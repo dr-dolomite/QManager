@@ -41,8 +41,8 @@ const euclid = Euclid({
 });
 
 export const metadata: Metadata = {
-  title: "Webby",
-  description: "Your modern 5G modem management tool built for simplicity and efficiency.",
+  title: "Lumin",
+  description: "Lumin is a lightweight web console that illuminates modem state and simplifies cellular device management — from APN and band locking to advanced diagnostics.",
 };
 
 export default function RootLayout({

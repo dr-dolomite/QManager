@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚀 Lumin — Modem management made clear
 
-## Getting Started
+Lumin is a lightweight, web-based console for managing cellular modems and devices — from APN and band-lock configuration to SIM, diagnostics, and fleet health. Built for power users and teams who want clarity and control.
 
-First, run the development server:
+✨ Friendly, fast, and focused: Lumin brings visibility to your devices so you can act with confidence.
+
+---
+
+## Quick start
+
+Start the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 in your browser and explore the Lumin console.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## What you get
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- APN & network profile management
+- Band locking and frequency tools
+- SIM & IMEI utilities
+- Live diagnostics and telemetry
+- Simple workflows for common modem tasks
 
-## Learn More
+## Contribute
 
-To learn more about Next.js, take a look at the following resources:
+Want to help? We welcome contributions. Typical steps:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm install
+pnpm dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a branch, add your feature or fix, and open a pull request.
 
-## Deploy on Vercel
+## Branding & metadata
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Title: `Lumin`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Meta description (copy into `app/layout.tsx`):
+
+```
+Lumin — Intuitive modem management: APN, band-lock, SIM, and diagnostics for managing cellular devices from a clean web console.
+```
+
+## Deploy
+
+Deploy to Vercel, Netlify, or your preferred platform. Vercel offers a one-click deploy for Next.js apps.
+
+---
+
+Made with 💡 by the Lumin team.
