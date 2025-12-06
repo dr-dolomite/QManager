@@ -27,6 +27,28 @@ const NrStatusComponent = () => {
             <MdSignalCellular2Bar className="w-10 h-10 text-primary" />
           </div>
           <div className="grid gap-2">
+            {/* Band Name */}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground text-sm">
+                Band
+              </p>
+              <p className="font-semibold text-sm">N41</p>
+            </div>
+            {/* ARFCN */}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground text-sm">
+                ARFCN
+              </p>
+              <p className="font-semibold text-sm">499200</p>
+            </div>
+            {/* PCI */}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground text-sm">PCI</p>
+              <p className="font-semibold text-sm">200</p>
+            </div>
             {/* RSRP */}
             <Separator />
             <div className="flex items-center justify-between">

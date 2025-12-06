@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
@@ -74,8 +74,6 @@ const generateSignalData = () => {
   return data;
 };
 
-const chartData = generateSignalData();
-
 const chartConfig = {
   rsrp4G: {
     label: "4G",
@@ -105,6 +103,9 @@ const chartConfig = {
 
 export function SignalHistoryComponent() {
   const [signalType, setSignalType] = useState("rsrp");
+  
+  // Generate data only on client side to avoid hydration mismatch
+  const chartData = useMemo(() => generateSignalData(), []);
 
   const getDataKeys = () => {
     switch (signalType) {

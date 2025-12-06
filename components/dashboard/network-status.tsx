@@ -8,7 +8,12 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DiscIcon, MonitorSmartphoneIcon } from "lucide-react";
+import {
+  CardSimIcon,
+  CloudCheckIcon,
+  DiscIcon,
+  MonitorSmartphoneIcon,
+} from "lucide-react";
 import { MdOutline5G } from "react-icons/md";
 import { FaCheck } from "react-icons/fa";
 
@@ -20,13 +25,22 @@ const NetworkStatusComponent = () => {
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             Network Status
           </CardTitle>
-          <Badge
-            variant="outline"
-            className="border-green-500 bg-green-500/10 text-green-500"
-          >
-            <DiscIcon />
-            Radio On
-          </Badge>
+          <div className="flex items-center gap-x-1.5">
+            <Badge
+              variant="outline"
+              className="border-green-500 bg-green-500/10 text-green-500"
+            >
+              <DiscIcon />
+              Radio On
+            </Badge>
+            <Badge
+              variant="outline"
+              className="border-green-500 bg-green-500/10 text-green-500"
+            >
+              <CloudCheckIcon />
+              Internet
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -44,15 +58,15 @@ const NetworkStatusComponent = () => {
             </div>
             <div className="grid gap-0.5 text-center">
               <h3 className="text-md font-semibold leading-none">5G Signal</h3>
-              <p className="text-muted-foreground text-sm ">Connected</p>
+              <p className="text-muted-foreground text-sm ">Non-Standalone</p>
             </div>
           </div>
 
           <div className="grid gap-2">
             {/* Connected devices circle */}
             <div className="relative">
-              <div className="rounded-full size-36 bg-primary/15 flex items-center justify-center p-5">
-                <MonitorSmartphoneIcon className="size-full text-primary" />
+              <div className="rounded-full size-36 bg-primary/15 flex items-center justify-center p-4">
+                <CardSimIcon className="size-full text-primary" />
               </div>
               {/* Checkmark badge */}
               <div className="absolute top-1 right-4 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-md">
@@ -60,8 +74,8 @@ const NetworkStatusComponent = () => {
               </div>
             </div>
             <div className="grid gap-0.5 text-center">
-              <h3 className="text-md font-semibold leading-none">Devices</h3>
-              <p className="text-muted-foreground text-sm">1 Connected</p>
+              <h3 className="text-md font-semibold leading-none">SIM</h3>
+              <p className="text-muted-foreground text-sm">TMobile</p>
             </div>
           </div>
 

@@ -11,7 +11,7 @@ Lumin is a lightweight, web-based console for managing cellular modems and devic
 Start the development server:
 
 ```bash
-pnpm dev
+bun run dev
 ```
 
 Open http://localhost:3000 in your browser and explore the Lumin console.
@@ -29,8 +29,8 @@ Open http://localhost:3000 in your browser and explore the Lumin console.
 Want to help? We welcome contributions. Typical steps:
 
 ```bash
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 Create a branch, add your feature or fix, and open a pull request.
@@ -45,10 +45,6 @@ Meta description (copy into `app/layout.tsx`):
 Lumin — Intuitive modem management: APN, band-lock, SIM, and diagnostics for managing cellular devices from a clean web console.
 ```
 
-## Deploy
-
-Deploy to Vercel, Netlify, or your preferred platform. Vercel offers a one-click deploy for Next.js apps.
-
 ---
 
-Made with 💡 by the Lumin team.
+Made with 💡 by Rus.

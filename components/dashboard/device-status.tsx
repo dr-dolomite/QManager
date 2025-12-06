@@ -9,6 +9,8 @@ import {
   CardAction,
 } from "@/components/ui/card";
 import { Separator } from "../ui/separator";
+import { Badge } from "../ui/badge";
+import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
 
 const DeviceStatus = () => {
   return (
@@ -50,7 +52,9 @@ const DeviceStatus = () => {
               <p className="font-semibold text-muted-foreground xl:text-md text-sm">
                 Firmware Version
               </p>
-              <p className="font-semibold xl:text-md text-sm">RM551EGL00AAR01A04M8G</p>
+              <p className="font-semibold xl:text-md text-sm">
+                RM551EGL00AAR01A04M8G
+              </p>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -62,9 +66,53 @@ const DeviceStatus = () => {
             <Separator />
             <div className="flex items-center justify-between">
               <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                Lumin Version
+              </p>
+              <p className="font-semibold xl:text-md text-sm">1.0.0-beta.5</p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                Phone Number
+              </p>
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                +1 (555) 123-4567
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
                 Device IMEI
               </p>
-              <p className="font-semibold xl:text-md text-sm">866792052000123</p>
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                866792052000123
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                LTE Category
+              </p>
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                Cat 20
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                Device Temperature
+              </p>
+              <div className="flex items-center gap-x-2">
+                <Badge className="border-green-500 bg-green-500/10 text-green-500">
+                  <CircleCheckIcon />
+                  Normal
+                </Badge>
+                {/* <Badge className="border-orange-500 bg-orange-500/10 text-orange-500">
+                  <TriangleAlertIcon />
+                  High
+                </Badge> */}
+                <p className="font-semibold xl:text-md text-sm">45°C</p>
+              </div>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
