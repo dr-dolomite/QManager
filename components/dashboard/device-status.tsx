@@ -5,12 +5,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardFooter,
-  CardAction,
 } from "@/components/ui/card";
 import { Separator } from "../ui/separator";
 import { Badge } from "../ui/badge";
-import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
+import { CircleCheckIcon } from "lucide-react";
 
 const DeviceStatus = () => {
   return (

@@ -12,7 +12,6 @@ import {
   CardSimIcon,
   CloudCheckIcon,
   DiscIcon,
-  MonitorSmartphoneIcon,
 } from "lucide-react";
 import { MdOutline5G } from "react-icons/md";
 import { FaCheck } from "react-icons/fa";
