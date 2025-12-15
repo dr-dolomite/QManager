@@ -7,6 +7,7 @@ import {
   Card,
   CardAction,
   CardContent,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -76,7 +77,7 @@ const generateSignalData = () => {
 
 const chartConfig = {
   rsrp4G: {
-    label: "4G",
+    label: "LTE",
     color: "var(--chart-1)",
   },
   rsrp5G: {
@@ -84,7 +85,7 @@ const chartConfig = {
     color: "var(--chart-3)",
   },
   rsrq4G: {
-    label: "4G",
+    label: "LTE",
     color: "var(--chart-1)",
   },
   rsrq5G: {
@@ -92,7 +93,7 @@ const chartConfig = {
     color: "var(--chart-3)",
   },
   sinr4G: {
-    label: "4G",
+    label: "LTE",
     color: "var(--chart-1)",
   },
   sinr5G: {
@@ -103,7 +104,7 @@ const chartConfig = {
 
 export function SignalHistoryComponent() {
   const [signalType, setSignalType] = useState("rsrp");
-  
+
   // Generate data only on client side to avoid hydration mismatch
   const chartData = useMemo(() => generateSignalData(), []);
 
@@ -120,7 +121,7 @@ export function SignalHistoryComponent() {
     }
   };
 
-  const { key4G, key5G } = getDataKeys();
+  const { key4G, key5G, unit } = getDataKeys();
 
   // Calculate the min value for the current signal type to use as baseline
   const getBaseValue = () => {
@@ -234,7 +235,6 @@ export function SignalHistoryComponent() {
               type="monotone"
               fill="url(#fill4G)"
               stroke={`var(--color-${key4G})`}
-              name="4G"
               baseValue={baseValue}
             />
             <Area
@@ -242,13 +242,26 @@ export function SignalHistoryComponent() {
               type="monotone"
               fill="url(#fill5G)"
               stroke={`var(--color-${key5G})`}
-              name="5G"
               baseValue={baseValue}
             />
-             <ChartLegend content={<ChartLegendContent />} />
+            <ChartLegend content={<ChartLegendContent />} />
           </AreaChart>
         </ChartContainer>
       </CardContent>
+      <CardFooter>
+        <div className="flex w-full items-start gap-2 text-sm">
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2 leading-none font-medium">
+              This chart shows the {signalType.toUpperCase()} signal strength
+              over the past 10 minutes.
+            </div>
+            <div className="text-muted-foreground flex items-center gap-2 leading-none">
+              Values may fluctuate due to environmental factors and network
+              conditions.
+            </div>
+          </div>
+        </div>
+      </CardFooter>
     </Card>
   );
 }

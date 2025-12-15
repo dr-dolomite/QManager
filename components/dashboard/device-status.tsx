@@ -1,14 +1,9 @@
 import React from "react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "../ui/separator";
-import { Badge } from "../ui/badge";
-import { CircleCheckIcon } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { TbCircleCheckFilled } from "react-icons/tb";
 
 const DeviceStatus = () => {
   return (
@@ -80,6 +75,24 @@ const DeviceStatus = () => {
             <Separator />
             <div className="flex items-center justify-between">
               <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                IMSI
+              </p>
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                310260123456789
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
+                ICCID
+              </p>
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                8901260420001234567
+              </p>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
                 Device IMEI
               </p>
               <p className="font-semibold xl:text-md text-sm tabular-nums">
@@ -98,33 +111,11 @@ const DeviceStatus = () => {
             <Separator />
             <div className="flex items-center justify-between">
               <p className="font-semibold text-muted-foreground xl:text-md text-sm">
-                Device Temperature
+                Active MIMO
               </p>
-              <div className="flex items-center gap-x-2">
-                <Badge className="border-green-500 bg-green-500/10 text-green-500">
-                  <CircleCheckIcon />
-                  Normal
-                </Badge>
-                {/* <Badge className="border-orange-500 bg-orange-500/10 text-orange-500">
-                  <TriangleAlertIcon />
-                  High
-                </Badge> */}
-                <p className="font-semibold xl:text-md text-sm">45°C</p>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
-                Running Time
+              <p className="font-semibold xl:text-md text-sm tabular-nums">
+                LTE 4x4 | NR 4x4
               </p>
-              <p className="font-semibold xl:text-md text-sm">5h 23m 32s</p>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <p className="font-semibold text-muted-foreground xl:text-md text-sm">
-                Connection Uptime
-              </p>
-              <p className="font-semibold xl:text-md text-sm">5h 23m 32s</p>
             </div>
             <Separator />
           </div>

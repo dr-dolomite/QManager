@@ -8,11 +8,9 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  CardSimIcon,
-  CloudCheckIcon,
-  DiscIcon,
-} from "lucide-react";
+import { CardSimIcon } from "lucide-react";
+
+import { TbCloudFilled } from "react-icons/tb";
 import { MdOutline5G } from "react-icons/md";
 import { FaCheck } from "react-icons/fa";
 
@@ -27,16 +25,16 @@ const NetworkStatusComponent = () => {
           <div className="flex items-center gap-x-1.5">
             <Badge
               variant="outline"
-              className="border-green-500 bg-green-500/10 text-green-500"
+              className="bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-300/50 backdrop-blur-sm"
             >
-              <DiscIcon />
+              <div className="w-2 h-2 rounded-full bg-green-500" />
               Radio On
             </Badge>
             <Badge
               variant="outline"
-              className="border-green-500 bg-green-500/10 text-green-500"
+              className="bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-300/50 backdrop-blur-sm"
             >
-              <CloudCheckIcon />
+              <TbCloudFilled className="text-green-500" />
               Internet
             </Badge>
           </div>
@@ -73,7 +71,7 @@ const NetworkStatusComponent = () => {
               </div>
             </div>
             <div className="grid gap-0.5 text-center">
-              <h3 className="text-md font-semibold leading-none">SIM</h3>
+              <h3 className="text-md font-semibold leading-none">SIM 1</h3>
               <p className="text-muted-foreground text-sm">TMobile</p>
             </div>
           </div>
