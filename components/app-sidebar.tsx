@@ -45,7 +45,7 @@ const data = {
   navMain: [
     {
       title: "Home",
-      url: "/dashboard/home",
+      url: "/dashboard",
       icon: HomeIcon,
       isActive: true,
     },
@@ -70,7 +70,7 @@ const data = {
   cellular: [
     {
       title: "Cellular Information",
-      url: "#",
+      url: "/cellular",
       icon: RadioTowerIcon,
     },
     {
