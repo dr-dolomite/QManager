@@ -121,7 +121,7 @@ export function SignalHistoryComponent() {
     }
   };
 
-  const { key4G, key5G, unit } = getDataKeys();
+  const { key4G, key5G } = getDataKeys();
 
   // Calculate the min value for the current signal type to use as baseline
   const getBaseValue = () => {

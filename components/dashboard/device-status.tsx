@@ -2,8 +2,6 @@ import React from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { TbCircleCheckFilled } from "react-icons/tb";
 
 const DeviceStatus = () => {
   return (

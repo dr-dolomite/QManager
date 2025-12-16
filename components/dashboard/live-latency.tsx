@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/chart";
 import { Button } from "../ui/button";
 import { TbPlayerPlayFilled } from "react-icons/tb";
-import { Separator } from "../ui/separator";
 
 export const description = "A multiple bar chart";
 
