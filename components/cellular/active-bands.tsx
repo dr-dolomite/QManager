@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Accordion,
   AccordionContent,
@@ -13,7 +13,10 @@ const ActiveBandsComponent = () => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle className="text-lg">Active Cellular Bands</CardTitle>
+        <CardTitle>Active Cellular Bands</CardTitle>
+        <CardDescription>
+            Detailed information about the currently active cellular bands.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Accordion

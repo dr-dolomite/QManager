@@ -1,6 +1,7 @@
 "use client"
 
 import { ChevronRight, type LucideIcon } from "lucide-react"
+import { usePathname } from "next/navigation"
 
 import {
   Collapsible,
@@ -34,16 +35,20 @@ export function NavCellular({
     }[]
   }[]
 }) {
+  const pathname = usePathname()
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>
         Cellular
       </SidebarGroupLabel>
       <SidebarMenu>
-        {cellular.map((item) => (
-          <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
+        {cellular.map((item) => {
+          const isActive = pathname === item.url
+          return (
+          <Collapsible key={item.title} asChild defaultOpen={isActive}>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title} isActive={item.isActive}>
+              <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
                 <a href={item.url}>
                   <item.icon />
                   <span>{item.title}</span>
@@ -74,7 +79,7 @@ export function NavCellular({
               ) : null}
             </SidebarMenuItem>
           </Collapsible>
-        ))}
+        )})}
       </SidebarMenu>
     </SidebarGroup>
   )

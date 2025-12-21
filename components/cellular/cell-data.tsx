@@ -1,13 +1,22 @@
 import React from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { TbInfoCircleFilled } from "react-icons/tb";
 
 const CellDataComponent = () => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle className="text-lg">Cellular Information</CardTitle>
+        <CardTitle>Cellular Information</CardTitle>
+        <CardDescription>
+          Detailed information about the connected cellular network.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-2">
@@ -38,7 +47,19 @@ const CellDataComponent = () => {
               Tracking Area Code
             </p>
             <div className="flex items-center gap-1.5">
-              <p className="font-semibold ">40495</p>
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TbInfoCircleFilled className="w-5 h-5 text-blue-500" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {/* Will show in Hexadecimal form */}
+                    <p>0x80F3P</p>
+                  </TooltipContent>
+                </Tooltip>
+                {/* Will show in integer form */}
+                <p className="font-semibold">32895</p>
+              </div>
             </div>
           </div>
           <Separator />
@@ -47,7 +68,19 @@ const CellDataComponent = () => {
               Total Bandwidth in Use
             </p>
             <div className="flex items-center gap-1.5">
-              <p className="font-semibold ">200 MHz</p>
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TbInfoCircleFilled className="w-5 h-5 text-blue-500" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {/* Will show each bandwidth value*/}
+                    <p>100 + 100</p>
+                  </TooltipContent>
+                </Tooltip>
+                {/* Will show in total bandwidth */}
+                <p className="font-semibold">200 MHz</p>
+              </div>
             </div>
           </div>
           <Separator />
@@ -77,7 +110,19 @@ const CellDataComponent = () => {
           <div className="flex items-center justify-between">
             <p className="font-semibold text-muted-foreground ">WAN IPv6</p>
             <div className="flex items-center gap-1.5">
-              <p className="font-semibold ">2607:f8b0:4005:805::200e</p>
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TbInfoCircleFilled className="w-5 h-5 text-blue-500" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {/* Will show full IPv6 address */}
+                    <p>2607:f8b0:4005:805::200e</p>
+                  </TooltipContent>
+                </Tooltip>
+                {/* Will show shortened / truncated IPv6 address */}
+                <p className="font-semibold">2607:f8b0:4...::200e</p>
+              </div>
             </div>
           </div>
           <Separator />

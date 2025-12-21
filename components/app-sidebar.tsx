@@ -75,7 +75,7 @@ const data = {
     },
     {
       title: "Custom Profile",
-      url: "#",
+      url: "/cellular/custom-profile",
       icon: CardSimIcon,
     },
     {
