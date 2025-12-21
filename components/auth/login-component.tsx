@@ -20,14 +20,14 @@ const LoginComponent = () => {
             >
               <div className="flex size-16 p-1 items-center justify-center rounded-md">
                 <img
-                  src="/lumin-logo.svg"
-                  alt="Lumin Logo"
+                  src="/qmanager-logo.svg"
+                  alt="QManager Logo"
                   className="size-full"
                 />
               </div>
-              <span className="sr-only">Lumin</span>
+              <span className="sr-only">QManager</span>
             </a>
-            <h1 className="text-xl font-bold">Welcome to Lumin</h1>
+            <h1 className="text-xl font-bold">Welcome to QManager</h1>
             <FieldDescription>
               Forgot your password? <a href="#">Reset it</a>
             </FieldDescription>

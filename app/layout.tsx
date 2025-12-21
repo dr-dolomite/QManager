@@ -46,9 +46,9 @@ const euclid = Euclid({
 });
 
 export const metadata: Metadata = {
-  title: "Lumin",
+  title: "QManager",
   description:
-    "Lumin is a lightweight web console that illuminates modem state and simplifies cellular device management — from APN and band locking to advanced diagnostics.",
+    "QManager is a modern web-based GUI for managing Quectel modems — from APN and band locking to advanced diagnostics and cellular device management.",
 };
 
 export default function RootLayout({

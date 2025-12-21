@@ -1,13 +1,13 @@
-# Lumin
+# QManager
 
 <div align="center">
-  <h3>A modern, lightweight web console for Quectel modem management</h3>
-  <p>Visualize, configure, and optimize your cellular modem's performance with clarity and control</p>
+  <h3>A modern, custom GUI for Quectel modem management</h3>
+  <p>Visualize, configure, and optimize your cellular modem's performance with an intuitive web interface</p>
 </div>
 
 ---
 
-> **Note:** Lumin is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing Quectel modems like the RM520N-GL and similar devices.
+> **Note:** QManager is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing Quectel modems like the RM520N-GL and similar devices.
 
 ---
 
@@ -35,8 +35,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/dr-dolomite/lumin.git
-cd lumin
+git clone https://github.com/dr-dolomite/qmanager.git
+cd qmanager
 
 # Install dependencies
 bun install
@@ -48,7 +48,7 @@ bun run dev
 bun run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to explore the Lumin console.
+Open [http://localhost:3000](http://localhost:3000) in your browser to explore the QManager console.
 
 ---
 
@@ -66,7 +66,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to explore t
 ## 🤝 Support the Project
 
 <div align="center">
-  <h3>Support Lumin's Development</h3>
+  <h3>Support QManager's Development</h3>
   <p>Your contribution helps maintain the project and fund continued development, testing on new cellular networks, and hardware costs.</p>
   <br/>
   <a href="https://ko-fi.com/drdolomite" target="_blank">
@@ -87,5 +87,5 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 ---
 
 <div align="center">
-  <p>Built with 💡 by <a href="https://github.com/dr-dolomite">DrDolomite</a></p>
+  <p>Built with 💙 by <a href="https://github.com/dr-dolomite">DrDolomite</a></p>
 </div>

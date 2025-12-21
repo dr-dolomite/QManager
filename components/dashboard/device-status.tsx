@@ -57,7 +57,7 @@ const DeviceStatus = () => {
             <Separator />
             <div className="flex items-center justify-between">
               <p className="font-semibold text-muted-foreground xl:text-md text-sm">
-                Lumin Version
+                QManager Version
               </p>
               <p className="font-semibold xl:text-md text-sm">1.0.0-beta.5</p>
             </div>
