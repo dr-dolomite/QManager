@@ -1,9 +1,8 @@
 import React from "react";
 
-
-import CustomProfileFormComponent from "./custom-profile-form";
-import EmptyProfileViewComponent from "./empty-profile";
-import CustomProfileViewComponent from "./custom-profile-view";
+import CustomProfileFormComponent from "@/components/cellular/custom-profiles/custom-profile-form";
+import EmptyProfileViewComponent from "@/components/cellular/custom-profiles/empty-profile";
+import CustomProfileViewComponent from "@/components/cellular/custom-profiles/custom-profile-view";
 
 const CustomProfileComponent = () => {
   return (
@@ -16,8 +15,8 @@ const CustomProfileComponent = () => {
         </p>
       </div>
       <div className="grid grid-cols-1 @xl/main:grid-cols-2 @5xl/main:grid-cols-2 grid-flow-row gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:shadow-xs">
-        <CustomProfileFormComponent/>
-        <CustomProfileViewComponent/>
+        <CustomProfileFormComponent />
+        <CustomProfileViewComponent />
       </div>
     </div>
   );

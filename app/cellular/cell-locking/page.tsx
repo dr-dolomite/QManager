@@ -1,4 +1,4 @@
-import BandLockingComponent from '@/components/cellular/bandlocking/band-locking'
+import BandLockingComponent from '@/components/cellular/band-locking/band-locking'
 import React from 'react'
 
 const BandLockingPage = () => {

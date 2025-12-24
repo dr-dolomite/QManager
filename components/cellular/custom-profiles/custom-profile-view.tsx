@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { DataTable, schema } from "./custom-profile-table";
+import { DataTable, schema } from "@/components/cellular/custom-profiles/custom-profile-table";
 import { z } from "zod";
 
 // Sample data - replace with your actual data source

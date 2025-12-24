@@ -80,12 +80,12 @@ const data = {
     },
     {
       title: "Cell Locking",
-      url: "/cellular/band-locking",
+      url: "/cellular/cell-locking",
       icon: LucideSignal,
       items: [
         {
           title: "Tower Locking",
-          url: "#",
+          url: "/cellular/cell-locking/tower-locking",
         },
       ],
     },
