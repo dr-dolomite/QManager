@@ -138,7 +138,22 @@ const TowerLockingSettingsComponent = () => {
             </div>
           </div>
           <Separator />
-
+                    <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-muted-foreground ">
+              Schedule Locking Status
+            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold ">
+                <Badge
+                  variant="outline"
+                  className="bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-300/50 backdrop-blur-sm"
+                >
+                  Active
+                </Badge>
+              </p>
+            </div>
+          </div>
+          <Separator />
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-muted-foreground ">
               Active PCell E/AFRCN

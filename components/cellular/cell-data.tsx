@@ -14,6 +14,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { TbInfoCircleFilled } from "react-icons/tb";
+import { Button } from "../ui/button";
 
 const CellDataComponent = () => {
   return (
@@ -31,6 +32,20 @@ const CellDataComponent = () => {
             <p className="text-sm font-semibold text-muted-foreground ">ISP</p>
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-semibold ">Verizon Wireless</p>
+            </div>
+          </div>
+          <Separator />
+                    <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-muted-foreground ">
+              Access Point Name (APN)
+            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold ">
+                vzwinternet
+              </p>
+              <Button variant="link" size="sm" className="p-0.5 cursor-pointer">
+                Edit
+              </Button>
             </div>
           </div>
           <Separator />

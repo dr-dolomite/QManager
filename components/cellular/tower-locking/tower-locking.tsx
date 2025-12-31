@@ -1,5 +1,8 @@
 import React from "react";
 import TowerLockingSettingsComponent from "@/components/cellular/tower-locking/tower-settings";
+import ScheduleTowerLockingComponent from "./schedule-locking";
+import LTELockingComponent from "./lte-locking";
+import NRSALockingComponent from "./nr-sa-locking";
 
 const TowerLockingComponent = () => {
   return (
@@ -12,8 +15,16 @@ const TowerLockingComponent = () => {
           stability and performance.
         </p>
       </div>
-      <div className="grid grid-cols-1 @xl/main:grid-cols-2 @5xl/main:grid-cols-2 grid-flow-row gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:shadow-xs">
-        <TowerLockingSettingsComponent/>
+      <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:shadow-xs">
+        <div className="grid grid-cols-1 @xl/main:grid-cols-2 @5xl/main:grid-cols-2 grid-flow-row gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:shadow-xs">
+          <TowerLockingSettingsComponent />
+          <LTELockingComponent />
+        </div>
+
+        <div className="grid grid-cols-1 @xl/main:grid-cols-2 @5xl/main:grid-cols-2 grid-flow-row gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:shadow-xs">
+          <ScheduleTowerLockingComponent />
+          <NRSALockingComponent />
+        </div>
       </div>
     </div>
   );
