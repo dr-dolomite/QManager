@@ -91,7 +91,7 @@ const data = {
     },
     {
       title: "Cell Scanner",
-      url: "#",
+      url: "/cellular/cell-scanner",
       icon: RadarIcon,
       items: [
         {

@@ -7,7 +7,7 @@ const BandLockingComponent = () => {
     <div className="@container/main mx-auto p-2">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Band Locking</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground max-w-5xl">
           Manage and configure band locking settings for your cellular device to
           optimize network performance and connectivity.
         </p>

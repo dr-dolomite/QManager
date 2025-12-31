@@ -9,7 +9,7 @@ const TowerLockingComponent = () => {
     <div className="@container/main mx-auto p-2">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Tower Locking</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground max-w-5xl ">
           Manage and configure tower locking settings for your cellular device
           to select and lock onto specific cell towers, enhancing network
           stability and performance.

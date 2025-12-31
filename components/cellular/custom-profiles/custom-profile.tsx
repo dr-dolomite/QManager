@@ -9,7 +9,7 @@ const CustomProfileComponent = () => {
     <div className="@container/main mx-auto p-2">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Custom SIM Profile</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground max-w-5xl">
           Create and manage custom SIM profiles for your cellular device. Enter
           the necessary details below to set up a new profile.
         </p>
