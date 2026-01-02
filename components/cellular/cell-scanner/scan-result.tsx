@@ -16,10 +16,8 @@ import {
 import {
   ArrowUpDown,
   ChevronDown,
-  Lock,
   Info,
   MoreVertical,
-  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
