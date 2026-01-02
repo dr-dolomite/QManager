@@ -96,11 +96,11 @@ const data = {
       items: [
         {
           title: "Neighboring Cells",
-          url: "#",
+          url: "/cellular/cell-scanner/neighbourcell-scanner",
         },
         {
           title: "Frequency Calculator",
-          url: "#",
+          url: "/cellular/cell-scanner/frequency-calculator",
         },
       ],
     },

@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TbInfoCircleFilled } from "react-icons/tb";
 import { Badge } from "@/components/ui/badge";
+import { TriangleAlertIcon } from "lucide-react";
 
 const BandSettingsComponent = () => {
   return (
@@ -63,6 +64,7 @@ const BandSettingsComponent = () => {
                   variant="outline"
                   className="bg-orange-500/20 text-orange-500 hover:bg-orange-500/30 border border-orange-300/50 backdrop-blur-sm"
                 >
+                  <TriangleAlertIcon/>
                   Using Default Bands
                 </Badge>
               </p>

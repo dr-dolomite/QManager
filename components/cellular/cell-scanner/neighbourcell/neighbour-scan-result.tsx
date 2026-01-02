@@ -16,20 +16,13 @@ import {
 import {
   ArrowUpDown,
   ChevronDown,
-  Lock,
-  Info,
-  MoreVertical,
-  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -42,30 +35,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-export interface CellScanResult {
+export interface NeighbourCellResult {
   id: string;
   networkType: string;
-  earfcn: number;
+  cellType: string;
+  frequency: number;
   pci: number;
-  band: number;
-  bandwidth: number;
-  cellID: number;
-  tac: number;
   signalStrength: number;
-  mcc: number;
-  mnc: number;
-  provider: string;
 }
 
-interface ScanResultViewProps {
-  data: CellScanResult[];
+interface NeighbourScanResultViewProps {
+  data: NeighbourCellResult[];
 }
 
 const getSignalBadge = (strength: number) => {
@@ -92,105 +74,36 @@ const getNetworkTypeBadge = (type: string) => {
   return <Badge variant="default">{type}</Badge>;
 };
 
-const columns: ColumnDef<CellScanResult>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
+const columns: ColumnDef<NeighbourCellResult>[] = [
   {
     accessorKey: "networkType",
-    header: () => <div>Network</div>,
+    header: () => <div className="pl-4">Network</div>,
     cell: ({ row }) => (
-      <div>{getNetworkTypeBadge(row.getValue("networkType"))}</div>
+      <div className="pl-4">{getNetworkTypeBadge(row.getValue("networkType"))}</div>
     ),
   },
   {
-    accessorKey: "provider",
+    accessorKey: "cellType",
+    header: "Cell Type",
+    cell: ({ row }) => <div className="font-medium">{row.getValue("cellType")}</div>,
+  },
+  {
+    accessorKey: "frequency",
     header: ({ column }) => (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
       >
-        Provider
+        Frequency
         <ArrowUpDown className="h-4 w-4" />
       </Button>
     ),
-    cell: ({ row }) => {
-      const cell = row.original;
-      return (
-        <div className="flex items-center gap-1">
-          <span className="font-semibold">{cell.provider}</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="h-3 w-3 cursor-pointer" />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {cell.mcc} {cell.mnc}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "band",
-    header: "Band",
-    cell: ({ row }) => {
-      const networkType = row.original.networkType;
-      const band = row.getValue("band") as number;
-      const prefix = networkType === "NR5G-SA" ? "N" : "B";
-      return (
-        <div className="font-semibold">
-          {prefix}
-          {band}
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "earfcn",
-    header: "EARFCN",
-    cell: ({ row }) => <div className="font-semibold">{row.getValue("earfcn")}</div>,
+    cell: ({ row }) => <div className="font-semibold">{row.getValue("frequency")}</div>,
   },
   {
     accessorKey: "pci",
     header: "PCI",
     cell: ({ row }) => <div className="font-semibold">{row.getValue("pci")}</div>,
-  },
-  {
-    accessorKey: "cellID",
-    header: "Cell ID",
-    cell: ({ row }) => <div className="font-medium">{row.getValue("cellID")}</div>,
-  },
-  {
-    accessorKey: "tac",
-    header: "TAC",
-    cell: ({ row }) => <div className="font-medium">{row.getValue("tac")}</div>,
-  },
-  {
-    accessorKey: "bandwidth",
-    header: "BW",
-    cell: ({ row }) => <div className="font-medium">{row.getValue("bandwidth")} MHz</div>,
   },
   {
     accessorKey: "signalStrength",
@@ -213,43 +126,15 @@ const columns: ColumnDef<CellScanResult>[] = [
       );
     },
   },
-  {
-    id: "actions",
-    header: () => null,
-    enableHiding: false,
-    cell: () => {
-      // const cell = row.original;
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-              size="icon"
-            >
-              <MoreVertical className="h-4 w-4" />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem>Lock</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Remove</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
-  },
 ];
 
-const ScanResultView = ({ data }: ScanResultViewProps) => {
+const NeighbourScanResultView = ({ data }: NeighbourScanResultViewProps) => {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState({});
   const isMobile = useIsMobile();
 
   const table = useReactTable({
@@ -262,12 +147,10 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
-      rowSelection,
     },
   });
 
@@ -275,12 +158,12 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
     <div className="relative flex flex-col gap-4 overflow-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
         <Input
-          placeholder="Filter by provider..."
+          placeholder="Filter by cell type..."
           value={
-            (table.getColumn("provider")?.getFilterValue() as string) ?? ""
+            (table.getColumn("cellType")?.getFilterValue() as string) ?? ""
           }
           onChange={(event) =>
-            table.getColumn("provider")?.setFilterValue(event.target.value)
+            table.getColumn("cellType")?.setFilterValue(event.target.value)
           }
           className="max-w-sm"
         />
@@ -313,7 +196,7 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
         </DropdownMenu>
       </div>
       <div className="overflow-x-auto rounded-lg border">
-        <Table className={isMobile ? "min-w-[800px]" : ""}>
+        <Table className={isMobile ? "min-w-[600px]" : ""}>
           <TableHeader className="bg-muted sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -335,10 +218,7 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
+                <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(
@@ -364,8 +244,7 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-muted-foreground flex-1 text-sm">
-          {table.getFilteredSelectedRowModel().rows.length} of{" "}
-          {table.getFilteredRowModel().rows.length} cell(s) selected.
+          {table.getFilteredRowModel().rows.length} cell(s) found.
         </div>
         <div className="space-x-2">
           <Button
@@ -390,4 +269,4 @@ const ScanResultView = ({ data }: ScanResultViewProps) => {
   );
 };
 
-export default ScanResultView;
+export default NeighbourScanResultView;

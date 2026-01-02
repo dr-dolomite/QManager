@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/card";
 import ScannerEmptyView from "./empty-view";
 import ScanResultView, { type CellScanResult } from "./scan-result";
+import { Button } from "@/components/ui/button";
+import { DownloadIcon } from "lucide-react";
 
 // Mock data for testing
 const mockScanResults: CellScanResult[] = [
@@ -146,6 +148,14 @@ const FullScannerComponent = () => {
             <ScannerEmptyView />
           )}
         </div>
+        {hasScanResults && (
+          <div className="mt-4 flex items-center gap-x-2">
+            <Button>Start New Scan</Button>
+            <Button>
+              <DownloadIcon />
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

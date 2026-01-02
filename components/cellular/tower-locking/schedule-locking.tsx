@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { TbInfoCircleFilled } from "react-icons/tb";
 import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle"
-import { CircleIcon, StarIcon } from "lucide-react";
+import { CircleIcon } from "lucide-react";
 
 const ScheduleTowerLockingComponent = () => {
   return (

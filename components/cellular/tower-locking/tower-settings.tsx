@@ -15,7 +15,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { TbInfoCircleFilled } from "react-icons/tb";
+import { TbAlertTriangleFilled, TbInfoCircleFilled, TbSquareRoundedCheckFilled } from "react-icons/tb";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -116,6 +116,7 @@ const TowerLockingSettingsComponent = () => {
                   variant="outline"
                   className="bg-orange-500/20 text-orange-500 hover:bg-orange-500/30 border border-orange-300/50 backdrop-blur-sm"
                 >
+                   <TbAlertTriangleFilled/>
                   18%
                 </Badge>
               </p>
@@ -132,6 +133,7 @@ const TowerLockingSettingsComponent = () => {
                   variant="outline"
                   className="bg-orange-500/20 text-orange-500 hover:bg-orange-500/30 border border-orange-300/50 backdrop-blur-sm"
                 >
+                  <TbAlertTriangleFilled/>
                   Unlocked due to Poor Signal
                 </Badge>
               </p>
@@ -148,6 +150,7 @@ const TowerLockingSettingsComponent = () => {
                   variant="outline"
                   className="bg-green-500/20 text-green-500 hover:bg-green-500/30 border border-green-300/50 backdrop-blur-sm"
                 >
+                  <TbSquareRoundedCheckFilled/>
                   Active
                 </Badge>
               </p>

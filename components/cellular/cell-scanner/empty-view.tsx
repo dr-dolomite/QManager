@@ -1,6 +1,5 @@
 import React from "react";
 
-import { IconBell } from "@tabler/icons-react";
 import { RefreshCcwIcon, ScanSearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,7 @@ import {
 
 const ScannerEmptyView = () => {
   return (
-    <Empty className="from-muted/50 to-background h-full bg-gradient-to-b from-30%">
+    <Empty className="from-muted/50 to-background h-full bg-linear-to-b from-30%">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <ScanSearchIcon />
@@ -27,7 +26,7 @@ const ScannerEmptyView = () => {
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button variant="outline" size="sm">
+        <Button>
           <RefreshCcwIcon />
           Start New Scan
         </Button>
