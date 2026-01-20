@@ -106,7 +106,7 @@ const data = {
     },
     {
       title: "Settings",
-      url: "#",
+      url: "/cellular/settings",
       icon: Settings2,
       items: [
         {
