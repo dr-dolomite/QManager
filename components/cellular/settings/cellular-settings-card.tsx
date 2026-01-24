@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -23,6 +22,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RotateCcwIcon } from "lucide-react";
 
 const CellularSettingsCard = () => {
   return (
@@ -103,6 +104,12 @@ const CellularSettingsCard = () => {
                 </div>
               </FieldGroup>
             </FieldSet>
+          </div>
+          <div className="flex items-center gap-x-2">
+            <Button type="submit">Save Settings</Button>
+            <Button>
+              <RotateCcwIcon />
+            </Button>
           </div>
         </form>
       </CardContent>

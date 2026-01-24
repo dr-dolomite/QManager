@@ -111,11 +111,11 @@ const data = {
       items: [
         {
           title: "APN Management",
-          url: "#",
+          url: "/cellular/settings/apn-management",
         },
         {
           title: "Network Priority",
-          url: "#",
+          url: "/cellular/settings/network-priority",
         },
         {
           title: "IMEI Settings",
