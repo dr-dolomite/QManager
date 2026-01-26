@@ -119,11 +119,11 @@ const data = {
         },
         {
           title: "IMEI Settings",
-          url: "#",
+          url: "/cellular/settings/imei-settings",
         },
         {
           title: "FPLMN Settings",
-          url: "#",
+          url: "/cellular/settings/fplmn-settings",
         },
       ],
     },
