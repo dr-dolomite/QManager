@@ -131,7 +131,7 @@ const data = {
   localNetwork: [
     {
       title: "Ethernet Status",
-      url: "#",
+      url: "/local-network",
       icon: EthernetPortIcon,
     },
     {
