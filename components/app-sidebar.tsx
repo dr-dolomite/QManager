@@ -141,7 +141,7 @@ const data = {
     },
     {
       title: "Custom DNS",
-      url: "#",
+      url: "/local-network/custom-dns",
       icon: Map,
     },
     {
