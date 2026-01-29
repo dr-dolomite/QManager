@@ -136,7 +136,7 @@ const data = {
     },
     {
       title: "IP Passthrough",
-      url: "#",
+      url: "/local-network/ip-passthrough",
       icon: WorkflowIcon,
     },
     {
