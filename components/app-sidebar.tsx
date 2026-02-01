@@ -82,7 +82,7 @@ const data = {
       items: [
         {
           title: "Connection Scenarios",
-          url: "/cellular/settings/network-priority",
+          url: "/cellular/custom-profiles/connection-scenarios",
         },
       ],
     },

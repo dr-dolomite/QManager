@@ -35,14 +35,12 @@ const CellDataComponent = () => {
             </div>
           </div>
           <Separator />
-                    <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-muted-foreground ">
               Access Point Name (APN)
             </p>
             <div className="flex items-center gap-1.5">
-              <p className="text-sm font-semibold ">
-                vzwinternet
-              </p>
+              <p className="text-sm font-semibold ">vzwinternet</p>
               <Button variant="link" size="sm" className="p-0.5 cursor-pointer">
                 Edit
               </Button>
