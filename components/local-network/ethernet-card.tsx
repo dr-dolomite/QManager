@@ -87,8 +87,8 @@ const EthernetStatusCard = () => {
               containerRef={containerRef}
               fromRef={deviceRef}
               toRef={ringsRef}
-              duration={10}
-              pathWidth={2}
+              duration={2}
+              pathWidth={3}
               gradientStartColor="#3b82f6"
               gradientStopColor="#22c55e"
               startXOffset={72}
@@ -98,8 +98,8 @@ const EthernetStatusCard = () => {
               containerRef={containerRef}
               fromRef={ringsRef}
               toRef={ethernetRef}
-              duration={10}
-              pathWidth={2}
+              duration={2}
+              pathWidth={3}
               gradientStartColor="#22c55e"
               gradientStopColor="#3b82f6"
               startXOffset={56}

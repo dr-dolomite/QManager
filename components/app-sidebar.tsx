@@ -16,9 +16,11 @@ import {
   LogsIcon,
   MessageCircleIcon,
   WorkflowIcon,
-  CardSimIcon,
   DogIcon,
   RouterIcon,
+  RulerIcon,
+  TimerIcon,
+  User2Icon
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
@@ -74,9 +76,15 @@ const data = {
       icon: RadioTowerIcon,
     },
     {
-      title: "Custom Profile",
-      url: "/cellular/custom-profile",
-      icon: CardSimIcon,
+      title: "Custom Profiles",
+      url: "/cellular/custom-profiles",
+      icon: User2Icon,
+      items: [
+        {
+          title: "Connection Scenarios",
+          url: "/cellular/settings/network-priority",
+        },
+      ],
     },
     {
       title: "Cell Locking",
@@ -145,23 +153,14 @@ const data = {
       icon: Map,
     },
     {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "TTL Settings",
-          url: "#",
-        },
-        {
-          title: "MTU Settings",
-          url: "#",
-        },
-        {
-          title: "USB & DNS Settings",
-          url: "#",
-        }
-      ],
+      title: "TTL Settings",
+      url: "/local-network/ttl-settings",
+      icon: TimerIcon,
+    },
+    {
+      title: "MTU Settings",
+      url: "/local-network/mtu-settings",
+      icon: RulerIcon,
     },
   ],
   monitoring: [

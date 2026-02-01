@@ -64,15 +64,18 @@ const CustomProfileFormComponent = () => {
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
                   <Field>
-                    <FieldLabel htmlFor="iccid">ICCID</FieldLabel>
-                    <Input
-                      id="iccid"
-                      type="text"
-                      placeholder="12345678901234567890"
-                    />
+                    <FieldLabel htmlFor="imei">Register Current SIM</FieldLabel>
+                    <Select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose Mobile Network Operator" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">SMART ending in 6869</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="imei">IMEI</FieldLabel>
+                    <FieldLabel htmlFor="imei">Preferred IMEI</FieldLabel>
                     <Input
                       id="imei"
                       type="text"
@@ -80,26 +83,7 @@ const CustomProfileFormComponent = () => {
                     />
                   </Field>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="lteBands">
-                      Preferred LTE Bands
-                    </FieldLabel>
-                    <Input id="lteBands" type="text" placeholder="1,3,41" />
-                    <FieldDescription>
-                      Comma-separated list of LTE bands.
-                    </FieldDescription>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="nr5gBands">
-                      Preferred NR5G Bands
-                    </FieldLabel>
-                    <Input id="nr5gBands" type="text" placeholder="1,3,41" />
-                    <FieldDescription>
-                      Comma-separated list of NR5G bands.
-                    </FieldDescription>
-                  </Field>
-                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <Field>
                     <FieldLabel htmlFor="ttlValue">
