@@ -21,6 +21,7 @@ import {
   ScanIcon,
   SettingsIcon,
   TerminalIcon,
+  ServerIcon,
 } from "lucide-react";
 
 import QManagerLogo from "@/public/qmanager-logo.svg";
@@ -56,6 +57,11 @@ const data = {
       url: "/dashboard",
       icon: HomeIcon,
       isActive: true,
+    },
+    {
+      title: "Site Manager",
+      url: "/site-manager",
+      icon: ServerIcon,
     },
   ],
   system: [

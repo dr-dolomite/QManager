@@ -39,6 +39,7 @@ const routeNameMap: Record<string, string> = {
   watchdog: 'Watchdog',
   tailscale: 'Tailscale',
   'system-settings': 'System Settings',
+  'site-manager': 'Site Manager',
   'about-device': 'About Device',
   support: 'Support',
 };
