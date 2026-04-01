@@ -41,6 +41,7 @@ const routeNameMap: Record<string, string> = {
   'traffic-masquerade': 'Traffic Masquerade',
   tailscale: 'Tailscale',
   'system-settings': 'System Settings',
+  'site-manager': 'Site Manager',
   'about-device': 'About Device',
   support: 'Support',
 };
