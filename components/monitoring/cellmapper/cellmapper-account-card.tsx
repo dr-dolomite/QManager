@@ -14,6 +14,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Loader2, CheckCircle2Icon, MinusCircleIcon } from "lucide-react";
 
 // =============================================================================
@@ -218,22 +229,46 @@ function CellMapperAccountCardContent({
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!isLinked || isSigningOut}
-              onClick={() => void handleSignOut()}
-              className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-            >
-              {isSigningOut ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t("cellmapper.account_signing_out")}
-                </>
-              ) : (
-                t("cellmapper.account_sign_out_button")
-              )}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!isLinked || isSigningOut}
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                >
+                  {isSigningOut ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {t("cellmapper.account_signing_out")}
+                    </>
+                  ) : (
+                    t("cellmapper.account_sign_out_button")
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("cellmapper.signout_dialog_title")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("cellmapper.signout_dialog_description")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>
+                    {t("cellmapper.signout_dialog_cancel")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void handleSignOut()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {t("cellmapper.signout_dialog_confirm")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             <Button
               variant="outline"

@@ -163,10 +163,10 @@ cm_adapter_collect_serving() {
     #   Two-line:  +QENG: "servingcell","NOCONN"\n+QENG: "LTE","FDD",...
     #   One-line:  +QENG: "servingcell","NOCONN","LTE","FDD",...
     # Normalize both to '+QENG: "LTE",...' so field offsets are consistent.
-    lte_line=$(printf '%s' "$raw" | grep '+QENG: "LTE"')
+    lte_line=$(printf '%s' "$raw" | grep '+QENG: "LTE"' | head -1)
     if [ -z "$lte_line" ]; then
         # Try single-line format: extract from '"LTE"' onward
-        lte_line=$(printf '%s' "$raw" | grep '"LTE"' | sed 's/.*"LTE"/+QENG: "LTE"/')
+        lte_line=$(printf '%s' "$raw" | grep '"LTE"' | head -1 | sed 's/.*"LTE"/+QENG: "LTE"/')
     fi
     if [ -z "$lte_line" ]; then
         qlog_warn "rm551: no LTE serving cell line found"
@@ -384,9 +384,9 @@ cm_adapter_collect_neighbors() {
     serve_raw=$(qcmd 'AT+QENG="servingcell"' 2>/dev/null)
     local serving_mcc serving_mnc
     local _nb_lte_line
-    _nb_lte_line=$(printf '%s' "$serve_raw" | grep '+QENG: "LTE"')
+    _nb_lte_line=$(printf '%s' "$serve_raw" | grep '+QENG: "LTE"' | head -1)
     if [ -z "$_nb_lte_line" ]; then
-        _nb_lte_line=$(printf '%s' "$serve_raw" | grep '"LTE"' | sed 's/.*"LTE"/+QENG: "LTE"/')
+        _nb_lte_line=$(printf '%s' "$serve_raw" | grep '"LTE"' | head -1 | sed 's/.*"LTE"/+QENG: "LTE"/')
     fi
     serving_mcc=$(printf '%s' "$_nb_lte_line" | awk -F',' '{gsub(/[^0-9]/,"",$3); print $3}')
     serving_mnc=$(printf '%s' "$_nb_lte_line" | awk -F',' '{gsub(/[^0-9]/,"",$4); print $4}')

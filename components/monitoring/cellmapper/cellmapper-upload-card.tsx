@@ -36,7 +36,7 @@ interface CellMapperUploadCardProps {
     batch_size: number;
     status: string;
   } | null;
-  uploaderState: "running" | "idle" | "error" | undefined;
+  uploaderState: "running" | "idle" | "error" | "needs_reauth" | "backoff" | undefined;
   isLoading: boolean;
   isStale: boolean;
   onUploadNow: () => Promise<boolean>;
@@ -63,7 +63,7 @@ function formatTimeAgo(ts: number): string {
 // ─── Uploader state badge config ─────────────────────────────────────────────
 
 const UPLOADER_BADGE_STYLES: Record<
-  "running" | "idle" | "error",
+  "running" | "idle" | "error" | "needs_reauth" | "backoff",
   { variant: "outline"; className: string; icon: React.ReactNode }
 > = {
   running: {
@@ -84,6 +84,18 @@ const UPLOADER_BADGE_STYLES: Record<
       "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/30",
     icon: <AlertCircleIcon className="h-3 w-3" />,
   },
+  needs_reauth: {
+    variant: "outline",
+    className:
+      "bg-warning/15 text-warning hover:bg-warning/20 border-warning/30",
+    icon: <AlertCircleIcon className="h-3 w-3" />,
+  },
+  backoff: {
+    variant: "outline",
+    className:
+      "bg-warning/15 text-warning hover:bg-warning/20 border-warning/30",
+    icon: <AlertCircleIcon className="h-3 w-3" />,
+  },
 };
 
 // Translation key map — avoids dynamic template literal that trips up i18n
@@ -92,6 +104,8 @@ const UPLOADER_STATE_I18N_KEYS = {
   running: "cellmapper.uploader_state_running",
   idle: "cellmapper.uploader_state_idle",
   error: "cellmapper.uploader_state_error",
+  needs_reauth: "cellmapper.uploader_state_needs_reauth",
+  backoff: "cellmapper.uploader_state_backoff",
 } as const;
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -121,9 +135,9 @@ export function CellMapperUploadCard({
   const isUploadDisabled =
     isUploading ||
     (buffer?.pending_count ?? 0) < 5 ||
-    uploaderState === "error";
+    uploaderState === "error" || uploaderState === "needs_reauth";
 
-  const badgeKey: "running" | "idle" | "error" = uploaderState ?? "idle";
+  const badgeKey = (uploaderState ?? "idle") as keyof typeof UPLOADER_BADGE_STYLES;
   const badgeStyle = UPLOADER_BADGE_STYLES[badgeKey];
 
   // ── Loading skeleton ──────────────────────────────────────────────────────

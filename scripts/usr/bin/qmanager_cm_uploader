@@ -104,10 +104,10 @@ _get_ms() {
 # Args: $1 = state string (running | backoff | needs_reauth | stopped)
 _cm_write_state() {
     local state_name="${1:-running}"
-    local backoff_val needs_reauth_val last_error_val esc_err
+    local backoff_val needs_reauth_val last_error_arg
 
     # JSON: backoff_until is an integer or null
-    if [ "$_cm_backoff_until" -gt 0 ]; then
+    if [ "$_cm_backoff_until" -gt 0 ] 2>/dev/null; then
         backoff_val="$_cm_backoff_until"
     else
         backoff_val="null"
@@ -120,27 +120,43 @@ _cm_write_state() {
         needs_reauth_val="false"
     fi
 
-    # JSON: last_error is a string or null
+    # Build last_error arg: jq --arg handles all escaping safely.
     if [ -n "$_cm_last_error" ]; then
-        esc_err=$(printf '%s' "$_cm_last_error" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        last_error_val="\"$esc_err\""
+        last_error_arg="--arg last_error $_cm_last_error"
     else
-        last_error_val="null"
+        last_error_arg=""
     fi
 
-    printf '{\n  "state": "%s",\n  "last_upload_ts": %s,\n  "last_upload_result": "%s",\n  "last_batch_size": %s,\n  "last_latency_ms": %s,\n  "uploads_this_session": %s,\n  "points_uploaded_this_session": %s,\n  "consecutive_failures": %s,\n  "backoff_until": %s,\n  "needs_reauth": %s,\n  "last_error": %s\n}\n' \
-        "$state_name" \
-        "$_cm_last_upload_ts" \
-        "$_cm_last_upload_result" \
-        "$_cm_last_batch_size" \
-        "$_cm_last_latency_ms" \
-        "$_cm_uploads_session" \
-        "$_cm_points_session" \
-        "$_cm_consecutive_failures" \
-        "$backoff_val" \
-        "$needs_reauth_val" \
-        "$last_error_val" \
-        > "$UPLOADER_STATE_FILE" 2>/dev/null
+    jq -n \
+        --arg     state              "$state_name" \
+        --argjson last_upload_ts     "${_cm_last_upload_ts:-0}" \
+        --arg     last_upload_result "${_cm_last_upload_result:-}" \
+        --argjson last_batch_size    "${_cm_last_batch_size:-0}" \
+        --argjson last_latency_ms    "${_cm_last_latency_ms:-0}" \
+        --argjson uploads            "${_cm_uploads_session:-0}" \
+        --argjson points             "${_cm_points_session:-0}" \
+        --argjson failures           "${_cm_consecutive_failures:-0}" \
+        --argjson backoff_until      "$backoff_val" \
+        --argjson needs_reauth       "$needs_reauth_val" \
+        '{
+            state:                       $state,
+            last_upload_ts:              $last_upload_ts,
+            last_upload_result:          $last_upload_result,
+            last_batch_size:             $last_batch_size,
+            last_latency_ms:             $last_latency_ms,
+            uploads_this_session:        $uploads,
+            points_uploaded_this_session: $points,
+            consecutive_failures:        $failures,
+            backoff_until:               $backoff_until,
+            needs_reauth:                $needs_reauth,
+            last_error:                  null
+        }' | {
+            if [ -n "$_cm_last_error" ]; then
+                jq --arg e "$_cm_last_error" '.last_error = $e'
+            else
+                cat
+            fi
+        } > "$UPLOADER_STATE_FILE" 2>/dev/null
 }
 
 # --- _cm_cleanup --------------------------------------------------------------

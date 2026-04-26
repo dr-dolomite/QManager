@@ -2,7 +2,12 @@
 
 import { useTranslation } from "react-i18next";
 import { useCellMapper } from "@/hooks/use-cellmapper";
-import { CellMapperMapCard } from "./cellmapper-map-card";
+import dynamic from "next/dynamic";
+
+const CellMapperMapCard = dynamic(
+  () => import("./cellmapper-map-card").then((mod) => mod.CellMapperMapCard),
+  { ssr: false, loading: () => <div className="h-[400px] animate-pulse rounded-lg bg-muted" /> }
+);
 import { CellMapperStatusCard } from "./cellmapper-status-card";
 import { CellMapperUploadCard } from "./cellmapper-upload-card";
 import { CellMapperSignInCard } from "./cellmapper-signin-card";
@@ -50,9 +55,10 @@ const CellMapperComponent = () => {
         <p className="text-muted-foreground">{t("cellmapper.page_description")}</p>
       </div>
 
-      {/* Re-auth banner: session expired but account was previously linked */}
-      {hookData.status?.account.linked === false &&
-        hookData.status?.account.username && (
+      {/* Re-auth banner: session expired OR uploader flagged needs_reauth */}
+      {((hookData.status?.account.linked === false &&
+        hookData.status?.account.username) ||
+        hookData.status?.service.uploader_needs_reauth) && (
           <div className="mb-4">
             <CellMapperSignInCard
               isLinked={false}

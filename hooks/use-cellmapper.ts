@@ -19,7 +19,7 @@ export interface CellMapperStatus {
   service: {
     enabled: boolean;
     collector_state: "running" | "paused" | "stopped" | "error" | "starting";
-    uploader_state: "running" | "idle" | "error";
+    uploader_state: "running" | "idle" | "error" | "needs_reauth" | "backoff";
     last_measurement: {
       type: string;
       provider: string;
@@ -32,6 +32,8 @@ export interface CellMapperStatus {
       batch_size: number;
       status: string;
     } | null;
+    uploader_failures: number;
+    uploader_needs_reauth: boolean;
   };
   account: {
     linked: boolean;

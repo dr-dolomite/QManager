@@ -64,6 +64,8 @@ CM_UPLOADER_STATE_FILE="/tmp/qmanager_cm_uploader.json"
 # Defaults if state files are absent or malformed
 collector_state="stopped"
 uploader_state="idle"
+consecutive_failures=0
+uploader_needs_reauth="false"
 last_measurement="null"
 last_upload="null"
 gps_fix="null"
@@ -103,6 +105,11 @@ if [ -f "$CM_UPLOADER_STATE_FILE" ] && [ -s "$CM_UPLOADER_STATE_FILE" ]; then
     uploader_state=$(jq -r '.state // "idle"' "$CM_UPLOADER_STATE_FILE" 2>/dev/null)
     [ -z "$uploader_state" ] && uploader_state="idle"
 
+    consecutive_failures=$(jq -r '.consecutive_failures // 0' "$CM_UPLOADER_STATE_FILE" 2>/dev/null)
+    [ -z "$consecutive_failures" ] && consecutive_failures=0
+    uploader_needs_reauth=$(jq -r 'if .needs_reauth == true then "true" else "false" end' "$CM_UPLOADER_STATE_FILE" 2>/dev/null)
+    [ -z "$uploader_needs_reauth" ] && uploader_needs_reauth="false"
+
     # Build last_upload object from uploader state fields.
     # Frontend expects: {timestamp, batch_size, status} — map from daemon's schema.
     last_upload=$(jq -c '
@@ -126,7 +133,7 @@ esac
 
 # Sanitize uploader_state to allowed values
 case "$uploader_state" in
-    running|idle|error) ;;
+    running|idle|error|needs_reauth|backoff) ;;
     *) uploader_state="idle" ;;
 esac
 
@@ -218,6 +225,8 @@ jq -n \
     --argjson enabled        "$svc_enabled" \
     --arg     col_state      "$collector_state" \
     --arg     upl_state      "$uploader_state" \
+    --argjson upl_failures   "$consecutive_failures" \
+    --argjson upl_reauth     "$uploader_needs_reauth" \
     --argjson last_meas      "$last_measurement" \
     --argjson last_up        "$last_upload" \
     --argjson linked         "$cm_linked" \
@@ -237,6 +246,8 @@ jq -n \
             enabled:         $enabled,
             collector_state: $col_state,
             uploader_state:  $upl_state,
+            uploader_failures: $upl_failures,
+            uploader_needs_reauth: $upl_reauth,
             last_measurement: $last_meas,
             last_upload:     $last_up
         },

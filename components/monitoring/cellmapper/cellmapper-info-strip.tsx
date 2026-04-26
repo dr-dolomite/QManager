@@ -2,31 +2,32 @@
 
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
+import { CellMapperStatus } from "@/hooks/use-cellmapper";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface CellMapperInfoStripProps {
-  status: {
-    service: {
-      enabled: boolean;
-    };
-    buffer: {
-      pending_count: number;
-    };
-  } | null;
+  status: CellMapperStatus | null;
+  uploadTarget?: "cellmapper" | "custom";
+  customUrl?: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CellMapperInfoStrip({ status }: CellMapperInfoStripProps) {
+export function CellMapperInfoStrip({ status, uploadTarget, customUrl }: CellMapperInfoStripProps) {
   const { t } = useTranslation("monitoring");
 
   if (!status) return null;
 
+  const endpoint =
+    uploadTarget === "custom" && customUrl
+      ? customUrl.replace(/^https?:\/\//, "").split("/")[0]
+      : "cellmapper.net";
+
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <span>
-        {t("cellmapper.info_destination", { endpoint: "cellmapper.net" })}
+        {t("cellmapper.info_destination", { endpoint })}
       </span>
 
       <span className="hidden @md/main:inline">·</span>

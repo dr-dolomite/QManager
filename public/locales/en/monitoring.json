@@ -480,6 +480,10 @@
     "account_row_token_expires": "Token expires",
     "account_row_user": "User",
     "account_sign_out_button": "Sign Out",
+    "signout_dialog_title": "Sign out of CellMapper?",
+    "signout_dialog_description": "Uploads will pause until you sign in again. Buffered measurements will be preserved.",
+    "signout_dialog_cancel": "Cancel",
+    "signout_dialog_confirm": "Sign Out",
     "account_signing_out": "Signing out…",
     "account_status_linked": "Linked",
     "account_status_not_linked": "Not linked",
@@ -496,6 +500,7 @@
     "buffer_btn_purge": "Purge Buffer",
     "buffer_col_captured": "Captured",
     "buffer_col_cell": "Cell",
+    "buffer_col_pci": "PCI",
     "buffer_col_mcc": "MCC",
     "buffer_col_mnc": "MNC",
     "buffer_col_position": "Position",
@@ -780,6 +785,8 @@
     "upload_title": "Upload Queue",
     "uploader_state_error": "Error",
     "uploader_state_idle": "Idle",
-    "uploader_state_running": "Uploading"
+    "uploader_state_running": "Uploading",
+    "uploader_state_needs_reauth": "Auth Expired",
+    "uploader_state_backoff": "Backing Off"
   }
 }

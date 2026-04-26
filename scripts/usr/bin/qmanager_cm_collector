@@ -167,11 +167,11 @@ _cm_load_config() {
 # ---------------------------------------------------------------------------
 cm_distance_m() {
     local lat1="$1" lon1="$2" lat2="$3" lon2="$4"
-    # Guard: if any input is empty or exactly "0", return sentinel.
-    case "$lat1$lon1$lat2$lon2" in
-        *''*) echo "99999"; return ;;
-    esac
-    [ "$lat1" = "0" ] && echo "99999" && return
+    # Guard: if any coord is empty or zero, return sentinel (= "moved").
+    if [ -z "$lat1" ] || [ -z "$lon1" ] || [ -z "$lat2" ] || [ -z "$lon2" ]; then
+        echo "99999"; return
+    fi
+    [ "$lat1" = "0" ] || [ "$lon1" = "0" ] && echo "99999" && return
     awk "BEGIN {
         dlat = ($lat2 - $lat1) * 111320.0
         dlon = ($lon2 - $lon1) * 111320.0 * cos($lat1 * 3.14159265358979 / 180.0)
@@ -532,8 +532,8 @@ _cm_process_measurements() {
                 printf '%s' "$geo_obj" > /tmp/cm_last_measurement_$$
             else
                 qlog_warn "cm_collector: DB insert failed for cell $cell_key"
-                _cm_add_error "db" "insert failed for cell $cell_key"
-                echo "0" >> /tmp/cm_insert_count_$$
+                # _cm_add_error won't work here (pipe subshell) — signal via flag file.
+                echo "E:db:insert failed for cell $cell_key" >> /tmp/cm_insert_count_$$
             fi
         else
             qlog_debug "cm_collector: dedup skip cell $cell_key (signal=$signal snr=$snr)"
@@ -544,9 +544,19 @@ _cm_process_measurements() {
     # Tally results from the flag file written inside the subshell loop.
     local flag_file="/tmp/cm_insert_count_$$"
     if [ -f "$flag_file" ]; then
-        local inserted dropped
-        inserted=$(grep -c "^1$" "$flag_file" 2>/dev/null); inserted=${inserted:-0}
-        dropped=$(grep -c "^D$" "$flag_file" 2>/dev/null); dropped=${dropped:-0}
+        local inserted=0 dropped=0 _flag_line
+        while IFS= read -r _flag_line; do
+            case "$_flag_line" in
+                1) inserted=$((inserted + 1)) ;;
+                D) dropped=$((dropped + 1)) ;;
+                E:*) # Error signal from subshell: E:<source>:<message>
+                    local _err_rest="${_flag_line#E:}"
+                    local _err_src="${_err_rest%%:*}"
+                    local _err_msg="${_err_rest#*:}"
+                    _cm_add_error "$_err_src" "$_err_msg"
+                    ;;
+            esac
+        done < "$flag_file"
         rm -f "$flag_file"
         SESSION_MEASUREMENTS=$((SESSION_MEASUREMENTS + inserted))
         SESSION_DEDUP_DROPS=$((SESSION_DEDUP_DROPS + dropped))

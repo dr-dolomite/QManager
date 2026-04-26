@@ -44,6 +44,7 @@ interface BufferEntry {
     MCC: number | null;
     MNC: number | null;
     CID: number | null;
+    PCI: number | null;
     signal: number | null;
     latitude: number | null;
     longitude: number | null;
@@ -296,6 +297,9 @@ const CellMapperBufferComponent = () => {
                       <th className="py-2 pr-3 font-medium text-muted-foreground">
                         {t("cellmapper.buffer_col_cell")}
                       </th>
+                      <th className="py-2 pr-3 font-medium text-muted-foreground tabular-nums">
+                        {t("cellmapper.buffer_col_pci")}
+                      </th>
                       <th className="py-2 pr-3 font-medium text-muted-foreground text-right">
                         {t("cellmapper.buffer_col_signal")}
                       </th>
@@ -321,6 +325,9 @@ const CellMapperBufferComponent = () => {
                         </td>
                         <td className="py-2 pr-3 tabular-nums font-mono text-xs">
                           {entry.summary.CID ?? "—"}
+                        </td>
+                        <td className="py-2 pr-3 tabular-nums font-mono text-xs">
+                          {entry.summary.PCI ?? "—"}
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums">
                           {entry.summary.signal != null

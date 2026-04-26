@@ -43,7 +43,7 @@ interface CellMapperStatusCardProps {
     service: {
       enabled: boolean;
       collector_state: "running" | "paused" | "stopped" | "error" | "starting";
-      uploader_state: "running" | "idle" | "error";
+      uploader_state: "running" | "idle" | "error" | "needs_reauth" | "backoff";
       last_measurement: {
         type: string;
         provider: string;
