@@ -102,7 +102,6 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     _http_gps_url=$(    cm_uci_get http_gps_url     "")
     _http_gps_auth=$(   cm_uci_get http_gps_auth    "")
     _nmea_udp_port=$(   cm_uci_get nmea_udp_port    29998)
-    _nmea_fwd_peers=$(  cm_uci_get nmea_forward_peers "")
     _interval_moving=$( cm_uci_get interval_moving  5)
     _interval_stopped=$(cm_uci_get interval_stopped 60)
     _neighbor_interval=$(cm_uci_get neighbor_interval 30)
@@ -146,7 +145,6 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --arg     http_gps_url      "$_http_gps_url" \
         --arg     http_gps_auth     "$_http_gps_auth" \
         --argjson nmea_udp_port     "$_nmea_udp_port" \
-        --arg     nmea_forward_peers "$_nmea_fwd_peers" \
         --argjson interval_moving   "$_interval_moving" \
         --argjson interval_stopped  "$_interval_stopped" \
         --argjson neighbor_interval "$_neighbor_interval" \
@@ -178,7 +176,6 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             http_gps_url:      $http_gps_url,
             http_gps_auth:     $http_gps_auth,
             nmea_udp_port:     $nmea_udp_port,
-            nmea_forward_peers: $nmea_forward_peers,
             interval_moving:   $interval_moving,
             interval_stopped:  $interval_stopped,
             neighbor_interval: $neighbor_interval,
@@ -295,15 +292,6 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     if [ -n "$val" ]; then
         validate_int "$val" 1024 65535 || reject_field "nmea_udp_port" "must be 1024-65535"
         uci -q set "quecmanager.cellmapper.nmea_udp_port=$val"
-    fi
-
-    # -------------------------------------------------------------------------
-    # nmea_forward_peers (space-separated host:port pairs, optional)
-    # -------------------------------------------------------------------------
-    val=$(printf '%s' "$POST_DATA" | jq -r '.nmea_forward_peers // empty' 2>/dev/null)
-    if [ -n "$val" ]; then
-        # Basic validation: each token should be host:port or just host
-        uci -q set "quecmanager.cellmapper.nmea_forward_peers=$val"
     fi
 
     # -------------------------------------------------------------------------
