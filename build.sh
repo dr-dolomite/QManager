@@ -129,6 +129,17 @@ cp "$DEPS_DIR/atcli_smd11" "$STAGING_DIR/dependencies/atcli_smd11"
 cp "$DEPS_DIR/sms_tool" "$STAGING_DIR/dependencies/sms_tool"
 chmod 755 "$STAGING_DIR/dependencies/atcli_smd11" "$STAGING_DIR/dependencies/sms_tool"
 
+step "Normalising file permissions for OpenWRT..."
+# uhttpd requires world-readable files; macOS umask 077 produces 600/700 which causes 403.
+find "$STAGING_DIR" -type d -exec chmod 755 {} \;
+find "$STAGING_DIR" -type f -exec chmod 644 {} \;
+# Restore executable bit on scripts, CGIs, init.d, and binaries
+find "$STAGING_DIR" -type f -name '*.sh' -exec chmod 755 {} \;
+find "$STAGING_DIR/scripts/etc/init.d" -type f -exec chmod 755 {} \; 2>/dev/null || true
+find "$STAGING_DIR/scripts/usr/bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
+find "$STAGING_DIR/dependencies" -type f -exec chmod 755 {} \; 2>/dev/null || true
+chmod 755 "$STAGING_DIR/install.sh" "$STAGING_DIR/uninstall.sh"
+
 step "Creating qmanager.tar.gz..."
 tar czf "$ARCHIVE" -C "$BUILD_DIR" qmanager_install
 

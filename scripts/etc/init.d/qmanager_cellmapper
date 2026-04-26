@@ -1,0 +1,99 @@
+#!/bin/sh /etc/rc.common
+# =============================================================================
+# qmanager_cellmapper — Init Script for CellMapper Integration (procd)
+# =============================================================================
+# Manages the lifecycle of the CellMapper collector and uploader daemons
+# independently from the core qmanager service. Both processes are supervised
+# by procd for automatic respawn and clean shutdown.
+#
+# Persistent data directory layout (created at start_service time):
+#   /overlay/cellmapper/          — persistent data directory (survives reboot)
+#   /overlay/cellmapper/queue.db  — SQLite queue database
+#   /overlay/cellmapper/hash      — CellMapper auth token (chmod 0600)
+#   /var/log/cellmapper/          — log files (tmpfs, recreated on boot)
+#
+# The service will not start unless quecmanager.cellmapper.enabled=1 in UCI.
+#
+# Usage:
+#   /etc/init.d/qmanager_cellmapper start|stop|restart|enable|disable
+#
+# Install location: /etc/init.d/qmanager_cellmapper
+# Dependencies:     procd, uci, qmanager_cm_collector, qmanager_cm_uploader
+# =============================================================================
+
+START=99
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    # Guard: only start when explicitly enabled in UCI.
+    local enabled
+    enabled=$(uci -q get quecmanager.cellmapper.enabled 2>/dev/null)
+    [ "$enabled" = "1" ] || return 0
+
+    # Read log level from the shared qmanager config file, defaulting to INFO.
+    local log_level
+    log_level=$(cat /etc/qmanager/log_level 2>/dev/null || echo "INFO")
+
+    # Create runtime directories.
+    # /overlay/cellmapper persists across reboots (overlay filesystem).
+    # /var/log/cellmapper lives in tmpfs and is recreated here each boot.
+    mkdir -p /var/log/cellmapper
+    mkdir -p /overlay/cellmapper
+
+    # Protect the auth token file if it already exists.
+    if [ -f /overlay/cellmapper/hash ]; then
+        chmod 0600 /overlay/cellmapper/hash
+    fi
+
+    # ---- Collector -----------------------------------------------------------
+    # Reads cell/GPS data from the modem and writes to the SQLite queue.
+    procd_open_instance "cellmapper_collector"
+    procd_set_param command /usr/bin/qmanager_cm_collector
+    procd_set_param env QLOG_LEVEL="$log_level"
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    # respawn: threshold=3600s, timeout=5s, retry_max=5
+    procd_set_param respawn 3600 5 5
+    procd_close_instance
+
+    # ---- Uploader ------------------------------------------------------------
+    # Drains the SQLite queue and posts batches to CellMapper (or custom URL).
+    procd_open_instance "cellmapper_uploader"
+    procd_set_param command /usr/bin/qmanager_cm_uploader
+    procd_set_param env QLOG_LEVEL="$log_level"
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    # respawn: threshold=3600s, timeout=5s, retry_max=5
+    procd_set_param respawn 3600 5 5
+    procd_close_instance
+
+    # ---- NMEA UDP Relay (only when gps_source=nmea_udp) ----------------------
+    local gps_source
+    gps_source=$(uci -q get quecmanager.cellmapper.gps_source 2>/dev/null)
+    if [ "$gps_source" = "nmea_udp" ]; then
+        procd_open_instance "cellmapper_nmea_relay"
+        procd_set_param command /usr/bin/qmanager_cm_nmea_relay
+        procd_set_param env QLOG_LEVEL="$log_level"
+        procd_set_param stdout 1
+        procd_set_param stderr 1
+        procd_set_param respawn 3600 5 5
+        procd_close_instance
+    fi
+}
+
+stop_service() {
+    # Clean up transient state files written by the daemons.
+    # The queue.db in /overlay is intentionally left intact — it survives
+    # stop/start cycles so buffered data is not lost on a restart.
+    rm -f /tmp/qmanager_cellmapper.json
+    rm -f /var/run/qmanager_cm_collector.pid
+    rm -f /var/run/qmanager_cm_uploader.pid
+    rm -f /tmp/cellmapper_gps_fix.json
+    rm -f /var/run/qmanager_cm_nmea_relay.pid
+}
+
+service_triggers() {
+    # Reload/restart when the quecmanager UCI config changes.
+    procd_add_reload_trigger "quecmanager"
+}

@@ -1,0 +1,826 @@
+#!/bin/sh
+# =============================================================================
+# qmanager_cm_collector — CellMapper Measurement Collector Daemon
+# =============================================================================
+# Runs as a procd service. On each cycle:
+#   1. Reads UCI config (supports SIGUSR-style reload via flag file).
+#   2. Obtains a GPS fix from the configured provider.
+#   3. Determines motion state (moving/stationary) via Haversine distance
+#      and speed threshold.
+#   4. Collects serving cell, carrier aggregation, and (at lower frequency)
+#      neighbour cell measurements from the modem adapter.
+#   5. Applies GPS coordinates to every measurement object.
+#   6. Deduplicates per-cell using state files under /tmp/cellmapper_dedup/.
+#   7. Inserts non-duplicate measurements into the SQLite pending queue.
+#   8. Evicts buffer rows that exceed configured count/age limits.
+#   9. Writes a live state JSON to /tmp/qmanager_cellmapper.json.
+#  10. Sleeps for the appropriate interval (moving=fast, stopped=slow).
+#
+# Graceful shutdown: trap SIGTERM/SIGINT → flush state → remove PID → exit 0.
+#
+# Install location: /usr/bin/qmanager_cm_collector
+# Dependencies:     /usr/lib/qmanager/qlog.sh
+#                   /usr/lib/qmanager/cellmapper_uci.sh
+#                   /usr/lib/qmanager/cellmapper_db.sh
+#                   /usr/lib/qmanager/cellmapper_gps.sh
+#                   /usr/lib/qmanager/cellmapper_adapter.sh
+#                   jq, awk, sqlite3-cli (opkg install jq sqlite3-cli)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Bootstrap: load qlog first so we can emit errors during lib loading.
+# ---------------------------------------------------------------------------
+if [ -f /usr/lib/qmanager/qlog.sh ]; then
+    # shellcheck disable=SC1091
+    . /usr/lib/qmanager/qlog.sh
+else
+    # Bare minimum stubs — this is only reached during very early install.
+    qlog_init()  { :; }
+    qlog_info()  { logger -t "cm_collector" -p daemon.info  "$1" 2>/dev/null; }
+    qlog_warn()  { logger -t "cm_collector" -p daemon.warn  "$1" 2>/dev/null; }
+    qlog_error() { logger -t "cm_collector" -p daemon.err   "$1" 2>/dev/null; }
+    qlog_debug() { :; }
+fi
+
+qlog_init "cm_collector"
+qlog_info "cm_collector: starting up (PID $$)"
+
+# ---------------------------------------------------------------------------
+# Load remaining libraries.
+# ---------------------------------------------------------------------------
+for _lib in \
+    /usr/lib/qmanager/cellmapper_uci.sh \
+    /usr/lib/qmanager/cellmapper_db.sh \
+    /usr/lib/qmanager/cellmapper_gps.sh \
+    /usr/lib/qmanager/cellmapper_adapter.sh
+do
+    if [ -f "$_lib" ]; then
+        # shellcheck disable=SC1090
+        . "$_lib"
+    else
+        qlog_error "cm_collector: required library not found: $_lib — aborting"
+        exit 1
+    fi
+done
+unset _lib
+
+# ---------------------------------------------------------------------------
+# Runtime constants
+# ---------------------------------------------------------------------------
+
+CM_PID_FILE="/var/run/qmanager_cm_collector.pid"
+CM_STATE_FILE="/tmp/qmanager_cellmapper.json"
+CM_RELOAD_FLAG="/tmp/qmanager_cellmapper_reload"
+CM_DEDUP_DIR="/tmp/cellmapper_dedup"
+CM_PAUSE_FLAG="/tmp/qmanager_cellmapper_pause"
+
+# GPS fix age threshold in seconds. Fixes older than this are discarded.
+CM_GPS_MAX_AGE_SEC=60
+
+# Minimum distance in metres to consider the device as MOVING.
+CM_MOTION_DIST_M=50
+
+# Estimated bytes per pending row (used for buffer count limit calculation).
+CM_AVG_ROW_BYTES=500
+
+# ---------------------------------------------------------------------------
+# Session-level state (global variables, not per-cycle).
+# ---------------------------------------------------------------------------
+
+SESSION_MEASUREMENTS=0    # Total measurements inserted this session
+SESSION_DEDUP_DROPS=0     # Total measurements dropped by dedup this session
+SESSION_ERRORS=0          # Total error events this session
+LAST_MEASUREMENT_JSON=""  # Last inserted measurement payload (JSON)
+
+# GPS state — updated each cycle; reused as fallback when GPS is unavailable.
+GPS_LAST_LAT=""
+GPS_LAST_LON=""
+GPS_LAST_ALT="0"
+GPS_LAST_SPEED="0"
+GPS_LAST_SATS="0"
+GPS_LAST_TS="0"           # Unix timestamp of the last valid GPS fix
+GPS_LAST_FIX_TYPE="none"  # "3D" | "2D" | "none"
+GPS_LAST_HDOP="99"        # Horizontal Dilution of Precision
+
+# Motion detection state
+MOTION_STATE="stationary" # "moving" | "stationary"
+MOTION_ANCHOR_LAT=""      # GPS position at last motion-state change anchor
+MOTION_ANCHOR_LON=""
+
+# Neighbour collection scheduling
+LAST_NEIGHBOR_TS=0        # Unix timestamp of last neighbour collection
+
+# Error ring buffer (JSON array string, max 20 entries)
+ERROR_RING="[]"
+
+# Adapter info (populated after cm_detect_adapter)
+CM_ADAPTER_ID_CACHED=""
+CM_ADAPTER_NAME_CACHED=""
+
+# Configuration (loaded by _cm_load_config)
+CFG_INTERVAL_MOVING=5
+CFG_INTERVAL_STOPPED=60
+CFG_NEIGHBOR_INTERVAL=30
+CFG_SPEED_THRESHOLD=5
+CFG_BUFFER_SIZE_MB=50
+CFG_BUFFER_AGE_DAYS=7
+CFG_LOG_LEVEL="WARN"
+
+# ---------------------------------------------------------------------------
+# PID file and signal handling
+# ---------------------------------------------------------------------------
+
+echo $$ > "$CM_PID_FILE"
+
+_cm_shutdown() {
+    qlog_info "cm_collector: shutting down (signal received)"
+    # Write a final tombstone state so observers know we stopped cleanly.
+    _cm_write_state "stopped"
+    rm -f "$CM_PID_FILE"
+    exit 0
+}
+
+trap '_cm_shutdown' INT TERM
+
+# ---------------------------------------------------------------------------
+# _cm_load_config
+# Reads all relevant UCI options into local CFG_* variables.
+# ---------------------------------------------------------------------------
+_cm_load_config() {
+    CFG_INTERVAL_MOVING=$( cm_uci_get "interval_moving"  "5")
+    CFG_INTERVAL_STOPPED=$(cm_uci_get "interval_stopped" "60")
+    CFG_NEIGHBOR_INTERVAL=$(cm_uci_get "neighbor_interval" "30")
+    CFG_SPEED_THRESHOLD=$( cm_uci_get "speed_threshold"  "5")
+    CFG_BUFFER_SIZE_MB=$(  cm_uci_get "buffer_size_mb"   "50")
+    CFG_BUFFER_AGE_DAYS=$( cm_uci_get "buffer_age_days"  "7")
+    CFG_LOG_LEVEL=$(       cm_uci_get "log_level"        "WARN")
+
+    # Propagate log level to the qlog library's live variable.
+    QLOG_LEVEL="$CFG_LOG_LEVEL"
+}
+
+# ---------------------------------------------------------------------------
+# cm_distance_m <lat1> <lon1> <lat2> <lon2>
+# Equirectangular approximation — accurate enough for the <=50 m threshold.
+# Returns distance in metres (integer).  Returns 99999 when any coord is
+# empty or zero (causes caller to treat position as "moved").
+# ---------------------------------------------------------------------------
+cm_distance_m() {
+    local lat1="$1" lon1="$2" lat2="$3" lon2="$4"
+    # Guard: if any input is empty or exactly "0", return sentinel.
+    case "$lat1$lon1$lat2$lon2" in
+        *''*) echo "99999"; return ;;
+    esac
+    [ "$lat1" = "0" ] && echo "99999" && return
+    awk "BEGIN {
+        dlat = ($lat2 - $lat1) * 111320.0
+        dlon = ($lon2 - $lon1) * 111320.0 * cos($lat1 * 3.14159265358979 / 180.0)
+        printf \"%d\", int(sqrt(dlat*dlat + dlon*dlon) + 0.5)
+    }"
+}
+
+# ---------------------------------------------------------------------------
+# _cm_abs_diff <a> <b>
+# Return the absolute difference between two integers.
+# ---------------------------------------------------------------------------
+_cm_abs_diff() {
+    local a="$1" b="$2"
+    awk "BEGIN { d = $a - $b; if (d < 0) d = -d; printf \"%d\", int(d) }"
+}
+
+# ---------------------------------------------------------------------------
+# _cm_add_error <source> <message>
+# Append an error to ERROR_RING (ring buffer, last 20 entries).
+# If the previous error has the same source+msg, increment its count instead.
+# Updates the global ERROR_RING string.
+# ---------------------------------------------------------------------------
+_cm_add_error() {
+    local src="$1"
+    local msg="$2"
+    local now
+    now=$(date +%s)
+
+    SESSION_ERRORS=$((SESSION_ERRORS + 1))
+
+    # Attempt to increment the count on the last error if it matches.
+    local updated
+    updated=$(printf '%s' "$ERROR_RING" | jq -c \
+        --arg src "$src" --arg msg "$msg" --argjson ts "$now" '
+        if length > 0 and last.source == $src and last.msg == $msg then
+            # Increment the count of the last entry.
+            .[:-1] + [.[-1] | .count += 1 | .ts = $ts]
+        else
+            # Append a new entry; trim to last 20.
+            . + [{"ts": $ts, "source": $src, "msg": $msg, "count": 1}]
+            | .[-20:]
+        end
+    ' 2>/dev/null)
+
+    if [ -n "$updated" ]; then
+        ERROR_RING="$updated"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# _cm_write_state <state_string>
+# Write the live state JSON to CM_STATE_FILE.
+# <state_string> is "running" | "stopped" | "no_gps" etc.
+# Uses global session variables.  Safe to call even when GPS vars are unset.
+# ---------------------------------------------------------------------------
+_cm_write_state() {
+    local state="${1:-running}"
+    local now
+    now=$(date +%s)
+
+    local lat  lon  alt  sats  speed  fix_type  hdop
+    lat="${GPS_LAST_LAT:-0}"
+    lon="${GPS_LAST_LON:-0}"
+    alt="${GPS_LAST_ALT:-0}"
+    sats="${GPS_LAST_SATS:-0}"
+    speed="${GPS_LAST_SPEED:-0}"
+    fix_type="${GPS_LAST_FIX_TYPE:-none}"
+    hdop="${GPS_LAST_HDOP:-99}"
+
+    local interval
+    if [ "$MOTION_STATE" = "moving" ]; then
+        interval="$CFG_INTERVAL_MOVING"
+    else
+        interval="$CFG_INTERVAL_STOPPED"
+    fi
+
+    # Determine last_error: use the last entry in ERROR_RING, or null.
+    local last_err
+    last_err=$(printf '%s' "$ERROR_RING" | jq -c 'if length > 0 then last else null end' 2>/dev/null)
+    [ -z "$last_err" ] && last_err="null"
+
+    # Parse last_measurement JSON or use null
+    local lm_json
+    if [ -n "$LAST_MEASUREMENT_JSON" ]; then
+        lm_json=$(printf '%s' "$LAST_MEASUREMENT_JSON" | jq -c \
+            --argjson ts "$now" \
+            '{type: (.type // .subType // "LTE"),
+              provider: (.provider // "Unknown"),
+              band: ("EARFCN " + ((.ARFCN // .EARFCN // "?") | tostring)),
+              signal: (.signal // 0),
+              timestamp: $ts}' 2>/dev/null)
+    fi
+    [ -z "$lm_json" ] && lm_json="null"
+
+    jq -n \
+        --arg     state              "$state" \
+        --argjson last_collect_ts    "$now" \
+        --argjson lat                "$lat" \
+        --argjson lon                "$lon" \
+        --argjson alt                "$alt" \
+        --argjson sats               "$sats" \
+        --argjson speed              "$speed" \
+        --arg     fix_type           "$fix_type" \
+        --argjson hdop               "$hdop" \
+        --arg     motion             "$MOTION_STATE" \
+        --argjson interval_sec       "$interval" \
+        --argjson measurements       "$SESSION_MEASUREMENTS" \
+        --argjson dedup_drops        "$SESSION_DEDUP_DROPS" \
+        --argjson errors_total       "$SESSION_ERRORS" \
+        --argjson last_error         "$last_err" \
+        --argjson errors             "$ERROR_RING" \
+        --arg     adapter_id         "${CM_ADAPTER_ID_CACHED:-unknown}" \
+        --arg     adapter_name       "${CM_ADAPTER_NAME_CACHED:-unknown}" \
+        --argjson last_measurement   "$lm_json" \
+        '{
+            state:                    $state,
+            last_collect_ts:          $last_collect_ts,
+            last_gps_fix: {
+                type:      $fix_type,
+                lat:       $lat,
+                lon:       $lon,
+                alt:       $alt,
+                sats:      $sats,
+                speed_kmh: $speed,
+                hdop:      $hdop
+            },
+            motion:                   $motion,
+            interval_sec:             $interval_sec,
+            measurements_this_session: $measurements,
+            dedup_drops_this_session:  $dedup_drops,
+            errors_this_session:       $errors_total,
+            last_error:               $last_error,
+            errors:                   $errors,
+            adapter: {
+                id:   $adapter_id,
+                name: $adapter_name
+            },
+            last_measurement:         $last_measurement
+        }' > "$CM_STATE_FILE" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# _cm_apply_gps <json_array> <lat> <lon> <alt>
+# Return a new JSON array where every object has latitude, longitude, and
+# altitude replaced with the supplied values.
+# Falls back to the original array on jq failure.
+# ---------------------------------------------------------------------------
+_cm_apply_gps() {
+    local arr="$1"
+    local lat="$2" lon="$3" alt="$4"
+
+    local result
+    result=$(printf '%s' "$arr" | jq -c \
+        --argjson lat "$lat" \
+        --argjson lon "$lon" \
+        --argjson alt "$alt" \
+        '[.[] | .latitude = $lat | .longitude = $lon | .altitude = $alt]' \
+        2>/dev/null)
+
+    if [ -n "$result" ] && [ "$result" != "null" ]; then
+        printf '%s' "$result"
+    else
+        printf '%s' "$arr"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# _cm_dedup_state_file <cell_key>
+# Return the path for the per-cell dedup state file.
+# cell_key is a sanitised string (no slashes).
+# ---------------------------------------------------------------------------
+_cm_dedup_state_file() {
+    local key
+    key=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9_-')
+    printf '%s/%s' "$CM_DEDUP_DIR" "$key"
+}
+
+# ---------------------------------------------------------------------------
+# _cm_dedup_check_stationary <cell_key> <signal> <snr> <ca_count>
+# Return 0 (RECORD) or 1 (SKIP) for stationary dedup logic.
+# Reads the prior state from the dedup state file.
+# Uses global GPS_LAST_TS as "now".
+# ---------------------------------------------------------------------------
+_cm_dedup_check_stationary() {
+    local cell_key="$1"
+    local signal="$2"
+    local snr="$3"
+    local ca_count="$4"
+    local now
+    now=$(date +%s)
+    local state_file
+    state_file=$(_cm_dedup_state_file "$cell_key")
+
+    if [ ! -f "$state_file" ]; then
+        # Never seen this cell before → always record.
+        return 0
+    fi
+
+    # Source the previous state into local variables via a subshell-safe read.
+    local p_lat p_lon p_signal p_snr p_ts p_ca_count
+    # shellcheck disable=SC1090
+    . "$state_file"
+    p_lat="${DEDUP_LAT:-0}"
+    p_lon="${DEDUP_LON:-0}"
+    p_signal="${DEDUP_SIGNAL:-0}"
+    p_snr="${DEDUP_SNR:-0}"
+    p_ts="${DEDUP_TS:-0}"
+    p_ca_count="${DEDUP_CA_COUNT:-0}"
+
+    # 1. Time threshold: more than 60 s since last measurement → record.
+    local age
+    age=$((now - p_ts))
+    if [ "$age" -ge 60 ]; then
+        return 0
+    fi
+
+    # 2. Signal changed by >= 3 dB.
+    local sig_diff
+    sig_diff=$(_cm_abs_diff "${signal:-0}" "${p_signal:-0}")
+    if [ "$sig_diff" -ge 3 ] 2>/dev/null; then
+        return 0
+    fi
+
+    # 3. SNR changed by >= 3 dB.
+    local snr_diff
+    snr_diff=$(_cm_abs_diff "${snr:-0}" "${p_snr:-0}")
+    if [ "$snr_diff" -ge 3 ] 2>/dev/null; then
+        return 0
+    fi
+
+    # 4. CA component count changed.
+    if [ "${ca_count:-0}" != "$p_ca_count" ] 2>/dev/null; then
+        return 0
+    fi
+
+    # None of the record conditions met → skip (dedup).
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# _cm_dedup_update <cell_key> <lat> <lon> <signal> <snr> <ca_count>
+# Persist the current measurement state for future dedup comparisons.
+# ---------------------------------------------------------------------------
+_cm_dedup_update() {
+    local cell_key="$1"
+    local lat="$2" lon="$3"
+    local signal="$4" snr="$5" ca_count="$6"
+    local now
+    now=$(date +%s)
+    local state_file
+    state_file=$(_cm_dedup_state_file "$cell_key")
+
+    mkdir -p "$CM_DEDUP_DIR" 2>/dev/null
+    cat > "$state_file" <<EOF
+DEDUP_LAT="${lat}"
+DEDUP_LON="${lon}"
+DEDUP_SIGNAL="${signal}"
+DEDUP_SNR="${snr}"
+DEDUP_TS="${now}"
+DEDUP_CA_COUNT="${ca_count}"
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# _cm_process_measurements <json_array> <lat> <lon> <alt> <motion_state>
+#                           <ca_count_hint>
+# Iterate through a JSON array of measurement objects.  For each object:
+#   - Determine the cell key (CID, NCI, or PCI).
+#   - Run dedup check (stationary) or bypass (moving).
+#   - If not deduped: insert into DB and update dedup state.
+#
+# Updates globals: SESSION_MEASUREMENTS, SESSION_DEDUP_DROPS.
+#
+# Note: This function must NOT be called in a subshell ($()) because it
+# updates global session counters.  Output is suppressed; side-effects are
+# the goal.
+# ---------------------------------------------------------------------------
+_cm_process_measurements() {
+    local arr="$1"
+    local lat="$2" lon="$3" alt="$4"
+    local motion="$5"
+    local ca_count="${6:-0}"
+
+    # Quick exit if array is empty.
+    case "$arr" in
+        "[]"|""|"null") return 0 ;;
+    esac
+
+    local now
+    now=$(date +%s)
+
+    # Iterate using jq to emit each object as a single-line JSON string.
+    local obj cell_key cid signal snr
+
+    printf '%s' "$arr" | jq -c '.[]' 2>/dev/null | while IFS= read -r obj; do
+        [ -z "$obj" ] && continue
+
+        # Extract cell key: prefer CID, fall back to NCI, then PCI.
+        cid=$(printf '%s' "$obj" | jq -r '
+            if .CID? and (.CID? | type) == "number" and .CID > 0 then .CID | tostring
+            elif .NCI? and (.NCI? | type) == "number" and .NCI > 0 then "NCI_\(.NCI)"
+            elif .PCI? then "PCI_\(.PCI)"
+            else "UNKNOWN"
+            end
+        ' 2>/dev/null)
+        cell_key="${cid:-UNKNOWN}"
+
+        # Extract signal (RSRP) and SNR/SINR.
+        signal=$(printf '%s' "$obj" | jq -r '
+            if (.signal? | type) == "number" then .signal
+            elif (.LTE_RSRP? | type) == "string" and .LTE_RSRP != "" then .LTE_RSRP | tonumber? // 0
+            else 0
+            end
+        ' 2>/dev/null)
+        signal="${signal:-0}"
+
+        snr=$(printf '%s' "$obj" | jq -r '
+            if (.LTE_SNR? | type) == "string" and .LTE_SNR != "" then .LTE_SNR | tonumber? // 0
+            elif (.NR5G_SNR? | type) == "string" and .NR5G_SNR != "" then .NR5G_SNR | tonumber? // 0
+            else 0
+            end
+        ' 2>/dev/null)
+        snr="${snr:-0}"
+
+        # Dedup decision.
+        local should_record=1
+        if [ "$motion" = "moving" ]; then
+            # Moving: always record.
+            should_record=1
+        else
+            # Stationary: apply signal/time thresholds.
+            if _cm_dedup_check_stationary "$cell_key" "$signal" "$snr" "$ca_count"; then
+                should_record=1
+            else
+                should_record=0
+            fi
+        fi
+
+        if [ "$should_record" -eq 1 ]; then
+            # Apply GPS coords to this single object then insert.
+            local geo_obj
+            geo_obj=$(printf '%s' "$obj" | jq -c \
+                --argjson lat "$lat" \
+                --argjson lon "$lon" \
+                --argjson alt "$alt" \
+                '. | .latitude = $lat | .longitude = $lon | .altitude = $alt' \
+                2>/dev/null)
+            [ -z "$geo_obj" ] && geo_obj="$obj"
+
+            local payload_size
+            payload_size=${#geo_obj}
+
+            if cm_db_insert_pending "$now" "$payload_size" "$geo_obj"; then
+                _cm_dedup_update "$cell_key" "$lat" "$lon" "$signal" "$snr" "$ca_count"
+                # Signal the parent shell via a flag file since we're in a subshell.
+                echo "1" >> /tmp/cm_insert_count_$$
+                # Save the last inserted measurement for state file reporting.
+                printf '%s' "$geo_obj" > /tmp/cm_last_measurement_$$
+            else
+                qlog_warn "cm_collector: DB insert failed for cell $cell_key"
+                _cm_add_error "db" "insert failed for cell $cell_key"
+                echo "0" >> /tmp/cm_insert_count_$$
+            fi
+        else
+            qlog_debug "cm_collector: dedup skip cell $cell_key (signal=$signal snr=$snr)"
+            echo "D" >> /tmp/cm_insert_count_$$
+        fi
+    done
+
+    # Tally results from the flag file written inside the subshell loop.
+    local flag_file="/tmp/cm_insert_count_$$"
+    if [ -f "$flag_file" ]; then
+        local inserted dropped
+        inserted=$(grep -c "^1$" "$flag_file" 2>/dev/null); inserted=${inserted:-0}
+        dropped=$(grep -c "^D$" "$flag_file" 2>/dev/null); dropped=${dropped:-0}
+        rm -f "$flag_file"
+        SESSION_MEASUREMENTS=$((SESSION_MEASUREMENTS + inserted))
+        SESSION_DEDUP_DROPS=$((SESSION_DEDUP_DROPS + dropped))
+    fi
+
+    # Capture last inserted measurement for state file (written from subshell).
+    local lm_file="/tmp/cm_last_measurement_$$"
+    if [ -f "$lm_file" ]; then
+        LAST_MEASUREMENT_JSON=$(cat "$lm_file")
+        rm -f "$lm_file"
+    fi
+}
+
+# ===========================================================================
+# INITIALIZATION
+# ===========================================================================
+
+# Ensure config defaults exist before reading.
+ensure_cellmapper_config
+
+# Load config into CFG_* variables (sets QLOG_LEVEL too).
+_cm_load_config
+
+# Check feature-enabled flag.
+_cm_enabled=$(cm_uci_get "enabled" "0")
+if [ "$_cm_enabled" != "1" ]; then
+    qlog_info "cm_collector: CellMapper is disabled in UCI (enabled=0) — exiting"
+    rm -f "$CM_PID_FILE"
+    exit 0
+fi
+
+# Check consent.
+_cm_consent=$(cm_uci_get "consent_accepted" "0")
+if [ "$_cm_consent" != "1" ]; then
+    qlog_warn "cm_collector: consent_accepted=0 — cannot collect. Exiting."
+    rm -f "$CM_PID_FILE"
+    exit 0
+fi
+
+# Initialize the SQLite queue database.
+if ! cm_db_init; then
+    qlog_error "cm_collector: cm_db_init failed — aborting"
+    rm -f "$CM_PID_FILE"
+    exit 1
+fi
+
+# Detect and load the modem adapter.
+if ! cm_detect_adapter; then
+    qlog_error "cm_collector: no compatible modem adapter found — aborting"
+    _cm_add_error "adapter" "no compatible adapter found"
+    _cm_write_state "no_adapter"
+    rm -f "$CM_PID_FILE"
+    exit 1
+fi
+
+CM_ADAPTER_ID_CACHED="$CM_ADAPTER_ID"
+CM_ADAPTER_NAME_CACHED="$CM_ADAPTER_NAME"
+qlog_info "cm_collector: adapter detected: $CM_ADAPTER_ID_CACHED ($CM_ADAPTER_NAME_CACHED)"
+
+# Create the dedup working directory.
+mkdir -p "$CM_DEDUP_DIR" 2>/dev/null
+
+# Write initial running state.
+_cm_write_state "running"
+
+qlog_info "cm_collector: initialization complete — entering main loop"
+
+# ===========================================================================
+# MAIN COLLECTION LOOP
+# ===========================================================================
+
+while true; do
+
+    # -----------------------------------------------------------------------
+    # A0. Check for pause flag.
+    # -----------------------------------------------------------------------
+    if [ -f "$CM_PAUSE_FLAG" ]; then
+        qlog_debug "cm_collector: paused by user request"
+        _cm_write_state "paused"
+        sleep "$CFG_INTERVAL_MOVING"
+        continue
+    fi
+
+    # -----------------------------------------------------------------------
+    # A. Check for UCI reload flag.
+    # -----------------------------------------------------------------------
+    if [ -f "$CM_RELOAD_FLAG" ]; then
+        qlog_info "cm_collector: reload flag detected — re-reading UCI config"
+        rm -f "$CM_RELOAD_FLAG"
+        _cm_load_config
+    fi
+
+    # -----------------------------------------------------------------------
+    # B. Get GPS fix.
+    # -----------------------------------------------------------------------
+    _gps_ok=0
+    _gps_raw=""
+
+    if _gps_raw=$(cm_gps_get_fix 2>/dev/null); then
+        # Parse the JSON fix.
+        _gps_lat=$(printf '%s' "$_gps_raw" | jq -r '.lat   // empty' 2>/dev/null)
+        _gps_lon=$(printf '%s' "$_gps_raw" | jq -r '.lon   // empty' 2>/dev/null)
+        _gps_alt=$(printf '%s' "$_gps_raw" | jq -r '.alt   // 0'     2>/dev/null)
+        _gps_spd=$(printf '%s' "$_gps_raw" | jq -r '.speed_kmh // 0' 2>/dev/null)
+        _gps_sat=$(printf '%s' "$_gps_raw" | jq -r '.sats  // 0'     2>/dev/null)
+        _fix_type=$(printf '%s' "$_gps_raw" | jq -r '.fix_type // "none"' 2>/dev/null)
+        _gps_hdop=$(printf '%s' "$_gps_raw" | jq -r '.hdop // empty' 2>/dev/null)
+
+        if [ -n "$_gps_lat" ] && [ -n "$_gps_lon" ] && [ "$_fix_type" != "none" ]; then
+            GPS_LAST_LAT="$_gps_lat"
+            GPS_LAST_LON="$_gps_lon"
+            GPS_LAST_ALT="${_gps_alt:-0}"
+            GPS_LAST_SPEED="${_gps_spd:-0}"
+            GPS_LAST_SATS="${_gps_sat:-0}"
+            GPS_LAST_TS=$(date +%s)
+            GPS_LAST_FIX_TYPE="$_fix_type"
+            GPS_LAST_HDOP="${_gps_hdop:-99}"
+            _gps_ok=1
+        else
+            qlog_debug "cm_collector: GPS fix returned but fix_type=none or coords empty"
+        fi
+    fi
+
+    # If no fresh fix, try the stale-fix fallback (< CM_GPS_MAX_AGE_SEC).
+    if [ "$_gps_ok" -eq 0 ]; then
+        _now=$(date +%s)
+        _fix_age=$((_now - GPS_LAST_TS))
+        if [ -n "$GPS_LAST_LAT" ] && [ "$_fix_age" -lt "$CM_GPS_MAX_AGE_SEC" ]; then
+            qlog_debug "cm_collector: using cached GPS fix (age ${_fix_age}s)"
+            _gps_ok=1
+        else
+            qlog_warn "cm_collector: no GPS fix available (age=${_fix_age}s) — skipping cycle"
+            _cm_add_error "gps" "no fix available"
+            _cm_write_state "no_gps"
+            sleep "$CFG_INTERVAL_MOVING"
+            continue
+        fi
+    fi
+
+    _lat="$GPS_LAST_LAT"
+    _lon="$GPS_LAST_LON"
+    _alt="${GPS_LAST_ALT:-0}"
+    _speed_int=$(awk "BEGIN { printf \"%d\", int(${GPS_LAST_SPEED:-0} + 0.5) }")
+
+    # -----------------------------------------------------------------------
+    # C. Determine motion state.
+    # -----------------------------------------------------------------------
+    _dist=$(cm_distance_m "$MOTION_ANCHOR_LAT" "$MOTION_ANCHOR_LON" "$_lat" "$_lon")
+
+    if [ "$_dist" -ge "$CM_MOTION_DIST_M" ] 2>/dev/null || \
+       [ "$_speed_int" -ge "$CFG_SPEED_THRESHOLD" ] 2>/dev/null; then
+        if [ "$MOTION_STATE" != "moving" ]; then
+            qlog_info "cm_collector: motion state → MOVING (dist=${_dist}m speed=${_speed_int}km/h)"
+        fi
+        MOTION_STATE="moving"
+        # Update anchor to current position so distance is relative to
+        # the last update, not the session start.
+        MOTION_ANCHOR_LAT="$_lat"
+        MOTION_ANCHOR_LON="$_lon"
+    else
+        if [ "$MOTION_STATE" != "stationary" ]; then
+            qlog_info "cm_collector: motion state → STATIONARY (dist=${_dist}m speed=${_speed_int}km/h)"
+        fi
+        MOTION_STATE="stationary"
+        # Do NOT reset anchor while stationary so the distance accumulates
+        # until we cross the threshold.
+    fi
+
+    # Set anchor on first valid GPS fix.
+    if [ -z "$MOTION_ANCHOR_LAT" ]; then
+        MOTION_ANCHOR_LAT="$_lat"
+        MOTION_ANCHOR_LON="$_lon"
+    fi
+
+    # -----------------------------------------------------------------------
+    # D. Choose sleep interval.
+    # -----------------------------------------------------------------------
+    if [ "$MOTION_STATE" = "moving" ]; then
+        _sleep_interval="$CFG_INTERVAL_MOVING"
+    else
+        _sleep_interval="$CFG_INTERVAL_STOPPED"
+    fi
+
+    # -----------------------------------------------------------------------
+    # E. Collect carrier aggregation (CA) data.
+    #    We collect this first so we know the CA count to merge into serving
+    #    cell measurements for dedup tracking.
+    # -----------------------------------------------------------------------
+    _ca_arr="[]"
+    _ca_count=0
+
+    _ca_raw=$(cm_collect_ca 2>/dev/null)
+    if [ -n "$_ca_raw" ] && [ "$_ca_raw" != "[]" ]; then
+        _ca_arr=$(_cm_apply_gps "$_ca_raw" "$_lat" "$_lon" "$_alt")
+        _ca_count=$(printf '%s' "$_ca_arr" | jq 'length' 2>/dev/null || echo 0)
+        qlog_debug "cm_collector: CA components: $_ca_count"
+    fi
+
+    # -----------------------------------------------------------------------
+    # F. Collect serving cell.
+    # -----------------------------------------------------------------------
+    _serving_raw=$(cm_collect_serving 2>/dev/null)
+    if [ -z "$_serving_raw" ] || [ "$_serving_raw" = "[]" ]; then
+        qlog_warn "cm_collector: no serving cell data returned"
+        _cm_add_error "adapter" "cm_collect_serving returned empty"
+        _cm_write_state "running"
+        sleep "$_sleep_interval"
+        continue
+    fi
+
+    # Apply GPS to serving cell array.
+    _serving_arr=$(_cm_apply_gps "$_serving_raw" "$_lat" "$_lon" "$_alt")
+
+    # Process serving cell measurements (dedup + insert).
+    # ca_count is passed so dedup can trigger on CA topology changes.
+    _cm_process_measurements \
+        "$_serving_arr" "$_lat" "$_lon" "$_alt" "$MOTION_STATE" "$_ca_count"
+
+    # -----------------------------------------------------------------------
+    # G. Process CA component carriers as separate measurements.
+    # -----------------------------------------------------------------------
+    if [ "$_ca_count" -gt 0 ]; then
+        _cm_process_measurements \
+            "$_ca_arr" "$_lat" "$_lon" "$_alt" "$MOTION_STATE" "0"
+    fi
+
+    # -----------------------------------------------------------------------
+    # H. Collect neighbour cells (at lower frequency).
+    # -----------------------------------------------------------------------
+    _now=$(date +%s)
+    _nb_elapsed=$((_now - LAST_NEIGHBOR_TS))
+    if [ "$_nb_elapsed" -ge "$CFG_NEIGHBOR_INTERVAL" ]; then
+        qlog_debug "cm_collector: collecting neighbour cells"
+        _nb_raw=$(cm_collect_neighbors 2>/dev/null)
+        if [ -n "$_nb_raw" ] && [ "$_nb_raw" != "[]" ]; then
+            _nb_arr=$(_cm_apply_gps "$_nb_raw" "$_lat" "$_lon" "$_alt")
+            # Neighbours get their own per-PCI dedup state; ca_count=0.
+            _cm_process_measurements \
+                "$_nb_arr" "$_lat" "$_lon" "$_alt" "$MOTION_STATE" "0"
+        fi
+        LAST_NEIGHBOR_TS="$_now"
+    fi
+
+    # -----------------------------------------------------------------------
+    # I. Buffer eviction.
+    # -----------------------------------------------------------------------
+    _max_rows=$(awk "BEGIN { printf \"%d\", int($CFG_BUFFER_SIZE_MB * 1048576 / $CM_AVG_ROW_BYTES) }")
+    _max_age_sec=$((CFG_BUFFER_AGE_DAYS * 86400))
+
+    # Count current rows before eviction (for log message).
+    _pre_count=$(cm_db_count_pending 2>/dev/null || echo 0)
+
+    cm_db_evict_by_count "$_max_rows" 2>/dev/null
+    cm_db_evict_by_age   "$_max_age_sec" 2>/dev/null
+
+    _post_count=$(cm_db_count_pending 2>/dev/null || echo 0)
+    _evicted=$((_pre_count - _post_count))
+    if [ "$_evicted" -gt 0 ]; then
+        qlog_info "cm_collector: evicted $_evicted measurements (count/age limit)"
+    fi
+
+    # -----------------------------------------------------------------------
+    # J. Update state file.
+    # -----------------------------------------------------------------------
+    _cm_write_state "running"
+
+    qlog_debug "cm_collector: cycle complete — inserted=$SESSION_MEASUREMENTS dedup_drops=$SESSION_DEDUP_DROPS motion=$MOTION_STATE interval=${_sleep_interval}s"
+
+    # -----------------------------------------------------------------------
+    # K. Sleep until next cycle.
+    # -----------------------------------------------------------------------
+    sleep "$_sleep_interval"
+
+done
+
+# Should not be reached — the trap handles normal exit.
+_cm_shutdown

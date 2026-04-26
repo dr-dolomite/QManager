@@ -1,6 +1,6 @@
 {
   "name": "qmanager",
-  "version": "v0.1.21-test1",
+  "version": "v0.1.21-cm.1",
   "private": true,
   "scripts": {
     "dev": "bun --bun next dev",
@@ -57,6 +57,7 @@
     "i18next-icu": "^2.4.3",
     "input-otp": "^1.4.2",
     "intl-messageformat": "^11.2.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.8.0",
     "motion": "^12.38.0",
     "next": "16.0.7",
@@ -68,6 +69,7 @@
     "react-hook-form": "^7.71.2",
     "react-i18next": "^17.0.4",
     "react-icons": "^5.6.0",
+    "react-leaflet": "^5.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.7.4",
     "recharts": "2.15.4",
@@ -80,6 +82,7 @@
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/canvas-confetti": "^1.9.0",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^20.19.37",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",

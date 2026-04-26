@@ -19,7 +19,7 @@ qlog_init "auto_update"
 
 # --- Configuration -----------------------------------------------------------
 
-REPO="dr-dolomite/QManager"
+REPO="moxy-kit/QManager"
 VERSION_FILE="/etc/qmanager/VERSION"
 PID_FILE="/tmp/qmanager_update.pid"
 UPDATER="/usr/bin/qmanager_update"
