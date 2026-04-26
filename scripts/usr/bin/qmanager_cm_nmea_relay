@@ -26,8 +26,24 @@
 # The state file includes an _epoch field (Unix timestamp of last write) so
 # consumers can detect stale data.
 #
+# Peer forwarding (multi-sled GPS sharing):
+#   When nmea_forward_peers is set in UCI, every received NMEA line is also
+#   forwarded via UDP to each listed peer. This allows a single phone running
+#   gpsdRelay to feed GPS to multiple sleds on different subnets (e.g. via
+#   Tailscale).
+#
+#   UCI option: quecmanager.cellmapper.nmea_forward_peers
+#   Format:     space-separated host:port pairs
+#   Example:    '100.127.10.72:29998 100.115.138.16:29998'
+#
+#   Forwarding uses a persistent socat pipe per peer — no process spawning
+#   per NMEA line. Peer unreachability does not affect local GPS processing
+#   (UDP is fire-and-forget). Only the primary sled (receiving from the
+#   phone) should have this option set; secondary sleds leave it empty.
+#
 # UCI config:
-#   uci get quecmanager.cellmapper.nmea_udp_port  (default: 29998)
+#   uci get quecmanager.cellmapper.nmea_udp_port       (default: 29998)
+#   uci get quecmanager.cellmapper.nmea_forward_peers   (default: empty)
 #
 # Install location: /usr/bin/qmanager_cm_nmea_relay
 # Dependencies:     socat or nc, awk
@@ -58,6 +74,14 @@ if command -v uci >/dev/null 2>&1; then
     UDP_PORT=$(uci -q get quecmanager.cellmapper.nmea_udp_port 2>/dev/null)
 fi
 UDP_PORT="${UDP_PORT:-29998}"
+
+# ---------------------------------------------------------------------------
+# Read forward peers from UCI (optional — for multi-sled GPS sharing)
+# ---------------------------------------------------------------------------
+FORWARD_PEERS=""
+if command -v uci >/dev/null 2>&1; then
+    FORWARD_PEERS=$(uci -q get quecmanager.cellmapper.nmea_forward_peers 2>/dev/null)
+fi
 
 # ---------------------------------------------------------------------------
 # Determine listener command (socat preferred, nc fallback)
@@ -96,6 +120,94 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Peer forwarding — persistent socat pipes
+# ---------------------------------------------------------------------------
+# For each configured peer, we create a named FIFO and a persistent socat
+# process that reads lines from the FIFO and sends them as UDP packets.
+# The main pipeline tees raw NMEA data through all peer FIFOs before
+# passing it to the awk parser.
+#
+# Architecture:
+#   listener → tee peer1.fifo peer2.fifo → awk (local GPS processing)
+#              ↓                ↓
+#            socat→peer1     socat→peer2
+#
+# Each socat process is long-lived (reads continuously from its FIFO).
+# UDP send is non-blocking — if a peer is unreachable, the packet is
+# silently dropped by the kernel.
+# ---------------------------------------------------------------------------
+FWD_PEER_FIFOS=""
+FWD_PEER_PIDS=""
+
+start_forwarders() {
+    [ -z "$FORWARD_PEERS" ] && return 0
+
+    # Need socat for persistent UDP forwarding
+    if ! command -v socat >/dev/null 2>&1; then
+        qlog_warn "Peer forwarding requires socat — skipping"
+        FORWARD_PEERS=""
+        return 0
+    fi
+
+    _peer_idx=0
+    for peer in $FORWARD_PEERS; do
+        peer_host=$(printf '%s' "$peer" | cut -d: -f1)
+        peer_port=$(printf '%s' "$peer" | cut -d: -f2 -s)
+        [ -z "$peer_port" ] && peer_port="$UDP_PORT"
+
+        _fifo="/tmp/cm_nmea_fwd_${_peer_idx}.fifo"
+        rm -f "$_fifo"
+        mkfifo "$_fifo" 2>/dev/null || {
+            qlog_warn "Failed to create FIFO for peer $peer — skipping"
+            continue
+        }
+
+        # Persistent socat: reads lines from FIFO, sends each as UDP packet.
+        # `-u` = unidirectional (FIFO→UDP only). socat stays alive as long
+        # as the FIFO has a writer (the tee command in the main pipeline).
+        # We use a sentinel to keep the write end open across pipeline restarts.
+        sleep 86400 > "$_fifo" &
+        _sentinel_pid=$!
+
+        socat -u PIPE:"$_fifo" UDP-SENDTO:"${peer_host}:${peer_port}" 2>/dev/null &
+        _socat_pid=$!
+
+        FWD_PEER_FIFOS="$FWD_PEER_FIFOS $_fifo"
+        FWD_PEER_PIDS="$FWD_PEER_PIDS $_socat_pid $_sentinel_pid"
+        _peer_idx=$((_peer_idx + 1))
+
+        qlog_info "Forwarding to peer $peer_host:$peer_port (socat PID=$_socat_pid, FIFO=$_fifo)"
+    done
+}
+
+stop_forwarders() {
+    for pid in $FWD_PEER_PIDS; do
+        kill "$pid" 2>/dev/null
+    done
+    for fifo in $FWD_PEER_FIFOS; do
+        rm -f "$fifo"
+    done
+    FWD_PEER_PIDS=""
+    FWD_PEER_FIFOS=""
+}
+
+# ---------------------------------------------------------------------------
+# Build the tee command for peer forwarding
+# ---------------------------------------------------------------------------
+# When peers are configured, `tee` copies stdin to each peer FIFO and also
+# passes through to stdout (for the local awk parser). When no peers are
+# configured, this is a simple `cat` passthrough with zero overhead.
+# ---------------------------------------------------------------------------
+nmea_tee_cmd() {
+    if [ -n "$FWD_PEER_FIFOS" ]; then
+        # shellcheck disable=SC2086
+        tee $FWD_PEER_FIFOS
+    else
+        cat
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Clean shutdown handler
 # ---------------------------------------------------------------------------
 cleanup() {
@@ -103,6 +215,7 @@ cleanup() {
     [ -n "$LISTENER_PID" ] && kill "$LISTENER_PID" 2>/dev/null
     [ -n "$AWK_PID" ]      && kill "$AWK_PID" 2>/dev/null
     [ -n "$SENTINEL_PID" ] && kill "$SENTINEL_PID" 2>/dev/null
+    stop_forwarders
     wait 2>/dev/null
     rm -f "$STATE_FILE" "$STATE_TMP" "$PID_FILE" "$FIFO_PATH"
     exit 0
@@ -115,7 +228,14 @@ trap cleanup INT TERM
 # ---------------------------------------------------------------------------
 echo $$ > "$PID_FILE"
 
-qlog_info "Starting NMEA UDP relay on port $UDP_PORT (listener: $LISTENER_CMD)"
+if [ -n "$FORWARD_PEERS" ]; then
+    qlog_info "Starting NMEA UDP relay on port $UDP_PORT (listener: $LISTENER_CMD, peers: $FORWARD_PEERS)"
+else
+    qlog_info "Starting NMEA UDP relay on port $UDP_PORT (listener: $LISTENER_CMD)"
+fi
+
+# Start peer forwarders before the main listener (creates FIFOs that tee writes to)
+start_forwarders
 
 # ---------------------------------------------------------------------------
 # AWK parser for NMEA sentences
@@ -245,6 +365,7 @@ $1 ~ /^\$G[PNLB]RMC$/ {
 run_socat() {
     while :; do
         socat UDP-RECV:"$UDP_PORT",reuseaddr STDOUT 2>/dev/null | \
+            nmea_tee_cmd | \
             STATE_FILE="$STATE_FILE" STATE_TMP="$STATE_TMP" awk "$NMEA_AWK" &
         LISTENER_PID=$!
 

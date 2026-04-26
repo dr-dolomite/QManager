@@ -81,6 +81,11 @@ ensure_cellmapper_config() {
     _cm_uci_set_default nmea_device      ''
     _cm_uci_set_default nmea_baud        '9600'
 
+    # NMEA UDP relay (used when gps_source=nmea_udp)
+    _cm_uci_set_default nmea_udp_port    '29998'
+    # Peer forwarding: space-separated host:port pairs for multi-sled GPS sharing
+    _cm_uci_set_default nmea_forward_peers ''
+
     # HTTP GPS endpoint (used when gps_source=http)
     _cm_uci_set_default http_gps_url     ''
     _cm_uci_set_default http_gps_auth    ''
