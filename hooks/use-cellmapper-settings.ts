@@ -36,7 +36,7 @@ export interface CellMapperSettings {
   batch_size: number;
   upload_interval: number;
   retry_enabled: boolean;
-  upload_policy: "always" | "lan_only" | "scheduled";
+  upload_policy: "always" | "lan_only";
   buffer_size_mb: number;
   buffer_age_days: number;
   consent_accepted: boolean;

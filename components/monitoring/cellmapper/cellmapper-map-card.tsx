@@ -3,39 +3,43 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import { CircleMarker, Popup } from "react-leaflet";
+import { Map, type MapHandle, type MapPlottedPoint } from "@/components/ui/map";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LocateFixed, Maximize2 } from "lucide-react";
 
-// Fix Leaflet default marker icons for webpack bundling
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
 const BUFFER_ENDPOINT = "/cgi-bin/quecmanager/cellmapper/buffer.sh";
-const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+// Tile URLs are resolved by <Map> from the next-themes resolved theme:
+//  light → OSM standard, dark → CartoDB Dark Matter.
 const DEFAULT_CENTER: [number, number] = [32.158, -95.281]; // East Texas fallback
 const DEFAULT_ZOOM = 14;
 const MAX_MAP_POINTS = 200;
 
-// Signal strength → color mapping (RSRP dBm)
-function signalColor(rsrp: number | null): string {
-  if (rsrp === null) return "oklch(0.7 0.1 250)"; // gray-blue
-  if (rsrp >= -80) return "oklch(0.75 0.2 145)";  // excellent — green
-  if (rsrp >= -90) return "oklch(0.75 0.2 125)";  // good — yellow-green
-  if (rsrp >= -100) return "oklch(0.7 0.2 85)";   // fair — yellow
-  if (rsrp >= -110) return "oklch(0.65 0.2 50)";  // poor — orange
-  return "oklch(0.6 0.25 25)";                     // bad — red
+// ─── RAT classification ──────────────────────────────────────────────────────
+// `type` field comes from the buffer (collector emits values like "LTE",
+// "5G-NSA", "5G-SA", "NR", "NR5G", etc.). Bucket into LTE / NR / unknown.
+type Rat = "lte" | "nr" | "unknown";
+
+function classifyRat(type: string | null): Rat {
+  if (!type) return "unknown";
+  const t = type.toUpperCase();
+  if (t.includes("NR") || t.includes("5G")) return "nr";
+  if (t.includes("LTE") || t.includes("4G")) return "lte";
+  return "unknown";
+}
+
+// Signal-strength bucket → 1 (excellent) … 5 (weak) / 0 (unknown).
+// Drives lightness on the HSL color and the legend gradient.
+function signalBucket(rsrp: number | null): 0 | 1 | 2 | 3 | 4 | 5 {
+  if (rsrp === null) return 0;
+  if (rsrp >= -80) return 1; // excellent
+  if (rsrp >= -90) return 2; // good
+  if (rsrp >= -100) return 3; // fair
+  if (rsrp >= -110) return 4; // poor
+  return 5; // weak
 }
 
 function signalLabel(rsrp: number | null): string {
@@ -45,6 +49,29 @@ function signalLabel(rsrp: number | null): string {
   if (rsrp >= -100) return "Fair";
   if (rsrp >= -110) return "Poor";
   return "Weak";
+}
+
+// Hue: LTE=220 (blue), NR=280 (purple), unknown=0 (red/grey).
+const RAT_HUE: Record<Rat, number> = { lte: 220, nr: 280, unknown: 0 };
+
+// Lightness ramps inverse to signal bucket (stronger signal = darker, more
+// saturated swatch). Buckets 1..5 → 25..65 %, unknown → desaturated grey.
+const LIGHTNESS_BY_BUCKET: Record<number, number> = {
+  0: 60,
+  1: 30,
+  2: 40,
+  3: 50,
+  4: 58,
+  5: 65,
+};
+
+function ratColor(type: string | null, rsrp: number | null): string {
+  const rat = classifyRat(type);
+  const bucket = signalBucket(rsrp);
+  const hue = RAT_HUE[rat];
+  const sat = rat === "unknown" ? 0 : 70;
+  const light = LIGHTNESS_BY_BUCKET[bucket];
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
 interface MapPoint {
@@ -74,88 +101,13 @@ interface CellMapperMapCardProps {
   isStale: boolean;
 }
 
-// Inner component: auto-pan to GPS position
-function MapAutoCenter({ lat, lon }: { lat: number; lon: number }) {
-  const map = useMap();
-  const prevRef = useRef({ lat: 0, lon: 0 });
-
-  useEffect(() => {
-    // Only pan if position changed meaningfully (>50m = ~0.0005 deg)
-    const dlat = Math.abs(lat - prevRef.current.lat);
-    const dlon = Math.abs(lon - prevRef.current.lon);
-    if (dlat > 0.0005 || dlon > 0.0005) {
-      map.panTo([lat, lon], { animate: true, duration: 0.5 });
-      prevRef.current = { lat, lon };
-    }
-  }, [lat, lon, map]);
-
-  return null;
-}
-
-// Inner component: fit bounds to all points
-function FitBoundsButton({
-  points,
-  gpsLat,
-  gpsLon,
-}: {
-  points: MapPoint[];
-  gpsLat?: number;
-  gpsLon?: number;
-}) {
-  const map = useMap();
-  const { t } = useTranslation("monitoring");
-
-  const handleFit = useCallback(() => {
-    const allLats = points.map((p) => p.lat);
-    const allLons = points.map((p) => p.lon);
-    if (gpsLat != null && gpsLon != null) {
-      allLats.push(gpsLat);
-      allLons.push(gpsLon);
-    }
-    if (allLats.length === 0) return;
-    const bounds = L.latLngBounds(
-      [Math.min(...allLats), Math.min(...allLons)],
-      [Math.max(...allLats), Math.max(...allLons)]
-    );
-    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
-  }, [map, points, gpsLat, gpsLon]);
-
-  return (
-    <Button
-      variant="outline"
-      size="icon"
-      className="absolute top-2 right-2 z-[1000] bg-background/80 backdrop-blur-sm"
-      onClick={handleFit}
-      title={t("cellmapper.map_fit_bounds")}
-    >
-      <Maximize2 className="h-4 w-4" />
-    </Button>
-  );
-}
-
-// Inner component: recenter on GPS
-function RecenterButton({ lat, lon }: { lat: number; lon: number }) {
-  const map = useMap();
-  const { t } = useTranslation("monitoring");
-
-  return (
-    <Button
-      variant="outline"
-      size="icon"
-      className="absolute top-12 right-2 z-[1000] bg-background/80 backdrop-blur-sm"
-      onClick={() => map.flyTo([lat, lon], 15, { animate: true, duration: 0.5 })}
-      title={t("cellmapper.map_recenter")}
-    >
-      <LocateFixed className="h-4 w-4" />
-    </Button>
-  );
-}
-
 // Main component
 export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCardProps) {
   const { t } = useTranslation("monitoring");
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [isMapReady, setIsMapReady] = useState(false);
+  const mapRef = useRef<MapHandle>(null);
+  const lastPanRef = useRef({ lat: 0, lon: 0 });
 
   // Fetch recent buffer points for the map
   const fetchPoints = useCallback(async () => {
@@ -196,17 +148,78 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
   // GPS accuracy circle radius (from HDOP -- rough approximation)
   const accuracyRadius = hasGpsFix ? Math.max((gps!.fix!.hdop || 1) * 5, 10) : 0;
 
-  // Legend entries
-  const legend = useMemo(
-    () => [
-      { label: t("cellmapper.map_signal_excellent"), color: signalColor(-70) },
-      { label: t("cellmapper.map_signal_good"), color: signalColor(-85) },
-      { label: t("cellmapper.map_signal_fair"), color: signalColor(-95) },
-      { label: t("cellmapper.map_signal_poor"), color: signalColor(-105) },
-      { label: t("cellmapper.map_signal_weak"), color: signalColor(-115) },
-    ],
-    [t]
+  // Auto-pan when GPS fix moves more than ~50m (~0.0005°)
+  useEffect(() => {
+    if (!isMapReady || !hasGpsFix || !mapRef.current) return;
+    const lat = gps!.fix!.lat;
+    const lon = gps!.fix!.lon;
+    const dlat = Math.abs(lat - lastPanRef.current.lat);
+    const dlon = Math.abs(lon - lastPanRef.current.lon);
+    if (dlat > 0.0005 || dlon > 0.0005) {
+      mapRef.current.panTo(lat, lon);
+      lastPanRef.current = { lat, lon };
+    }
+  }, [isMapReady, hasGpsFix, gps]);
+
+  const handleFitBounds = useCallback(() => {
+    if (!mapRef.current) return;
+    const bounds: Array<[number, number]> = points.map((p) => [p.lat, p.lon]);
+    if (hasGpsFix) bounds.push([gps!.fix!.lat, gps!.fix!.lon]);
+    mapRef.current.fitBounds(bounds);
+  }, [points, hasGpsFix, gps]);
+
+  const handleRecenter = useCallback(() => {
+    if (!mapRef.current || !hasGpsFix) return;
+    mapRef.current.flyTo(gps!.fix!.lat, gps!.fix!.lon, 15);
+  }, [hasGpsFix, gps]);
+
+  // Build plotted-points payload for the generic map primitive.
+  const plottedPoints: MapPlottedPoint[] = useMemo(
+    () =>
+      points.map((pt) => ({
+        id: pt.id,
+        lat: pt.lat,
+        lng: pt.lon,
+        color: ratColor(pt.type, pt.signal),
+        radius: 5,
+        fillOpacity: 0.7,
+        popup: (
+          <div className="text-sm space-y-0.5">
+            <div className="font-semibold">
+              {pt.type ?? "—"} • {signalLabel(pt.signal)}
+            </div>
+            {pt.signal != null && <div>RSRP: {pt.signal} dBm</div>}
+            {pt.cellId != null && <div>Cell: {pt.cellId}</div>}
+            <div className="text-muted-foreground text-xs">
+              {new Date(pt.capturedAt * 1000).toLocaleTimeString()}
+            </div>
+          </div>
+        ),
+      })),
+    [points],
   );
+
+  // Legend rows: one per RAT, each with stronger←weaker gradient swatches.
+  const legendRows = useMemo(() => {
+    // Representative dBm values for each signal bucket (excellent→weak).
+    const sampleRsrp = [-70, -85, -95, -105, -115];
+    const gradientFor = (typeStr: string) =>
+      sampleRsrp.map((rsrp) => ratColor(typeStr, rsrp));
+    return [
+      {
+        key: "lte",
+        label: t("cellmapper.map_legend_lte"),
+        swatchColor: ratColor("LTE", -75),
+        gradient: gradientFor("LTE"),
+      },
+      {
+        key: "nr",
+        label: t("cellmapper.map_legend_nr"),
+        swatchColor: ratColor("NR", -75),
+        gradient: gradientFor("NR"),
+      },
+    ];
+  }, [t]);
 
   // Loading state
   if (isLoading) {
@@ -251,37 +264,19 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
       </CardHeader>
       <CardContent className="p-0 pb-3 px-3">
         <div className="relative rounded-lg overflow-hidden border" style={{ height: "400px" }}>
-          <MapContainer
+          <Map
+            ref={mapRef}
             center={center}
             zoom={DEFAULT_ZOOM}
             className="h-full w-full z-0"
-            whenReady={() => setIsMapReady(true)}
             scrollWheelZoom={true}
-            zoomControl={false}
+            showZoomControl={false}
+            onMapReady={() => setIsMapReady(true)}
+            points={plottedPoints}
           >
-            <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
-
-            {/* Auto-pan to GPS */}
-            {hasGpsFix && <MapAutoCenter lat={gps!.fix!.lat} lon={gps!.fix!.lon} />}
-
-            {/* Fit bounds button */}
-            {isMapReady && (
-              <FitBoundsButton
-                points={points}
-                gpsLat={hasGpsFix ? gps!.fix!.lat : undefined}
-                gpsLon={hasGpsFix ? gps!.fix!.lon : undefined}
-              />
-            )}
-
-            {/* Recenter button */}
-            {hasGpsFix && isMapReady && (
-              <RecenterButton lat={gps!.fix!.lat} lon={gps!.fix!.lon} />
-            )}
-
-            {/* GPS position marker -- blue circle */}
+            {/* GPS position marker -- accuracy circle + dot */}
             {hasGpsFix && (
               <>
-                {/* Accuracy circle */}
                 <CircleMarker
                   center={[gps!.fix!.lat, gps!.fix!.lon]}
                   radius={accuracyRadius}
@@ -292,7 +287,6 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
                     weight: 1,
                   }}
                 />
-                {/* Position dot */}
                 <CircleMarker
                   center={[gps!.fix!.lat, gps!.fix!.lon]}
                   radius={8}
@@ -315,49 +309,57 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
                 </CircleMarker>
               </>
             )}
+          </Map>
 
-            {/* Measurement points */}
-            {points.map((pt) => (
-              <CircleMarker
-                key={pt.id}
-                center={[pt.lat, pt.lon]}
-                radius={5}
-                pathOptions={{
-                  color: signalColor(pt.signal),
-                  fillColor: signalColor(pt.signal),
-                  fillOpacity: 0.7,
-                  weight: 1,
-                }}
-              >
-                <Popup>
-                  <div className="text-sm space-y-0.5">
-                    <div className="font-semibold">
-                      {pt.type ?? "—"} • {signalLabel(pt.signal)}
-                    </div>
-                    {pt.signal != null && <div>RSRP: {pt.signal} dBm</div>}
-                    {pt.cellId != null && <div>Cell: {pt.cellId}</div>}
-                    <div className="text-muted-foreground text-xs">
-                      {new Date(pt.capturedAt * 1000).toLocaleTimeString()}
-                    </div>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MapContainer>
+          {/* Fit-bounds + recenter controls — overlay buttons driven by map ref */}
+          {isMapReady && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute top-2 right-2 z-[1000] bg-background/80 backdrop-blur-sm"
+              onClick={handleFitBounds}
+              title={t("cellmapper.map_fit_bounds")}
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          )}
+          {hasGpsFix && isMapReady && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute top-12 right-2 z-[1000] bg-background/80 backdrop-blur-sm"
+              onClick={handleRecenter}
+              title={t("cellmapper.map_recenter")}
+            >
+              <LocateFixed className="h-4 w-4" />
+            </Button>
+          )}
 
-          {/* Signal legend -- bottom-left overlay */}
+          {/* RAT legend -- bottom-left overlay */}
           <div className="absolute bottom-2 left-2 z-[1000] bg-background/85 backdrop-blur-sm rounded-md p-2 border text-xs">
             <div className="font-medium mb-1">{t("cellmapper.map_legend_title")}</div>
-            <div className="space-y-0.5">
-              {legend.map((item) => (
-                <div key={item.label} className="flex items-center gap-1.5">
+            <div className="space-y-1.5">
+              {legendRows.map((row) => (
+                <div key={row.key} className="flex items-center gap-2">
                   <span
-                    className="inline-block size-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
+                    className="inline-block size-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: row.swatchColor }}
                   />
-                  <span>{item.label}</span>
+                  <span className="font-medium w-7">{row.label}</span>
+                  <div className="flex items-center gap-0.5" aria-hidden="true">
+                    {row.gradient.map((c, i) => (
+                      <span
+                        key={i}
+                        className="inline-block h-2 w-3 first:rounded-l-sm last:rounded-r-sm"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
                 </div>
               ))}
+              <div className="text-muted-foreground text-[10px] pl-1 pt-0.5">
+                {t("cellmapper.map_legend_gradient")}
+              </div>
             </div>
           </div>
         </div>
