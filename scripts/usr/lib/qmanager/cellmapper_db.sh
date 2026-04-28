@@ -25,6 +25,15 @@ _CM_DB_LOADED=1
 
 CM_DB_PATH="/overlay/cellmapper/queue.db"
 
+# Directory containing versioned schema migrations (v1.sql, v2.sql, ...).
+# Each file is plain SQL; cm_db_migrate applies them in order based on
+# the database's PRAGMA user_version.
+CM_DB_SCHEMA_DIR="/usr/lib/qmanager/cellmapper/schema"
+
+# Latest schema version known to this build. Bump this whenever a new
+# v${N}.sql file is added under CM_DB_SCHEMA_DIR.
+CM_DB_SCHEMA_LATEST=1
+
 # --- cm_db_exec ---------------------------------------------------------------
 # Wrapper around sqlite3 for the CellMapper queue database.
 # Usage: cm_db_exec "<sql statement>"
@@ -33,48 +42,95 @@ cm_db_exec() {
     sqlite3 "$CM_DB_PATH" ".timeout 5000" "$1"
 }
 
+# --- cm_db_user_version -------------------------------------------------------
+# Returns the current PRAGMA user_version of the database (integer).
+# Returns 0 if the DB is brand-new or the pragma is unset.
+# Usage: ver=$(cm_db_user_version)
+cm_db_user_version() {
+    local v
+    v=$(sqlite3 "$CM_DB_PATH" "PRAGMA user_version;" 2>/dev/null)
+    printf '%s' "${v:-0}"
+}
+
+# --- cm_db_migrate ------------------------------------------------------------
+# Applies any schema migrations whose version is greater than the database's
+# current user_version, up through CM_DB_SCHEMA_LATEST. Each version's SQL is
+# loaded from $CM_DB_SCHEMA_DIR/v<N>.sql and executed; user_version is then
+# bumped to <N>. Safe to call repeatedly — running migrate twice in a row is
+# a no-op once user_version is already at the latest.
+# Returns: 0 on success, non-zero if a migration file is missing or sqlite3 fails.
+# Usage: cm_db_migrate
+cm_db_migrate() {
+    local current target migration_file rc
+    current=$(cm_db_user_version)
+    target="$CM_DB_SCHEMA_LATEST"
+
+    # Already at latest — nothing to do.
+    if [ "$current" -ge "$target" ] 2>/dev/null; then
+        return 0
+    fi
+
+    # Apply each pending version in order: current+1 .. target.
+    # POSIX sh has no C-style for-loop, so we use a while.
+    local next
+    next=$((current + 1))
+    while [ "$next" -le "$target" ]; do
+        migration_file="$CM_DB_SCHEMA_DIR/v${next}.sql"
+        if [ ! -f "$migration_file" ]; then
+            command -v qlog_error >/dev/null 2>&1 && \
+                qlog_error "cm_db_migrate: missing schema file $migration_file"
+            return 1
+        fi
+
+        # Apply the migration and bump user_version atomically. If sqlite3
+        # fails mid-script, user_version stays at the previous value so the
+        # next call retries from the same point.
+        sqlite3 "$CM_DB_PATH" >/dev/null <<EOF
+BEGIN;
+.read $migration_file
+PRAGMA user_version = $next;
+COMMIT;
+EOF
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            command -v qlog_error >/dev/null 2>&1 && \
+                qlog_error "cm_db_migrate: failed to apply $migration_file (rc=$rc)"
+            return "$rc"
+        fi
+
+        command -v qlog_info >/dev/null 2>&1 && \
+            qlog_info "cm_db_migrate: applied schema v${next}"
+        next=$((next + 1))
+    done
+
+    return 0
+}
+
 # --- cm_db_init ---------------------------------------------------------------
-# Creates the database file and schema if not already present.
-# Sets WAL mode and performance pragmas. Safe to call multiple times.
+# Creates the database file, applies pragmas, and runs schema migrations.
+# Safe to call multiple times — idempotent thanks to cm_db_migrate's
+# user_version check.
 # Usage: cm_db_init
 cm_db_init() {
     local db_dir
     db_dir=$(dirname "$CM_DB_PATH")
     mkdir -p "$db_dir"
 
-    # Apply pragmas and create schema in a single transaction for atomicity.
+    # Apply runtime pragmas. These are *not* schema — they're connection /
+    # file-format settings that need to be set on the DB file itself.
     # Redirect stdout to /dev/null — PRAGMA journal_mode=WAL prints "wal"
-    # to stdout, which pollutes CGI responses.
+    # to stdout, which would pollute CGI responses if it bubbled up.
     sqlite3 "$CM_DB_PATH" >/dev/null <<'EOF'
 PRAGMA busy_timeout=5000;
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA auto_vacuum=INCREMENTAL;
 PRAGMA page_size=4096;
-
-CREATE TABLE IF NOT EXISTS pending (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    captured_at INTEGER NOT NULL,
-    size_bytes  INTEGER NOT NULL,
-    payload     TEXT    NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pending_captured ON pending(captured_at);
-
-CREATE TABLE IF NOT EXISTS archive (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    uploaded_at INTEGER NOT NULL,
-    batch_id    TEXT,
-    point_count INTEGER,
-    endpoint    TEXT,
-    size_bytes  INTEGER,
-    latency_ms  INTEGER,
-    status      TEXT,
-    error_msg   TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_archive_uploaded ON archive(uploaded_at);
 EOF
+
+    # Apply versioned schema migrations (creates tables/indexes on first run,
+    # no-op on subsequent calls).
+    cm_db_migrate
 }
 
 # --- cm_db_insert_pending -----------------------------------------------------
