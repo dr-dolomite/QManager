@@ -30,7 +30,7 @@ CM_DB_PATH="/overlay/cellmapper/queue.db"
 # Usage: cm_db_exec "<sql statement>"
 # Returns: sqlite3 exit code; stdout contains query results.
 cm_db_exec() {
-    sqlite3 "$CM_DB_PATH" "$1"
+    sqlite3 "$CM_DB_PATH" ".timeout 5000" "$1"
 }
 
 # --- cm_db_init ---------------------------------------------------------------
@@ -46,6 +46,7 @@ cm_db_init() {
     # Redirect stdout to /dev/null — PRAGMA journal_mode=WAL prints "wal"
     # to stdout, which pollutes CGI responses.
     sqlite3 "$CM_DB_PATH" >/dev/null <<'EOF'
+PRAGMA busy_timeout=5000;
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA auto_vacuum=INCREMENTAL;

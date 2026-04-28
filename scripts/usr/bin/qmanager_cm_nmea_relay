@@ -279,7 +279,7 @@ run_nc_fifo() {
     # Sentinel writer: keeps the FIFO writer-end open so awk never sees
     # EOF when nc exits. A FIFO reader gets EOF only when ALL writers
     # close — the sentinel ensures at least one writer is always open.
-    sleep 86400 > "$FIFO_PATH" &
+    ( while sleep 86400; do :; done ) > "$FIFO_PATH" &
     SENTINEL_PID=$!
 
     # Start awk reading from the FIFO — runs for the lifetime of the daemon

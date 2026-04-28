@@ -211,6 +211,11 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # Ensure defaults exist before partial update
     ensure_cellmapper_config
 
+    # Track whether structural fields changed (require daemon restart).
+    # Runtime-only changes (intervals, thresholds, log_level, etc.) are picked
+    # up via the reload flag without restarting.
+    STRUCTURAL_CHANGED=0
+
     val=""
 
     # -------------------------------------------------------------------------
@@ -223,6 +228,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             false) uci -q set quecmanager.cellmapper.enabled=0 ;;
             *)     reject_field "enabled" "must be true or false" ;;
         esac
+        # enabled is structural — affects whether daemons run at all
+        STRUCTURAL_CHANGED=1
     fi
 
     # -------------------------------------------------------------------------
@@ -233,6 +240,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         validate_enum "$val" modem gpsd_local gpsd_remote nmea nmea_udp http || \
             reject_field "gps_source" "must be one of: modem, gpsd_local, gpsd_remote, nmea, nmea_udp, http"
         uci -q set "quecmanager.cellmapper.gps_source=$val"
+        # gps_source is structural — toggles the NMEA relay daemon
+        STRUCTURAL_CHANGED=1
     fi
 
     # -------------------------------------------------------------------------
@@ -292,6 +301,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     if [ -n "$val" ]; then
         validate_int "$val" 1024 65535 || reject_field "nmea_udp_port" "must be 1024-65535"
         uci -q set "quecmanager.cellmapper.nmea_udp_port=$val"
+        # nmea_udp_port is structural — relay must rebind
+        STRUCTURAL_CHANGED=1
     fi
 
     # -------------------------------------------------------------------------
@@ -473,13 +484,16 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # --- Signal collector daemon to reload config ----------------------------
     touch "$CM_RELOAD_FLAG"
 
-    # --- Restart service to apply structural changes -------------------------
-    # uci commit from CLI/CGI does NOT emit a ubus config.change event, so
-    # procd's reload_trigger never fires.  Settings that affect which procd
-    # instances are spawned (e.g. gps_source toggling the nmea_relay) require
-    # an explicit restart so start_service() runs fresh and procd reconciles.
-    if [ "$(uci -q get quecmanager.cellmapper.enabled 2>/dev/null)" = "1" ]; then
-        /etc/init.d/qmanager_cellmapper restart >/dev/null 2>&1 &
+    # --- Restart only if structural changes require it -----------------------
+    # Structural fields (enabled, gps_source, nmea_udp_port) affect which procd
+    # instances run. Runtime fields (intervals, thresholds, log_level) are
+    # picked up by the collector's reload flag mechanism without a restart.
+    if [ "$STRUCTURAL_CHANGED" = "1" ]; then
+        if [ "$(uci -q get quecmanager.cellmapper.enabled 2>/dev/null)" = "1" ]; then
+            /etc/init.d/qmanager_cellmapper restart >/dev/null 2>&1 &
+        else
+            /etc/init.d/qmanager_cellmapper stop >/dev/null 2>&1 &
+        fi
     fi
 
     qlog_info "CellMapper settings saved"

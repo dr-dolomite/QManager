@@ -22,8 +22,10 @@ import {
   AlertCircleIcon,
   MinusCircleIcon,
   PauseIcon,
+  PauseCircleIcon,
   Loader2,
   RadarIcon,
+  NavigationIcon,
   RefreshCcwIcon,
   AlertTriangleIcon,
   PlayIcon,
@@ -56,6 +58,8 @@ interface CellMapperStatusCardProps {
         batch_size: number;
         status: string;
       } | null;
+      motion_state?: "moving" | "stationary" | "unknown";
+      interval_sec?: number;
     };
     account: {
       linked: boolean;
@@ -120,6 +124,27 @@ const COLLECTOR_BADGE: Record<
     className:
       "bg-info/15 text-info hover:bg-info/20 border-info/30",
     icon: <Loader2 className="h-3 w-3 animate-spin" />,
+  },
+};
+
+const MOTION_BADGE: Record<
+  string,
+  { className: string; icon: React.ReactNode }
+> = {
+  moving: {
+    className:
+      "bg-info/15 text-info hover:bg-info/20 border-info/30",
+    icon: <NavigationIcon className="h-3 w-3" />,
+  },
+  stationary: {
+    className:
+      "bg-warning/15 text-warning hover:bg-warning/20 border-warning/30",
+    icon: <PauseCircleIcon className="h-3 w-3" />,
+  },
+  unknown: {
+    className:
+      "bg-muted/50 text-muted-foreground border-muted-foreground/30",
+    icon: <MinusCircleIcon className="h-3 w-3" />,
   },
 };
 
@@ -213,7 +238,7 @@ export function CellMapperStatusCard({
         </CardHeader>
         <CardContent aria-live="polite">
           <div className="space-y-4">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex justify-between items-center">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-6 w-32" />
@@ -244,6 +269,16 @@ export function CellMapperStatusCard({
   const gpsLabel = gpsFix
     ? t("cellmapper.gps_sats", { type: gpsFixType, sats: gpsFix.sats })
     : t("cellmapper.gps_no_fix");
+
+  // Motion badge
+  const motionState = service?.motion_state ?? "unknown";
+  const motionBadge = MOTION_BADGE[motionState] ?? MOTION_BADGE.unknown;
+  const intervalSec = service?.interval_sec ?? 0;
+  const motionLabel = motionState === "moving"
+    ? t("cellmapper.motion_moving", { interval: intervalSec })
+    : motionState === "stationary"
+      ? t("cellmapper.motion_stationary", { interval: intervalSec })
+      : t("cellmapper.motion_unknown");
 
   // Account badge
   const isLinked = account?.linked ?? false;
@@ -288,6 +323,30 @@ export function CellMapperStatusCard({
             <Badge variant="outline" className={collectorBadge.className}>
               {collectorBadge.icon}
               {collectorLabel}
+            </Badge>
+          </motion.div>
+        </AnimatePresence>
+      ),
+    },
+    {
+      label: t("cellmapper.row_motion"),
+      value: (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={motionState}
+            initial={{ opacity: 0, scale: 0.88 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.88 }}
+            transition={{
+              duration: 0.18,
+              type: "spring",
+              stiffness: 400,
+              damping: 24,
+            }}
+          >
+            <Badge variant="outline" className={motionBadge.className}>
+              {motionBadge.icon}
+              {motionLabel}
             </Badge>
           </motion.div>
         </AnimatePresence>

@@ -649,6 +649,13 @@ while true; do
         _cm_load_config
     fi
 
+    # Check if feature was disabled via settings.
+    if [ "$(cm_uci_get enabled 0)" != "1" ]; then
+        qlog_info "cm_collector: CellMapper disabled via UCI — exiting"
+        _cm_write_state "stopped"
+        break
+    fi
+
     # -----------------------------------------------------------------------
     # B. Get GPS fix.
     # -----------------------------------------------------------------------

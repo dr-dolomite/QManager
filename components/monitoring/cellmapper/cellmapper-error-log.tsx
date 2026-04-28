@@ -48,6 +48,12 @@ export function CellMapperErrorLog({ errors }: CellMapperErrorLogProps) {
         </motion.span>
       </Button>
 
+      {errors.length > 50 && (
+        <p className="text-xs text-muted-foreground italic mt-1 ml-1">
+          {t("cellmapper.errors_historical_hint")}
+        </p>
+      )}
+
       <AnimatePresence>
         {expanded && (
           <motion.div

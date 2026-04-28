@@ -63,6 +63,8 @@ CM_UPLOADER_STATE_FILE="/tmp/qmanager_cm_uploader.json"
 
 # Defaults if state files are absent or malformed
 collector_state="stopped"
+motion_state="unknown"
+interval_sec=0
 uploader_state="idle"
 consecutive_failures=0
 uploader_needs_reauth="false"
@@ -75,6 +77,12 @@ if [ -f "$CM_STATE_FILE" ] && [ -s "$CM_STATE_FILE" ]; then
     # Extract fields with safe fallbacks — field names match collector daemon output
     collector_state=$(jq -r '.state // "stopped"' "$CM_STATE_FILE" 2>/dev/null)
     [ -z "$collector_state" ] && collector_state="stopped"
+
+    motion_state=$(jq -r '.motion // "unknown"' "$CM_STATE_FILE" 2>/dev/null)
+    [ -z "$motion_state" ] && motion_state="unknown"
+
+    interval_sec=$(jq -r '.interval_sec // 0' "$CM_STATE_FILE" 2>/dev/null)
+    [ -z "$interval_sec" ] && interval_sec=0
 
     # last_measurement — read directly from collector state file.
     # The collector writes this field with {type, provider, band, signal, timestamp}.
@@ -129,6 +137,12 @@ fi
 case "$collector_state" in
     running|paused|stopped|error|starting) ;;
     *) collector_state="stopped" ;;
+esac
+
+# Sanitize motion_state to allowed values
+case "$motion_state" in
+    moving|stationary) ;;
+    *) motion_state="unknown" ;;
 esac
 
 # Sanitize uploader_state to allowed values
@@ -227,6 +241,8 @@ jq -n \
     --arg     upl_state      "$uploader_state" \
     --argjson upl_failures   "$consecutive_failures" \
     --argjson upl_reauth     "$uploader_needs_reauth" \
+    --arg     motion_state   "$motion_state" \
+    --argjson interval_sec   "$interval_sec" \
     --argjson last_meas      "$last_measurement" \
     --argjson last_up        "$last_upload" \
     --argjson linked         "$cm_linked" \
@@ -249,7 +265,9 @@ jq -n \
             uploader_failures: $upl_failures,
             uploader_needs_reauth: $upl_reauth,
             last_measurement: $last_meas,
-            last_upload:     $last_up
+            last_upload:     $last_up,
+            motion_state:    $motion_state,
+            interval_sec:    $interval_sec
         },
         account: {
             linked:     $linked,

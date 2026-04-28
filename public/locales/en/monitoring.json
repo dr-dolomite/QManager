@@ -542,12 +542,12 @@
     "collection_http_url": "HTTP GPS URL",
     "collection_http_url_description": "JSON endpoint returning {lat, lon, alt, speed, sats}",
     "collection_http_url_label": "HTTP GPS URL",
-    "collection_interval_moving": "Interval (moving)",
+    "collection_interval_moving": "Moving interval",
     "collection_interval_moving_description": "Seconds between measurements while moving",
-    "collection_interval_moving_label": "Interval (moving)",
-    "collection_interval_stopped": "Interval (stopped)",
+    "collection_interval_moving_label": "Moving interval",
+    "collection_interval_stopped": "Stationary interval",
     "collection_interval_stopped_description": "Seconds between measurements while stopped",
-    "collection_interval_stopped_label": "Interval (stopped)",
+    "collection_interval_stopped_label": "Stationary interval",
     "collection_neighbor_description": "How often to scan for neighboring cells",
     "collection_neighbor_interval_label": "Neighbor scan",
     "collection_neighbor_off": "Off",
@@ -633,6 +633,9 @@
     "map_signal_weak": "Weak (< −110)",
     "map_stale": "Stale",
     "map_title": "Live Map",
+    "motion_moving": "Moving · {{interval}}s",
+    "motion_stationary": "Stationary · {{interval}}s",
+    "motion_unknown": "Unknown",
     "page_description": "Collect and upload cell measurements.",
     "page_title": "CellMapper",
     "purge_confirm": "Purge Buffer",
@@ -670,6 +673,7 @@
     "row_collector": "Collector",
     "row_gps": "GPS",
     "row_last_measurement": "Last measurement",
+    "row_motion": "Motion",
     "settings_page_description": "Account, collection, upload destination, and retention.",
     "settings_page_title": "CellMapper Settings",
     "signin_already_linked": "Already linked as {{username}}",
@@ -787,6 +791,7 @@
     "uploader_state_idle": "Idle",
     "uploader_state_running": "Uploading",
     "uploader_state_needs_reauth": "Auth Expired",
-    "uploader_state_backoff": "Backing Off"
+    "uploader_state_backoff": "Backing Off",
+    "errors_historical_hint": "Errors are cleared on collector restart"
   }
 }

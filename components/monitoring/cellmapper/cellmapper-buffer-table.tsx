@@ -257,7 +257,12 @@ const CellMapperBufferComponent = () => {
               </AlertDialog>
 
               {/* Export CSV */}
-              <Button variant="outline" size="sm" onClick={handleExport}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={(stats?.total_pending ?? 0) === 0}
+              >
                 <DownloadIcon className="h-4 w-4 mr-1" />
                 {t("cellmapper.buffer_btn_export")}
               </Button>

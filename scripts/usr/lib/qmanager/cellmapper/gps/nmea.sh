@@ -110,7 +110,7 @@ cm_gps_nmea_get_fix() {
     # Read up to 60 lines with a 10-second timeout (implemented via head + timeout).
     local nmea_lines
     # Use a subshell with head to avoid blocking indefinitely.
-    nmea_lines=$(head -n 60 "$device" 2>/dev/null) || {
+    nmea_lines=$(timeout 10 head -n 60 "$device" 2>/dev/null) || {
         qlog_warn "cm_gps_nmea: failed to read from $device"
         return 1
     }

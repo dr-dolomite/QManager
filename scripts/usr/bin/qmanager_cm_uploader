@@ -606,6 +606,9 @@ _cm_do_upload_cycle() {
     local now
     now=$(date +%s)
 
+    # Always update latency from most recent attempt (success or failure)
+    _cm_last_latency_ms="$_upload_latency_ms"
+
     # h. On success: delete rows, archive, update session counters
     if [ "$upload_rc" -eq 0 ]; then
         qlog_info "Upload OK: $batch_count points, ${_upload_latency_ms}ms"
@@ -618,7 +621,6 @@ _cm_do_upload_cycle() {
         _cm_last_upload_ts="$now"
         _cm_last_upload_result="ok"
         _cm_last_batch_size="$batch_count"
-        _cm_last_latency_ms="$_upload_latency_ms"
         _cm_last_error=""
         _cm_uploads_session=$(( _cm_uploads_session + 1 ))
         _cm_points_session=$(( _cm_points_session + batch_count ))

@@ -177,14 +177,7 @@ export function CellMapperUploadCard({
       label: t("cellmapper.upload_row_last"),
       value: lastUpload !== null ? formatTimeAgo(lastUpload.timestamp) : "—",
     },
-    {
-      label: t("cellmapper.upload_row_success_rate"),
-      value: "—", // placeholder — needs log data (PR 4)
-    },
-    {
-      label: t("cellmapper.upload_row_today"),
-      value: "—", // placeholder — needs log data (PR 4)
-    },
+
   ];
 
   return (
@@ -267,13 +260,6 @@ export function CellMapperUploadCard({
               </motion.div>
             ))}
           </motion.div>
-
-          <Separator />
-
-          {/* Sparkline placeholder — chart ships in PR 4 */}
-          <p className="text-xs text-muted-foreground italic py-1">
-            {t("cellmapper.upload_sparkline_placeholder")}
-          </p>
 
           <Separator />
 

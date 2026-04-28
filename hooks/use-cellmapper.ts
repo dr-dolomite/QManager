@@ -34,6 +34,8 @@ export interface CellMapperStatus {
     } | null;
     uploader_failures: number;
     uploader_needs_reauth: boolean;
+    motion_state: "moving" | "stationary" | "unknown";
+    interval_sec: number;
   };
   account: {
     linked: boolean;

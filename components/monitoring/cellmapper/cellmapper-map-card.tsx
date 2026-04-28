@@ -224,7 +224,7 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
   }
 
   return (
-    <Card className="@container/card col-span-full @5xl/main:col-span-1">
+    <Card className="@container/card col-span-1 @3xl/main:col-span-2 @5xl/main:col-span-1 min-h-[460px]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>

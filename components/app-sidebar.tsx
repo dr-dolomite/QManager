@@ -198,7 +198,6 @@ const data = {
       url: "/monitoring/cellmapper",
       icon: Radar,
       items: [
-        { t_key: "cellmapper_dashboard", url: "/monitoring/cellmapper" },
         { t_key: "cellmapper_settings", url: "/monitoring/cellmapper/settings" },
         { t_key: "cellmapper_log", url: "/monitoring/cellmapper/log" },
         { t_key: "cellmapper_buffer", url: "/monitoring/cellmapper/buffer" },

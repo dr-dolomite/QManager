@@ -23,7 +23,7 @@ const CellMapperComponent = () => {
   // ── Not linked: show full-page sign-in ─────────────────────────────────
   if (!hookData.isLoading && hookData.status && !hookData.status.account.linked) {
     return (
-      <div className="@container/main mx-auto p-2">
+      <div className="@container/main w-full mx-auto p-2">
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">{t("cellmapper.page_title")}</h1>
           <p className="text-muted-foreground">{t("cellmapper.page_description")}</p>
@@ -49,7 +49,7 @@ const CellMapperComponent = () => {
 
   // ── Main dashboard ─────────────────────────────────────────────────────
   return (
-    <div className="@container/main mx-auto p-2">
+    <div className="@container/main w-full mx-auto p-2">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">{t("cellmapper.page_title")}</h1>
         <p className="text-muted-foreground">{t("cellmapper.page_description")}</p>
