@@ -522,17 +522,14 @@ _cm_do_upload_cycle() {
     upload_policy=$(cm_uci_get upload_policy "always")
     retry_enabled=$(cm_uci_get retry_enabled "1")
 
-    # c/d. Check upload policy
+    # c/d. Check upload policy. Only "always" and "lan_only" are supported;
+    # any other value (including legacy "scheduled") is treated as "always".
     case "$upload_policy" in
         lan_only)
             if _cm_is_cellular; then
                 qlog_debug "LAN-only policy: skipping upload (on cellular)"
                 return 5
             fi
-            ;;
-        scheduled)
-            # Future feature — treat as "always" for now
-            qlog_debug "Scheduled upload policy: defaulting to 'always'"
             ;;
         always|*)
             : # proceed
