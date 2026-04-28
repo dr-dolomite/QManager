@@ -760,8 +760,6 @@
     "upload_cfg_policy_description": "When to upload measurements",
     "upload_cfg_policy_label": "Upload policy",
     "upload_cfg_policy_lan": "Wi-Fi / LAN only",
-    "upload_cfg_policy_scheduled": "Scheduled",
-    "upload_cfg_policy_wifi": "Wi-Fi / LAN only",
     "upload_cfg_retry": "Retry failed",
     "upload_cfg_retry_label": "Retry failed uploads",
     "upload_cfg_save": "Save Upload",

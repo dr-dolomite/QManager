@@ -441,11 +441,8 @@ function UploadDestinationForm({
                     <SelectItem value="always">
                       {t("cellmapper.upload_cfg_policy_always")}
                     </SelectItem>
-                    <SelectItem value="wifi">
-                      {t("cellmapper.upload_cfg_policy_wifi")}
-                    </SelectItem>
-                    <SelectItem value="scheduled">
-                      {t("cellmapper.upload_cfg_policy_scheduled")}
+                    <SelectItem value="lan_only">
+                      {t("cellmapper.upload_cfg_policy_lan")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
