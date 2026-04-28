@@ -18,14 +18,28 @@ const DEFAULT_CENTER: [number, number] = [32.158, -95.281]; // East Texas fallba
 const DEFAULT_ZOOM = 14;
 const MAX_MAP_POINTS = 200;
 
-// Signal strength → color mapping (RSRP dBm)
-function signalColor(rsrp: number | null): string {
-  if (rsrp === null) return "oklch(0.7 0.1 250)"; // gray-blue
-  if (rsrp >= -80) return "oklch(0.75 0.2 145)";  // excellent — green
-  if (rsrp >= -90) return "oklch(0.75 0.2 125)";  // good — yellow-green
-  if (rsrp >= -100) return "oklch(0.7 0.2 85)";   // fair — yellow
-  if (rsrp >= -110) return "oklch(0.65 0.2 50)";  // poor — orange
-  return "oklch(0.6 0.25 25)";                     // bad — red
+// ─── RAT classification ──────────────────────────────────────────────────────
+// `type` field comes from the buffer (collector emits values like "LTE",
+// "5G-NSA", "5G-SA", "NR", "NR5G", etc.). Bucket into LTE / NR / unknown.
+type Rat = "lte" | "nr" | "unknown";
+
+function classifyRat(type: string | null): Rat {
+  if (!type) return "unknown";
+  const t = type.toUpperCase();
+  if (t.includes("NR") || t.includes("5G")) return "nr";
+  if (t.includes("LTE") || t.includes("4G")) return "lte";
+  return "unknown";
+}
+
+// Signal-strength bucket → 1 (excellent) … 5 (weak) / 0 (unknown).
+// Drives lightness on the HSL color and the legend gradient.
+function signalBucket(rsrp: number | null): 0 | 1 | 2 | 3 | 4 | 5 {
+  if (rsrp === null) return 0;
+  if (rsrp >= -80) return 1; // excellent
+  if (rsrp >= -90) return 2; // good
+  if (rsrp >= -100) return 3; // fair
+  if (rsrp >= -110) return 4; // poor
+  return 5; // weak
 }
 
 function signalLabel(rsrp: number | null): string {
@@ -35,6 +49,29 @@ function signalLabel(rsrp: number | null): string {
   if (rsrp >= -100) return "Fair";
   if (rsrp >= -110) return "Poor";
   return "Weak";
+}
+
+// Hue: LTE=220 (blue), NR=280 (purple), unknown=0 (red/grey).
+const RAT_HUE: Record<Rat, number> = { lte: 220, nr: 280, unknown: 0 };
+
+// Lightness ramps inverse to signal bucket (stronger signal = darker, more
+// saturated swatch). Buckets 1..5 → 25..65 %, unknown → desaturated grey.
+const LIGHTNESS_BY_BUCKET: Record<number, number> = {
+  0: 60,
+  1: 30,
+  2: 40,
+  3: 50,
+  4: 58,
+  5: 65,
+};
+
+function ratColor(type: string | null, rsrp: number | null): string {
+  const rat = classifyRat(type);
+  const bucket = signalBucket(rsrp);
+  const hue = RAT_HUE[rat];
+  const sat = rat === "unknown" ? 0 : 70;
+  const light = LIGHTNESS_BY_BUCKET[bucket];
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
 interface MapPoint {
@@ -143,7 +180,7 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
         id: pt.id,
         lat: pt.lat,
         lng: pt.lon,
-        color: signalColor(pt.signal),
+        color: ratColor(pt.type, pt.signal),
         radius: 5,
         fillOpacity: 0.7,
         popup: (
@@ -162,17 +199,27 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
     [points],
   );
 
-  // Legend entries
-  const legend = useMemo(
-    () => [
-      { label: t("cellmapper.map_signal_excellent"), color: signalColor(-70) },
-      { label: t("cellmapper.map_signal_good"), color: signalColor(-85) },
-      { label: t("cellmapper.map_signal_fair"), color: signalColor(-95) },
-      { label: t("cellmapper.map_signal_poor"), color: signalColor(-105) },
-      { label: t("cellmapper.map_signal_weak"), color: signalColor(-115) },
-    ],
-    [t]
-  );
+  // Legend rows: one per RAT, each with stronger←weaker gradient swatches.
+  const legendRows = useMemo(() => {
+    // Representative dBm values for each signal bucket (excellent→weak).
+    const sampleRsrp = [-70, -85, -95, -105, -115];
+    const gradientFor = (typeStr: string) =>
+      sampleRsrp.map((rsrp) => ratColor(typeStr, rsrp));
+    return [
+      {
+        key: "lte",
+        label: t("cellmapper.map_legend_lte"),
+        swatchColor: ratColor("LTE", -75),
+        gradient: gradientFor("LTE"),
+      },
+      {
+        key: "nr",
+        label: t("cellmapper.map_legend_nr"),
+        swatchColor: ratColor("NR", -75),
+        gradient: gradientFor("NR"),
+      },
+    ];
+  }, [t]);
 
   // Loading state
   if (isLoading) {
@@ -288,19 +335,31 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
             </Button>
           )}
 
-          {/* Signal legend -- bottom-left overlay */}
+          {/* RAT legend -- bottom-left overlay */}
           <div className="absolute bottom-2 left-2 z-[1000] bg-background/85 backdrop-blur-sm rounded-md p-2 border text-xs">
             <div className="font-medium mb-1">{t("cellmapper.map_legend_title")}</div>
-            <div className="space-y-0.5">
-              {legend.map((item) => (
-                <div key={item.label} className="flex items-center gap-1.5">
+            <div className="space-y-1.5">
+              {legendRows.map((row) => (
+                <div key={row.key} className="flex items-center gap-2">
                   <span
-                    className="inline-block size-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
+                    className="inline-block size-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: row.swatchColor }}
                   />
-                  <span>{item.label}</span>
+                  <span className="font-medium w-7">{row.label}</span>
+                  <div className="flex items-center gap-0.5" aria-hidden="true">
+                    {row.gradient.map((c, i) => (
+                      <span
+                        key={i}
+                        className="inline-block h-2 w-3 first:rounded-l-sm last:rounded-r-sm"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
                 </div>
               ))}
+              <div className="text-muted-foreground text-[10px] pl-1 pt-0.5">
+                {t("cellmapper.map_legend_gradient")}
+              </div>
             </div>
           </div>
         </div>
