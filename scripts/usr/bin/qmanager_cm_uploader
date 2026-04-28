@@ -52,6 +52,16 @@ CM_MIN_BATCH=5
     exit 1
 }
 
+# Shared error ring buffer (writes to /tmp/cellmapper/errors/ring.json so
+# uploader errors show up in the dashboard error log card alongside
+# collector errors). Optional — if errors.sh is missing for any reason
+# we fall back to a no-op so uploads still work.
+# shellcheck disable=SC1091
+. /usr/lib/qmanager/cellmapper/errors.sh 2>/dev/null || {
+    cm_error_record() { :; }
+    cm_error_ring_get() { printf '[]'; }
+}
+
 qlog_init "cm_uploader"
 
 # --- Global Session State -----------------------------------------------------
@@ -634,6 +644,10 @@ _cm_do_upload_cycle() {
     _cm_last_upload_result="error"
     _cm_last_error="${_upload_error_msg}"
     qlog_warn "Upload failed (rc=$upload_rc): ${_upload_error_msg:-unknown}"
+
+    # Push the failure into the shared error ring so the UI's error log
+    # card surfaces uploader problems alongside collector problems.
+    cm_error_record "uploader" "${_upload_error_msg:-rc=$upload_rc}"
 
     case "$upload_rc" in
         2)  # Auth error
