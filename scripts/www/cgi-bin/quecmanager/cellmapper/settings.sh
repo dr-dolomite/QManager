@@ -31,7 +31,7 @@
 #     "batch_size":       number (5-500),
 #     "upload_interval":  number (10-600),
 #     "retry_enabled":    true|false,
-#     "upload_policy":    "always"|"lan_only"|"scheduled",
+#     "upload_policy":    "always"|"lan_only",
 #     "buffer_size_mb":   number (5-500),
 #     "buffer_age_days":  number (1-30),
 #     "consent_accepted": true|false,
@@ -421,12 +421,13 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # -------------------------------------------------------------------------
-    # upload_policy (enum: always|lan_only|scheduled)
+    # upload_policy (enum: always|lan_only) — "scheduled" was dropped after
+    # the audit; never implemented and no UI surface for it.
     # -------------------------------------------------------------------------
     val=$(printf '%s' "$POST_DATA" | jq -r '.upload_policy // empty' 2>/dev/null)
     if [ -n "$val" ]; then
-        validate_enum "$val" always lan_only scheduled || \
-            reject_field "upload_policy" "must be one of: always, lan_only, scheduled"
+        validate_enum "$val" always lan_only || \
+            reject_field "upload_policy" "must be one of: always, lan_only"
         uci -q set "quecmanager.cellmapper.upload_policy=$val"
     fi
 

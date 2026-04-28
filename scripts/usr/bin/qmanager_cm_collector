@@ -52,7 +52,8 @@ for _lib in \
     /usr/lib/qmanager/cellmapper_uci.sh \
     /usr/lib/qmanager/cellmapper_db.sh \
     /usr/lib/qmanager/cellmapper_gps.sh \
-    /usr/lib/qmanager/cellmapper_adapter.sh
+    /usr/lib/qmanager/cellmapper_adapter.sh \
+    /usr/lib/qmanager/cellmapper/errors.sh
 do
     if [ -f "$_lib" ]; then
         # shellcheck disable=SC1090
@@ -110,8 +111,9 @@ MOTION_ANCHOR_LON=""
 # Neighbour collection scheduling
 LAST_NEIGHBOR_TS=0        # Unix timestamp of last neighbour collection
 
-# Error ring buffer (JSON array string, max 20 entries)
-ERROR_RING="[]"
+# Error ring buffer state lives on disk in /tmp/cellmapper/errors/ring.json
+# (see cellmapper/errors.sh).  No per-process in-memory copy is kept; the
+# state file dump uses cm_error_ring_get to fetch the latest snapshot.
 
 # Adapter info (populated after cm_detect_adapter)
 CM_ADAPTER_ID_CACHED=""
@@ -190,35 +192,17 @@ _cm_abs_diff() {
 
 # ---------------------------------------------------------------------------
 # _cm_add_error <source> <message>
-# Append an error to ERROR_RING (ring buffer, last 20 entries).
-# If the previous error has the same source+msg, increment its count instead.
-# Updates the global ERROR_RING string.
+# Thin wrapper around the shared cm_error_record helper from errors.sh.
+# Kept under the original name so existing call-sites in this daemon are
+# unchanged.  Also bumps the per-session counter that the collector exposes
+# in its state file.
 # ---------------------------------------------------------------------------
 _cm_add_error() {
     local src="$1"
     local msg="$2"
-    local now
-    now=$(date +%s)
 
     SESSION_ERRORS=$((SESSION_ERRORS + 1))
-
-    # Attempt to increment the count on the last error if it matches.
-    local updated
-    updated=$(printf '%s' "$ERROR_RING" | jq -c \
-        --arg src "$src" --arg msg "$msg" --argjson ts "$now" '
-        if length > 0 and last.source == $src and last.msg == $msg then
-            # Increment the count of the last entry.
-            .[:-1] + [.[-1] | .count += 1 | .ts = $ts]
-        else
-            # Append a new entry; trim to last 20.
-            . + [{"ts": $ts, "source": $src, "msg": $msg, "count": 1}]
-            | .[-20:]
-        end
-    ' 2>/dev/null)
-
-    if [ -n "$updated" ]; then
-        ERROR_RING="$updated"
-    fi
+    cm_error_record "$src" "$msg"
 }
 
 # ---------------------------------------------------------------------------
@@ -248,9 +232,14 @@ _cm_write_state() {
         interval="$CFG_INTERVAL_STOPPED"
     fi
 
-    # Determine last_error: use the last entry in ERROR_RING, or null.
+    # Read the shared error ring (collector + uploader contributions).
+    local errors_arr
+    errors_arr=$(cm_error_ring_get)
+    [ -z "$errors_arr" ] && errors_arr="[]"
+
+    # Determine last_error: use the last entry in the ring, or null.
     local last_err
-    last_err=$(printf '%s' "$ERROR_RING" | jq -c 'if length > 0 then last else null end' 2>/dev/null)
+    last_err=$(printf '%s' "$errors_arr" | jq -c 'if length > 0 then last else null end' 2>/dev/null)
     [ -z "$last_err" ] && last_err="null"
 
     # Parse last_measurement JSON or use null
@@ -282,7 +271,7 @@ _cm_write_state() {
         --argjson dedup_drops        "$SESSION_DEDUP_DROPS" \
         --argjson errors_total       "$SESSION_ERRORS" \
         --argjson last_error         "$last_err" \
-        --argjson errors             "$ERROR_RING" \
+        --argjson errors             "$errors_arr" \
         --arg     adapter_id         "${CM_ADAPTER_ID_CACHED:-unknown}" \
         --arg     adapter_name       "${CM_ADAPTER_NAME_CACHED:-unknown}" \
         --argjson last_measurement   "$lm_json" \

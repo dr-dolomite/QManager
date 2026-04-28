@@ -99,8 +99,18 @@ if [ -f "$CM_STATE_FILE" ] && [ -s "$CM_STATE_FILE" ]; then
     ' "$CM_STATE_FILE" 2>/dev/null)
     [ -z "$gps_fix" ] && gps_fix="null"
 
-    # errors — last 20 entries
-    errors_json=$(jq -c '[.errors // [] | .[-20:] | .[]]' "$CM_STATE_FILE" 2>/dev/null)
+    # errors — prefer the shared ring buffer at
+    # /tmp/cellmapper/errors/ring.json (written by both collector and
+    # uploader via cm_error_record). Fall back to the collector state
+    # file's embedded array if the ring is missing or malformed so older
+    # builds still render an error log.
+    CM_ERRORS_RING="/tmp/cellmapper/errors/ring.json"
+    if [ -s "$CM_ERRORS_RING" ]; then
+        errors_json=$(jq -c '. // [] | .[-20:]' "$CM_ERRORS_RING" 2>/dev/null)
+    fi
+    if [ -z "$errors_json" ] || [ "$errors_json" = "null" ]; then
+        errors_json=$(jq -c '[.errors // [] | .[-20:] | .[]]' "$CM_STATE_FILE" 2>/dev/null)
+    fi
     [ -z "$errors_json" ] && errors_json="[]"
 
     qlog_debug "State file read: collector=$collector_state"

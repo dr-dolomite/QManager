@@ -33,6 +33,15 @@ command -v qlog_error >/dev/null 2>&1 || qlog_error() { :; }
 command -v qlog_debug >/dev/null 2>&1 || qlog_debug() { :; }
 
 # ---------------------------------------------------------------------------
+# Source the shared normalization helpers (hex<->dec, bandwidth index<->MHz,
+# SINR scaling, TAC parsing). Adapters should never reimplement these inline.
+# ---------------------------------------------------------------------------
+if [ -f /usr/lib/qmanager/cellmapper/normalize.sh ]; then
+    # shellcheck disable=SC1091
+    . /usr/lib/qmanager/cellmapper/normalize.sh
+fi
+
+# ---------------------------------------------------------------------------
 # Adapter identity
 # ---------------------------------------------------------------------------
 
@@ -49,38 +58,12 @@ cm_adapter_id()   { printf 'quectel_rm551'; }
 cm_adapter_name() { printf 'Quectel RM551E-GL'; }
 
 # ---------------------------------------------------------------------------
-# _cm_bw_index_to_mhz <index>
-# Convert LTE bandwidth index to MHz string.
-# 0=1.4, 1=3, 2=5, 3=10, 4=15, 5=20
+# Local thin wrappers around the shared normalize.sh helpers.  These keep
+# the existing call-sites in this file unchanged while delegating the actual
+# math to the shared module.  Removing them would just be churn.
 # ---------------------------------------------------------------------------
-_cm_bw_index_to_mhz() {
-    case "$1" in
-        0) printf '1.4' ;;
-        1) printf '3'   ;;
-        2) printf '5'   ;;
-        3) printf '10'  ;;
-        4) printf '15'  ;;
-        5) printf '20'  ;;
-        *) printf '0'   ;;
-    esac
-}
-
-# ---------------------------------------------------------------------------
-# _cm_fix_sinr <sinr>
-# CellMapper expects SINR in dB. The RM551 reports values > 41 as tenths.
-# ---------------------------------------------------------------------------
-_cm_fix_sinr() {
-    local sinr="$1"
-    # Strip any leading minus to test magnitude.
-    local abs
-    abs=$(printf '%s' "$sinr" | sed 's/^-//')
-    if [ "$abs" -gt 41 ] 2>/dev/null; then
-        # Use awk for decimal division since ash has no float arithmetic.
-        printf '%s' "$sinr" | awk '{printf "%g", $1/10}'
-    else
-        printf '%s' "$sinr"
-    fi
-}
+_cm_bw_index_to_mhz() { cm_norm_lte_bandwidth_mhz "$1"; }
+_cm_fix_sinr()        { cm_norm_sinr "$1"; }
 
 # ---------------------------------------------------------------------------
 # _cm_fix_earfcn <earfcn> <mcc>
@@ -105,12 +88,9 @@ _cm_fix_earfcn() {
 }
 
 # ---------------------------------------------------------------------------
-# _cm_hex_to_dec <hex_string>
-# Convert a hexadecimal value (with or without 0x prefix) to decimal.
+# Local thin wrapper around cm_norm_hex_to_dec.
 # ---------------------------------------------------------------------------
-_cm_hex_to_dec() {
-    printf '%d' "0x$1" 2>/dev/null || printf '0'
-}
+_cm_hex_to_dec() { cm_norm_hex_to_dec "$1"; }
 
 # ---------------------------------------------------------------------------
 # _cm_get_provider
