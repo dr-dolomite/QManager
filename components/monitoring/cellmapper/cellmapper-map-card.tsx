@@ -12,10 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LocateFixed, Maximize2 } from "lucide-react";
 
 const BUFFER_ENDPOINT = "/cgi-bin/quecmanager/cellmapper/buffer.sh";
-// Light-mode tiles preserved here for now; theme-aware default lives in <Map>.
-const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+// Tile URLs are resolved by <Map> from the next-themes resolved theme:
+//  light → OSM standard, dark → CartoDB Dark Matter.
 const DEFAULT_CENTER: [number, number] = [32.158, -95.281]; // East Texas fallback
 const DEFAULT_ZOOM = 14;
 const MAX_MAP_POINTS = 200;
@@ -223,8 +221,6 @@ export function CellMapperMapCard({ gps, isLoading, isStale }: CellMapperMapCard
             ref={mapRef}
             center={center}
             zoom={DEFAULT_ZOOM}
-            tileUrl={TILE_URL}
-            attribution={TILE_ATTRIBUTION}
             className="h-full w-full z-0"
             scrollWheelZoom={true}
             showZoomControl={false}
