@@ -10,7 +10,7 @@ const STORAGE_KEY = "qmanager_pending_reboot";
 
 export interface PendingReboot {
   since: number;
-  source: "config_restore";
+  source: "config_restore" | "verizon_revert";
 }
 
 export function readPendingReboot(): PendingReboot | null {
@@ -26,9 +26,9 @@ export function readPendingReboot(): PendingReboot | null {
   }
 }
 
-export function setPendingReboot(): void {
+export function setPendingReboot(source: PendingReboot["source"] = "config_restore"): void {
   if (typeof window === "undefined") return;
-  const value: PendingReboot = { since: Date.now(), source: "config_restore" };
+  const value: PendingReboot = { since: Date.now(), source };
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
     // Notify same-tab listeners — the storage event only fires cross-tab

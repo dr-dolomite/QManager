@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import i18next from "i18next";
 import { authFetch } from "@/lib/auth-fetch";
+import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import type {
   SimProfile,
   ProfileSummary,
@@ -45,7 +47,7 @@ export interface UseSimProfilesReturn {
   /** Fetch a single profile by ID (full data for edit form). */
   getProfile: (id: string) => Promise<SimProfile | null>;
   /** Deactivate the current active profile (clears marker only, no modem changes). */
-  deactivateProfile: () => Promise<boolean>;
+  deactivateProfile: () => Promise<{ success: boolean; requiresReboot: boolean }>;
   /** Manually refresh the profile list */
   refresh: () => void;
 }
@@ -230,7 +232,7 @@ export function useSimProfiles(): UseSimProfilesReturn {
   // ---------------------------------------------------------------------------
   // Deactivate active profile
   // ---------------------------------------------------------------------------
-  const deactivateProfile = useCallback(async (): Promise<boolean> => {
+  const deactivateProfile = useCallback(async (): Promise<{ success: boolean; requiresReboot: boolean }> => {
     setError(null);
     try {
       const resp = await authFetch(`${CGI_BASE}/deactivate.sh`, {
@@ -241,22 +243,27 @@ export function useSimProfiles(): UseSimProfilesReturn {
         throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
       }
 
-      const result: ProfileApiResponse = await resp.json();
+      const result: ProfileApiResponse & { requires_reboot?: boolean } = await resp.json();
 
       if (!result.success) {
         setError(
-          result.detail || result.error || "Failed to deactivate profile"
+          resolveErrorMessage(
+            i18next.t.bind(i18next),
+            result.error,
+            result.detail,
+            "Failed to deactivate profile",
+          ),
         );
-        return false;
+        return { success: false, requiresReboot: false };
       }
 
       await fetchProfiles();
-      return true;
+      return { success: true, requiresReboot: result.requires_reboot === true };
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Failed to deactivate profile";
       setError(msg);
-      return false;
+      return { success: false, requiresReboot: false };
     }
   }, [fetchProfiles]);
 

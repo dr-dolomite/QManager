@@ -35,34 +35,9 @@ dpi_check_kmod() {
     return 0
 }
 
-# Insert nftables NFQUEUE rules for DPI evasion on the configured interface
-dpi_insert_rules() {
-    local iface="${1:-$DPI_INTERFACE}"
-
-    # TCP — intercept first 1-4 packets of TLS handshake on port 443
-    nft add rule inet fw4 mangle_postrouting oifname "$iface" tcp dport 443 \
-        ct original packets 1-4 counter queue num "$DPI_QUEUE_NUM" bypass \
-        comment "\"$DPI_NFT_COMMENT\"" 2>/dev/null || return 1
-
-    # QUIC — intercept first 1-4 packets of QUIC handshake on port 443
-    nft add rule inet fw4 mangle_postrouting oifname "$iface" udp dport 443 \
-        ct original packets 1-4 counter queue num "$DPI_QUEUE_NUM" bypass \
-        comment "\"$DPI_NFT_COMMENT\"" 2>/dev/null || return 1
-
-    return 0
-}
-
-# Remove all DPI nftables rules (identified by comment)
-dpi_remove_rules() {
-    # List postrouting rules, find handles for our rules, delete them
-    nft -a list chain inet fw4 mangle_postrouting 2>/dev/null | \
-        grep "$DPI_NFT_COMMENT" | \
-        awk '{print $NF}' | \
-        while read handle; do
-            nft delete rule inet fw4 mangle_postrouting handle "$handle" 2>/dev/null
-        done
-    return 0
-}
+# nftables rules are now shipped as a static /etc/nftables.d/12-mangle-qmanager-dpi.nft
+# file (sourced by fw4 on every load/reload — survives `fw4 reload`). No runtime
+# rule manipulation needed here. See that file for the rule definitions.
 
 # Get service status: running, stopped, or error
 dpi_get_status() {
@@ -96,11 +71,11 @@ dpi_get_uptime() {
     fi
 }
 
-# Read packet count from nftables rule counters
+# Read packet count from nftables rule counters in the persistent chain.
 dpi_get_packet_count() {
     local count=0
-    count=$(nft list chain inet fw4 mangle_postrouting 2>/dev/null | \
-        awk '/'"$DPI_NFT_COMMENT"'/ && /packets/ {for(i=1;i<=NF;i++) if($i=="packets") sum+=$(i+1)} END {print sum+0}')
+    count=$(nft list chain inet fw4 mangle_postrouting_qmanager_dpi 2>/dev/null | \
+        awk '/packets/ {for(i=1;i<=NF;i++) if($i=="packets") sum+=$(i+1)} END {print sum+0}')
     echo "${count:-0}"
 }
 

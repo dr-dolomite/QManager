@@ -124,7 +124,12 @@
     "aria_mac_address": "Alamat MAC",
     "placeholder_nat_mode": "Pilih Mode NAT",
     "placeholder_usb_mode": "Pilih Protokol Modem USB",
-    "placeholder_dns_proxy": "Pilih mode DNS"
+    "placeholder_dns_proxy": "Pilih mode DNS",
+    "locked_by_verizon": {
+      "title": "IP Passthrough dikelola oleh profil Verizon Anda",
+      "body": "Profil aktif: \"{{name}}\". Untuk mengubah pengaturan ini, nonaktifkan profil dari Profil Kustom.",
+      "cta": "Buka Profil Kustom"
+    }
   },
   "masquerade": {
     "page_title": "Traffic Masquerade",

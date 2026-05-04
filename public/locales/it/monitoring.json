@@ -277,7 +277,7 @@
     "install_button": "Installa Tailscale",
     "check_again_button": "Controlla di nuovo",
     "install_manually_label": "o installare manualmente",
-    "install_command": "aggiornamento opkg && installazione opkg tailscale",
+    "install_command": "opkg update && opkg install luci-app-tailscale-community-tiny",
     "install_success_title": "Installazione completata",
     "install_error_title": "Installazione non riuscita",
     "service_stopped_title": "Il servizio Tailscale non è in esecuzione",

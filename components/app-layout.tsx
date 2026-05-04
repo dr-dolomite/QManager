@@ -25,11 +25,13 @@ import { useBreadcrumbs } from "@/hooks/use-breadcrumbs";
 import { SimSwapBanner } from "@/components/monitoring/watchdog/sim-swap-banner";
 import { isLoggedIn } from "@/hooks/use-auth";
 import { useAutoLogout } from "@/hooks/use-auto-logout";
+import { useBootPendingReboot } from "@/hooks/use-boot-pending-reboot";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const breadcrumbs = useBreadcrumbs();
   const pathname = usePathname();
   useAutoLogout();
+  useBootPendingReboot();
 
   // Sync cookie check — no API call, no loading state
   if (typeof document !== "undefined" && !isLoggedIn()) {

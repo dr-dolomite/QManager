@@ -82,7 +82,7 @@ CONFLICT_PACKAGES="sms-tool socat-at-bridge socat"
 # UCI-gated services — only enabled if a prior install had them enabled.
 # Everything else is enabled unconditionally. This is the ONLY hardcoded
 # service list in this script.
-UCI_GATED_SERVICES="qmanager_tower_failover qmanager_watchcat qmanager_bandwidth qmanager_dpi qmanager_wan_guard"
+UCI_GATED_SERVICES="qmanager_tower_failover qmanager_watchcat qmanager_bandwidth qmanager_dpi qmanager_wan_guard qmanager_vpn_zone"
 
 # Expected modem firmware signature (after normalization: upper + alnum only)
 REQUIRED_FIRMWARE="RM551EGL"
@@ -738,6 +738,44 @@ stop_services() {
     info "All services stopped"
 }
 
+seed_uci_defaults() {
+    step "Seeding UCI defaults"
+
+    # Wake-on-LAN disabled by default (CLAUDE.md / Ethernet WoL change).
+    # Only seed when the key is ABSENT — preserves any explicit user choice
+    # (whether 0=enabled or 1=disabled) across upgrades. The qmanager_wol_fix
+    # init.d picks up the value at next boot via its existing
+    # `disable_wol == "1"` guard; no live ethtool call needed here because
+    # install ends in a reboot.
+    if ! uci -q get quecmanager.network >/dev/null 2>&1; then
+        uci set quecmanager.network=network
+    fi
+    if ! uci -q get quecmanager.network.disable_wol >/dev/null 2>&1; then
+        uci set quecmanager.network.disable_wol=1
+        info "Seeded quecmanager.network.disable_wol=1 (WoL disabled by default)"
+    else
+        info "quecmanager.network.disable_wol already set — preserving user choice"
+    fi
+
+    # Force Tailscale Fixes — opt-in toggle, default OFF. Re-enables the
+    # historical fw4 zone + mwan3 ipset workarounds for tailscale0 on top of
+    # any firmware that already handles routing (sdxpinn-patch). Recommended
+    # for R02 firmware users where outbound reply packets get marked for WAN
+    # egress and never traverse the tunnel. Owned by system/settings.sh and
+    # the qmanager_vpn_zone boot self-heal.
+    if ! uci -q get quecmanager.tailscale_workarounds >/dev/null 2>&1; then
+        uci set quecmanager.tailscale_workarounds=tailscale_workarounds
+    fi
+    if ! uci -q get quecmanager.tailscale_workarounds.enabled >/dev/null 2>&1; then
+        uci set quecmanager.tailscale_workarounds.enabled=0
+        info "Seeded quecmanager.tailscale_workarounds.enabled=0 (off by default)"
+    else
+        info "quecmanager.tailscale_workarounds.enabled already set — preserving user choice"
+    fi
+
+    uci commit quecmanager 2>/dev/null || warn "uci commit quecmanager failed"
+}
+
 enable_services() {
     step "Enabling init.d services"
 
@@ -884,6 +922,25 @@ install_backend() {
         info "Init.d: $svc_count services -> $INITD_DIR"
     fi
 
+    # --- nftables.d files (persistent firewall rules) ---
+    if [ -d "$SRC_SCRIPTS/etc/nftables.d" ]; then
+        mkdir -p /etc/nftables.d
+        local nft_count=0
+        for f in "$SRC_SCRIPTS/etc/nftables.d"/*.nft; do
+            [ -f "$f" ] || continue
+            local fname
+            fname="$(basename "$f")"
+            if install_file "$f" "/etc/nftables.d/$fname" 644; then
+                nft_count=$(( nft_count + 1 ))
+            fi
+        done
+        info "nftables.d: $nft_count rule files -> /etc/nftables.d"
+        # Trigger fw4 reload so rules take effect on running system (OTA --no-reboot path)
+        if command -v fw4 >/dev/null 2>&1; then
+            fw4 reload >/dev/null 2>&1 || true
+        fi
+    fi
+
     # --- Required runtime directories ---
     mkdir -p "$CONF_DIR/profiles" "$SESSION_DIR" "$UPDATES_DIR" /var/lock
 
@@ -934,6 +991,248 @@ install_bundled_binaries() {
     else
         warn "atcli_smd11 smoke test did not return OK — check /dev/smd11"
     fi
+}
+
+# --- Tailscale Firewall Zone Migration ---------------------------------------
+# Removes the legacy 'tailscale' fw4 zone and its forwarding rules from UCI.
+# Pre-sdxpinn-patch QManager builds added this zone to make the modem reachable
+# over Tailscale's magic IP (100.x.x.x). The patched RM551E firmware now
+# handles routing/firewall for tailscale0 on its own, so the zone is dead
+# config and is removed unconditionally on every install.
+# Idempotent — fast no-op when no 'tailscale' zone exists (the steady state).
+#
+# EXCEPTION: when the user has explicitly opted into Force Tailscale Fixes
+# (quecmanager.tailscale_workarounds.enabled=1), this migration is skipped —
+# the zone is what the user asked to keep. The opt-in path owns lifecycle of
+# the zone via system/settings.sh + qmanager_vpn_zone.
+
+migrate_tailscale_firewall_zone() {
+    step "Migrating legacy Tailscale firewall zone"
+
+    if ! command -v uci >/dev/null 2>&1; then
+        info "uci not available — skipping firewall zone migration"
+        return 0
+    fi
+
+    if [ "$(uci -q get quecmanager.tailscale_workarounds.enabled 2>/dev/null)" = "1" ]; then
+        info "Force Tailscale Fixes enabled — preserving Tailscale firewall zone"
+        return 0
+    fi
+
+    # Find a 'tailscale' named zone in UCI
+    local found=0 i=0 val
+    while true; do
+        val=$(uci -q get "firewall.@zone[$i].name") || break
+        if [ "$val" = "tailscale" ]; then
+            found=1
+            break
+        fi
+        i=$((i + 1))
+    done
+
+    if [ "$found" = "0" ]; then
+        info "No legacy Tailscale firewall zone present"
+        return 0
+    fi
+
+    info "Removing legacy Tailscale firewall zone and forwarding rules"
+
+    # Collect forwarding indices in reverse order (delete tail-first so the
+    # in-place index renumber done by uci doesn't shift our remaining targets).
+    # Only break on src lookup failure (end-of-list). A missing dest is
+    # treated as a non-match so manual or partial UCI edits don't truncate
+    # the scan early.
+    local fwd_indices="" src dest
+    i=0
+    while true; do
+        src=$(uci -q get "firewall.@forwarding[$i].src") || break
+        dest=$(uci -q get "firewall.@forwarding[$i].dest" 2>/dev/null || echo "")
+        if [ "$src" = "tailscale" ] || [ "$dest" = "tailscale" ]; then
+            fwd_indices="$i $fwd_indices"
+        fi
+        i=$((i + 1))
+    done
+    for idx in $fwd_indices; do
+        uci delete "firewall.@forwarding[$idx]" 2>/dev/null || true
+    done
+
+    # Remove the zone itself
+    i=0
+    while true; do
+        val=$(uci -q get "firewall.@zone[$i].name") || break
+        if [ "$val" = "tailscale" ]; then
+            uci delete "firewall.@zone[$i]" 2>/dev/null || true
+            break
+        fi
+        i=$((i + 1))
+    done
+
+    if ! uci commit firewall 2>/dev/null; then
+        warn "uci commit firewall failed — legacy Tailscale zone may persist until next reboot"
+        return 0
+    fi
+
+    # Best-effort: drop the dead mwan3 ipset entry if NetBird is NOT installed.
+    # When NetBird is present, its CGI/init.d will re-assert the entry — there
+    # is no ordering guarantee here, so we only clear when no consumer remains.
+    # Ipset entries are in-kernel only, harmless if absent.
+    if ! command -v netbird >/dev/null 2>&1; then
+        if command -v ipset >/dev/null 2>&1 && \
+           ipset list mwan3_connected_ipv4 >/dev/null 2>&1; then
+            ipset del mwan3_connected_ipv4 100.64.0.0/10 2>/dev/null || true
+        fi
+    fi
+
+    # Restart firewall so the deletions take effect immediately. The default
+    # install path ends with a reboot, which would also achieve this — but the
+    # OTA path uses --no-reboot, where this restart matters.
+    /etc/init.d/firewall restart >/dev/null 2>&1 || true
+
+    info "Legacy Tailscale firewall zone removed"
+}
+
+# --- Tailscale Package Migration ---------------------------------------------
+# Migrates from legacy {tailscale, tailscaled, luci-app-tailscale} to
+# {tailscale-tiny, luci-app-tailscale-community-tiny}.
+#
+# - Preserves the user's node identity by copying the state file from
+#   /var/lib/tailscale/tailscaled.state to /etc/tailscale/tailscaled.state
+#   BEFORE removing legacy packages.
+# - Restores the prior boot-enable + run state after the swap.
+# - Lock-protected so concurrent CGI install/uninstall POSTs back off cleanly.
+# - Reliability over speed: aborts before opkg remove if state copy fails.
+# Idempotent — fast no-op when already on tiny or no Tailscale installed.
+
+migrate_tailscale_packages() {
+    step "Migrating Tailscale to community-tiny"
+
+    if ! command -v opkg >/dev/null 2>&1; then
+        info "opkg not available — skipping Tailscale package migration"
+        return 0
+    fi
+
+    local lock="/var/lock/qmanager_tailscale_migrate.lock"
+    if ! ( set -C; echo $$ > "$lock" ) 2>/dev/null; then
+        warn "Tailscale migration lock held by another process — skipping"
+        return 0
+    fi
+    trap 'rm -f "$lock"' EXIT INT TERM
+
+    local installed
+    installed=$(opkg list-installed 2>/dev/null | awk '{print $1}')
+
+    local has_legacy=0 has_tiny=0
+    echo "$installed" | grep -qE '^(tailscale|tailscaled|luci-app-tailscale)$' && has_legacy=1 || true
+    echo "$installed" | grep -qE '^(tailscale-tiny|luci-app-tailscale-community-tiny)$' && has_tiny=1 || true
+
+    if [ "$has_legacy" = "0" ] && [ "$has_tiny" = "0" ]; then
+        info "Tailscale not installed — nothing to migrate"
+        rm -f "$lock"; trap - EXIT INT TERM
+        return 0
+    fi
+
+    if [ "$has_legacy" = "0" ] && [ "$has_tiny" = "1" ]; then
+        info "Already on tailscale-tiny — nothing to migrate"
+        rm -f "$lock"; trap - EXIT INT TERM
+        return 0
+    fi
+
+    if [ "$has_legacy" = "1" ] && [ "$has_tiny" = "1" ]; then
+        warn "Both legacy and tiny packages present — opkg conflict, manual cleanup required"
+        rm -f "$lock"; trap - EXIT INT TERM
+        return 0
+    fi
+
+    # ---- has_legacy=1, has_tiny=0 → MIGRATE ---------------------------------
+    info "Legacy Tailscale detected — migrating to community-tiny"
+
+    # Wait for any in-flight opkg operation to release its lock (≤30s).
+    local waited=0
+    while [ -f /var/lock/opkg.lock ] && [ "$waited" -lt 30 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if [ -f /var/lock/opkg.lock ]; then
+        warn "opkg lock still held after 30s — aborting Tailscale migration"
+        rm -f "$lock"; trap - EXIT INT TERM
+        return 1
+    fi
+
+    # Snapshot prior state.
+    local was_boot_enabled was_running
+    was_boot_enabled=$(uci -q get tailscale.@tailscale[0].enabled 2>/dev/null)
+    [ "$was_boot_enabled" = "1" ] || was_boot_enabled="0"
+    if pidof tailscaled >/dev/null 2>&1; then
+        was_running=1
+    else
+        was_running=0
+    fi
+    info "Prior state: boot_enabled=$was_boot_enabled running=$was_running"
+
+    # Stop daemon.
+    [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale stop >/dev/null 2>&1 || true
+
+    # Poll for tailscaled to actually exit (≤10s), then SIGKILL.
+    waited=0
+    while pidof tailscaled >/dev/null 2>&1 && [ "$waited" -lt 10 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if pidof tailscaled >/dev/null 2>&1; then
+        warn "tailscaled did not exit cleanly — sending SIGKILL"
+        killall -9 tailscaled 2>/dev/null
+        sleep 1
+    fi
+
+    # Clear /etc/rc.d symlinks so the legacy init script doesn't re-trigger.
+    [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale disable >/dev/null 2>&1 || true
+
+    # Copy the state file BEFORE opkg remove. If this fails we abort with
+    # legacy intact — user retries via UI later.
+    if [ -s /var/lib/tailscale/tailscaled.state ]; then
+        if ! mkdir -p /etc/tailscale 2>/dev/null; then
+            warn "Failed to create /etc/tailscale — aborting migration (legacy intact)"
+            rm -f "$lock"; trap - EXIT INT TERM
+            return 1
+        fi
+        if ! cp -p /var/lib/tailscale/tailscaled.state /etc/tailscale/tailscaled.state 2>/dev/null; then
+            warn "Failed to copy Tailscale state file — aborting migration (legacy intact)"
+            rm -f "$lock"; trap - EXIT INT TERM
+            return 1
+        fi
+        info "Tailscale state file copied to /etc/tailscale/tailscaled.state"
+    else
+        info "No Tailscale state file to migrate (device was never connected)"
+    fi
+
+    # Swap packages.
+    if ! opkg remove luci-app-tailscale tailscale tailscaled >/dev/null 2>&1; then
+        warn "opkg remove of legacy Tailscale packages reported errors — continuing"
+    fi
+    if ! opkg install luci-app-tailscale-community-tiny >/dev/null 2>&1; then
+        warn "opkg install luci-app-tailscale-community-tiny FAILED — Tailscale uninstalled, state preserved in /etc/tailscale/"
+        rm -f "$lock"; trap - EXIT INT TERM
+        return 1
+    fi
+
+    # Restore boot-enable.
+    if [ "$was_boot_enabled" = "1" ]; then
+        uci -q set tailscale.settings.service_enabled='1' 2>/dev/null
+        uci -q commit tailscale 2>/dev/null
+        [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale enable >/dev/null 2>&1 || true
+    fi
+
+    # Restore run state.
+    if [ "$was_running" = "1" ] || [ "$was_boot_enabled" = "1" ]; then
+        [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale start >/dev/null 2>&1 || true
+    fi
+
+    # Clean up legacy state dir.
+    rm -rf /var/lib/tailscale 2>/dev/null
+
+    rm -f "$lock"; trap - EXIT INT TERM
+    info "Tailscale migration complete"
+    return 0
 }
 
 # --- Cleanup Legacy ----------------------------------------------------------
@@ -1209,7 +1508,7 @@ main() {
         TOTAL_STEPS=$(( TOTAL_STEPS + 2 ))                            # backup + frontend
     fi
     if [ "$DO_BACKEND" = "1" ]; then
-        TOTAL_STEPS=$(( TOTAL_STEPS + 3 ))                            # backend + bundled + cleanup
+        TOTAL_STEPS=$(( TOTAL_STEPS + 6 ))                            # backend + bundled + cleanup + migrate_tailscale_fw + migrate_tailscale_pkg + seed
         [ "$DO_ENABLE" = "1" ] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))  # enable
         if [ "$DO_START" = "1" ]; then
             TOTAL_STEPS=$(( TOTAL_STEPS + 3 ))                        # start + health + at_stack_check
@@ -1251,6 +1550,9 @@ main() {
         install_backend
         install_bundled_binaries
         cleanup_legacy_scripts
+        migrate_tailscale_firewall_zone
+        migrate_tailscale_packages
+        seed_uci_defaults
 
         [ "$DO_ENABLE" = "1" ] && enable_services
 

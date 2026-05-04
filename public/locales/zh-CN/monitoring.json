@@ -277,7 +277,7 @@
     "install_button": "安装 Tailscale",
     "check_again_button": "重新检测",
     "install_manually_label": "或手动安装",
-    "install_command": "opkg update && opkg install tailscale",
+    "install_command": "opkg update && opkg install luci-app-tailscale-community-tiny",
     "install_success_title": "安装完成",
     "install_error_title": "安装失败",
     "service_stopped_title": "Tailscale 服务未运行",

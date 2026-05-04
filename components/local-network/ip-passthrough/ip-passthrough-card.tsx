@@ -34,9 +34,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { RotateCcwIcon } from "lucide-react";
+import { InfoIcon, RotateCcwIcon } from "lucide-react";
+import Link from "next/link";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useIpPassthrough } from "@/hooks/use-ip-passthrough";
+import { useActiveProfile } from "@/hooks/use-active-profile";
 import type {
   PassthroughMode,
   DnsProxy,
@@ -78,6 +81,7 @@ const IPPassthroughCard = () => {
     saveSettings,
     refresh,
   } = useIpPassthrough();
+  const { activeProfile, isVerizonActive, isLoading: isProfileLoading } = useActiveProfile();
   const { saved, markSaved } = useSaveFlash();
 
   // Local form state — NatMode and UsbModeLocal use descriptive strings to
@@ -237,6 +241,25 @@ const IPPassthroughCard = () => {
         <CardDescription>{t("ippt.card_description")}</CardDescription>
       </CardHeader>
       <CardContent>
+        {!isProfileLoading && isVerizonActive && (
+          <Alert className="mb-4 bg-info/15 text-info border-info/30">
+            <InfoIcon className="size-4" />
+            <AlertTitle>{t("ippt.locked_by_verizon.title")}</AlertTitle>
+            <AlertDescription>
+              <p>
+                {t("ippt.locked_by_verizon.body", { name: activeProfile?.name ?? "" })}
+              </p>
+              <p className="mt-1">
+                <Link
+                  href="/cellular/custom-profiles"
+                  className="underline underline-offset-2 font-medium"
+                >
+                  {t("ippt.locked_by_verizon.cta")}
+                </Link>
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
         {error && (
           <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 mb-4">
             <p className="text-sm text-destructive">{error}</p>
@@ -251,6 +274,7 @@ const IPPassthroughCard = () => {
             </Button>
           </div>
         )}
+        <fieldset disabled={!isProfileLoading && isVerizonActive}>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="w-full">
             <FieldSet>
@@ -456,6 +480,7 @@ const IPPassthroughCard = () => {
             </Button>
           </div>
         </form>
+        </fieldset>
 
         {/* Pre-save confirmation dialog */}
         <AlertDialog

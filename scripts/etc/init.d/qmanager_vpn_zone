@@ -1,18 +1,23 @@
 #!/bin/sh /etc/rc.common
 # =============================================================================
-# qmanager_vpn_zone — Boot-Time VPN Firewall Zone Self-Heal
+# qmanager_vpn_zone — Boot-Time Tailscale Firewall Zone Self-Heal
 # =============================================================================
-# Runs once at boot. For each installed VPN (Tailscale, Netbird), ensures the
-# fw4 firewall zone for its interface exists. If the zone is already present
-# (the common case — zones persist in UCI), this is a fast no-op.
+# Runs once at boot, GATED on the user-controlled toggle
+# quecmanager.tailscale_workarounds.enabled. When the flag is "1", ensures the
+# fw4 zone for tailscale0 is present and re-asserts the mwan3 ipset entry
+# (which is ephemeral and lost on every reboot). When the flag is "0" or
+# unset, fast no-op.
 #
 # Why this exists:
-#   fw4's default input policy is DROP. Without a zone for tailscale0 / wt0,
-#   inbound VPN traffic hits no jump rule and is silently dropped. The CGI
-#   install flow adds the zone when the user installs the VPN via QManager —
-#   but users who installed the VPN via LuCI > Software first, or who
-#   accidentally removed the zone, would be stuck without recourse short of
-#   reinstalling. This script self-heals the zone on every boot.
+#   fw4's default input policy is DROP. Without a zone for tailscale0,
+#   inbound VPN traffic hits no jump rule and is silently dropped. mwan3
+#   marks reply packets for WAN egress unless the VPN CGNAT range is in its
+#   connected-routes ipset — which is in-kernel only and cleared on every
+#   boot, so it must be re-added each time. The matching CGI install flow
+#   only adds these when the user enables the toggle in System Settings.
+#
+# Scope: Tailscale only. NetBird's parallel boot self-heal lives in
+# qmanager_netbird_zone and is unrelated.
 #
 # Non-procd: runs once at boot, exits. No watch, no respawn.
 #
@@ -46,6 +51,8 @@ ensure_if_installed() {
 
     if vpn_fw_zone_exists "$zone_name"; then
         logger -t qmanager_vpn_zone "Zone '$zone_name' already present, no action"
+        # Still re-assert mwan3 ipset (ephemeral, lost on reboot).
+        vpn_fw_ensure_mwan3_exception
         return 0
     fi
 
@@ -54,14 +61,19 @@ ensure_if_installed() {
 }
 
 start() {
+    # Gate: only run when the user has explicitly enabled the workarounds.
+    if [ "$(uci -q get quecmanager.tailscale_workarounds.enabled)" != "1" ]; then
+        logger -t qmanager_vpn_zone "Tailscale workarounds disabled, skipping"
+        return 0
+    fi
+
     ensure_if_installed "tailscale" "tailscale" "tailscale0"
-    ensure_if_installed "netbird"   "netbird"   "wt0"
 }
 
 # stop() is intentionally a no-op. Zone removal on stop would force a
 # firewall restart that breaks VPN reachability on every service reload,
 # which is precisely the opposite of what this self-heal is for. Zone
-# removal is owned by the uninstall path in the CGI scripts.
+# removal is owned by the disable path in system/settings.sh.
 stop() {
     :
 }

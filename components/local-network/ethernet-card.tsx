@@ -50,6 +50,7 @@ interface EthernetStatus {
   duplex: string;
   auto_negotiation: string;
   speed_limit: string;
+  supports_2500?: boolean;
 }
 
 const EthernetStatusCard = () => {
@@ -96,6 +97,7 @@ const EthernetStatusCard = () => {
           duplex: data.duplex,
           auto_negotiation: data.auto_negotiation,
           speed_limit: data.speed_limit,
+          supports_2500: data.supports_2500,
         });
       }
     } catch {
@@ -176,6 +178,7 @@ const EthernetStatusCard = () => {
                   duplex: pollData.duplex,
                   auto_negotiation: pollData.auto_negotiation,
                   speed_limit: pollData.speed_limit,
+                  supports_2500: pollData.supports_2500,
                 });
                 setError(null);
                 hasDataRef.current = true;
@@ -521,6 +524,9 @@ const EthernetStatusCard = () => {
                     <SelectItem value="10">{t("ethernet.option_speed_10")}</SelectItem>
                     <SelectItem value="100">{t("ethernet.option_speed_100")}</SelectItem>
                     <SelectItem value="1000">{t("ethernet.option_speed_1000")}</SelectItem>
+                    {status?.supports_2500 ? (
+                      <SelectItem value="2500">{t("ethernet.option_speed_2500")}</SelectItem>
+                    ) : null}
                   </SelectGroup>
                 </SelectContent>
               </Select>

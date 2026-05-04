@@ -21,6 +21,8 @@
     "profile_applied": "配置文件已应用",
     "profile_failed": "配置文件应用失败",
     "profile_deactivated": "配置文件已停用",
+    "verizon_mpdn_applied": "Verizon 路由已应用",
+    "verizon_mpdn_reverted": "Verizon 路由已还原",
     "config_backup_collected": "备份已生成",
     "config_restore_started": "恢复已开始",
     "config_restore_section_success": "分段恢复成功",

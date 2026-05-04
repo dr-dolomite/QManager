@@ -1,13 +1,12 @@
 #!/bin/sh
 . /usr/lib/qmanager/cgi_base.sh
-. /usr/lib/qmanager/vpn_firewall.sh
 # =============================================================================
 # tailscale.sh — CGI Endpoint: Tailscale VPN Management (GET + POST)
 # =============================================================================
 # GET:  Returns installation status, daemon state, connection info, and peers.
 # POST: Connect/disconnect, start/stop daemon, enable/disable on boot, logout.
 #
-# Tailscale manages its own config in /var/lib/tailscale/ — we are a thin
+# Tailscale manages its own config in /etc/tailscale/ — we are a thin
 # control layer, not a service owner. No UCI config needed.
 #
 # Data sources:
@@ -45,17 +44,17 @@ is_daemon_running() {
 }
 
 # --- Helper: check if tailscale is enabled on boot --------------------------
-# luci-app-tailscale uses UCI enabled flag as the authoritative control.
-# The init script's section_enabled() checks this, AND a WAN interface
-# trigger can fire reload even without the /etc/rc.d symlink.
+# luci-app-tailscale-community-tiny stores its enabled flag at
+# tailscale.settings.service_enabled (see /etc/config/tailscale shipped
+# by the package). Fall back to the init.d enabled check if the UCI
+# section is absent for any reason.
 get_boot_enabled() {
     local uci_enabled
-    uci_enabled=$(uci -q get tailscale.@tailscale[0].enabled 2>/dev/null)
+    uci_enabled=$(uci -q get tailscale.settings.service_enabled 2>/dev/null)
     if [ -n "$uci_enabled" ]; then
         [ "$uci_enabled" = "1" ] && echo "true" || echo "false"
         return
     fi
-    # Fallback for non-luci-app installs: check init.d symlink
     if [ -x /etc/init.d/tailscale ]; then
         /etc/init.d/tailscale enabled && echo "true" || echo "false"
     else
@@ -74,17 +73,44 @@ kill_stale_ts_up() {
     fi
 }
 
+# --- Helper: refuse to mutate while install.sh migration is in-flight -------
+check_migration_lock() {
+    if [ -f /var/lock/qmanager_tailscale_migrate.lock ]; then
+        cgi_error "migration_in_progress" "Tailscale package migration is in progress — try again in a moment"
+        exit 0
+    fi
+}
+
 # --- Helper: get tailscale version string ------------------------------------
 get_ts_version() {
     tailscale version 2>/dev/null | head -1 | awk '{print $1}'
 }
+
+# --- Force Tailscale Fixes gate ---------------------------------------------
+# Opt-in toggle owned by /cgi-bin/quecmanager/system/settings.sh + the
+# qmanager_vpn_zone init.d boot self-heal. When enabled, this CGI re-acquires
+# the historical fw4 zone + mwan3 ipset workarounds for tailscale0:
+#   - install success: vpn_fw_ensure_zone "tailscale" "tailscale0"
+#   - uninstall success: background vpn_fw_remove_zone "tailscale"
+# Process-lifecycle fixes (orphan double-fork, --accept-dns=false,
+# --accept-routes ban, migration lock) are unconditional and not gated here.
+if [ "$(uci -q get quecmanager.tailscale_workarounds.enabled 2>/dev/null)" = "1" ]; then
+    . /usr/lib/qmanager/vpn_firewall.sh
+    _TS_WORKAROUNDS=1
+else
+    _TS_WORKAROUNDS=0
+fi
 
 # =============================================================================
 # GET — Fetch installation status, daemon state, connection info, peers
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
 
-    other_vpn_installed=$(vpn_check_other_installed "netbird")
+    if command -v netbird >/dev/null 2>&1; then
+        other_vpn_installed="true"
+    else
+        other_vpn_installed="false"
+    fi
 
     # --- Tier 1: Not installed -----------------------------------------------
     if ! is_installed; then
@@ -94,7 +120,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             '{
                 success: true,
                 installed: false,
-                install_hint: "opkg update && opkg install luci-app-tailscale",
+                install_hint: "opkg update && opkg install luci-app-tailscale-community-tiny",
                 other_vpn_installed: $other_vpn_installed,
                 other_vpn_name: "NetBird"
             }'
@@ -251,6 +277,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: install — install tailscale via opkg (background)
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "install" ]; then
+        check_migration_lock
         TS_INSTALL_RESULT="/tmp/qmanager_tailscale_install.json"
         TS_INSTALL_PID="/tmp/qmanager_tailscale_install.pid"
 
@@ -286,14 +313,21 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             fi
 
             printf '{"success":true,"status":"running","message":"Installing tailscale..."}' > "$TS_INSTALL_RESULT"
-            if ! opkg install luci-app-tailscale >/dev/null 2>&1; then
+            if ! opkg install luci-app-tailscale-community-tiny >/dev/null 2>&1; then
                 printf '{"success":false,"status":"error","message":"opkg install failed","detail":"Package may not be available for this architecture"}' > "$TS_INSTALL_RESULT"
                 exit 1
             fi
 
             # Verify
             if command -v tailscale >/dev/null 2>&1; then
-                vpn_fw_ensure_zone "tailscale" "tailscale0"
+                # If Force Tailscale Fixes is enabled, ensure the fw4 zone
+                # for tailscale0 + mwan3 ipset entry exist now that the
+                # binary is on disk. Already running in an orphaned
+                # subshell so the fw4 restart inside vpn_fw_ensure_zone
+                # cannot kill the parent CGI.
+                if [ "$_TS_WORKAROUNDS" = "1" ]; then
+                    vpn_fw_ensure_zone "tailscale" "tailscale0"
+                fi
                 printf '{"success":true,"status":"complete","message":"Tailscale installed successfully"}' > "$TS_INSTALL_RESULT"
             else
                 printf '{"success":false,"status":"error","message":"Package installed but binary not found"}' > "$TS_INSTALL_RESULT"
@@ -327,6 +361,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: connect — start tailscale up, capture auth URL
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "connect" ]; then
+        check_migration_lock
         qlog_info "Connecting to Tailscale"
 
         # Ensure daemon is running first
@@ -334,7 +369,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             if [ -x /etc/init.d/tailscale ]; then
                 /etc/init.d/tailscale start >/dev/null 2>&1
             else
-                tailscaled --state=/var/lib/tailscale/tailscaled.state >/dev/null 2>&1 &
+                tailscaled --state=/etc/tailscale/tailscaled.state >/dev/null 2>&1 &
             fi
             # Wait for daemon to be ready (up to 5 seconds)
             attempts=0
@@ -408,6 +443,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: disconnect — disconnect from tailnet (stay registered)
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "disconnect" ]; then
+        check_migration_lock
         qlog_info "Disconnecting Tailscale"
         result=$(tailscale down 2>&1)
         rc=$?
@@ -426,6 +462,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: logout — full deauthentication (removes device from tailnet)
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "logout" ]; then
+        check_migration_lock
         qlog_info "Logging out of Tailscale"
         kill_stale_ts_up
         result=$(tailscale logout 2>&1)
@@ -445,6 +482,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: start_service — start tailscaled daemon
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "start_service" ]; then
+        check_migration_lock
         if is_daemon_running; then
             cgi_error "already_running" "Tailscale daemon is already running"
             exit 0
@@ -453,7 +491,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         if [ -x /etc/init.d/tailscale ]; then
             /etc/init.d/tailscale start >/dev/null 2>&1
         else
-            tailscaled --state=/var/lib/tailscale/tailscaled.state >/dev/null 2>&1 &
+            tailscaled --state=/etc/tailscale/tailscaled.state >/dev/null 2>&1 &
         fi
         sleep 1
         if is_daemon_running; then
@@ -469,6 +507,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: stop_service — stop tailscaled daemon
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "stop_service" ]; then
+        check_migration_lock
         qlog_info "Stopping tailscale daemon"
         kill_stale_ts_up
         if [ -x /etc/init.d/tailscale ]; then
@@ -486,6 +525,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: set_boot_enabled — enable/disable tailscale on boot
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "set_boot_enabled" ]; then
+        check_migration_lock
         boot_enabled=$(printf '%s' "$POST_DATA" | jq -r '.enabled | if . == null then empty else tostring end')
         if [ -z "$boot_enabled" ]; then
             cgi_error "missing_field" "enabled field is required"
@@ -497,17 +537,17 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         fi
         case "$boot_enabled" in
             true)
-                # Toggle UCI flag (authoritative for luci-app-tailscale)
-                if uci -q get tailscale.@tailscale[0] >/dev/null 2>&1; then
-                    uci set tailscale.@tailscale[0].enabled='1'
+                # Toggle UCI flag (authoritative for luci-app-tailscale-community-tiny)
+                if uci -q get tailscale.settings >/dev/null 2>&1; then
+                    uci set tailscale.settings.service_enabled='1'
                     uci commit tailscale
                 fi
                 /etc/init.d/tailscale enable >/dev/null 2>&1
                 qlog_info "Tailscale enabled on boot"
                 ;;
             false)
-                if uci -q get tailscale.@tailscale[0] >/dev/null 2>&1; then
-                    uci set tailscale.@tailscale[0].enabled='0'
+                if uci -q get tailscale.settings >/dev/null 2>&1; then
+                    uci set tailscale.settings.service_enabled='0'
                     uci commit tailscale
                 fi
                 /etc/init.d/tailscale disable >/dev/null 2>&1
@@ -526,9 +566,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # action: uninstall — remove tailscale packages from the device
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "uninstall" ]; then
+        check_migration_lock
         qlog_info "Uninstalling Tailscale packages"
 
-        # Stop service if running
+        # Stop service if running.
         if is_daemon_running; then
             qlog_info "Stopping Tailscale daemon before uninstall"
             kill_stale_ts_up
@@ -541,19 +582,29 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             sleep 1
         fi
 
-        # Disable boot entry if init script exists
+        # Disable boot entry if init script exists (covers both legacy and tiny).
         [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale disable >/dev/null 2>&1
 
-        # Remove packages
-        opkg remove luci-app-tailscale tailscale tailscaled >/dev/null 2>&1
+        # Smart removal: enumerate which of the 6 known package names are
+        # installed and remove only those. Handles pure-legacy, pure-tiny,
+        # and any partial state.
+        PKGS=$(opkg list-installed 2>/dev/null | awk '{print $1}' | grep -E \
+            '^(tailscale|tailscaled|tailscale-tiny|luci-app-tailscale|luci-app-tailscale-community|luci-app-tailscale-community-tiny)$' \
+            | tr '\n' ' ')
+        if [ -n "$PKGS" ]; then
+            qlog_info "Removing packages: $PKGS"
+            opkg remove $PKGS >/dev/null 2>&1
+        else
+            qlog_info "No Tailscale packages found to remove"
+        fi
 
-        # Clean up state files
-        rm -rf /var/lib/tailscale/
+        # Clean up state from BOTH legacy and tiny locations.
+        rm -rf /var/lib/tailscale/ /etc/tailscale/
         rm -f /tmp/qmanager_tailscale_auth_url /tmp/qmanager_tailscale_up_output /tmp/qmanager_tailscale_up_pid
 
-        # Verify removal (check actual binary paths, not command -v which can be cached)
+        # Verify removal (check actual binary paths, not command -v which can be cached).
         hash -r 2>/dev/null
-        if [ -x /usr/sbin/tailscale ] || [ -x /usr/bin/tailscale ]; then
+        if [ -x /usr/sbin/tailscale ] || [ -x /usr/bin/tailscale ] || [ -x /usr/sbin/tailscaled ]; then
             qlog_error "Tailscale binary still present after opkg remove"
             cgi_error "uninstall_failed" "Failed to remove Tailscale packages"
             exit 0
@@ -562,11 +613,15 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         qlog_info "Tailscale uninstalled successfully"
         cgi_success
 
-        # Remove firewall zone in background AFTER response is sent.
-        # vpn_fw_remove_zone restarts the firewall which kills the HTTP
-        # connection — doing it after cgi_success ensures the frontend
-        # receives a clean JSON response.
-        ( vpn_fw_remove_zone "tailscale" ) </dev/null >/dev/null 2>&1 &
+        # If Force Tailscale Fixes was enabled, remove the fw4 zone in
+        # background AFTER the response is sent. vpn_fw_remove_zone runs
+        # /etc/init.d/firewall restart which would kill the HTTP connection
+        # if run synchronously (firewall-restart-kills-http rule). The
+        # function preserves the mwan3 ipset entry when NetBird is still
+        # installed, per the historical guard.
+        if [ "$_TS_WORKAROUNDS" = "1" ]; then
+            ( vpn_fw_remove_zone "tailscale" ) </dev/null >/dev/null 2>&1 &
+        fi
         exit 0
     fi
 

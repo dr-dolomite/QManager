@@ -73,7 +73,8 @@
         "ttl_label": "Nilai TTL",
         "ttl_error": "TTL Harus 0–255.",
         "hl_label": "Limit Hop",
-        "hl_error": "HL Harus 0–255."
+        "hl_error": "HL Harus 0–255.",
+        "cid_locked_verizon": "Verizon memerlukan konteks PDP 3"
       },
       "buttons": {
         "create_submit": "Buat Profil",
@@ -109,9 +110,18 @@
       "step_labels": {
         "apn": "Konfigurasi APN",
         "ttl_hl": "TTL / Hop Limit",
-        "imei": "IMEI"
+        "imei": "IMEI",
+        "mpdn_rule": "Perutean Data"
       },
       "reboot_notice": "Modem sedang memulai ulang untuk menerapkan perubahan IMEI. Dashboard akan tersambung kembali secara otomatis."
+    },
+    "verizon_warning": {
+      "title": "Verizon memerlukan aturan routing data khusus",
+      "body_intro": "Jaringan Verizon hanya mengirimkan data melalui saluran non-default pada modem ini. Agar Data dan SMS berfungsi, QManager akan mengonfigurasi aturan jalur data kustom saat Anda mengaktifkan profil ini.",
+      "body_warning_lead": "Penting — setelah aktif, jangan hapus atau lepaskan aturan ini secara manual.",
+      "body_warning_rest": "Melakukan hal itu dapat membuat modem tidak dapat memulihkan routing defaultnya hingga firmware di-flash ulang. QManager menangani pembersihan dengan aman saat Anda beralih ke profil lain.",
+      "cancel": "Batal",
+      "confirm": "Saya mengerti, lanjutkan"
     },
     "empty_state": {
       "title": "Tidak ada profil",
@@ -476,7 +486,6 @@
         "pci_label_n": "ID Sel (PCI) {{n}}",
         "pci_placeholder": "Masukkan PCI",
         "pci_placeholder_n": "Masukkan PCI {{n}}",
-        "use_current": "Gunakan Saat Ini",
         "lock_dialog": {
           "title": "Kunci ke Tower LTE?",
           "description_single": "Ini akan mengunci modem Anda ke EARFCN {{earfcn}}, PCI {{pci}}. Modem hanya akan terhubung ke tower ini dan mungkin akan terputus sebentar saat proses perpindahan.",
@@ -516,7 +525,6 @@
         "band_placeholder": "Masukkan Band NR",
         "scs_label": "Subcarrier Spacing",
         "scs_placeholder": "SCS",
-        "use_current": "Gunakan Saat Ini",
         "lock_dialog": {
           "title": "Kunci ke Tower NR-SA?",
           "description": "Ini akan mengunci modem Anda ke NR ARFCN {{arfcn}}, PCI {{pci}} (Band {{band}}). Modem hanya akan terhubung ke tower ini dan mungkin akan terputus sebentar saat proses perpindahan.",

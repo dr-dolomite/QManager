@@ -40,5 +40,57 @@
   "language": {
     "label": "语言",
     "switch_aria": "切换语言"
+  },
+  "overview": {
+    "title": "欢迎使用 QManager",
+    "tagline": "实时调制解调器状态",
+    "login_button": "登录",
+    "field": {
+      "carrier": "运营商",
+      "aggregation": "频段",
+      "uptime": "运行时间",
+      "empty": "—"
+    },
+    "aggregation": {
+      "band_with_bw": "{{band}} ({{bandwidth}} MHz)",
+      "band_only": "{{band}}",
+      "pci_label": "PCI"
+    },
+    "signal": {
+      "dual": "{{rsrp}} dBm · {{sinr}} dB SINR",
+      "rsrp_only": "{{rsrp}} dBm",
+      "sinr_only": "{{sinr}} dB SINR",
+      "none": "—"
+    },
+    "quality": {
+      "excellent": "极佳",
+      "good": "良好",
+      "fair": "一般",
+      "poor": "较差",
+      "none": "无信号"
+    },
+    "connection": {
+      "connected": "已连接",
+      "searching": "搜索中",
+      "limited": "受限",
+      "inactive": "未激活",
+      "error": "错误",
+      "disconnected": "未连接",
+      "unknown": "未知",
+      "modem_unreachable": "无法连接到调制解调器"
+    },
+    "stale_indicator": "数据可能已过期",
+    "empty": {
+      "title": "调制解调器状态不可用",
+      "subtitle": "登录以查看诊断详情。",
+      "fetch_error": "无法连接到设备。",
+      "retry": "重试"
+    },
+    "uptime": {
+      "days": "{{days}}天 {{hours}}小时",
+      "hours": "{{hours}}小时 {{minutes}}分钟",
+      "minutes": "{{minutes}}分钟"
+    },
+    "copyright": "© {{year}} QManager 版权所有"
   }
 }

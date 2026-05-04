@@ -26,6 +26,9 @@
     "config_restore_section_success": "Bagian Dipulihkan",
     "config_restore_section_failed": "Bagian Gagal",
     "config_restore_section_skipped": "Bagian Dilewati",
-    "config_restore_completed": "Pemulihan Selesai"
+    "config_restore_completed": "Pemulihan Selesai",
+    "wol_changed": "Pengaturan WoL Diubah",
+    "verizon_mpdn_applied": "Routing Verizon Diterapkan",
+    "verizon_mpdn_reverted": "Routing Verizon Dikembalikan"
   }
 }

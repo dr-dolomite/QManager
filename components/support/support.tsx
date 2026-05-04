@@ -121,12 +121,12 @@ const SupportComponent = () => {
                   />
                 </div>
                 <a
-                  href="https://discord.gg/wNuzkg8s"
+                  href="https://discord.iamromulan.dev/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-primary hover:underline underline-offset-4"
                 >
-                  discord.gg/wNuzkg8s
+                  discord.iamromulan.dev/
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>

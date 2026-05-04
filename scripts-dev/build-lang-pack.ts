@@ -56,20 +56,33 @@ Arguments:
   version     Optional. Defaults to today's UTC date YYYY.MM.DD.
 
 Options:
-  --update-manifest <url>  Patch language-packs/manifest.json with the entry.
-  --contributors <csv>     Comma-separated list of contributor names/handles
-                           (e.g. "@fmase" or "@fmase,@other"). Rendered in
-                           the Languages card.
+  --publish                Upload tarball to the 'language-packs' GitHub release
+                           and auto-patch manifest.json. Requires gh CLI + auth.
+                           Mutually exclusive with --update-manifest.
+  --push                   After updating manifest.json (via --publish or
+                           --update-manifest), commit and push it to git.
+                           Skips gracefully if manifest is already up to date.
+  --update-manifest <url>  Patch language-packs/manifest.json manually with the
+                           given asset URL. Mutually exclusive with --publish.
+  --contributors <csv>     Comma-separated contributor names/handles (e.g.
+                           "@fmase" or "@fmase,@other"). Preserved from the
+                           existing manifest entry when omitted.
   --skip-check             Skip the 'bun run i18n:check' step.
   -h, --help               Print this help and exit.
 
 Output: qmanager-build/lang/qmanager-lang-<code>-<version>.tar.gz
 
 Examples:
+  # Build only (no manifest update)
   bun run package:lang it
   bun run package:lang fr 2026.04.23
-  bun run package:lang de --update-manifest https://example.com/de.tar.gz
-  bun run package:lang it --contributors "@fmase" --update-manifest https://...
+
+  # Recommended: build, upload to GitHub, update + push manifest in one command
+  bun run package:lang it --publish --push
+  bun run package:lang it --publish --push --contributors "@fmase"
+
+  # Manual: build, upload yourself, then update manifest with the asset URL
+  bun run package:lang de --update-manifest https://example.com/de.tar.gz --push
 `.trim());
 }
 
@@ -80,8 +93,11 @@ interface Args {
   code: string;
   version: string;
   updateManifestUrl: string | null;
+  publish: boolean;
+  push: boolean;
   skipCheck: boolean;
   contributors: string[];
+  contributorsExplicit: boolean;
 }
 
 function parseArgs(): Args {
@@ -89,20 +105,28 @@ function parseArgs(): Args {
   if (argv.includes("-h") || argv.includes("--help")) { printUsage(); process.exit(0); }
   const positional: string[] = [];
   let updateManifestUrl: string | null = null;
+  let publish = false;
+  let push = false;
   let skipCheck = false;
   let contributors: string[] = [];
+  let contributorsExplicit = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--update-manifest") {
       const url = argv[++i];
       if (!url || url.startsWith("--")) fail("--update-manifest requires a URL argument.");
       updateManifestUrl = url;
+    } else if (arg === "--publish") {
+      publish = true;
+    } else if (arg === "--push") {
+      push = true;
     } else if (arg === "--skip-check") {
       skipCheck = true;
     } else if (arg === "--contributors") {
       const csv = argv[++i];
       if (!csv || csv.startsWith("--")) fail("--contributors requires a comma-separated list of names.");
       contributors = csv.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      contributorsExplicit = true;
     } else if (arg.startsWith("--")) {
       fail(`Unknown option: ${arg}`);
     } else {
@@ -132,7 +156,13 @@ function parseArgs(): Args {
       warn(`Version '${version}' is not YYYY.MM.DD format. Frontend compareVersion() does lexicographic comparison - verify ordering is intentional.`);
     }
   }
-  return { code, version, updateManifestUrl, skipCheck, contributors };
+  if (publish && updateManifestUrl) {
+    fail("--publish and --update-manifest are mutually exclusive.");
+  }
+  if (push && !publish && !updateManifestUrl) {
+    fail("--push requires --publish or --update-manifest (no manifest update would occur otherwise).");
+  }
+  return { code, version, updateManifestUrl, publish, push, skipCheck, contributors, contributorsExplicit };
 }
 
 // ---------------------------------------------------------------------------
@@ -218,11 +248,73 @@ function collectLocaleKeys(localeDir: string): Set<string> {
 }
 
 // ---------------------------------------------------------------------------
+// GitHub publish helper
+// ---------------------------------------------------------------------------
+async function publishToGitHub(archivePath: string, archiveName: string): Promise<string> {
+  // 1. Verify gh is available
+  const ghCheck = Bun.spawnSync(["gh", "--version"], { stdout: "pipe", stderr: "pipe" });
+  if (ghCheck.exitCode !== 0) {
+    fail("gh CLI not found. Install from https://cli.github.com and run 'gh auth login'.");
+  }
+
+  // 2. Detect repo owner/name
+  const repoResult = Bun.spawnSync(
+    ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const nameWithOwner = repoResult.stdout
+    ? new TextDecoder().decode(repoResult.stdout).trim()
+    : "";
+  if (repoResult.exitCode !== 0 || !nameWithOwner) {
+    fail("Could not detect GitHub repo. Make sure you are inside a GitHub-backed git repo and 'gh auth login' has been run.");
+  }
+
+  // 3. Persistent release tag
+  const RELEASE_TAG = "language-packs";
+
+  // 4. Ensure the release exists; create it if not
+  const viewResult = Bun.spawnSync(
+    ["gh", "release", "view", RELEASE_TAG, "--json", "tagName"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  if (viewResult.exitCode !== 0) {
+    log(`Creating persistent '${RELEASE_TAG}' GitHub release...`);
+    const createResult = Bun.spawnSync(
+      [
+        "gh", "release", "create", RELEASE_TAG,
+        "--title", "Language Packs",
+        "--notes", "Persistent release hosting QManager language pack tarballs. Assets are updated automatically — do not delete this release.",
+        "--latest=false",
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    if (createResult.exitCode !== 0) {
+      const stderr = createResult.stderr ? new TextDecoder().decode(createResult.stderr) : "(no output)";
+      fail(`gh release create failed: ${stderr}`);
+    }
+  }
+
+  // 5. Upload tarball (--clobber replaces existing asset with same filename)
+  log(`Uploading ${archiveName} to '${RELEASE_TAG}' release...`);
+  const uploadResult = Bun.spawnSync(
+    ["gh", "release", "upload", RELEASE_TAG, archivePath, "--clobber"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  if (uploadResult.exitCode !== 0) {
+    const stderr = uploadResult.stderr ? new TextDecoder().decode(uploadResult.stderr) : "(no output)";
+    fail(`gh release upload failed: ${stderr}`);
+  }
+
+  // 6. Construct asset URL deterministically (fixed GitHub release asset pattern)
+  return `https://github.com/${nameWithOwner}/releases/download/${RELEASE_TAG}/${archiveName}`;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
   const args = parseArgs();
-  const { code, version, updateManifestUrl, skipCheck, contributors } = args;
+  const { code, version, updateManifestUrl, publish, push, skipCheck, contributors, contributorsExplicit } = args;
 
   log(`Building language pack for: ${code} @ ${version}`);
 
@@ -321,7 +413,14 @@ async function main() {
   await Bun.write(sidecarPath, `${sha256}  ${archiveName}\n`);
   log(`  Sidecar: ${sidecarPath}`);
 
-  // 8. Compute completeness vs EN reference locale
+  // 8. Publish to GitHub (--publish)
+  let publishedUrl: string | null = null;
+  if (publish) {
+    publishedUrl = await publishToGitHub(archivePath, archiveName);
+    log(`  Published URL: ${publishedUrl}`);
+  }
+
+  // 9. Compute completeness vs EN reference locale
   log("Computing translation completeness...");
   const enLocaleDir = join(publicLocalesDir, "en");
   const enKeys = collectLocaleKeys(enLocaleDir);
@@ -331,7 +430,27 @@ async function main() {
   const completeness = Math.round(Math.min(trCount / enCount, 1) * 1000) / 1000;
   log(`  EN keys: ${enCount}, ${code} keys: ${trCount}, completeness: ${completeness}`);
 
-  // 9. Assemble entry object
+  // 10. Resolve contributors: CLI value takes priority; otherwise fall back to
+  //    the existing manifest entry so a republish without --contributors does
+  //    not silently drop a previously-set contributors list.
+  let resolvedContributors: string[] | undefined;
+  if (contributorsExplicit) {
+    resolvedContributors = contributors.length > 0 ? contributors : undefined;
+  } else {
+    // Try to read the existing manifest entry's contributors field.
+    try {
+      const raw = readFileSync(manifestPath, "utf-8");
+      const parsed = JSON.parse(raw) as { packs?: Record<string, unknown>[] };
+      const existing = (parsed.packs ?? []).find((p) => p.code === code);
+      if (existing && Array.isArray(existing.contributors) && (existing.contributors as unknown[]).length > 0) {
+        resolvedContributors = existing.contributors as string[];
+      }
+    } catch {
+      // Manifest doesn't exist yet or is malformed — silently skip.
+    }
+  }
+
+  // 11. Assemble entry object
   const entry: Record<string, unknown> = {
     code,
     native_name: meta.native_name,
@@ -341,13 +460,13 @@ async function main() {
     completeness,
     size_bytes: sizeBytes,
     sha256,
-    url: updateManifestUrl ?? "<FILL_URL>",
-    ...(contributors.length > 0 ? { contributors } : {}),
+    url: publishedUrl ?? updateManifestUrl ?? "<FILL_URL>",
+    ...(resolvedContributors && resolvedContributors.length > 0 ? { contributors: resolvedContributors } : {}),
   };
 
-  // 10. Patch manifest.json if --update-manifest was supplied
-  if (updateManifestUrl) {
-    log(`Patching manifest.json with URL: ${updateManifestUrl}`);
+  // 12. Patch manifest.json if --update-manifest or --publish was used
+  if (updateManifestUrl || publish) {
+    log(`Patching manifest.json with URL: ${publishedUrl ?? updateManifestUrl}`);
     let manifest: Record<string, unknown>;
     try {
       manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
@@ -367,20 +486,52 @@ async function main() {
     log("  manifest.json updated.");
   }
 
-  // 11. Print summary
+  // 13. Push manifest to git (--push)
+  if (push) {
+    log("Committing and pushing language-packs/manifest.json...");
+    const gitAdd = Bun.spawnSync(["git", "add", "language-packs/manifest.json"], {
+      cwd: repoRoot, stdout: "pipe", stderr: "pipe",
+    });
+    if (gitAdd.exitCode !== 0) {
+      fail(`git add failed: ${new TextDecoder().decode(gitAdd.stderr)}`);
+    }
+    const gitDiff = Bun.spawnSync(["git", "diff", "--cached", "--exit-code", "language-packs/manifest.json"], {
+      cwd: repoRoot, stdout: "pipe", stderr: "pipe",
+    });
+    if (gitDiff.exitCode === 0) {
+      warn("manifest.json is already up to date in git — skipping commit and push.");
+    } else {
+      const commitMsg = `chore(lang): update manifest for ${code} ${version}`;
+      const gitCommit = Bun.spawnSync(["git", "commit", "-m", commitMsg], {
+        cwd: repoRoot, stdout: "pipe", stderr: "pipe",
+      });
+      if (gitCommit.exitCode !== 0) {
+        fail(`git commit failed: ${new TextDecoder().decode(gitCommit.stderr)}`);
+      }
+      const gitPush = Bun.spawnSync(["git", "push"], {
+        cwd: repoRoot, stdout: "pipe", stderr: "pipe",
+      });
+      if (gitPush.exitCode !== 0) {
+        fail(`git push failed: ${new TextDecoder().decode(gitPush.stderr)}`);
+      }
+      log("  manifest.json committed and pushed.");
+    }
+  }
+
+  // 14. Print summary
   console.log("");
   console.log(`Pack built! ${archivePath} (${sizeBytes} bytes, completeness ${completeness})`);
   console.log(`SHA-256: ${sha256}`);
   console.log("Manifest entry:");
   console.log(JSON.stringify(entry, null, 2));
 
-  if (!updateManifestUrl) {
+  if (!updateManifestUrl && !publish) {
     console.log(`
-Next steps:
-  1. Upload ${archiveName} to a hosted URL (GitHub Release asset recommended).
-  2. Re-run with --update-manifest <url> to patch language-packs/manifest.json,
-     OR paste the entry above into manifest.json manually.
-  3. Commit language-packs/manifest.json to development-home and push.`);
+Next steps (or re-run with --publish --push to do this automatically):
+  1. Upload ${archiveName} to the 'language-packs' GitHub release:
+       gh release upload language-packs ${archivePath} --clobber
+  2. Re-run with --update-manifest <url> --push to patch and commit manifest.json,
+     OR paste the entry above into language-packs/manifest.json manually and commit.`);
   }
 }
 

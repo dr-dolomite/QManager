@@ -73,7 +73,8 @@
         "ttl_label": "TTL 值",
         "ttl_error": "TTL 必须为 0–255。",
         "hl_label": "跳数限制",
-        "hl_error": "HL 必须为 0–255。"
+        "hl_error": "HL 必须为 0–255。",
+        "cid_locked_verizon": "Verizon 需要 PDP 上下文 3"
       },
       "buttons": {
         "create_submit": "创建配置文件",
@@ -109,9 +110,18 @@
       "step_labels": {
         "apn": "APN 配置",
         "ttl_hl": "TTL / 跳数限制",
-        "imei": "IMEI"
+        "imei": "IMEI",
+        "mpdn_rule": "数据路由"
       },
       "reboot_notice": "调制解调器正在重启以应用 IMEI 更改，仪表板将自动重新连接。"
+    },
+    "verizon_warning": {
+      "title": "Verizon 需要特殊的数据路由规则",
+      "body_intro": "Verizon 的网络只能通过此调制解调器的非默认通道传输数据。为使数据和短信正常工作，QManager 将在您激活此配置文件时配置自定义数据路径规则。",
+      "body_warning_lead": "重要提示——一旦激活，请勿手动清除或释放此规则。",
+      "body_warning_rest": "否则可能导致调制解调器无法恢复默认路由，直到重新刷写固件。当您切换到其他配置文件时，QManager 会安全地处理清理工作。",
+      "cancel": "取消",
+      "confirm": "我已了解，继续"
     },
     "empty_state": {
       "title": "暂无自定义配置文件",
@@ -468,6 +478,8 @@
         "title": "LTE 基站锁定",
         "description": "通过输入信道和小区 ID 锁定到特定的 LTE 小区基站。",
         "enabled_label": "已启用 LTE 基站锁定",
+        "enabled_tooltip": "强制调制解调器仅连接到特定的 LTE 小区（通过 EARFCN 和 PCI 标识）。适用于在调制解调器频繁切换到较弱小区时锁定到已知良好的基站。",
+        "enabled_info_aria": "LTE 塔锁定信息",
         "channel_label": "信道 (EARFCN)",
         "channel_label_n": "信道 (EARFCN) {{n}}",
         "channel_placeholder": "输入 EARFCN",
@@ -476,7 +488,16 @@
         "pci_label_n": "小区 ID (PCI) {{n}}",
         "pci_placeholder": "输入 PCI",
         "pci_placeholder_n": "输入 PCI {{n}}",
-        "use_current": "使用当前",
+        "simple_mode": {
+          "toggle_label": "简易模式",
+          "switch_aria": "LTE 简易模式",
+          "info_aria": "LTE 简易模式信息",
+          "info_tooltip": "从调制解调器当前活动的载波中选择",
+          "empty_tooltip": "未检测到活动的 LTE 载波 — 请先连接，或使用自定义模式",
+          "select_placeholder": "选择一个活动载波",
+          "custom_value_label": "自定义：{{earfcn}} / PCI {{pci}}",
+          "slot_used_suffix": "（已在槽 {{n}} 中使用）"
+        },
         "lock_dialog": {
           "title": "锁定到 LTE 基站？",
           "description_single": "这将把您的调制解调器锁定到 EARFCN {{earfcn}}、PCI {{pci}}。调制解调器将只连接到此基站，切换过程中可能短暂断线。",
@@ -508,6 +529,8 @@
         "description_suffix_nsa_mode": " 不兼容 NR5G-NSA 模式。",
         "description_suffix_lte_only": " 无可用 NR 连接。",
         "enabled_label": "已启用 NR 基站锁定",
+        "enabled_tooltip": "强制调制解调器仅连接到特定的 5G NR 小区（通过 ARFCN、PCI、频段和 SCS 标识）。仅在 NR-SA 模式下可用。",
+        "enabled_info_aria": "NR 塔锁定信息",
         "arfcn_label": "信道 (ARFCN)",
         "arfcn_placeholder": "输入 ARFCN",
         "pci_label": "小区 ID (PCI)",
@@ -516,7 +539,17 @@
         "band_placeholder": "输入 NR 频段",
         "scs_label": "子载波间隔",
         "scs_placeholder": "SCS",
-        "use_current": "使用当前",
+        "simple_mode": {
+          "toggle_label": "简易模式",
+          "switch_aria": "NR 简易模式",
+          "info_aria": "NR 简易模式信息",
+          "info_tooltip": "从调制解调器当前活动的载波中选择",
+          "empty_tooltip": "未检测到活动的 5G NR 载波 — 请先连接，或使用自定义模式",
+          "select_placeholder": "选择一个活动载波",
+          "custom_value_label": "自定义：{{arfcn}} / PCI {{pci}}",
+          "scs_band_default_warning": "这是 N{{band}} 的典型 SCS。您的运营商可能使用不同的值 — 请在锁定前确认。",
+          "scs_warning_aria": "子载波间隔警告"
+        },
         "lock_dialog": {
           "title": "锁定到 NR-SA 基站？",
           "description": "这将把您的调制解调器锁定到 NR ARFCN {{arfcn}}、PCI {{pci}}（频段 {{band}}）。调制解调器将只连接到此基站，切换过程中可能短暂断线。",

@@ -133,7 +133,12 @@
     "aria_mac_address": "Indirizzo MAC",
     "placeholder_nat_mode": "Seleziona la modalità NAT",
     "placeholder_usb_mode": "Scegli Protocollo modem USB",
-    "placeholder_dns_proxy": "Seleziona la modalità DNS"
+    "placeholder_dns_proxy": "Seleziona la modalità DNS",
+    "locked_by_verizon": {
+      "title": "Il passthrough IP è gestito dal tuo profilo Verizon",
+      "body": "Profilo attivo: \"{{name}}\". Per modificare queste impostazioni, disattiva il profilo da Profili personalizzati.",
+      "cta": "Apri Profili personalizzati"
+    }
   },
   "masquerade": {
     "page_title": "Traffic Masquerade",

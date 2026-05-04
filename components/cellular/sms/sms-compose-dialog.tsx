@@ -130,7 +130,7 @@ export default function SmsComposeDialog({
               onClick={() => onOpenChange(false)}
               disabled={isSaving}
             >
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button type="submit" disabled={isSaving || !isValid}>
               {isSaving ? (

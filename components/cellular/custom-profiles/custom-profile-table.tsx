@@ -328,7 +328,7 @@ export function ProfileTable({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}

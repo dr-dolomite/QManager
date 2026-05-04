@@ -1,6 +1,6 @@
 {
   "name": "qmanager",
-  "version": "v0.1.21-cellmapper",
+  "version": "v0.1.23-cm.1",
   "private": true,
   "scripts": {
     "dev": "bun --bun next dev",

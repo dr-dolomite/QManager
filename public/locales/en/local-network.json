@@ -28,6 +28,7 @@
     "option_speed_10": "10 Mbps",
     "option_speed_100": "100 Mbps",
     "option_speed_1000": "1000 Mbps",
+    "option_speed_2500": "2500 Mbps",
     "label_duplex": "Duplex",
     "alt_device_icon": "Device Icon"
   },
@@ -133,7 +134,12 @@
     "aria_mac_address": "MAC address",
     "placeholder_nat_mode": "Select NAT Mode",
     "placeholder_usb_mode": "Choose USB Modem Protocol",
-    "placeholder_dns_proxy": "Select DNS mode"
+    "placeholder_dns_proxy": "Select DNS mode",
+    "locked_by_verizon": {
+      "title": "IP Passthrough is managed by your Verizon profile",
+      "body": "Active profile: \"{{name}}\". To change these settings, deactivate the profile from Custom Profiles.",
+      "cta": "Open Custom Profiles"
+    }
   },
   "masquerade": {
     "page_title": "Traffic Masquerade",

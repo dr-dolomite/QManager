@@ -73,7 +73,8 @@
         "ttl_label": "TTL Value",
         "ttl_error": "TTL must be 0–255.",
         "hl_label": "Hop Limit",
-        "hl_error": "HL must be 0–255."
+        "hl_error": "HL must be 0–255.",
+        "cid_locked_verizon": "Verizon requires PDP context 3"
       },
       "buttons": {
         "create_submit": "Create Profile",
@@ -109,9 +110,18 @@
       "step_labels": {
         "apn": "APN Configuration",
         "ttl_hl": "TTL / Hop Limit",
-        "imei": "IMEI"
+        "imei": "IMEI",
+        "mpdn_rule": "Data Routing"
       },
       "reboot_notice": "Modem is restarting to apply IMEI change. Dashboard will reconnect automatically."
+    },
+    "verizon_warning": {
+      "title": "Verizon requires a special data routing rule",
+      "body_intro": "Verizon's network only delivers data on a non-default channel on this modem. To make Data and SMS work, QManager will configure a custom data-path rule when you activate this profile.",
+      "body_warning_lead": "Important — once active, do not manually clear or release this rule.",
+      "body_warning_rest": "Doing so can leave the modem unable to restore its default routing until a firmware re-flash. QManager handles cleanup safely when you switch to another profile.",
+      "cancel": "Cancel",
+      "confirm": "I understand, continue"
     },
     "empty_state": {
       "title": "No Custom Profiles",
@@ -468,6 +478,8 @@
         "title": "LTE Tower Locking",
         "description": "Lock to a specific LTE cell tower by entering its channel and cell ID.",
         "enabled_label": "LTE Tower Locking Enabled",
+        "enabled_tooltip": "Force the modem to attach only to specific LTE cells, identified by EARFCN and PCI. Useful for pinning to a known-good tower when the modem keeps drifting between weaker cells.",
+        "enabled_info_aria": "LTE Tower Lock info",
         "channel_label": "Channel (EARFCN)",
         "channel_label_n": "Channel (EARFCN) {{n}}",
         "channel_placeholder": "Enter EARFCN",
@@ -476,7 +488,16 @@
         "pci_label_n": "Cell ID (PCI) {{n}}",
         "pci_placeholder": "Enter PCI",
         "pci_placeholder_n": "Enter PCI {{n}}",
-        "use_current": "Use Current",
+        "simple_mode": {
+          "toggle_label": "Simple Mode",
+          "switch_aria": "LTE Simple Mode",
+          "info_aria": "LTE Simple Mode info",
+          "info_tooltip": "Pick from your modem's currently active carriers",
+          "empty_tooltip": "No active LTE carriers detected — connect first, or use Custom mode",
+          "select_placeholder": "Select an active carrier",
+          "custom_value_label": "Custom: {{earfcn}} / PCI {{pci}}",
+          "slot_used_suffix": "(used in slot {{n}})"
+        },
         "lock_dialog": {
           "title": "Lock to LTE Tower?",
           "description_single": "This will lock your modem to EARFCN {{earfcn}}, PCI {{pci}}. The modem will only connect to this tower and may briefly disconnect during the switch.",
@@ -508,6 +529,8 @@
         "description_suffix_nsa_mode": " Not compatible with NR5G-NSA mode.",
         "description_suffix_lte_only": " No NR connection available.",
         "enabled_label": "NR Tower Locking Enabled",
+        "enabled_tooltip": "Force the modem to attach only to a specific 5G NR cell, identified by ARFCN, PCI, Band, and SCS. Only available in NR-SA mode.",
+        "enabled_info_aria": "NR Tower Lock info",
         "arfcn_label": "Channel (ARFCN)",
         "arfcn_placeholder": "Enter ARFCN",
         "pci_label": "Cell ID (PCI)",
@@ -516,7 +539,17 @@
         "band_placeholder": "Enter NR Band",
         "scs_label": "Subcarrier Spacing",
         "scs_placeholder": "SCS",
-        "use_current": "Use Current",
+        "simple_mode": {
+          "toggle_label": "Simple Mode",
+          "switch_aria": "NR Simple Mode",
+          "info_aria": "NR Simple Mode info",
+          "info_tooltip": "Pick from your modem's currently active carriers",
+          "empty_tooltip": "No active 5G NR carriers detected — connect first, or use Custom mode",
+          "select_placeholder": "Select an active carrier",
+          "custom_value_label": "Custom: {{arfcn}} / PCI {{pci}}",
+          "scs_band_default_warning": "This is the typical SCS for N{{band}}. Your operator may use a different value — verify before locking.",
+          "scs_warning_aria": "Subcarrier spacing warning"
+        },
         "lock_dialog": {
           "title": "Lock to NR-SA Tower?",
           "description": "This will lock your modem to NR ARFCN {{arfcn}}, PCI {{pci}} (Band {{band}}). The modem will only connect to this tower and may briefly disconnect during the switch.",

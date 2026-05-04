@@ -40,5 +40,57 @@
   "language": {
     "label": "Language",
     "switch_aria": "Switch language"
+  },
+  "overview": {
+    "title": "Welcome to QManager",
+    "tagline": "Live modem status",
+    "login_button": "Login",
+    "field": {
+      "carrier": "Carrier",
+      "aggregation": "Bands",
+      "uptime": "Uptime",
+      "empty": "—"
+    },
+    "aggregation": {
+      "band_with_bw": "{{band}} ({{bandwidth}} MHz)",
+      "band_only": "{{band}}",
+      "pci_label": "PCI"
+    },
+    "signal": {
+      "dual": "{{rsrp}} dBm · {{sinr}} dB SINR",
+      "rsrp_only": "{{rsrp}} dBm",
+      "sinr_only": "{{sinr}} dB SINR",
+      "none": "—"
+    },
+    "quality": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "fair": "Fair",
+      "poor": "Poor",
+      "none": "No signal"
+    },
+    "connection": {
+      "connected": "Connected",
+      "searching": "Searching",
+      "limited": "Limited",
+      "inactive": "Inactive",
+      "error": "Error",
+      "disconnected": "Disconnected",
+      "unknown": "Unknown",
+      "modem_unreachable": "Modem unreachable"
+    },
+    "stale_indicator": "Data may be outdated",
+    "empty": {
+      "title": "Modem status unavailable",
+      "subtitle": "Log in for diagnostic details.",
+      "fetch_error": "Couldn't reach the device.",
+      "retry": "Try again"
+    },
+    "uptime": {
+      "days": "{{days}}d {{hours}}h",
+      "hours": "{{hours}}h {{minutes}}m",
+      "minutes": "{{minutes}}m"
+    },
+    "copyright": "© {{year}} QManager. All rights reserved."
   }
 }

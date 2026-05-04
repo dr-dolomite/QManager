@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { setPendingReboot } from "@/lib/config-backup/pending-reboot";
 
 // =============================================================================
 // CustomProfileComponent — Page Layout & State Coordinator
@@ -165,7 +166,10 @@ const CustomProfileComponent = () => {
 
   const handleDeactivateConfirm = useCallback(async () => {
     setIsDeactivating(true);
-    await deactivateProfile();
+    const result = await deactivateProfile();
+    if (result.requiresReboot) {
+      setPendingReboot("verizon_revert");
+    }
     setIsDeactivating(false);
     setShowDeactivateConfirm(false);
   }, [deactivateProfile]);
@@ -220,7 +224,7 @@ const CustomProfileComponent = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("cancel", { ns: "common" })}</AlertDialogCancel>
+            <AlertDialogCancel>{t("actions.cancel", { ns: "common" })}</AlertDialogCancel>
             <AlertDialogAction onClick={handleActivateConfirm}>
               {t("custom_profiles.activate_dialog.confirm")}
             </AlertDialogAction>
@@ -242,7 +246,7 @@ const CustomProfileComponent = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeactivating}>
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeactivateConfirm}

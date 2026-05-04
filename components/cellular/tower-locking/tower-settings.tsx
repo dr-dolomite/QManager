@@ -101,7 +101,7 @@ const TowerLockingSettingsComponent = ({
       markThresholdSaved();
       toast.success(t("cell_locking.tower_locking.settings.threshold_toast_success"));
     }
-  }, [thresholdInput, onThresholdChange, markThresholdSaved]);
+  }, [thresholdInput, onThresholdChange, markThresholdSaved, t]);
 
   // --- Determine which RSRP to use based on network type ---
   const networkType = modemData?.network?.type ?? "";

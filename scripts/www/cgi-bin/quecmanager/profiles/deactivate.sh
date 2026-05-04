@@ -45,6 +45,22 @@ if [ -n "$_deact_id" ] && [ -f "$PROFILE_DIR/${_deact_id}.json" ]; then
     _deact_name=$(jq -r '.name // empty' "$PROFILE_DIR/${_deact_id}.json" 2>/dev/null)
 fi
 
+# --- Verizon MPDN revert (before clearing marker) ----------------------------
+_deact_mno=""
+if [ -n "$_deact_id" ] && [ -f "$PROFILE_DIR/${_deact_id}.json" ]; then
+    _deact_mno=$(jq -r '.mno // empty' "$PROFILE_DIR/${_deact_id}.json" 2>/dev/null)
+fi
+_deact_requires_reboot="false"
+if [ "$_deact_mno" = "Verizon" ]; then
+    if mpdn_revert_to_default; then
+        _deact_requires_reboot="true"
+        append_event "verizon_mpdn_reverted" "Verizon profile '$_deact_name' deactivated — data routing reverted, reboot required" "info"
+    else
+        _deact_requires_reboot="true"
+        append_event "verizon_mpdn_reverted" "Verizon profile '$_deact_name' deactivated — MPDN revert verification failed, reboot recommended" "warning"
+    fi
+fi
+
 # --- Clear active profile ----------------------------------------------------
 clear_active_profile
 
@@ -53,4 +69,4 @@ if [ -n "$_deact_name" ]; then
     append_event "profile_deactivated" "Profile '$_deact_name' deactivated" "info"
 fi
 
-cgi_success
+jq -n --argjson reboot "$_deact_requires_reboot" '{success: true, requires_reboot: $reboot}'

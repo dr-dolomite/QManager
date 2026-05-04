@@ -397,7 +397,7 @@ export default function ATTerminalCard() {
                   {t("at_terminal.action_send_anyway")}
                 </Button>
                 <Button variant="outline" size="xs" onClick={handleCancelWarning}>
-                  {t("cancel", { ns: "common" })}
+                  {t("actions.cancel", { ns: "common" })}
                 </Button>
               </div>
             </div>

@@ -24,6 +24,7 @@ import type {
   ApplyStep,
   ApplyStepStatus,
 } from "@/types/sim-profile";
+import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 
 // =============================================================================
 // ApplyProgressDialog — Shows step-by-step profile application progress
@@ -41,6 +42,7 @@ const DEFAULT_STEPS: ApplyStep[] = [
   { name: "apn", status: "pending", detail: "" },
   { name: "ttl_hl", status: "pending", detail: "" },
   { name: "imei", status: "pending", detail: "" },
+  { name: "mpdn_rule", status: "pending", detail: "" },
 ];
 
 const stepIcons: Record<ApplyStepStatus, React.ReactNode> = {
@@ -73,6 +75,7 @@ export function ApplyProgressDialog({
       apn: t("custom_profiles.apply_dialog.step_labels.apn"),
       ttl_hl: t("custom_profiles.apply_dialog.step_labels.ttl_hl"),
       imei: t("custom_profiles.apply_dialog.step_labels.imei"),
+      mpdn_rule: t("custom_profiles.apply_dialog.step_labels.mpdn_rule"),
     }),
     [t]
   );
@@ -181,12 +184,12 @@ export function ApplyProgressDialog({
         {/* Partial/failed summary */}
         {applyState?.status === "partial" && applyState.error && (
           <div className="rounded-md bg-warning/10 p-3 text-sm text-warning">
-            {applyState.error}
+            {resolveErrorMessage(t, applyState.error, undefined, applyState.error)}
           </div>
         )}
         {applyState?.status === "failed" && applyState.error && (
           <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {applyState.error}
+            {resolveErrorMessage(t, applyState.error, undefined, applyState.error)}
           </div>
         )}
 
@@ -194,7 +197,7 @@ export function ApplyProgressDialog({
         {(isTerminal || (error && !applyState)) && (
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={onClose}>
-              {t("close", { ns: "common" })}
+              {t("actions.close", { ns: "common" })}
             </Button>
           </div>
         )}

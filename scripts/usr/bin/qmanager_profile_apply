@@ -12,10 +12,11 @@
 # State file: /tmp/qmanager_profile_state.json
 # PID file:   /tmp/qmanager_profile_apply.pid
 #
-# Apply steps (3 total):
-#   1. APN     — AT+CGDCONT (no modem reboot)
-#   2. TTL/HL  — iptables/ip6tables (no modem lock needed)
-#   3. IMEI    — AT+EGMR + AT+CFUN=1,1 reboot (most disruptive, last)
+# Apply steps (4 total):
+#   1. APN       — AT+CGDCONT (no modem reboot)
+#   2. TTL/HL    — iptables/ip6tables (no modem lock needed)
+#   3. IMEI      — AT+EGMR + AT+CFUN=1,1 reboot (most disruptive, last)
+#   4. MPDN rule — Verizon PDP3 routing or revert on carrier switch
 #
 # NOTE: Band locking and network mode are NOT part of SIM Profiles.
 # They will be owned by the Connection Scenarios feature.
@@ -80,19 +81,21 @@ trap cleanup EXIT INT TERM
 # State File Management
 # =============================================================================
 
-# Step names (3 steps after band/mode removal)
-STEP_NAMES="apn ttl_hl imei"
-STEP_COUNT=3
+# Step names (4 steps)
+STEP_NAMES="apn ttl_hl imei mpdn_rule"
+STEP_COUNT=4
 
 # Step statuses (initialized to "pending")
 step_status_apn="pending"
 step_status_ttl_hl="pending"
 step_status_imei="pending"
+step_status_mpdn_rule="pending"
 
 # Step details
 step_detail_apn=""
 step_detail_ttl_hl=""
 step_detail_imei=""
+step_detail_mpdn_rule=""
 
 # Global state
 apply_status="applying"
@@ -130,6 +133,8 @@ write_state() {
         --arg s2_detail    "$step_detail_ttl_hl" \
         --arg s3_status    "$step_status_imei" \
         --arg s3_detail    "$step_detail_imei" \
+        --arg s4_status    "$step_status_mpdn_rule" \
+        --arg s4_detail    "$step_detail_mpdn_rule" \
         --argjson reboot   "$apply_requires_reboot" \
         --arg err          "$err_val" \
         '{
@@ -140,9 +145,10 @@ write_state() {
             current_step: $cur_step,
             total_steps: $total,
             steps: [
-                {name: "apn",    status: $s1_status, detail: $s1_detail},
-                {name: "ttl_hl", status: $s2_status, detail: $s2_detail},
-                {name: "imei",   status: $s3_status, detail: $s3_detail}
+                {name: "apn",       status: $s1_status, detail: $s1_detail},
+                {name: "ttl_hl",    status: $s2_status, detail: $s2_detail},
+                {name: "imei",      status: $s3_status, detail: $s3_detail},
+                {name: "mpdn_rule", status: $s4_status, detail: $s4_detail}
             ],
             requires_reboot: $reboot,
             error: (if $err == "null" then null else $err end)
@@ -219,11 +225,18 @@ p_pdp_type=$(printf '%s' "$profile_json" | jq -r '.settings.apn.pdp_type // empt
 p_imei=$(printf '%s' "$profile_json" | jq -r '.settings.imei // empty')
 p_ttl=$(printf '%s' "$profile_json" | jq -r '.settings.ttl // empty | tostring')
 p_hl=$(printf '%s' "$profile_json" | jq -r '.settings.hl // empty | tostring')
+p_mno=$(printf '%s' "$profile_json" | jq -r '.mno // empty')
 
 # Defaults
 [ -z "$p_apn_cid" ] && p_apn_cid=1
 [ -z "$p_ttl" ] && p_ttl=0
 [ -z "$p_hl" ] && p_hl=0
+
+# Verizon profiles must always use CID 3 for MPDN routing
+if [ "$p_mno" = "Verizon" ]; then
+    p_apn_cid=3
+    qlog_info "Verizon profile: forcing APN CID to 3"
+fi
 
 qlog_info "Applying profile: $p_name (APN=$p_apn_name, CID=$p_apn_cid)"
 
@@ -430,8 +443,68 @@ apply_imei() {
 }
 
 # =============================================================================
+# Step 4: MPDN rule (Verizon CID routing or revert on carrier switch)
+# =============================================================================
+apply_mpdn_rule() {
+    if [ "$p_mno" = "Verizon" ]; then
+        # --- Verizon path: ensure PDP context 3 is active ---
+        mark_step_running "mpdn_rule" "Configuring data routing for Verizon..."
+
+        local current_pdp
+        current_pdp=$(mpdn_get_active_pdp)
+        if [ "$current_pdp" = "3" ]; then
+            mark_step_skipped "mpdn_rule" "Already routed via PDP context 3"
+            return
+        fi
+
+        if mpdn_apply_verizon; then
+            mark_step_done "mpdn_rule" "Routed data via PDP context 3"
+        else
+            mark_step_failed "mpdn_rule" "Failed to set Verizon data routing rule"
+        fi
+    else
+        # --- Non-Verizon path: revert if a Verizon rule is still active ---
+        mark_step_running "mpdn_rule" "Checking for leftover Verizon routing..."
+        local current_pdp
+        current_pdp=$(mpdn_get_active_pdp)
+        if [ "$current_pdp" != "3" ]; then
+            mark_step_skipped "mpdn_rule" "No Verizon routing rule active"
+            return
+        fi
+
+        # Active PDP=3 detected — previous Verizon profile left a rule; revert it
+        mark_step_running "mpdn_rule" "Reverting Verizon data routing..."
+
+        if mpdn_revert_to_default; then
+            mark_step_done "mpdn_rule" "Restored default data routing"
+            apply_requires_reboot="true"
+        else
+            mark_step_failed "mpdn_rule" "Failed to restore default data routing — a reboot is recommended"
+        fi
+    fi
+}
+
+# =============================================================================
 # EXECUTE ALL STEPS (ordered by impact: least disruptive first)
 # =============================================================================
+
+# USB-mode pre-flight for Verizon profiles only
+if [ "$p_mno" = "Verizon" ]; then
+    if ! usb_mode_supports_mpdn; then
+        qlog_warn "USB mode incompatible with Verizon MPDN — skipping all steps"
+        _skip_detail="Blocked: USB mode incompatible with Verizon (requires ECM or RNDIS)"
+        mark_step_failed  "apn"       "usb_mode_incompatible_for_verizon"
+        mark_step_skipped "ttl_hl"    "$_skip_detail"
+        mark_step_skipped "imei"      "$_skip_detail"
+        mark_step_skipped "mpdn_rule" "$_skip_detail"
+        apply_status="failed"
+        apply_error="usb_mode_incompatible_for_verizon"
+        write_state
+        append_event "profile_failed" "Profile '$p_name' failed: USB mode incompatible with Verizon (requires ECM or RNDIS)" "error"
+        exit 1
+    fi
+fi
+
 apply_apn
 sleep "$CMD_GAP"
 
@@ -440,6 +513,9 @@ apply_ttl_hl
 
 apply_imei
 
+sleep "$CMD_GAP"
+apply_mpdn_rule
+
 # =============================================================================
 # FINALIZE
 # =============================================================================
@@ -447,10 +523,10 @@ apply_imei
 # Determine final status
 if [ "$steps_failed" -gt 0 ] && [ "$steps_done" -gt 0 ]; then
     apply_status="partial"
-    apply_error="$steps_failed step(s) failed, $steps_done succeeded"
+    apply_error="partial_apply"
 elif [ "$steps_failed" -gt 0 ]; then
     apply_status="failed"
-    apply_error="All steps failed"
+    apply_error="all_steps_failed"
 else
     apply_status="complete"
 fi

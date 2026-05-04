@@ -577,7 +577,7 @@ const ConnectionScenariosCard = () => {
 
           <DialogFooter className="gap-2">
             <DialogClose asChild>
-              <Button variant="outline">{t("cancel", { ns: "common" })}</Button>
+              <Button variant="outline">{t("actions.cancel", { ns: "common" })}</Button>
             </DialogClose>
             <Button
               onClick={handleAddScenario}
@@ -745,7 +745,7 @@ const ConnectionScenariosCard = () => {
 
           <DialogFooter className="gap-2">
             <DialogClose asChild>
-              <Button variant="outline">{t("cancel", { ns: "common" })}</Button>
+              <Button variant="outline">{t("actions.cancel", { ns: "common" })}</Button>
             </DialogClose>
             <Button
               onClick={handleSaveEdit}

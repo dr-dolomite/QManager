@@ -30,6 +30,7 @@ _PROFILE_MGR_LOADED=1
 PROFILE_DIR="/etc/qmanager/profiles"
 ACTIVE_PROFILE_FILE="/etc/qmanager/active_profile"
 PROFILE_APPLY_PID_FILE="/tmp/qmanager_profile_apply.pid"
+PROFILE_SPAWN_LOCK_FILE="/tmp/qmanager_profile_spawn.lock"
 MAX_PROFILES=10
 
 # Ensure profile directory exists
@@ -406,7 +407,7 @@ _profile_emit_event() {
 auto_apply_profile() {
     local current_iccid="$1"
     local caller="${2:-unknown}"
-    local iccid_suffix pf pf_iccid match_id _ap_id _ap_iccid _ap_name
+    local iccid_suffix pf pf_iccid match_id _ap_id _ap_iccid _ap_name _ap_mno
 
     if [ -z "$current_iccid" ]; then
         qlog_info "[$caller] auto_apply_profile: empty ICCID, skipping" 2>/dev/null
@@ -440,6 +441,15 @@ auto_apply_profile() {
             _ap_iccid=$(jq -r '(.sim_iccid) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
             if [ -n "$_ap_iccid" ] && [ "$_ap_iccid" != "$current_iccid" ]; then
                 _ap_name=$(jq -r '(.name) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
+                _ap_mno=$(jq -r '(.mno) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
+                if [ "$_ap_mno" = "Verizon" ]; then
+                    if mpdn_revert_to_default; then
+                        _profile_emit_event "verizon_mpdn_reverted" "Verizon profile '${_ap_name:-unknown}' auto-deactivated (SIM mismatch). Data routing reverted — reboot required." "warning"
+                    else
+                        _profile_emit_event "verizon_mpdn_reverted" "Verizon profile '${_ap_name:-unknown}' auto-deactivated (SIM mismatch). MPDN revert verification failed — reboot recommended." "warning"
+                    fi
+                    : > /tmp/qmanager_pending_reboot_verizon
+                fi
                 clear_active_profile
                 _profile_emit_event "profile_deactivated" "Profile '${_ap_name:-unknown}' auto-deactivated (SIM mismatch)" "warning"
                 qlog_info "[$caller] Deactivated profile $_ap_id (SIM mismatch: current ICCID ...$iccid_suffix)" 2>/dev/null
@@ -466,7 +476,15 @@ auto_apply_profile() {
 # be reimplemented in the Connection Scenarios library when that feature is built.
 
 # =============================================================================
-# PID File Lock (Profile Apply Singleton)
+# Apply Lock Helpers (Worker PID Lock + CGI Spawn Lock)
+# =============================================================================
+# Two distinct concerns, two files:
+#   - $PROFILE_APPLY_PID_FILE  — owned by the worker (qmanager_profile_apply).
+#                                 Singleton enforcement.
+#   - $PROFILE_SPAWN_LOCK_FILE — owned by the CGI (apply.sh). Rejects
+#                                 concurrent POSTs while the worker comes up.
+# Collapsing both onto one file caused the worker to abort because the CGI's
+# kill -0 check found the still-sleeping CGI parent. See plan 2026-05-03.
 # =============================================================================
 
 # profile_check_lock
@@ -495,4 +513,139 @@ profile_acquire_lock() {
         return 1
     }
     return 0
+}
+
+# profile_acquire_spawn_lock
+# CGI-side spawn mutex. Atomically creates $PROFILE_SPAWN_LOCK_FILE with the
+# caller's PID. Distinct from profile_acquire_lock — that one belongs to the
+# worker. Stale spawn-locks (PID dead) are reaped before acquire.
+# Returns 0 on success, 1 if a live spawner already holds it.
+# Global _profile_spawn_lock_pid: cleared on success (caller holds the lock);
+# set to the holding PID on failure (caller may log it).
+profile_acquire_spawn_lock() {
+    if [ -f "$PROFILE_SPAWN_LOCK_FILE" ]; then
+        _profile_spawn_lock_pid=$(cat "$PROFILE_SPAWN_LOCK_FILE" 2>/dev/null)
+        if [ -n "$_profile_spawn_lock_pid" ] && kill -0 "$_profile_spawn_lock_pid" 2>/dev/null; then
+            return 1
+        fi
+        rm -f "$PROFILE_SPAWN_LOCK_FILE"
+    fi
+    # Atomic create via noclobber. If another shell wins the race, the redirect
+    # fails and we return 1 without clobbering. The subshell isolates `set -C`
+    # so the caller's shell options are unaffected.
+    ( set -C; echo $$ > "$PROFILE_SPAWN_LOCK_FILE" ) 2>/dev/null || {
+        # Re-read in case the winner is alive — caller treats either as "locked".
+        _profile_spawn_lock_pid=$(cat "$PROFILE_SPAWN_LOCK_FILE" 2>/dev/null)
+        return 1
+    }
+    _profile_spawn_lock_pid=""
+    return 0
+}
+
+# profile_release_spawn_lock
+# Removes the spawn-lock file. Safe to call unconditionally on every CGI exit
+# path — rm -f does not fail on a missing file.
+profile_release_spawn_lock() {
+    rm -f "$PROFILE_SPAWN_LOCK_FILE"
+}
+
+# =============================================================================
+# MPDN Rule Management (Verizon workaround)
+# =============================================================================
+# Verizon requires data to flow through PDP context 3 (not the default 1).
+# These helpers read/write QMAP MPDN rules and verify USB net mode compatibility.
+#
+# AT response formats:
+#   AT+QMAP="WWAN"   → +QMAP: "WWAN",<connected>,<pdp>,"IPV4","..."
+#   AT+QCFG="usbnet" → +QCFG: "usbnet",<mode>
+#
+# USB net mode compatibility: 1=ECM, 3=RNDIS (supported); 0=RMNet, 2=MBIM (not supported)
+# =============================================================================
+
+# mpdn_get_active_pdp
+# Reads the active PDP context number reported by AT+QMAP="WWAN".
+# Echoes the integer (e.g. "1" or "3") to stdout, or empty string if not
+# connected / response cannot be parsed.
+# Returns 0 always — callers check the echoed value.
+mpdn_get_active_pdp() {
+    local response pdp
+    response=$(qcmd 'AT+QMAP="WWAN"' 2>/dev/null)
+    # Line format: +QMAP: "WWAN",<connected>,<pdp>,"IPV4","..."
+    # $1=+QMAP: "WWAN"  $2=<connected>  $3=<pdp>
+    pdp=$(printf '%s' "$response" | awk -F',' '/\+QMAP:.*"WWAN"/{
+        cid=$3; gsub(/[^0-9]/, "", cid); if (cid != "") { print cid; exit }
+    }')
+    printf '%s' "$pdp"
+    return 0
+}
+
+# usb_mode_supports_mpdn
+# Returns 0 (success) if the current USB net mode supports MPDN (ECM=1 or RNDIS=3).
+# Returns 1 for unsupported modes (RMNet=0, MBIM=2) or on parse failure.
+usb_mode_supports_mpdn() {
+    local response mode
+    response=$(qcmd 'AT+QCFG="usbnet"' 2>/dev/null)
+    mode=$(printf '%s' "$response" | awk -F',' '/\+QCFG:.*"usbnet"/{print $2+0; exit}')
+    case "$mode" in
+        1|3) return 0 ;;
+        *)   return 1 ;;
+    esac
+}
+
+# mpdn_apply_verizon
+# Configures MPDN rule 0 to route through PDP context 3 (Verizon requirement).
+# Idempotent: skips if already on PDP 3.
+# Returns 0 on success, 1 if verification fails after applying.
+mpdn_apply_verizon() {
+    local current_pdp
+    current_pdp=$(mpdn_get_active_pdp)
+
+    if [ "$current_pdp" = "3" ]; then
+        qlog_info "MPDN already on PDP context 3, skipping" 2>/dev/null
+        return 0
+    fi
+
+    qlog_info "Applying Verizon MPDN rule: PDP context 3" 2>/dev/null
+    qcmd 'AT+QMAP="mpdn_rule",0,3,0,0,1' >/dev/null 2>&1
+
+    sleep 1
+
+    local verified_pdp
+    verified_pdp=$(mpdn_get_active_pdp)
+    if [ "$verified_pdp" = "3" ]; then
+        qlog_info "MPDN rule applied: active PDP context is 3" 2>/dev/null
+        return 0
+    fi
+
+    qlog_error "MPDN apply verification failed: expected PDP 3, got '${verified_pdp:-<empty>}'" 2>/dev/null
+    return 1
+}
+
+# mpdn_revert_to_default
+# Reverts MPDN rule 0 back to PDP context 1 (modem default).
+# IMPORTANT: release and re-set are issued back-to-back with NO sleep between
+# them. The modem must never be left in a bare-released state — doing so
+# requires a firmware re-flash to recover.
+# Returns 0 on success, 1 if verification fails (but the release+re-set pair
+# is always sent regardless of the verification outcome).
+mpdn_revert_to_default() {
+    qlog_info "Reverting MPDN rule to PDP context 1 (default)" 2>/dev/null
+
+    # Release then immediately re-pin — NO sleep between (firmware quirk).
+    qcmd 'AT+QMAP="mpdn_rule",0' >/dev/null 2>&1
+    # !!! DO NOT INSERT ANYTHING BETWEEN THESE TWO LINES !!!
+    # A bare release followed by reboot bricks the modem until firmware reflash.
+    qcmd 'AT+QMAP="mpdn_rule",0,1,0,0,1' >/dev/null 2>&1
+
+    sleep 1
+
+    local verified_pdp
+    verified_pdp=$(mpdn_get_active_pdp)
+    if [ "$verified_pdp" = "1" ]; then
+        qlog_info "MPDN rule reverted: active PDP context is 1" 2>/dev/null
+        return 0
+    fi
+
+    qlog_error "MPDN revert verification failed: expected PDP 1, got '${verified_pdp:-<empty>}'" 2>/dev/null
+    return 1
 }

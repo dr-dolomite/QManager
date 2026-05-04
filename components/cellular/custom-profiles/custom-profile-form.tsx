@@ -28,6 +28,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { DownloadIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -75,7 +85,7 @@ function profileToFormData(profile: SimProfile): ProfileFormData {
     name: profile.name,
     mno: profile.mno,
     sim_iccid: profile.sim_iccid,
-    cid: s.apn.cid,
+    cid: profile.mno === "Verizon" ? 3 : s.apn.cid,
     apn_name: s.apn.name,
     pdp_type: s.apn.pdp_type,
     imei: s.imei,
@@ -97,7 +107,11 @@ const CustomProfileFormComponent = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Pending Verizon MNO id — set when user picks Verizon, cleared on confirm/cancel
+  const [pendingVerizonMnoId, setPendingVerizonMnoId] = useState<string | null>(null);
+
   const isEditing = !!editingProfile;
+  const isVerizon = form.mno === "Verizon";
 
   const pdpTypeLabels = useMemo<Record<PdpType, string>>(
     () => ({
@@ -173,6 +187,12 @@ const CustomProfileFormComponent = ({
   };
 
   const handleMnoChange = (mnoId: string) => {
+    if (mnoId === "vzw" && form.mno !== "Verizon") {
+      // Gate: show warning dialog before applying Verizon preset
+      setPendingVerizonMnoId(mnoId);
+      return;
+    }
+
     const preset = getMnoPreset(mnoId);
     if (preset) {
       setForm((prev) => ({
@@ -183,8 +203,33 @@ const CustomProfileFormComponent = ({
         hl: preset.hl,
       }));
     } else {
-      setForm((prev) => ({ ...prev, mno: "Custom" }));
+      // Switching away from Verizon resets CID to default
+      setForm((prev) => ({
+        ...prev,
+        mno: "Custom",
+        cid: prev.mno === "Verizon" ? 1 : prev.cid,
+      }));
     }
+  };
+
+  const handleVerizonConfirm = () => {
+    if (!pendingVerizonMnoId) return;
+    const preset = getMnoPreset(pendingVerizonMnoId);
+    if (preset) {
+      setForm((prev) => ({
+        ...prev,
+        mno: preset.label,
+        apn_name: preset.apn_name,
+        ttl: preset.ttl,
+        hl: preset.hl,
+        cid: 3,
+      }));
+    }
+    setPendingVerizonMnoId(null);
+  };
+
+  const handleVerizonCancel = () => {
+    setPendingVerizonMnoId(null);
   };
 
   const validate = (): boolean => {
@@ -251,243 +296,287 @@ const CustomProfileFormComponent = ({
   };
 
   return (
-    <Card className="@container/card">
-      <CardHeader>
-        <CardTitle>
-          {isEditing
-            ? t("custom_profiles.form.edit_title")
-            : t("custom_profiles.form.create_title")}
-        </CardTitle>
-        <CardDescription>
-          {isEditing
-            ? t("custom_profiles.form.edit_description", {
-                name: editingProfile?.name ?? "",
-              })
-            : t("custom_profiles.form.create_description")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex w-full justify-end">
-          {!isEditing && onLoadCurrentSettings && (
-            <Button type="button" size="sm" onClick={onLoadCurrentSettings}>
-              <DownloadIcon className="size-4" />
-              {t("custom_profiles.form.load_current_button")}
-            </Button>
-          )}
-        </div>
+    <>
+      <Card className="@container/card">
+        <CardHeader>
+          <CardTitle>
+            {isEditing
+              ? t("custom_profiles.form.edit_title")
+              : t("custom_profiles.form.create_title")}
+          </CardTitle>
+          <CardDescription>
+            {isEditing
+              ? t("custom_profiles.form.edit_description", {
+                  name: editingProfile?.name ?? "",
+                })
+              : t("custom_profiles.form.create_description")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex w-full justify-end">
+            {!isEditing && onLoadCurrentSettings && (
+              <Button type="button" size="sm" onClick={onLoadCurrentSettings}>
+                <DownloadIcon className="size-4" />
+                {t("custom_profiles.form.load_current_button")}
+              </Button>
+            )}
+          </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <FieldSet>
-            <FieldGroup>
-              {/* --- Profile Identity --- */}
-              <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="grid gap-4">
+            <FieldSet>
+              <FieldGroup>
+                {/* --- Profile Identity --- */}
+                <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="profileName">
+                      {t("custom_profiles.form.fields.profile_name_label")} *
+                    </FieldLabel>
+                    <Input
+                      id="profileName"
+                      type="text"
+                      placeholder={t(
+                        "custom_profiles.form.fields.profile_name_placeholder",
+                      )}
+                      value={form.name}
+                      onChange={(e) => updateField("name", e.target.value)}
+                      aria-describedby={
+                        errors.name ? "profileName-error" : undefined
+                      }
+                    />
+                    {errors.name && (
+                      <FieldError id="profileName-error">{errors.name}</FieldError>
+                    )}
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="simIccid">
+                      {t("custom_profiles.form.fields.sim_iccid_label")}
+                    </FieldLabel>
+                    <Input
+                      id="simIccid"
+                      type="text"
+                      placeholder={t(
+                        "custom_profiles.form.fields.sim_iccid_placeholder",
+                      )}
+                      value={form.sim_iccid}
+                      onChange={(e) => updateField("sim_iccid", e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel>
+                      {t("custom_profiles.form.fields.mno_label")}
+                    </FieldLabel>
+                    <Select value={selectedMno} onValueChange={handleMnoChange}>
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={t(
+                            "custom_profiles.form.fields.mno_placeholder",
+                          )}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MNO_PRESETS.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={MNO_CUSTOM_ID}>
+                          {t("custom_profiles.form.fields.mno_custom")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="apnName">
+                      {t("custom_profiles.form.fields.apn_name_label")}
+                    </FieldLabel>
+                    <Input
+                      id="apnName"
+                      type="text"
+                      placeholder={t(
+                        "custom_profiles.form.fields.apn_name_placeholder",
+                      )}
+                      value={form.apn_name}
+                      onChange={(e) => updateField("apn_name", e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel>
+                      {t("custom_profiles.form.fields.ip_protocol_label")}
+                    </FieldLabel>
+                    <Select
+                      value={form.pdp_type}
+                      onValueChange={(v) => updateField("pdp_type", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(
+                          Object.entries(pdpTypeLabels) as [PdpType, string][]
+                        ).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="apnCid">
+                      {t("custom_profiles.form.fields.cid_label")}
+                    </FieldLabel>
+                    <Input
+                      id="apnCid"
+                      type="number"
+                      min={1}
+                      max={15}
+                      disabled={isVerizon}
+                      value={form.cid}
+                      onChange={(e) => updateField("cid", parseInt(e.target.value) || 1)}
+                      aria-describedby={
+                        isVerizon
+                          ? "apnCid-verizon-hint"
+                          : errors.cid
+                            ? "apnCid-error"
+                            : undefined
+                      }
+                    />
+                    {isVerizon && (
+                      <p id="apnCid-verizon-hint" className="text-xs text-muted-foreground mt-1">
+                        {t("custom_profiles.form.fields.cid_locked_verizon")}
+                      </p>
+                    )}
+                    {!isVerizon && errors.cid && (
+                      <FieldError id="apnCid-error">{errors.cid}</FieldError>
+                    )}
+                  </Field>
+                </div>
+
                 <Field>
-                  <FieldLabel htmlFor="profileName">
-                    {t("custom_profiles.form.fields.profile_name_label")} *
+                  <FieldLabel htmlFor="imei">
+                    {t("custom_profiles.form.fields.imei_label")}
                   </FieldLabel>
                   <Input
-                    id="profileName"
+                    id="imei"
                     type="text"
                     placeholder={t(
-                      "custom_profiles.form.fields.profile_name_placeholder",
+                      "custom_profiles.form.fields.imei_placeholder",
                     )}
-                    value={form.name}
-                    onChange={(e) => updateField("name", e.target.value)}
-                    aria-describedby={
-                      errors.name ? "profileName-error" : undefined
-                    }
+                    maxLength={15}
+                    value={form.imei}
+                    onChange={(e) => updateField("imei", e.target.value)}
+                    aria-describedby={errors.imei ? "imei-error" : undefined}
                   />
-                  {errors.name && (
-                    <FieldError id="profileName-error">{errors.name}</FieldError>
+                  {errors.imei && (
+                    <FieldError id="imei-error">{errors.imei}</FieldError>
                   )}
                 </Field>
 
-                <Field>
-                  <FieldLabel htmlFor="simIccid">
-                    {t("custom_profiles.form.fields.sim_iccid_label")}
-                  </FieldLabel>
-                  <Input
-                    id="simIccid"
-                    type="text"
-                    placeholder={t(
-                      "custom_profiles.form.fields.sim_iccid_placeholder",
+                <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="ttl">
+                      {t("custom_profiles.form.fields.ttl_label")}
+                    </FieldLabel>
+                    <Input
+                      id="ttl"
+                      type="number"
+                      min={0}
+                      max={255}
+                      value={form.ttl}
+                      onChange={(e) =>
+                        updateField("ttl", parseInt(e.target.value) || 0)
+                      }
+                      aria-describedby={errors.ttl ? "ttl-error" : undefined}
+                    />
+                    {errors.ttl && (
+                      <FieldError id="ttl-error">{errors.ttl}</FieldError>
                     )}
-                    value={form.sim_iccid}
-                    onChange={(e) => updateField("sim_iccid", e.target.value)}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
-                <Field>
-                  <FieldLabel>
-                    {t("custom_profiles.form.fields.mno_label")}
-                  </FieldLabel>
-                  <Select value={selectedMno} onValueChange={handleMnoChange}>
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={t(
-                          "custom_profiles.form.fields.mno_placeholder",
-                        )}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MNO_PRESETS.map((preset) => (
-                        <SelectItem key={preset.id} value={preset.id}>
-                          {preset.label}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={MNO_CUSTOM_ID}>
-                        {t("custom_profiles.form.fields.mno_custom")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="apnName">
-                    {t("custom_profiles.form.fields.apn_name_label")}
-                  </FieldLabel>
-                  <Input
-                    id="apnName"
-                    type="text"
-                    placeholder={t(
-                      "custom_profiles.form.fields.apn_name_placeholder",
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="hl">
+                      {t("custom_profiles.form.fields.hl_label")}
+                    </FieldLabel>
+                    <Input
+                      id="hl"
+                      type="number"
+                      min={0}
+                      max={255}
+                      value={form.hl}
+                      onChange={(e) =>
+                        updateField("hl", parseInt(e.target.value) || 0)
+                      }
+                      aria-describedby={errors.hl ? "hl-error" : undefined}
+                    />
+                    {errors.hl && (
+                      <FieldError id="hl-error">{errors.hl}</FieldError>
                     )}
-                    value={form.apn_name}
-                    onChange={(e) => updateField("apn_name", e.target.value)}
-                  />
-                </Field>
-              </div>
+                  </Field>
+                </div>
 
-              <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
-                <Field>
-                  <FieldLabel>
-                    {t("custom_profiles.form.fields.ip_protocol_label")}
-                  </FieldLabel>
-                  <Select
-                    value={form.pdp_type}
-                    onValueChange={(v) => updateField("pdp_type", v)}
+                {/* --- Actions --- */}
+                <div className="flex gap-3 pt-2">
+                  <Button type="submit" disabled={isSaving}>
+                    {isSaving && <Spinner className="size-4" />}
+                    {isEditing
+                      ? t("custom_profiles.form.buttons.update_submit")
+                      : t("custom_profiles.form.buttons.create_submit")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    disabled={isSaving}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(
-                        Object.entries(pdpTypeLabels) as [PdpType, string][]
-                      ).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+                    {isEditing
+                      ? t("actions.cancel", { ns: "common" })
+                      : t("custom_profiles.form.buttons.reset")}
+                  </Button>
+                </div>
+              </FieldGroup>
+            </FieldSet>
+          </form>
+        </CardContent>
+      </Card>
 
-                <Field>
-                  <FieldLabel htmlFor="apnCid">
-                    {t("custom_profiles.form.fields.cid_label")}
-                  </FieldLabel>
-                  <Input
-                    id="apnCid"
-                    type="number"
-                    min={1}
-                    max={15}
-                    value={form.cid}
-                    onChange={(e) => updateField("cid", parseInt(e.target.value) || 1)}
-                    aria-describedby={errors.cid ? "apnCid-error" : undefined}
-                  />
-                  {errors.cid && (
-                    <FieldError id="apnCid-error">{errors.cid}</FieldError>
-                  )}
-                </Field>
+      <AlertDialog
+        open={pendingVerizonMnoId !== null}
+        onOpenChange={(open) => { if (!open) handleVerizonCancel(); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("custom_profiles.verizon_warning.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>{t("custom_profiles.verizon_warning.body_intro")}</p>
+                <p>
+                  <strong>{t("custom_profiles.verizon_warning.body_warning_lead")}</strong>{" "}
+                  {t("custom_profiles.verizon_warning.body_warning_rest")}
+                </p>
               </div>
-
-              <Field>
-                <FieldLabel htmlFor="imei">
-                  {t("custom_profiles.form.fields.imei_label")}
-                </FieldLabel>
-                <Input
-                  id="imei"
-                  type="text"
-                  placeholder={t(
-                    "custom_profiles.form.fields.imei_placeholder",
-                  )}
-                  maxLength={15}
-                  value={form.imei}
-                  onChange={(e) => updateField("imei", e.target.value)}
-                  aria-describedby={errors.imei ? "imei-error" : undefined}
-                />
-                {errors.imei && (
-                  <FieldError id="imei-error">{errors.imei}</FieldError>
-                )}
-              </Field>
-
-              <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-4">
-                <Field>
-                  <FieldLabel htmlFor="ttl">
-                    {t("custom_profiles.form.fields.ttl_label")}
-                  </FieldLabel>
-                  <Input
-                    id="ttl"
-                    type="number"
-                    min={0}
-                    max={255}
-                    value={form.ttl}
-                    onChange={(e) =>
-                      updateField("ttl", parseInt(e.target.value) || 0)
-                    }
-                    aria-describedby={errors.ttl ? "ttl-error" : undefined}
-                  />
-                  {errors.ttl && (
-                    <FieldError id="ttl-error">{errors.ttl}</FieldError>
-                  )}
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="hl">
-                    {t("custom_profiles.form.fields.hl_label")}
-                  </FieldLabel>
-                  <Input
-                    id="hl"
-                    type="number"
-                    min={0}
-                    max={255}
-                    value={form.hl}
-                    onChange={(e) =>
-                      updateField("hl", parseInt(e.target.value) || 0)
-                    }
-                    aria-describedby={errors.hl ? "hl-error" : undefined}
-                  />
-                  {errors.hl && (
-                    <FieldError id="hl-error">{errors.hl}</FieldError>
-                  )}
-                </Field>
-              </div>
-
-              {/* --- Actions --- */}
-              <div className="flex gap-3 pt-2">
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving && <Spinner className="size-4" />}
-                  {isEditing
-                    ? t("custom_profiles.form.buttons.update_submit")
-                    : t("custom_profiles.form.buttons.create_submit")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleReset}
-                  disabled={isSaving}
-                >
-                  {isEditing
-                    ? t("cancel", { ns: "common" })
-                    : t("custom_profiles.form.buttons.reset")}
-                </Button>
-              </div>
-            </FieldGroup>
-          </FieldSet>
-        </form>
-      </CardContent>
-    </Card>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleVerizonCancel}>
+              {t("custom_profiles.verizon_warning.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleVerizonConfirm}>
+              {t("custom_profiles.verizon_warning.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

@@ -66,6 +66,16 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         fi
     fi
 
+    # --- Force Tailscale Fixes status ---
+    # Source of truth is the UCI flag (set by this same endpoint). The
+    # qmanager_vpn_zone init.d enable state is a downstream effect of the
+    # flag, not an independent input — reading the flag avoids a stale
+    # /etc/rc.d/S99 symlink masking a freshly-toggled value.
+    force_tailscale_fixes="false"
+    if [ "$(uci -q get quecmanager.tailscale_workarounds.enabled)" = "1" ]; then
+        force_tailscale_fixes="true"
+    fi
+
     # --- Unit preferences ---
     temp_unit=$(uci_get temp_unit "celsius")
     distance_unit=$(uci_get distance_unit "km")
@@ -97,6 +107,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
 
     jq -n \
         --argjson wan_guard "$wan_guard_enabled" \
+        --argjson force_ts_fixes "$force_tailscale_fixes" \
         --arg hostname "$hostname" \
         --arg temp_unit "$temp_unit" \
         --arg distance_unit "$distance_unit" \
@@ -113,6 +124,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             success: true,
             settings: {
                 wan_guard_enabled: $wan_guard,
+                force_tailscale_fixes: $force_ts_fixes,
                 hostname: $hostname,
                 temp_unit: $temp_unit,
                 distance_unit: $distance_unit,
@@ -163,6 +175,42 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             case "$val" in
                 true)  /etc/init.d/qmanager_wan_guard enable 2>/dev/null ;;
                 false) /etc/init.d/qmanager_wan_guard disable 2>/dev/null ;;
+            esac
+        fi
+
+        # --- Force Tailscale Fixes toggle ---
+        # Re-introduces the historical fw4 zone + mwan3 ipset workarounds for
+        # tailscale0 (recommended on R02 firmware where outbound reply packets
+        # otherwise get marked for WAN egress and never reach the tunnel).
+        # The UCI flag is set synchronously so subsequent GETs reflect intent
+        # immediately. The actual zone/ipset/init.d work is dispatched in
+        # background AFTER cgi_success — vpn_fw_ensure_zone / vpn_fw_remove_zone
+        # both run /etc/init.d/firewall restart which would otherwise kill
+        # this HTTP response (firewall-restart-kills-http rule).
+        force_ts_fixes_action=""   # "" | "enable" | "disable"
+        val=$(printf '%s' "$POST_DATA" | jq -r 'if has("force_tailscale_fixes") then (.force_tailscale_fixes | tostring) else "" end')
+        if [ -n "$val" ]; then
+            cur=$(uci -q get quecmanager.tailscale_workarounds.enabled 2>/dev/null)
+            [ -z "$cur" ] && cur="0"
+            case "$val" in
+                true)
+                    if [ "$cur" != "1" ]; then
+                        if ! uci -q get quecmanager.tailscale_workarounds >/dev/null 2>&1; then
+                            uci set quecmanager.tailscale_workarounds=tailscale_workarounds
+                        fi
+                        uci set quecmanager.tailscale_workarounds.enabled=1
+                        force_ts_fixes_action="enable"
+                    fi
+                    ;;
+                false)
+                    if [ "$cur" = "1" ]; then
+                        if ! uci -q get quecmanager.tailscale_workarounds >/dev/null 2>&1; then
+                            uci set quecmanager.tailscale_workarounds=tailscale_workarounds
+                        fi
+                        uci set quecmanager.tailscale_workarounds.enabled=0
+                        force_ts_fixes_action="disable"
+                    fi
+                    ;;
             esac
         fi
 
@@ -249,6 +297,32 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                 qlog_info "TZ changed: scheduling /etc/init.d/cron restart"
                 ( /etc/init.d/cron restart </dev/null >/dev/null 2>&1 & )
             fi
+        fi
+
+        # --- Force Tailscale Fixes apply/revert (background, post-response) ---
+        # Heavy steps (init.d enable/disable + zone create/remove + firewall
+        # restart) are dispatched in a fully-orphaned subshell after the JSON
+        # response is sent, so the HTTP connection is not killed by fw4 reload.
+        # On enable: ensure zone if Tailscale is installed, then enable boot
+        # self-heal so the mwan3 ipset is re-asserted on every reboot.
+        # On disable: stop+disable boot self-heal first, then remove the zone
+        # (vpn_fw_remove_zone preserves the mwan3 ipset entry when NetBird is
+        # still installed, per the historical guard).
+        if [ -n "$force_ts_fixes_action" ]; then
+            qlog_info "Force Tailscale Fixes: scheduling $force_ts_fixes_action"
+            (
+                . /usr/lib/qmanager/vpn_firewall.sh
+                if [ "$force_ts_fixes_action" = "enable" ]; then
+                    if command -v tailscale >/dev/null 2>&1; then
+                        vpn_fw_ensure_zone "tailscale" "tailscale0"
+                    fi
+                    [ -x /etc/init.d/qmanager_vpn_zone ] && /etc/init.d/qmanager_vpn_zone enable
+                    [ -x /etc/init.d/qmanager_vpn_zone ] && /etc/init.d/qmanager_vpn_zone start
+                else
+                    [ -x /etc/init.d/qmanager_vpn_zone ] && /etc/init.d/qmanager_vpn_zone disable
+                    vpn_fw_remove_zone "tailscale"
+                fi
+            ) </dev/null >/dev/null 2>&1 &
         fi
 
         qlog_info "System settings saved"

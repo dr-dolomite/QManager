@@ -28,6 +28,7 @@
     "option_speed_10": "10 Mbps",
     "option_speed_100": "100 Mbps",
     "option_speed_1000": "1000 Mbps",
+    "option_speed_2500": "2500 Mbps",
     "label_duplex": "双工模式",
     "alt_device_icon": "设备图标"
   },
@@ -133,7 +134,12 @@
     "aria_mac_address": "MAC 地址",
     "placeholder_nat_mode": "选择 NAT 模式",
     "placeholder_usb_mode": "选择 USB 调制解调器协议",
-    "placeholder_dns_proxy": "选择 DNS 模式"
+    "placeholder_dns_proxy": "选择 DNS 模式",
+    "locked_by_verizon": {
+      "title": "IP 穿透由您的 Verizon 配置文件管理",
+      "body": "活动配置文件：\"{{name}}\"。要更改这些设置，请从自定义配置文件中停用该配置文件。",
+      "cta": "打开自定义配置文件"
+    }
   },
   "masquerade": {
     "page_title": "流量伪装",

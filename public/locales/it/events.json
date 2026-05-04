@@ -21,6 +21,8 @@
     "profile_applied": "Profilo applicato",
     "profile_failed": "Profilo non riuscito",
     "profile_deactivated": "Profilo disattivato",
+    "verizon_mpdn_applied": "Routing Verizon Applicato",
+    "verizon_mpdn_reverted": "Routing Verizon Ripristinato",
     "config_backup_collected": "Backup raccolto",
     "config_restore_started": "Ripristino avviato",
     "config_restore_section_success": "Sezione ripristinata",

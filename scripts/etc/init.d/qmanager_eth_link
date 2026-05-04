@@ -48,6 +48,7 @@ start() {
         "10")   desired_speed="10" ;;
         "100")  desired_speed="100" ;;
         "1000") desired_speed="1000" ;;
+        "2500") desired_speed="2500" ;;
         *)      desired_speed="" ;;
     esac
 
@@ -69,6 +70,7 @@ start() {
         "10")   ethtool -s "$ETH_INTERFACE" advertise 0x003 autoneg on 2>/dev/null ;;
         "100")  ethtool -s "$ETH_INTERFACE" advertise 0x00f autoneg on 2>/dev/null ;;
         "1000") ethtool -s "$ETH_INTERFACE" advertise 0x02f autoneg on 2>/dev/null ;;
+        "2500") ethtool -s "$ETH_INTERFACE" advertise 0x80000000002f autoneg on 2>/dev/null ;;
         *)
             advertise=$(get_supported_advertise_hex)
             if [ -n "$advertise" ]; then

@@ -73,7 +73,8 @@
         "ttl_label": "TTL Valore",
         "ttl_error": "TTL deve essere compreso tra 0 e 255.",
         "hl_label": "Limite del salto",
-        "hl_error": "HL deve essere compreso tra 0 e 255."
+        "hl_error": "HL deve essere compreso tra 0 e 255.",
+        "cid_locked_verizon": "Verizon richiede il contesto PDP 3"
       },
       "buttons": {
         "create_submit": "Crea profilo",
@@ -109,9 +110,18 @@
       "step_labels": {
         "apn": "APN Configurazione",
         "ttl_hl": "TTL / Limite salto",
-        "imei": "IMEI"
+        "imei": "IMEI",
+        "mpdn_rule": "Instradamento dati"
       },
       "reboot_notice": "Il modem si sta riavviando per applicare la modifica IMEI. La dashboard si ricollegherà automaticamente."
+    },
+    "verizon_warning": {
+      "title": "Verizon richiede una regola di routing dei dati speciale",
+      "body_intro": "La rete Verizon trasmette i dati solo su un canale non predefinito su questo modem. Per far funzionare Dati e SMS, QManager configurerà una regola personalizzata del percorso dati quando si attiva questo profilo.",
+      "body_warning_lead": "Importante — una volta attiva, non cancellare o rilasciare manualmente questa regola.",
+      "body_warning_rest": "Farlo potrebbe impedire al modem di ripristinare il routing predefinito fino a un re-flash del firmware. QManager gestisce la pulizia in modo sicuro quando si passa a un altro profilo.",
+      "cancel": "Annulla",
+      "confirm": "Ho capito, continua"
     },
     "empty_state": {
       "title": "Nessun profilo personalizzato",
@@ -476,7 +486,6 @@
         "pci_label_n": "ID cella (PCI) {{n}}",
         "pci_placeholder": "Inserisci PCI",
         "pci_placeholder_n": "Inserisci PCI {{n}}",
-        "use_current": "Usa corrente",
         "lock_dialog": {
           "title": "Blocca sulla torre LTE?",
           "description_single": "In questo modo il modem verrà bloccato su EARFCN {{earfcn}}, PCI {{pci}}. Il modem si collegherà solo a questa torre e potrebbe disconnettersi brevemente durante il passaggio.",
@@ -516,7 +525,6 @@
         "band_placeholder": "Inserisci NR Banda",
         "scs_label": "Spaziatura sottoportante",
         "scs_placeholder": "SCS",
-        "use_current": "Usa corrente",
         "lock_dialog": {
           "title": "Blocca la Torre NR-SA?",
           "description": "In questo modo il modem verrà bloccato su NR ARFCN {{arfcn}}, PCI {{pci}} (banda {{band}}). Il modem si collegherà solo a questa torre e potrebbe disconnettersi brevemente durante il passaggio.",

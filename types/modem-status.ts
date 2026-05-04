@@ -521,6 +521,8 @@ export type NetworkEventType =
   | "profile_applied" // Custom SIM Profile applied (complete or partial)
   | "profile_failed" // Custom SIM Profile apply failed (all steps)
   | "profile_deactivated" // Custom SIM Profile deactivated by user
+  | "verizon_mpdn_applied" // Verizon MPDN rule set to PDP context 3
+  | "verizon_mpdn_reverted" // Verizon MPDN rule reverted to default PDP context 1
   | "config_backup_collected" // Configuration backup collected
   | "config_restore_started" // Configuration restore started
   | "config_restore_section_success" // Single section restored

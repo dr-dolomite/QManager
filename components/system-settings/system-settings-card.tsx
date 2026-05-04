@@ -93,6 +93,11 @@ export default function SystemSettingsCard({
             </div>
             <Separator />
             <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-44" />
+              <Skeleton className="h-6 w-28" />
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-9 w-36" />
             </div>
@@ -139,7 +144,7 @@ export default function SystemSettingsCard({
   // Key-based remount: when settings change after save/re-fetch,
   // the form reinitializes with fresh values from useState defaults.
   const formKey = settings
-    ? `${settings.wan_guard_enabled}-${settings.temp_unit}-${settings.distance_unit}-${settings.zonename}`
+    ? `${settings.wan_guard_enabled}-${settings.force_tailscale_fixes}-${settings.temp_unit}-${settings.distance_unit}-${settings.zonename}`
     : "empty";
 
   return (
@@ -188,6 +193,14 @@ function SystemSettingsForm({
   );
   const [wanGuardSaving, setWanGuardSaving] = useState(false);
 
+  // Force Tailscale Fixes toggle state (saves immediately, not via Save button).
+  // Re-introduces the historical fw4 zone + mwan3 ipset workarounds for
+  // tailscale0. Off by default; recommended for R02 firmware users.
+  const [forceTailscaleFixes, setForceTailscaleFixes] = useState(
+    settings?.force_tailscale_fixes ?? false,
+  );
+  const [forceTailscaleFixesSaving, setForceTailscaleFixesSaving] = useState(false);
+
   // --- Dirty check (only for items 2-4, not WAN Guard) ---
   const isDirty = useMemo(() => {
     if (!settings) return false;
@@ -209,6 +222,7 @@ function SystemSettingsForm({
       const success = await saveSettings({
         action: "save_settings",
         wan_guard_enabled: checked,
+        force_tailscale_fixes: forceTailscaleFixes,
         temp_unit: settings?.temp_unit ?? "celsius",
         distance_unit: settings?.distance_unit ?? "km",
         timezone: settings?.timezone ?? "UTC0",
@@ -225,7 +239,39 @@ function SystemSettingsForm({
         toast.error(t("system.wan_guard_toast_failed"));
       }
     },
-    [saveSettings, settings, t],
+    [saveSettings, settings, t, forceTailscaleFixes],
+  );
+
+  // --- Force Tailscale Fixes immediate toggle handler ---
+  const handleForceTailscaleFixesChange = useCallback(
+    async (checked: boolean) => {
+      setForceTailscaleFixes(checked);
+      setForceTailscaleFixesSaving(true);
+
+      const success = await saveSettings({
+        action: "save_settings",
+        wan_guard_enabled: wanGuardEnabled,
+        force_tailscale_fixes: checked,
+        temp_unit: settings?.temp_unit ?? "celsius",
+        distance_unit: settings?.distance_unit ?? "km",
+        timezone: settings?.timezone ?? "UTC0",
+        zonename: settings?.zonename ?? "UTC",
+      });
+
+      setForceTailscaleFixesSaving(false);
+
+      if (success) {
+        toast.success(
+          checked
+            ? t("system.force_tailscale_fixes_toast_enabled")
+            : t("system.force_tailscale_fixes_toast_disabled"),
+        );
+      } else {
+        setForceTailscaleFixes(!checked);
+        toast.error(t("system.force_tailscale_fixes_toast_failed"));
+      }
+    },
+    [saveSettings, settings, t, wanGuardEnabled],
   );
 
   // --- Timezone change handler ---
@@ -244,6 +290,7 @@ function SystemSettingsForm({
     const success = await saveSettings({
       action: "save_settings",
       wan_guard_enabled: wanGuardEnabled,
+      force_tailscale_fixes: forceTailscaleFixes,
       temp_unit: tempUnit,
       distance_unit: distanceUnit,
       timezone,
@@ -260,6 +307,7 @@ function SystemSettingsForm({
     canSave,
     saveSettings,
     wanGuardEnabled,
+    forceTailscaleFixes,
     tempUnit,
     distanceUnit,
     timezone,
@@ -306,7 +354,7 @@ function SystemSettingsForm({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{t("system.wan_guard_tooltip")}</p>
+                  <p className="text-balance max-w-sm">{t("system.wan_guard_tooltip")}</p>
                 </TooltipContent>
               </Tooltip>
               <p className="font-semibold text-muted-foreground text-sm">
@@ -322,6 +370,43 @@ function SystemSettingsForm({
               />
               <Label htmlFor="wan-guard-enabled">
                 {wanGuardEnabled ? t("state.enabled", { ns: "common" }) : t("state.disabled", { ns: "common" })}
+              </Label>
+            </div>
+          </motion.div>
+
+          {/* ── Force Tailscale Fixes Toggle ──────────────────────── */}
+          <Separator />
+          <motion.div variants={itemVariants} className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex"
+                    aria-label={t("system.force_tailscale_fixes_info_aria")}
+                  >
+                    <TbInfoCircleFilled className="size-5 text-info" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-balance max-w-sm">{t("system.force_tailscale_fixes_tooltip")}</p>
+                </TooltipContent>
+              </Tooltip>
+              <p className="font-semibold text-muted-foreground text-sm">
+                {t("system.force_tailscale_fixes_label")}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="force-tailscale-fixes"
+                checked={forceTailscaleFixes}
+                onCheckedChange={handleForceTailscaleFixesChange}
+                disabled={forceTailscaleFixesSaving}
+              />
+              <Label htmlFor="force-tailscale-fixes">
+                {forceTailscaleFixes
+                  ? t("state.enabled", { ns: "common" })
+                  : t("state.disabled", { ns: "common" })}
               </Label>
             </div>
           </motion.div>

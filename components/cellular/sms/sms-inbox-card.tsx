@@ -516,7 +516,7 @@ export default function SmsInboxCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
@@ -550,7 +550,7 @@ export default function SmsInboxCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAll}
@@ -584,7 +584,7 @@ export default function SmsInboxCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              {t("cancel", { ns: "common" })}
+              {t("actions.cancel", { ns: "common" })}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteSelected}

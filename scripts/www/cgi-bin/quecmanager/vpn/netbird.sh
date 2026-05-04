@@ -1,6 +1,6 @@
 #!/bin/sh
 . /usr/lib/qmanager/cgi_base.sh
-. /usr/lib/qmanager/vpn_firewall.sh
+. /usr/lib/qmanager/netbird_firewall.sh
 # =============================================================================
 # netbird.sh — CGI Endpoint: NetBird VPN Management (GET + POST)
 # =============================================================================
@@ -290,7 +290,11 @@ parse_netbird_status() {
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
 
-    other_vpn_installed=$(vpn_check_other_installed "tailscale")
+    if command -v tailscale >/dev/null 2>&1; then
+        other_vpn_installed="true"
+    else
+        other_vpn_installed="false"
+    fi
 
     # --- Tier 1: Not installed -----------------------------------------------
     if ! is_installed; then
@@ -471,7 +475,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
             # Verify
             if command -v netbird >/dev/null 2>&1; then
-                vpn_fw_ensure_zone "netbird" "wt0"
+                netbird_fw_ensure_zone "netbird" "wt0"
                 printf '{"success":true,"status":"complete","message":"NetBird installed successfully"}' > "$NB_INSTALL_RESULT"
             else
                 printf '{"success":false,"status":"error","message":"Package installed but binary not found"}' > "$NB_INSTALL_RESULT"
@@ -674,10 +678,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         cgi_success
 
         # Remove firewall zone in background AFTER response is sent.
-        # vpn_fw_remove_zone restarts the firewall which kills the HTTP
+        # netbird_fw_remove_zone restarts the firewall which kills the HTTP
         # connection — doing it after cgi_success ensures the frontend
         # receives a clean JSON response.
-        ( vpn_fw_remove_zone "netbird" ) </dev/null >/dev/null 2>&1 &
+        ( netbird_fw_remove_zone "netbird" ) </dev/null >/dev/null 2>&1 &
         exit 0
     fi
 
