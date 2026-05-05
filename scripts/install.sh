@@ -866,11 +866,15 @@ install_frontend() {
 
     cp -r "$SRC_FRONTEND"/. "$WWW_ROOT"/ || die "Failed to copy frontend to $WWW_ROOT"
 
-    # uhttpd requires world-readable files; fix in case tarball has restrictive perms
+    # uhttpd requires world-readable files; fix in case tarball has restrictive perms.
+    # Order matters: chmod everything 644 first, then restore exec bit on EVERYTHING
+    # under cgi-bin (LuCI's main entry is /www/cgi-bin/luci — a Lua script with no
+    # extension — and uhttpd refuses to exec a 644 CGI). cm.1 regression: prior
+    # build only restored *.sh and broke LuCI access.
     find "$WWW_ROOT" -type d -exec chmod 755 {} \;
     find "$WWW_ROOT" -type f -exec chmod 644 {} \;
-    # Restore executable bit on CGI scripts (cgi-bin was preserved above)
-    find "$WWW_ROOT/cgi-bin" -type f -name '*.sh' -exec chmod 755 {} \; 2>/dev/null || true
+    # All files under cgi-bin must be executable (LuCI binary, .sh, .lua, etc.)
+    [ -d "$WWW_ROOT/cgi-bin" ] && find "$WWW_ROOT/cgi-bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
 
     local n
     n=$(count_files "$SRC_FRONTEND")
