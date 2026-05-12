@@ -23,6 +23,7 @@ import {
   Languages as LanguagesIcon,
   PackageOpenIcon,
   WaypointsIcon,
+  Radar,
 } from "lucide-react";
 
 import QManagerLogo from "@/public/qmanager-logo.svg";
@@ -192,6 +193,16 @@ const data = {
     { t_key: "tailscale", url: "/monitoring/tailscale", icon: WaypointsIcon },
     { t_key: "netbird", url: "/monitoring/netbird", icon: BirdIcon },
     { t_key: "watchdog", url: "/monitoring/watchdog", icon: DogIcon },
+    {
+      t_key: "cellmapper",
+      url: "/monitoring/cellmapper",
+      icon: Radar,
+      items: [
+        { t_key: "cellmapper_settings", url: "/monitoring/cellmapper/settings" },
+        { t_key: "cellmapper_log", url: "/monitoring/cellmapper/log" },
+        { t_key: "cellmapper_buffer", url: "/monitoring/cellmapper/buffer" },
+      ],
+    },
   ],
 };
 

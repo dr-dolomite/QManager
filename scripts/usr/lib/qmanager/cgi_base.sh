@@ -23,6 +23,21 @@ _CGI_BASE_LOADED=1
 }
 
 # ---------------------------------------------------------------------------
+# HTTP Headers
+# Emit full JSON + CORS headers followed by the required blank line.
+# Call once, before writing any response body.
+# MUST be defined before auth sourcing — require_auth() calls cgi_headers().
+# ---------------------------------------------------------------------------
+cgi_headers() {
+    echo "Content-Type: application/json"
+    echo "Cache-Control: no-cache, no-store, must-revalidate"
+    echo "Access-Control-Allow-Origin: *"
+    echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
+    echo "Access-Control-Allow-Headers: Content-Type, Authorization"
+    echo ""
+}
+
+# ---------------------------------------------------------------------------
 # Authentication — source cgi_auth.sh with no-op fallbacks if missing
 # ---------------------------------------------------------------------------
 . /usr/lib/qmanager/cgi_auth.sh 2>/dev/null || {
@@ -46,20 +61,6 @@ _CGI_BASE_LOADED=1
 if [ "$_SKIP_AUTH" != "1" ]; then
     require_auth
 fi
-
-# ---------------------------------------------------------------------------
-# HTTP Headers
-# Emit full JSON + CORS headers followed by the required blank line.
-# Call once, before writing any response body.
-# ---------------------------------------------------------------------------
-cgi_headers() {
-    echo "Content-Type: application/json"
-    echo "Cache-Control: no-cache, no-store, must-revalidate"
-    echo "Access-Control-Allow-Origin: *"
-    echo "Access-Control-Allow-Methods: GET, POST, OPTIONS"
-    echo "Access-Control-Allow-Headers: Content-Type, Authorization"
-    echo ""
-}
 
 # ---------------------------------------------------------------------------
 # CORS Preflight

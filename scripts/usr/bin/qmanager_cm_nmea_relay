@@ -1,0 +1,338 @@
+#!/bin/sh
+# =============================================================================
+# qmanager_cm_nmea_relay — NMEA UDP Relay Daemon
+# =============================================================================
+# Lightweight daemon that listens for NMEA 0183 sentences over UDP and writes
+# the latest GPS fix as JSON to a state file. Designed for use with the
+# gpsdRelay Android app — the phone sends NMEA data directly to this device
+# over UDP, no router or gpsd daemon needed.
+#
+# Listener strategy:
+#   1. socat UDP-RECV:<port>,reuseaddr STDOUT  (preferred — persistent)
+#   2. BusyBox nc via FIFO bridge              (fallback — nc reconnects,
+#                                                awk stays alive)
+#
+# BusyBox nc exits after each UDP "session" (one sender disconnects or
+# times out). A named pipe (FIFO) decouples nc from awk so the parser
+# keeps running across nc restarts, preserving accumulated GPS state.
+#
+# NMEA sentences parsed:
+#   $GPGGA / $GNGGA — lat, lon, altitude, satellites, HDOP, fix quality, time
+#   $GPRMC / $GNRMC — speed (knots → km/h), date (for full ISO timestamp)
+#
+# Output: /tmp/cellmapper_gps_fix.json (atomic write via .tmp + mv)
+# PID:    /var/run/qmanager_cm_nmea_relay.pid
+#
+# The state file includes an _epoch field (Unix timestamp of last write) so
+# consumers can detect stale data.
+#
+# UCI config:
+#   uci get quecmanager.cellmapper.nmea_udp_port  (default: 29998)
+#
+# Install location: /usr/bin/qmanager_cm_nmea_relay
+# Dependencies:     socat or nc, awk
+# =============================================================================
+
+STATE_FILE="/tmp/cellmapper_gps_fix.json"
+STATE_TMP="/tmp/cellmapper_gps_fix.json.tmp"
+PID_FILE="/var/run/qmanager_cm_nmea_relay.pid"
+FIFO_PATH="/tmp/cm_nmea_relay.fifo"
+
+# ---------------------------------------------------------------------------
+# Logging — source qlog if available, otherwise use stubs
+# ---------------------------------------------------------------------------
+if [ -f "/usr/lib/qmanager/qlog.sh" ]; then
+    # shellcheck disable=SC1091
+    . /usr/lib/qmanager/qlog.sh
+    qlog_init "cm_nmea_relay"
+fi
+command -v qlog_info  >/dev/null 2>&1 || qlog_info()  { logger -t cm_nmea_relay "$*"; }
+command -v qlog_warn  >/dev/null 2>&1 || qlog_warn()  { logger -t cm_nmea_relay "WARN: $*"; }
+command -v qlog_error >/dev/null 2>&1 || qlog_error() { logger -t cm_nmea_relay "ERROR: $*"; }
+command -v qlog_debug >/dev/null 2>&1 || qlog_debug() { :; }
+
+# ---------------------------------------------------------------------------
+# Read UDP port from UCI (default 29998)
+# ---------------------------------------------------------------------------
+if command -v uci >/dev/null 2>&1; then
+    UDP_PORT=$(uci -q get quecmanager.cellmapper.nmea_udp_port 2>/dev/null)
+fi
+UDP_PORT="${UDP_PORT:-29998}"
+
+# ---------------------------------------------------------------------------
+# Determine listener command (socat preferred, nc fallback)
+# ---------------------------------------------------------------------------
+AWK_PID=""
+SENTINEL_PID=""
+LISTENER_PID=""
+
+if command -v socat >/dev/null 2>&1; then
+    LISTENER_CMD="socat"
+elif command -v nc >/dev/null 2>&1; then
+    # Verify nc actually supports listen mode — BusyBox nc on some devices
+    # is connect-only (no -l flag). Test by checking --help or trying -l.
+    if nc --help 2>&1 | grep -qi '\-l'; then
+        LISTENER_CMD="nc"
+    else
+        qlog_error "nc is available but has no listen mode (BusyBox connect-only build)"
+        qlog_error "Install socat: opkg update && opkg install socat"
+        # Try to self-heal: install socat if opkg is available
+        if command -v opkg >/dev/null 2>&1; then
+            qlog_info "Attempting to install socat via opkg..."
+            if opkg update >/dev/null 2>&1 && opkg install socat >/dev/null 2>&1; then
+                qlog_info "socat installed successfully — using socat"
+                LISTENER_CMD="socat"
+            else
+                qlog_error "Failed to install socat — NMEA relay cannot start"
+                exit 1
+            fi
+        else
+            exit 1
+        fi
+    fi
+else
+    qlog_error "Neither socat nor nc is available — cannot listen for NMEA data"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Clean shutdown handler
+# ---------------------------------------------------------------------------
+cleanup() {
+    qlog_info "Shutting down NMEA UDP relay"
+    [ -n "$LISTENER_PID" ] && kill "$LISTENER_PID" 2>/dev/null
+    [ -n "$AWK_PID" ]      && kill "$AWK_PID" 2>/dev/null
+    [ -n "$SENTINEL_PID" ] && kill "$SENTINEL_PID" 2>/dev/null
+    wait 2>/dev/null
+    rm -f "$STATE_FILE" "$STATE_TMP" "$PID_FILE" "$FIFO_PATH"
+    exit 0
+}
+
+trap cleanup INT TERM
+
+# ---------------------------------------------------------------------------
+# Write PID file
+# ---------------------------------------------------------------------------
+echo $$ > "$PID_FILE"
+
+qlog_info "Starting NMEA UDP relay on port $UDP_PORT (listener: $LISTENER_CMD)"
+
+# ---------------------------------------------------------------------------
+# AWK parser for NMEA sentences
+# ---------------------------------------------------------------------------
+# This awk script processes GGA and RMC sentences and writes atomic JSON.
+# It avoids jq in the hot path for performance on embedded devices.
+#
+# Variables maintained across lines:
+#   lat, lon, alt, sats, fix_type, hdop, speed_kmh, iso_time, rmc_date
+#
+# On each valid GGA sentence, the state file is written (GGA has the most
+# complete position data). RMC updates speed and date fields.
+# ---------------------------------------------------------------------------
+
+NMEA_AWK='
+BEGIN {
+    FS = ","
+    lat = 0; lon = 0; alt = 0; sats = 0
+    fix_type = "none"; hdop = 99.9; speed_kmh = 0
+    iso_time = ""; rmc_date = ""
+    state_file = ENVIRON["STATE_FILE"]
+    state_tmp  = ENVIRON["STATE_TMP"]
+}
+
+# Convert NMEA DDDMM.mmmm to decimal degrees
+function nmea_to_dec(raw, hemi,    int_part, dec_frac, deg, min_val, result) {
+    if (raw == "" || raw + 0 == 0) return 0
+    # Split at decimal point
+    int_part = int(raw)
+    dec_frac = raw - int_part
+    # Last two digits of integer part are minutes
+    deg = int(int_part / 100)
+    min_val = (int_part - deg * 100) + dec_frac
+    result = deg + min_val / 60.0
+    if (hemi == "S" || hemi == "W") result = -result
+    return result
+}
+
+# Write state file atomically
+function write_state() {
+    # Get current epoch
+    cmd = "date +%s"
+    cmd | getline epoch
+    close(cmd)
+
+    printf "{\"lat\":%.6f,\"lon\":%.6f,\"alt\":%.1f,\"sats\":%d,\"fix_type\":\"%s\",\"hdop\":%.1f,\"speed_kmh\":%.1f,\"time\":\"%s\",\"_epoch\":%s}\n", \
+        lat, lon, alt, sats, fix_type, hdop, speed_kmh, iso_time, epoch > state_tmp
+    close(state_tmp)
+
+    system("mv " state_tmp " " state_file)
+}
+
+# --- GGA sentence: position, altitude, satellites, HDOP ---
+$1 ~ /^\$G[PNLB]GGA$/ {
+    # Validate minimum field count
+    if (NF < 10) next
+
+    # Field 7 = fix quality (0=no fix, 1=GPS, 2=DGPS, etc.)
+    quality = $7 + 0
+    if (quality < 1) next
+
+    # Parse UTC time (HHMMSS.ss)
+    utc = $2
+    if (length(utc) >= 6) {
+        hh = substr(utc, 1, 2)
+        mm = substr(utc, 3, 2)
+        ss = substr(utc, 5, 2)
+    }
+
+    # Parse coordinates
+    lat = nmea_to_dec($3, $4)
+    lon = nmea_to_dec($5, $6)
+
+    # Satellites, HDOP, altitude
+    sats = $8 + 0
+    hdop = ($9 != "") ? $9 + 0 : 99.9
+    alt  = ($10 != "") ? $10 + 0 : 0
+
+    # Determine fix type from satellite count
+    if (sats >= 4) fix_type = "3D"
+    else if (sats >= 3) fix_type = "2D"
+    else fix_type = "none"
+
+    # Build ISO timestamp
+    if (rmc_date != "" && length(rmc_date) == 6) {
+        dd = substr(rmc_date, 1, 2)
+        mo = substr(rmc_date, 3, 2)
+        yy = substr(rmc_date, 5, 2)
+        iso_time = "20" yy "-" mo "-" dd "T" hh ":" mm ":" ss "Z"
+    } else {
+        # No RMC date yet — use date command for the date portion
+        cmd = "date -u +%Y-%m-%d"
+        cmd | getline today
+        close(cmd)
+        iso_time = today "T" hh ":" mm ":" ss "Z"
+    }
+
+    write_state()
+    next
+}
+
+# --- RMC sentence: speed and date ---
+$1 ~ /^\$G[PNLB]RMC$/ {
+    # Validate minimum field count
+    if (NF < 10) next
+
+    # Field 3 = status: A=active, V=void
+    if ($3 != "A") next
+
+    # Field 8 = speed in knots → km/h
+    if ($8 != "") {
+        speed_kmh = ($8 + 0) * 1.852
+    }
+
+    # Field 10 = date DDMMYY
+    if ($10 != "" && length($10) == 6) {
+        rmc_date = $10
+    }
+
+    next
+}
+'
+
+# ---------------------------------------------------------------------------
+# socat mode — single persistent listener piped to awk
+# ---------------------------------------------------------------------------
+run_socat() {
+    while :; do
+        socat UDP-RECV:"$UDP_PORT",reuseaddr STDOUT 2>/dev/null | \
+            STATE_FILE="$STATE_FILE" STATE_TMP="$STATE_TMP" awk "$NMEA_AWK" &
+        LISTENER_PID=$!
+
+        qlog_debug "socat listener started (PID=$LISTENER_PID)"
+        wait "$LISTENER_PID" 2>/dev/null
+        exit_code=$?
+
+        # Signal-killed → let trap handle cleanup
+        [ $exit_code -gt 128 ] && break
+
+        qlog_warn "socat exited (code=$exit_code), restarting in 2 seconds"
+        sleep 2
+    done
+}
+
+# ---------------------------------------------------------------------------
+# nc (BusyBox) mode — FIFO bridge
+# ---------------------------------------------------------------------------
+# BusyBox nc in UDP listen mode exits after each sender disconnects (or
+# immediately on some builds). A named pipe decouples nc from awk:
+#   - awk reads from the FIFO (long-lived, preserves GPS state)
+#   - nc writes to the FIFO (short-lived, restarts in a tight loop)
+# ---------------------------------------------------------------------------
+run_nc_fifo() {
+    # Create FIFO (remove stale one first)
+    rm -f "$FIFO_PATH"
+    mkfifo "$FIFO_PATH" 2>/dev/null || {
+        qlog_error "Failed to create FIFO at $FIFO_PATH"
+        exit 1
+    }
+
+    # Sentinel writer: keeps the FIFO writer-end open so awk never sees
+    # EOF when nc exits. A FIFO reader gets EOF only when ALL writers
+    # close — the sentinel ensures at least one writer is always open.
+    ( while sleep 86400; do :; done ) > "$FIFO_PATH" &
+    SENTINEL_PID=$!
+
+    # Start awk reading from the FIFO — runs for the lifetime of the daemon
+    STATE_FILE="$STATE_FILE" STATE_TMP="$STATE_TMP" awk "$NMEA_AWK" < "$FIFO_PATH" &
+    AWK_PID=$!
+    qlog_info "awk parser started (PID=$AWK_PID) reading from FIFO"
+
+    # Inner loop: nc reconnects and writes to the FIFO.
+    # Each nc invocation handles one UDP "session" then exits.
+    # The sentinel keeps awk alive across nc restarts.
+    nc_failures=0
+    while kill -0 "$AWK_PID" 2>/dev/null; do
+        # BusyBox nc flags vary by build. Try -lup first, fall back to -lu.
+        nc -lup "$UDP_PORT" > "$FIFO_PATH" 2>/dev/null
+        nc_exit=$?
+
+        if [ $nc_exit -gt 128 ]; then
+            # Signalled — outer cleanup will handle it
+            break
+        fi
+
+        # Track rapid failures to avoid spinning at 100% CPU
+        if [ $nc_exit -ne 0 ]; then
+            nc_failures=$((nc_failures + 1))
+            if [ $nc_failures -ge 5 ]; then
+                qlog_warn "nc failing repeatedly (${nc_failures}x), backing off 5s"
+                sleep 5
+                nc_failures=0
+            else
+                sleep 1
+            fi
+        else
+            # nc exited 0 = normal session end. Brief pause to avoid tight loop.
+            nc_failures=0
+            # Don't log every reconnect — it's expected behaviour for BusyBox nc
+            sleep 0.2 2>/dev/null || sleep 1
+        fi
+    done
+
+    # awk died — this shouldn't happen, but log it
+    if ! kill -0 "$AWK_PID" 2>/dev/null; then
+        qlog_error "awk parser exited unexpectedly"
+    fi
+
+    kill "$SENTINEL_PID" 2>/dev/null
+    rm -f "$FIFO_PATH"
+}
+
+# ---------------------------------------------------------------------------
+# Main — dispatch to the appropriate listener mode
+# ---------------------------------------------------------------------------
+if [ "$LISTENER_CMD" = "socat" ]; then
+    run_socat
+else
+    run_nc_fifo
+fi

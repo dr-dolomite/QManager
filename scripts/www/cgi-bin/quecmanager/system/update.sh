@@ -24,7 +24,7 @@ cgi_handle_options
 
 # --- Configuration -----------------------------------------------------------
 
-GITHUB_REPO="dr-dolomite/QManager"
+GITHUB_REPO="moxy-kit/QManager"
 VERSION_FILE="/etc/qmanager/VERSION"
 UPDATES_DIR="/etc/qmanager/updates"
 STATUS_FILE="/tmp/qmanager_update.json"
@@ -246,16 +246,29 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     api_response=$(cat "$tmp_body" 2>/dev/null)
     rm -f "$tmp_body" "$tmp_headers"
 
-    # Filter by pre-release preference
+    # Find the highest version among all releases.
+    # GitHub API returns releases sorted by creation date, NOT by version.
+    # We iterate through all releases and use semver_compare to find the
+    # actual highest version (handles pre-release suffixes like cm.9 > cm.8).
     if [ "$include_prerelease" = "1" ]; then
-        release_filter='.[0]'
+        _all_tags=$(echo "$api_response" | jq -r '.[].tag_name' 2>/dev/null)
     else
-        release_filter='[ .[] | select(.prerelease == false) ] | .[0]'
+        _all_tags=$(echo "$api_response" | jq -r '[ .[] | select(.prerelease == false) ] | .[].tag_name' 2>/dev/null)
     fi
 
-    # Extract release info
-    latest_tag=$(echo "$api_response" | jq -r "$release_filter | .tag_name // empty")
-    changelog=$(echo "$api_response" | jq -r "$release_filter | .body // empty")
+    latest_tag=""
+    for _tag in $_all_tags; do
+        if [ -z "$latest_tag" ]; then
+            latest_tag="$_tag"
+        else
+            semver_compare "$_tag" "$latest_tag"
+            [ $? -eq 0 ] && latest_tag="$_tag"
+        fi
+    done
+
+    # Extract release info for the highest version
+    changelog=$(echo "$api_response" | jq -r --arg t "$latest_tag" \
+        '[ .[] | select(.tag_name == $t) ] | .[0].body // empty')
 
     # Extract current version's changelog from the same API response
     current_changelog=""

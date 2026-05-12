@@ -91,7 +91,9 @@ export function NavMonitoring({
                     <CollapsibleContent>
                       <SidebarMenuSub>
                         {item.items?.map((subItem) => {
-                          const isSubItemActive = pathname === subItem.url || pathname.startsWith(subItem.url + "/")
+                          const isSubItemActive = subItem.url === item.url
+                            ? pathname === subItem.url
+                            : pathname === subItem.url || pathname.startsWith(subItem.url + "/")
                           return (
                             <SidebarMenuSubItem key={subItem.t_key}>
                               <SidebarMenuSubButton asChild isActive={isSubItemActive}>

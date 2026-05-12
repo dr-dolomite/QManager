@@ -40,8 +40,8 @@ STAGED_VERSION_MARKER="/tmp/qmanager_staged_version"
 INSTALL_LOG="/tmp/qmanager_install.log"
 
 # URL prefix used for SSRF protection on all downloads
-GITHUB_REPO_PREFIX="https://github.com/dr-dolomite/QManager/releases/download/"
-GITHUB_RAW_PREFIX="https://github.com/dr-dolomite/QManager/raw/"
+GITHUB_REPO_PREFIX="https://github.com/moxy-kit/QManager/releases/download/"
+GITHUB_RAW_PREFIX="https://github.com/moxy-kit/QManager/raw/"
 
 # Curl defaults
 CURL_TIMEOUT=300

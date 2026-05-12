@@ -49,6 +49,11 @@
     "about_device": "About Device",
     "support": "Support",
     "donate": "Donate to the Project",
-    "languages": "Languages"
+    "languages": "Languages",
+    "cellmapper": "CellMapper",
+    "cellmapper_dashboard": "Dashboard",
+    "cellmapper_settings": "Settings",
+    "cellmapper_log": "Upload Log",
+    "cellmapper_buffer": "Pending Queue"
   }
 }

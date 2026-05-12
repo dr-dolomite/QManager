@@ -1,0 +1,809 @@
+#!/bin/sh
+# =============================================================================
+# qmanager_cm_uploader — CellMapper Batch Uploader Daemon
+# =============================================================================
+# Drains the CellMapper SQLite pending queue (/overlay/cellmapper/queue.db),
+# batches measurement payloads, GZIP-compresses them, and POSTs to the
+# CellMapper upload endpoint (or a configured custom URL). Records each upload
+# attempt in the archive table for diagnostics and retry decisions.
+#
+# Runs as a procd-supervised daemon alongside qmanager_cm_collector. Manages
+# exponential backoff for server/rate-limit errors, auth error detection,
+# network policy enforcement (always / lan_only), and flush triggers.
+#
+# Install location: /usr/bin/qmanager_cm_uploader
+# Dependencies:     /usr/lib/qmanager/qlog.sh
+#                   /usr/lib/qmanager/cellmapper_db.sh
+#                   /usr/lib/qmanager/cellmapper_uci.sh
+#                   sqlite3, curl, jq, gzip (OpenWRT packages)
+# =============================================================================
+
+# --- Constants ----------------------------------------------------------------
+CM_UPLOADER_VERSION="2.0.0"
+UPLOADER_STATE_FILE="/tmp/qmanager_cm_uploader.json"
+UPLOADER_PID_FILE="/var/run/qmanager_cm_uploader.pid"
+CM_HASH_FILE="/overlay/cellmapper/hash"
+RELOAD_FLAG="/tmp/qmanager_cellmapper_reload"
+FLUSH_FLAG="/tmp/qmanager_cm_flush"
+CM_UPLOAD_URL="https://upload.cellmapper.net/v6/upload"
+CM_USER_AGENT="Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 CM Android/5.6.5"
+CM_CONTENT_TYPE="application/x-www-form-urlencoded; charset=UTF-8; charset=utf-8"
+CM_MIN_BATCH=5
+
+# --- Library Sources ----------------------------------------------------------
+# shellcheck disable=SC1091
+. /usr/lib/qmanager/qlog.sh 2>/dev/null || {
+    qlog_init()  { :; }
+    qlog_debug() { :; }
+    qlog_info()  { logger -t qm_cm_uploader "$1" 2>/dev/null; }
+    qlog_warn()  { logger -t qm_cm_uploader "WARN: $1" 2>/dev/null; }
+    qlog_error() { logger -t qm_cm_uploader "ERROR: $1" 2>/dev/null; }
+}
+
+# shellcheck disable=SC1091
+. /usr/lib/qmanager/cellmapper_db.sh 2>/dev/null || {
+    qlog_error "FATAL: cellmapper_db.sh not found — cannot continue"
+    exit 1
+}
+
+# shellcheck disable=SC1091
+. /usr/lib/qmanager/cellmapper_uci.sh 2>/dev/null || {
+    qlog_error "FATAL: cellmapper_uci.sh not found — cannot continue"
+    exit 1
+}
+
+# Shared error ring buffer (writes to /tmp/cellmapper/errors/ring.json so
+# uploader errors show up in the dashboard error log card alongside
+# collector errors). Optional — if errors.sh is missing for any reason
+# we fall back to a no-op so uploads still work.
+# shellcheck disable=SC1091
+. /usr/lib/qmanager/cellmapper/errors.sh 2>/dev/null || {
+    cm_error_record() { :; }
+    cm_error_ring_get() { printf '[]'; }
+}
+
+qlog_init "cm_uploader"
+
+# --- Global Session State -----------------------------------------------------
+# These survive across loop iterations and are written to the state file.
+_cm_shutdown=0
+_cm_sleep_pid=0
+_cm_uploads_session=0
+_cm_points_session=0
+_cm_consecutive_failures=0
+_cm_needs_reauth=0
+_cm_backoff_server_sec=0      # current server-error backoff value (seconds)
+_cm_backoff_ratelimit_sec=0   # current rate-limit backoff value (seconds)
+_cm_backoff_until=0           # Unix timestamp: do not attempt upload before this
+_cm_last_upload_ts=0
+_cm_last_upload_result="none"
+_cm_last_batch_size=0
+_cm_last_latency_ms=0
+_cm_last_error=""
+
+# Output variables set by upload functions (avoids subshell loss of state).
+_upload_http_code=""
+_upload_error_msg=""
+_upload_size_bytes=0
+_upload_latency_ms=0
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+# --- _get_ms ------------------------------------------------------------------
+# Returns current time in milliseconds. BusyBox date does not support %N so
+# we detect that and fall back to second-resolution (×1000).
+_get_ms() {
+    local ts
+    ts=$(date +%s%N 2>/dev/null)
+    case "$ts" in
+        *N*|"")
+            # BusyBox: %N not supported — second precision only
+            printf '%d' "$(( $(date +%s) * 1000 ))"
+            ;;
+        *)
+            # GNU date: nanoseconds present — trim to 13 digits (ms)
+            printf '%s' "$ts" | cut -c1-13
+            ;;
+    esac
+}
+
+# --- _cm_write_state ----------------------------------------------------------
+# Writes the uploader state JSON to UPLOADER_STATE_FILE.
+# Args: $1 = state string (running | backoff | needs_reauth | stopped)
+_cm_write_state() {
+    local state_name="${1:-running}"
+    local backoff_val needs_reauth_val last_error_arg
+
+    # JSON: backoff_until is an integer or null
+    if [ "$_cm_backoff_until" -gt 0 ] 2>/dev/null; then
+        backoff_val="$_cm_backoff_until"
+    else
+        backoff_val="null"
+    fi
+
+    # JSON: needs_reauth is a boolean
+    if [ "$_cm_needs_reauth" = "1" ]; then
+        needs_reauth_val="true"
+    else
+        needs_reauth_val="false"
+    fi
+
+    # Build last_error arg: jq --arg handles all escaping safely.
+    if [ -n "$_cm_last_error" ]; then
+        last_error_arg="--arg last_error $_cm_last_error"
+    else
+        last_error_arg=""
+    fi
+
+    jq -n \
+        --arg     state              "$state_name" \
+        --argjson last_upload_ts     "${_cm_last_upload_ts:-0}" \
+        --arg     last_upload_result "${_cm_last_upload_result:-}" \
+        --argjson last_batch_size    "${_cm_last_batch_size:-0}" \
+        --argjson last_latency_ms    "${_cm_last_latency_ms:-0}" \
+        --argjson uploads            "${_cm_uploads_session:-0}" \
+        --argjson points             "${_cm_points_session:-0}" \
+        --argjson failures           "${_cm_consecutive_failures:-0}" \
+        --argjson backoff_until      "$backoff_val" \
+        --argjson needs_reauth       "$needs_reauth_val" \
+        '{
+            state:                       $state,
+            last_upload_ts:              $last_upload_ts,
+            last_upload_result:          $last_upload_result,
+            last_batch_size:             $last_batch_size,
+            last_latency_ms:             $last_latency_ms,
+            uploads_this_session:        $uploads,
+            points_uploaded_this_session: $points,
+            consecutive_failures:        $failures,
+            backoff_until:               $backoff_until,
+            needs_reauth:                $needs_reauth,
+            last_error:                  null
+        }' | {
+            if [ -n "$_cm_last_error" ]; then
+                jq --arg e "$_cm_last_error" '.last_error = $e'
+            else
+                cat
+            fi
+        } > "$UPLOADER_STATE_FILE" 2>/dev/null
+}
+
+# --- _cm_cleanup --------------------------------------------------------------
+# Signal handler for SIGTERM / SIGINT. Writes stopped state, removes PID file
+# and any temp files, then exits cleanly.
+_cm_cleanup() {
+    _cm_shutdown=1
+    # Wake any sleeping background process
+    [ "$_cm_sleep_pid" -gt 0 ] && kill "$_cm_sleep_pid" 2>/dev/null
+    qlog_info "Uploader shutting down (PID $$)"
+    _cm_write_state "stopped"
+    rm -f "$UPLOADER_PID_FILE"
+    # Best-effort cleanup of temp files for this PID
+    rm -f "/tmp/cm_batch_$$.txt" "/tmp/cm_resp_$$.txt" \
+          "/tmp/cm_upload_$$.gz"  "/tmp/cm_custom_body_$$.dat" \
+          "/tmp/cm_custom_resp_$$.txt"
+    exit 0
+}
+
+trap '_cm_cleanup' TERM INT
+
+# --- _cm_is_cellular ----------------------------------------------------------
+# Returns 0 if the default route uses a cellular interface (rmnet/wwan/usb0).
+_cm_is_cellular() {
+    local route
+    route=$(ip route show default 2>/dev/null)
+    printf '%s' "$route" | grep -q "rmnet" && return 0
+    printf '%s' "$route" | grep -q "wwan"  && return 0
+    printf '%s' "$route" | grep -q "usb0"  && return 0
+    return 1
+}
+
+# --- Backoff Helpers ----------------------------------------------------------
+
+# Server-error backoff (5xx / network): base 5s, max 300s
+_cm_apply_server_backoff() {
+    if [ "$_cm_backoff_server_sec" -eq 0 ]; then
+        _cm_backoff_server_sec=5
+    else
+        _cm_backoff_server_sec=$(( _cm_backoff_server_sec * 2 ))
+        [ "$_cm_backoff_server_sec" -gt 300 ] && _cm_backoff_server_sec=300
+    fi
+    _cm_backoff_until=$(( $(date +%s) + _cm_backoff_server_sec ))
+    qlog_warn "Server error backoff: ${_cm_backoff_server_sec}s"
+}
+
+# Rate-limit backoff (HTTP 429): base 60s, max 3600s
+_cm_apply_ratelimit_backoff() {
+    if [ "$_cm_backoff_ratelimit_sec" -eq 0 ]; then
+        _cm_backoff_ratelimit_sec=60
+    else
+        _cm_backoff_ratelimit_sec=$(( _cm_backoff_ratelimit_sec * 2 ))
+        [ "$_cm_backoff_ratelimit_sec" -gt 3600 ] && _cm_backoff_ratelimit_sec=3600
+    fi
+    _cm_backoff_until=$(( $(date +%s) + _cm_backoff_ratelimit_sec ))
+    qlog_warn "Rate-limit backoff: ${_cm_backoff_ratelimit_sec}s"
+}
+
+# Reset all backoff state after a successful upload
+_cm_reset_backoffs() {
+    _cm_backoff_server_sec=0
+    _cm_backoff_ratelimit_sec=0
+    _cm_backoff_until=0
+    _cm_consecutive_failures=0
+}
+
+# --- _cm_archive_record -------------------------------------------------------
+# Inserts one row into the archive table.
+# Args: uploaded_at batch_id point_count endpoint size_bytes latency_ms status error_msg
+_cm_archive_record() {
+    local uploaded_at="$1" batch_id="$2"   point_count="$3" endpoint="$4"
+    local size_bytes="$5"  latency_ms="$6" status="$7"      error_msg="$8"
+    local esc_batch esc_endpoint error_sql esc_error
+
+    esc_batch=$(printf '%s' "$batch_id" | sed "s/'/''/g")
+    esc_endpoint=$(printf '%s' "$endpoint" | sed "s/'/''/g")
+
+    if [ -n "$error_msg" ]; then
+        esc_error=$(printf '%s' "$error_msg" | sed "s/'/''/g")
+        error_sql="'$esc_error'"
+    else
+        error_sql="NULL"
+    fi
+
+    cm_db_exec "INSERT INTO archive
+        (uploaded_at, batch_id, point_count, endpoint, size_bytes, latency_ms, status, error_msg)
+        VALUES ($uploaded_at, '$esc_batch', $point_count, '$esc_endpoint',
+                $size_bytes, $latency_ms, '$status', $error_sql);" 2>/dev/null
+}
+
+# =============================================================================
+# Upload Functions
+# =============================================================================
+
+# --- cm_upload_cellmapper -----------------------------------------------------
+# Appends the auth hash, GZIP-compresses the batch, and POSTs to CellMapper.
+#
+# Args:    $1 = batch_json  (JSON array WITHOUT hash element)
+# Sets:    _upload_http_code  _upload_error_msg  _upload_size_bytes  _upload_latency_ms
+# Returns: 0=success  1=server/network  2=auth  3=rate-limit  4=payload  5=config
+cm_upload_cellmapper() {
+    local batch_json="$1"
+    _upload_http_code="" ; _upload_error_msg="" ; _upload_size_bytes=0 ; _upload_latency_ms=0
+
+    # Load auth hash — required for CellMapper
+    local hash
+    hash=$(cat "$CM_HASH_FILE" 2>/dev/null)
+    if [ -z "$hash" ]; then
+        qlog_error "No auth hash at $CM_HASH_FILE — cannot upload to CellMapper"
+        _upload_error_msg="Missing auth hash"
+        return 2
+    fi
+
+    # Append {"hash":"<value>"} as the final element of the JSON array
+    local payload
+    payload=$(printf '%s' "$batch_json" | \
+              jq -c --arg h "$hash" '. + [{"hash": $h}]' 2>/dev/null)
+    if [ -z "$payload" ]; then
+        qlog_error "jq failed to build CellMapper payload"
+        _upload_error_msg="jq payload construction failed"
+        return 4
+    fi
+
+    # GZIP compress to a temp file
+    local tmp_gz resp_file
+    tmp_gz="/tmp/cm_upload_$$.gz"
+    resp_file="/tmp/cm_resp_$$.txt"
+    printf '%s' "$payload" | gzip > "$tmp_gz" 2>/dev/null
+    _upload_size_bytes=$(wc -c < "$tmp_gz" 2>/dev/null | tr -d ' ')
+
+    # POST — capture body in file, HTTP code on stdout
+    local t_start t_end http_code
+    t_start=$(_get_ms)
+
+    http_code=$(curl -s -w "%{http_code}" \
+        -X POST "$CM_UPLOAD_URL" \
+        -H "Content-Type: $CM_CONTENT_TYPE" \
+        -H "Content-Encoding: gzip" \
+        -H "User-Agent: $CM_USER_AGENT" \
+        --data-binary @"$tmp_gz" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        -o "$resp_file" \
+        2>/dev/null)
+
+    t_end=$(_get_ms)
+    _upload_latency_ms=$(( t_end - t_start ))
+    _upload_http_code="$http_code"
+
+    local body
+    body=$(cat "$resp_file" 2>/dev/null)
+    rm -f "$tmp_gz" "$resp_file"
+
+    qlog_debug "CellMapper HTTP $http_code — ${_upload_latency_ms}ms ${_upload_size_bytes}B"
+
+    # Interpret response
+    case "$http_code" in
+        200)
+            local cm_status cm_error
+            cm_status=$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null)
+            cm_error=$(printf '%s' "$body" | jq -r '.error // empty' 2>/dev/null)
+            if [ "$cm_status" = "OK" ]; then
+                qlog_info "CellMapper upload OK — HTTP 200, ${_upload_latency_ms}ms"
+                return 0
+            else
+                _upload_error_msg="${cm_error:-Response status was not OK}"
+                qlog_warn "CellMapper app error: $_upload_error_msg"
+                return 4
+            fi
+            ;;
+        401|403)
+            _upload_error_msg="Auth rejected (HTTP $http_code)"
+            qlog_error "CellMapper auth error: HTTP $http_code"
+            return 2
+            ;;
+        429)
+            _upload_error_msg="Rate limited (HTTP 429)"
+            qlog_warn "CellMapper rate limit hit"
+            return 3
+            ;;
+        5*)
+            _upload_error_msg="Server error (HTTP $http_code)"
+            qlog_warn "CellMapper server error: HTTP $http_code"
+            return 1
+            ;;
+        000|"")
+            _upload_error_msg="Connection failed (curl timeout or DNS failure)"
+            qlog_warn "CellMapper network error: curl could not connect"
+            return 1
+            ;;
+        *)
+            _upload_error_msg="Unexpected HTTP $http_code"
+            qlog_warn "CellMapper unexpected response: HTTP $http_code"
+            return 1
+            ;;
+    esac
+}
+
+# --- cm_upload_custom ---------------------------------------------------------
+# POSTs to a user-configured endpoint, with optional auth header, format, and
+# GZIP compression.
+#
+# Args:    $1 = batch_json  (JSON array WITHOUT hash element)
+# Returns: same exit codes as cm_upload_cellmapper
+cm_upload_custom() {
+    local batch_json="$1"
+    _upload_http_code="" ; _upload_error_msg="" ; _upload_size_bytes=0 ; _upload_latency_ms=0
+
+    local url auth format do_gzip
+    url=$(cm_uci_get custom_url "")
+    auth=$(cm_uci_get custom_auth "")
+    format=$(cm_uci_get custom_format "cellmapper_json")
+    do_gzip=$(cm_uci_get custom_gzip "1")
+
+    if [ -z "$url" ]; then
+        qlog_error "Custom upload: custom_url is not configured"
+        _upload_error_msg="No custom URL configured"
+        return 5
+    fi
+
+    # Build payload based on format
+    local payload content_type
+    if [ "$format" = "cellmapper_json" ]; then
+        # Same format as CellMapper: array with hash appended as last element.
+        # Useful for aggregator routers that forward to CellMapper.
+        local hash
+        hash=$(cat "$CM_HASH_FILE" 2>/dev/null)
+        payload=$(printf '%s' "$batch_json" | \
+                  jq -c --arg h "${hash:-none}" '. + [{"hash": $h}]' 2>/dev/null)
+        content_type="$CM_CONTENT_TYPE"
+    else
+        # raw_json: plain unmodified measurement array
+        payload="$batch_json"
+        content_type="application/json"
+    fi
+
+    if [ -z "$payload" ]; then
+        qlog_error "Custom upload: jq payload construction failed"
+        _upload_error_msg="jq payload construction failed"
+        return 4
+    fi
+
+    # Prepare body file (optionally GZIP-compressed)
+    local body_file resp_file
+    body_file="/tmp/cm_custom_body_$$.dat"
+    resp_file="/tmp/cm_custom_resp_$$.txt"
+
+    if [ "$do_gzip" = "1" ]; then
+        printf '%s' "$payload" | gzip > "$body_file" 2>/dev/null
+    else
+        printf '%s' "$payload" > "$body_file"
+    fi
+    _upload_size_bytes=$(wc -c < "$body_file" 2>/dev/null | tr -d ' ')
+
+    # POST — explicit if/else for header combinations to avoid eval with
+    # potentially untrusted auth/url values.
+    local t_start t_end http_code
+    t_start=$(_get_ms)
+
+    if [ -n "$auth" ] && [ "$do_gzip" = "1" ]; then
+        http_code=$(curl -s -w "%{http_code}" \
+            -X POST "$url" \
+            -H "Content-Type: $content_type" \
+            -H "Content-Encoding: gzip" \
+            -H "Authorization: $auth" \
+            --data-binary @"$body_file" \
+            --connect-timeout 10 --max-time 30 \
+            -o "$resp_file" 2>/dev/null)
+    elif [ -n "$auth" ]; then
+        http_code=$(curl -s -w "%{http_code}" \
+            -X POST "$url" \
+            -H "Content-Type: $content_type" \
+            -H "Authorization: $auth" \
+            --data-binary @"$body_file" \
+            --connect-timeout 10 --max-time 30 \
+            -o "$resp_file" 2>/dev/null)
+    elif [ "$do_gzip" = "1" ]; then
+        http_code=$(curl -s -w "%{http_code}" \
+            -X POST "$url" \
+            -H "Content-Type: $content_type" \
+            -H "Content-Encoding: gzip" \
+            --data-binary @"$body_file" \
+            --connect-timeout 10 --max-time 30 \
+            -o "$resp_file" 2>/dev/null)
+    else
+        http_code=$(curl -s -w "%{http_code}" \
+            -X POST "$url" \
+            -H "Content-Type: $content_type" \
+            --data-binary @"$body_file" \
+            --connect-timeout 10 --max-time 30 \
+            -o "$resp_file" 2>/dev/null)
+    fi
+
+    t_end=$(_get_ms)
+    _upload_latency_ms=$(( t_end - t_start ))
+    _upload_http_code="$http_code"
+
+    rm -f "$body_file"
+    local body
+    body=$(cat "$resp_file" 2>/dev/null)
+    rm -f "$resp_file"
+
+    qlog_debug "Custom upload HTTP $http_code to $url — ${_upload_latency_ms}ms ${_upload_size_bytes}B"
+
+    # Accept any 2xx as success for custom endpoints
+    case "$http_code" in
+        2*)
+            qlog_info "Custom upload OK — HTTP $http_code, ${_upload_latency_ms}ms"
+            return 0
+            ;;
+        401|403)
+            _upload_error_msg="Auth rejected (HTTP $http_code)"
+            qlog_error "Custom upload auth error: HTTP $http_code"
+            return 2
+            ;;
+        429)
+            _upload_error_msg="Rate limited (HTTP 429)"
+            qlog_warn "Custom upload rate limited"
+            return 3
+            ;;
+        5*)
+            _upload_error_msg="Server error (HTTP $http_code)"
+            qlog_warn "Custom upload server error: HTTP $http_code"
+            return 1
+            ;;
+        000|"")
+            _upload_error_msg="Connection failed (curl timeout or DNS failure)"
+            qlog_warn "Custom upload network error"
+            return 1
+            ;;
+        *)
+            _upload_error_msg="Unexpected HTTP $http_code"
+            qlog_warn "Custom upload unexpected: HTTP $http_code"
+            return 1
+            ;;
+    esac
+}
+
+# =============================================================================
+# Upload Cycle
+# =============================================================================
+
+# --- _cm_do_upload_cycle ------------------------------------------------------
+# Reads UCI config, checks policy, builds a batch from the pending queue,
+# uploads it, then updates the archive and session state.
+#
+# Returns: 0=success  1=upload_failed  2=auth  3=rate-limit
+#          4=payload_dropped  5=skipped (policy/count)
+_cm_do_upload_cycle() {
+    local upload_target batch_size upload_policy retry_enabled
+    upload_target=$(cm_uci_get upload_target "cellmapper")
+    batch_size=$(cm_uci_get batch_size "50")
+    upload_policy=$(cm_uci_get upload_policy "always")
+    retry_enabled=$(cm_uci_get retry_enabled "1")
+
+    # c/d. Check upload policy. Only "always" and "lan_only" are supported;
+    # any other value (including legacy "scheduled") is treated as "always".
+    case "$upload_policy" in
+        lan_only)
+            if _cm_is_cellular; then
+                qlog_debug "LAN-only policy: skipping upload (on cellular)"
+                return 5
+            fi
+            ;;
+        always|*)
+            : # proceed
+            ;;
+    esac
+
+    # e. Check pending row count — CellMapper requires at least 5 per batch
+    local pending_count
+    pending_count=$(cm_db_count_pending 2>/dev/null)
+    pending_count="${pending_count:-0}"
+
+    if [ "$pending_count" -lt "$CM_MIN_BATCH" ]; then
+        qlog_debug "Pending: $pending_count rows (< $CM_MIN_BATCH minimum) — skipping"
+        return 5
+    fi
+
+    qlog_info "Upload cycle: $pending_count pending, batch_size=$batch_size, target=$upload_target"
+
+    # f. Read batch from SQLite into a temp file — avoids subshell variable loss
+    #    that would occur with a pipe-to-while loop.
+    local batch_file
+    batch_file="/tmp/cm_batch_$$.txt"
+    cm_db_exec "SELECT id, payload FROM pending ORDER BY captured_at ASC LIMIT $batch_size;" \
+        > "$batch_file" 2>/dev/null
+
+    # Parse rows with awk: split on the FIRST pipe (payload JSON may contain '|')
+    # Output three tagged lines: JSON:[...], IDS:id1,id2,..., COUNT:n
+    local awk_out batch_json batch_ids batch_count
+    awk_out=$(awk '{
+        pipe_pos = index($0, "|")
+        if (pipe_pos > 0) {
+            id      = substr($0, 1, pipe_pos - 1)
+            payload = substr($0, pipe_pos + 1)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
+            if (id != "" && length(payload) > 2) {
+                if (count > 0) { json = json ","; ids = ids "," }
+                json = json payload
+                ids  = ids id
+                count++
+            }
+        }
+    } END {
+        print "JSON:[" json "]"
+        print "IDS:"   ids
+        print "COUNT:" count
+    }' "$batch_file" 2>/dev/null)
+
+    rm -f "$batch_file"
+
+    batch_json=$(printf '%s\n' "$awk_out" | grep '^JSON:'  | cut -c6-)
+    batch_ids=$(printf '%s\n'  "$awk_out" | grep '^IDS:'   | cut -c5-)
+    batch_count=$(printf '%s\n' "$awk_out" | grep '^COUNT:' | cut -c7-)
+    batch_count="${batch_count:-0}"
+
+    if [ -z "$batch_ids" ] || [ "$batch_count" -lt "$CM_MIN_BATCH" ]; then
+        qlog_warn "Batch parsing returned only $batch_count rows — skipping"
+        return 5
+    fi
+
+    qlog_info "Batch ready: $batch_count measurements"
+
+    # Unique batch identifier for the archive table
+    local batch_id
+    batch_id="$(date +%s)_$$"
+
+    # g. Upload based on configured target
+    local upload_rc endpoint_label
+    case "$upload_target" in
+        custom)
+            endpoint_label=$(cm_uci_get custom_url "custom")
+            cm_upload_custom "$batch_json"
+            upload_rc=$?
+            ;;
+        cellmapper|*)
+            endpoint_label="$CM_UPLOAD_URL"
+            cm_upload_cellmapper "$batch_json"
+            upload_rc=$?
+            ;;
+    esac
+
+    local now
+    now=$(date +%s)
+
+    # Always update latency from most recent attempt (success or failure)
+    _cm_last_latency_ms="$_upload_latency_ms"
+
+    # h. On success: delete rows, archive, update session counters
+    if [ "$upload_rc" -eq 0 ]; then
+        qlog_info "Upload OK: $batch_count points, ${_upload_latency_ms}ms"
+
+        cm_db_exec "DELETE FROM pending WHERE id IN ($batch_ids);" 2>/dev/null
+
+        _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+            "$_upload_size_bytes" "$_upload_latency_ms" "ok" ""
+
+        _cm_last_upload_ts="$now"
+        _cm_last_upload_result="ok"
+        _cm_last_batch_size="$batch_count"
+        _cm_last_error=""
+        _cm_uploads_session=$(( _cm_uploads_session + 1 ))
+        _cm_points_session=$(( _cm_points_session + batch_count ))
+        _cm_reset_backoffs
+        _cm_write_state "running"
+        return 0
+    fi
+
+    # i. On failure: classify error and apply policy
+    _cm_consecutive_failures=$(( _cm_consecutive_failures + 1 ))
+    _cm_last_upload_result="error"
+    _cm_last_error="${_upload_error_msg}"
+    qlog_warn "Upload failed (rc=$upload_rc): ${_upload_error_msg:-unknown}"
+
+    # Push the failure into the shared error ring so the UI's error log
+    # card surfaces uploader problems alongside collector problems.
+    cm_error_record "uploader" "${_upload_error_msg:-rc=$upload_rc}"
+
+    case "$upload_rc" in
+        2)  # Auth error
+            qlog_error "Auth failure — setting needs_reauth; uploads paused until hash refreshed"
+            _cm_needs_reauth=1
+            _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+                "$_upload_size_bytes" "$_upload_latency_ms" "error" "${_upload_error_msg}"
+            _cm_write_state "needs_reauth"
+            return 2
+            ;;
+        3)  # Rate limit
+            _cm_apply_ratelimit_backoff
+            _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+                "$_upload_size_bytes" "$_upload_latency_ms" "error" "${_upload_error_msg}"
+            _cm_write_state "backoff"
+            return 3
+            ;;
+        4)  # Payload error — drop batch, do NOT retry
+            qlog_error "Payload error: dropping batch $batch_id ($batch_count rows)"
+            cm_db_exec "DELETE FROM pending WHERE id IN ($batch_ids);" 2>/dev/null
+            _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+                "$_upload_size_bytes" "$_upload_latency_ms" "error" "${_upload_error_msg}"
+            _cm_write_state "running"
+            return 4
+            ;;
+        5)  # Config error — skip (nothing to archive, no rows touched)
+            _cm_write_state "running"
+            return 5
+            ;;
+        1|*)  # Server / network error
+            if [ "$retry_enabled" = "1" ]; then
+                _cm_apply_server_backoff
+                _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+                    "$_upload_size_bytes" "$_upload_latency_ms" "error" "${_upload_error_msg}"
+                _cm_write_state "backoff"
+            else
+                qlog_warn "Retry disabled — discarding failed batch"
+                _cm_archive_record "$now" "$batch_id" "$batch_count" "$endpoint_label" \
+                    "$_upload_size_bytes" "$_upload_latency_ms" "error" "${_upload_error_msg}"
+                _cm_write_state "running"
+            fi
+            return 1
+            ;;
+    esac
+}
+
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
+# Write PID file
+printf '%d\n' "$$" > "$UPLOADER_PID_FILE"
+
+qlog_info "qmanager_cm_uploader v$CM_UPLOADER_VERSION starting (PID $$)"
+
+# Ensure UCI config section exists with defaults
+ensure_cellmapper_config
+
+# Ensure SQLite schema is initialized
+cm_db_init
+if [ $? -ne 0 ]; then
+    qlog_error "FATAL: cm_db_init failed — cannot continue"
+    exit 1
+fi
+
+_cm_write_state "running"
+qlog_info "Uploader initialized — entering main loop"
+
+# =============================================================================
+# Main Loop
+# =============================================================================
+while [ "$_cm_shutdown" -eq 0 ]; do
+
+    # a. Check for UCI config reload signal
+    if [ -f "$RELOAD_FLAG" ]; then
+        qlog_info "Reload flag detected — re-reading config"
+        rm -f "$RELOAD_FLAG"
+        ensure_cellmapper_config
+    fi
+
+    # b. Check for flush trigger — upload now regardless of timing/backoff
+    flush_requested=0
+    if [ -f "$FLUSH_FLAG" ]; then
+        qlog_info "Flush trigger detected — running immediate upload cycle"
+        rm -f "$FLUSH_FLAG"
+        flush_requested=1
+    fi
+
+    # Check if the feature is still enabled (may have been toggled)
+    enabled=$(cm_uci_get enabled "0")
+    if [ "$enabled" != "1" ]; then
+        qlog_info "CellMapper disabled in UCI — sleeping 60s"
+        sleep 60 &
+        _cm_sleep_pid=$!
+        wait "$_cm_sleep_pid" 2>/dev/null
+        _cm_sleep_pid=0
+        continue
+    fi
+
+    # Check auth state — if reauth needed, wait for hash to be refreshed
+    if [ "$_cm_needs_reauth" = "1" ]; then
+        if [ -f "$CM_HASH_FILE" ] && [ -s "$CM_HASH_FILE" ]; then
+            qlog_info "Hash file found — clearing needs_reauth and resuming uploads"
+            _cm_needs_reauth=0
+        else
+            qlog_warn "Waiting for auth hash refresh ($CM_HASH_FILE). Sleeping 60s."
+            _cm_write_state "needs_reauth"
+            sleep 60 &
+            _cm_sleep_pid=$!
+            wait "$_cm_sleep_pid" 2>/dev/null
+            _cm_sleep_pid=0
+            continue
+        fi
+    fi
+
+    # Check if we are in a backoff window (skip unless flush was requested)
+    now_ts=$(date +%s)
+    if [ "$flush_requested" -eq 0 ] && [ "$_cm_backoff_until" -gt "$now_ts" ]; then
+        remaining=$(( _cm_backoff_until - now_ts ))
+        qlog_debug "In backoff: ${remaining}s remaining"
+        # Sleep up to 60 seconds at a time so we wake up promptly when backoff expires
+        # and also respond to shutdown/flush signals.
+        sleep_chunk=60
+        [ "$remaining" -lt "$sleep_chunk" ] && sleep_chunk="$remaining"
+        [ "$sleep_chunk" -lt 1 ] && sleep_chunk=1
+        sleep "$sleep_chunk" &
+        _cm_sleep_pid=$!
+        wait "$_cm_sleep_pid" 2>/dev/null
+        _cm_sleep_pid=0
+        continue
+    fi
+
+    # Run the upload cycle
+    _cm_do_upload_cycle
+    cycle_rc=$?
+
+    # j. Update state file
+    if [ "$cycle_rc" -eq 2 ]; then
+        _cm_write_state "needs_reauth"
+    elif [ "$_cm_backoff_until" -gt "$(date +%s)" ]; then
+        _cm_write_state "backoff"
+    else
+        _cm_write_state "running"
+    fi
+
+    # k. Sleep for upload_interval (default 60s), interruptible by SIGTERM or flush
+    upload_interval=$(cm_uci_get upload_interval "60")
+    # Validate: must be a positive integer
+    case "$upload_interval" in
+        ''|*[!0-9]*) upload_interval=60 ;;
+    esac
+    [ "$upload_interval" -lt 10 ] && upload_interval=10
+
+    sleep "$upload_interval" &
+    _cm_sleep_pid=$!
+    wait "$_cm_sleep_pid" 2>/dev/null
+    _cm_sleep_pid=0
+
+done
+
+# Should not reach here under normal operation — trap handles exit.
+_cm_cleanup

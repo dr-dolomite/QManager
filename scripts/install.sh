@@ -74,8 +74,8 @@ SRC_DEPS="$INSTALL_DIR/dependencies"
 # applets at compile time, so we can't assume BusyBox `timeout` is present.
 # qcmd wraps atcli_smd11 with `timeout` as a last-ditch safety net, and the
 # installer's run_capture_timeout helper uses it too. Cheap guarantee.
-REQUIRED_PACKAGES="jq curl coreutils-timeout websocat ethtool"
-OPTIONAL_PACKAGES="msmtp ookla-speedtest"
+REQUIRED_PACKAGES="jq curl coreutils-timeout websocat ethtool sqlite3-cli"
+OPTIONAL_PACKAGES="socat msmtp ookla-speedtest"
 # Removed before install to avoid /dev/smd11 conflicts and sms_tool collision
 CONFLICT_PACKAGES="sms-tool socat-at-bridge socat"
 
@@ -552,6 +552,29 @@ remove_conflicts() {
     return 0
 }
 
+# --- Critical Runtime Dependencies -------------------------------------------
+# These are installed even during OTA updates (--skip-packages) because the
+# relay daemon cannot function without them on devices where BusyBox nc has
+# no listen capability. Best-effort: failures are non-fatal.
+install_critical_deps() {
+    # socat is required for the NMEA UDP relay. BusyBox nc on many Quectel
+    # sleds only supports connect mode (no -l flag), making socat the only
+    # viable UDP listener.
+    if ! command -v socat >/dev/null 2>&1; then
+        info "Installing critical dependency: socat"
+        if command -v opkg >/dev/null 2>&1; then
+            opkg update >>"$LOG_FILE" 2>&1 || true
+            if opkg install socat >>"$LOG_FILE" 2>&1; then
+                info "socat installed successfully"
+            else
+                warn "Failed to install socat — NMEA relay may not work on this device"
+            fi
+        else
+            warn "opkg not available — cannot install socat"
+        fi
+    fi
+}
+
 install_packages() {
     step "Installing required packages"
 
@@ -575,6 +598,7 @@ install_packages() {
     info "Optional packages available:"
     for pkg in $OPTIONAL_PACKAGES; do
         case "$pkg" in
+            socat)           printf "    %-18s — CellMapper NMEA relay (recommended)\n" "$pkg" ;;
             msmtp)           printf "    %-18s — email alerts\n" "$pkg" ;;
             ethtool)         printf "    %-18s — ethernet link speed control\n" "$pkg" ;;
             ookla-speedtest) printf "    %-18s — speed test\n" "$pkg" ;;
@@ -842,6 +866,16 @@ install_frontend() {
 
     cp -r "$SRC_FRONTEND"/. "$WWW_ROOT"/ || die "Failed to copy frontend to $WWW_ROOT"
 
+    # uhttpd requires world-readable files; fix in case tarball has restrictive perms.
+    # Order matters: chmod everything 644 first, then restore exec bit on EVERYTHING
+    # under cgi-bin (LuCI's main entry is /www/cgi-bin/luci — a Lua script with no
+    # extension — and uhttpd refuses to exec a 644 CGI). cm.1 regression: prior
+    # build only restored *.sh and broke LuCI access.
+    find "$WWW_ROOT" -type d -exec chmod 755 {} \;
+    find "$WWW_ROOT" -type f -exec chmod 644 {} \;
+    # All files under cgi-bin must be executable (LuCI binary, .sh, .lua, etc.)
+    [ -d "$WWW_ROOT/cgi-bin" ] && find "$WWW_ROOT/cgi-bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
+
     local n
     n=$(count_files "$SRC_FRONTEND")
     info "Frontend installed ($n files)"
@@ -857,6 +891,17 @@ install_backend() {
         # Non-.sh files in the lib dir should be 644
         find "$LIB_DIR" -maxdepth 1 -type f ! -name "*.sh" -exec chmod 644 {} \; 2>/dev/null
         info "Libraries: $lib_count files -> $LIB_DIR"
+    fi
+
+    # --- Cellmapper plugin subdirectories (recursive) ---
+    # install_dir_flat only copies top-level files; adapters/ and gps/ plugin
+    # dirs must be deployed separately with install_tree so the collector can
+    # source them at runtime.
+    if [ -d "$SRC_SCRIPTS/usr/lib/qmanager/cellmapper" ]; then
+        install_tree "$SRC_SCRIPTS/usr/lib/qmanager/cellmapper" "$LIB_DIR/cellmapper"
+        local cm_count
+        cm_count=$(find "$LIB_DIR/cellmapper" -name "*.sh" -type f 2>/dev/null | wc -l | tr -d ' ')
+        info "Cellmapper plugins: $cm_count scripts -> $LIB_DIR/cellmapper"
     fi
 
     # --- Daemons and utilities (flat) ---
@@ -1494,6 +1539,9 @@ main() {
     if [ "$DO_PACKAGES" = "1" ]; then
         install_packages
     fi
+
+    # Always ensure critical runtime deps are present (even during OTA)
+    install_critical_deps
 
     stop_services
 
