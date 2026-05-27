@@ -5,6 +5,11 @@ These frozen snapshots are diffed against in Task 17 (Phase 1 verification) and 
 verification) to prove the new native QMI-based stack (`qmsms` + awk PDU codec) produces
 functionally identical output to the old `sms_tool`-based pipeline.
 
+> **Directory layout:** Codec unit fixtures for PDU decoding and encoding live at
+> `tests/fixtures/sms/decode/` and `tests/fixtures/sms/encode/` (populated by Tasks 1+).
+> This `parity/` directory is reserved exclusively for end-to-end behavioral baselines — not
+> codec unit fixtures.
+
 ## Capture metadata
 
 - **Date captured:** 2026-05-28
@@ -38,3 +43,24 @@ DISTRIB_DESCRIPTION='RM551EGL00AAR02A01M8G_2025_9_25_iamromulan_basic_eth'
   by the CGI's `group_by(.sender + "|" + (.reference | tostring))` jq pipeline).
 
 - **`sms_tool` path on device:** `/usr/bin/sms_tool`
+
+## Diff guidance for Task 17 / Task 32
+
+The `.storage.used` and `.storage.total` fields in `baseline.cgi.json` will
+intentionally change from `0/0` to real values after the migration — the new
+native pipeline fixes the pre-existing parser bug. When running parity diffs,
+strip these fields first:
+
+    jq -S 'del(.storage)' baseline.cgi.json > /tmp/baseline.nostorage.json
+    jq -S 'del(.storage)' <new-cgi-output>    > /tmp/current.nostorage.json
+    diff /tmp/baseline.nostorage.json /tmp/current.nostorage.json
+
+Any remaining diff is a real regression and must be investigated before the
+phase tag advances.
+
+For `baseline.recv.json` (raw sms_tool output) vs the post-migration cache
+(`/tmp/qmanager_sms_inbox.json`), the .msg array shape should match
+byte-for-byte modulo field ordering. Diff with:
+
+    diff <(jq -S '.msg' baseline.recv.json) \
+         <(ssh modem 'jq -S ".msg" /tmp/qmanager_sms_inbox.json')
