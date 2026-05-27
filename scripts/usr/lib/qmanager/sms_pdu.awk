@@ -67,7 +67,7 @@ function pop(n,    out) {
 # Reads one line of hex from input, emits one JSON object (no trailing newline).
 function do_decode_one(    smsc_len, tpdu_first, mr, oa_len, ton, oa_digits,
                           pid, dcs, scts, udl, ud_hex,
-                          sender, ts, content, oa_bytes) {
+                          sender, ts, content, oa_bytes, udhi, mti) {
     # SMSC address — length octet + length bytes of address content
     smsc_len = hex2dec(pop(2))
     if (smsc_len > 0) pop(smsc_len * 2)   # skip SMSC bytes; we don't need them
