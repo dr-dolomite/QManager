@@ -1,8 +1,10 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # sms_pdu_test.sh — fixture-driven test runner for sms_pdu.awk
 # Runs from repo root. Compares awk decode output against expected JSON.
 
 set -eu
+command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required but not found in PATH" >&2; exit 2; }
+command -v awk >/dev/null 2>&1 || { echo "ERROR: awk is required but not found in PATH" >&2; exit 2; }
 AWK_FILE="scripts/usr/lib/qmanager/sms_pdu.awk"
 FIXTURE_ROOT="tests/fixtures/sms"
 
