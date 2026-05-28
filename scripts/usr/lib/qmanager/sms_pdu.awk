@@ -329,6 +329,11 @@ function decode_gsm7_address(h, ndigits,    abytes, n_septets) {
 }
 
 # Emit a Unicode code point (0..0x10FFFF) as a UTF-8 byte sequence (string).
+# Portability: sprintf("%c", N) for N in 128-255 must emit raw byte N (not a
+# locale-aware char). True under BusyBox awk in the C locale (OpenWRT has no
+# locale DB) and under GAWK on the dev host (verified via jq round-trip).
+# Re-confirmed against the live device in Task 11 parity.
+# Caller must ensure 0 <= cp <= 0x10FFFF.
 function emit_utf8_codepoint(cp,    b1, b2, b3, b4) {
     if (cp < 128) {
         return sprintf("%c", cp)
@@ -375,7 +380,15 @@ function ucs2_to_utf8(hex, udhl_bytes,
                 continue
             }
         }
-        out = out emit_utf8_codepoint(hi)
+        # Not part of a valid surrogate pair. Replace any lone/mispaired
+        # surrogate (0xD800-0xDFFF) with U+FFFD so output stays valid UTF-8 —
+        # decode_list (Task 5) pipes the whole inbox array through jq at once,
+        # and one invalid sequence would otherwise poison every message.
+        if (hi >= 55296 && hi <= 57343) {
+            out = out emit_utf8_codepoint(65533)   # U+FFFD replacement char
+        } else {
+            out = out emit_utf8_codepoint(hi)
+        }
         i++
     }
     return out
