@@ -330,7 +330,9 @@ function decode_gsm7_address(h, ndigits,    abytes, n_septets) {
 
 # Parse a UDH for concat-SMS IEs.
 # udh_hex: raw hex of the UDH IEs (excluding the leading UDHL byte).
-# Sets globals (cleared by do_decode_one before each call):
+# Sets globals (self-cleared at function entry; do_decode_one also zeroes
+# udh_found before the conditional call so non-UDH messages emit no stale
+# concat fields):
 #   udh_ref   — concat reference (0 = none found)
 #   udh_total — total parts
 #   udh_part  — this part number
@@ -338,7 +340,7 @@ function decode_gsm7_address(h, ndigits,    abytes, n_septets) {
 function parse_udh_concat(udh_hex,    pos, iei, iedl) {
     udh_ref = 0; udh_total = 0; udh_part = 0; udh_found = 0
     pos = 1
-    while (pos < length(udh_hex)) {
+    while (pos + 3 <= length(udh_hex)) {
         iei  = hex2dec(substr(udh_hex, pos, 2));     pos += 2
         iedl = hex2dec(substr(udh_hex, pos, 2));     pos += 2
         if (iei == 0 && iedl == 3) {
