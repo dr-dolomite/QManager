@@ -171,18 +171,19 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     #      content concatenated, all storage indexes collected for bulk delete
     messages=$(printf '%s' "$raw_msgs" | jq '
         [.[] | select(has("reference") | not) |
-            {indexes: [.index], sender, content, timestamp}
+            {indexes: [.index], sender, content, timestamp, status}
         ] as $singles |
         ([.[] | select(has("reference"))] |
             group_by(.sender + "|" + (.reference | tostring)) |
             [.[] | sort_by(.part) | {
                 indexes: [.[].index],
-                sender: .[0].sender,
+                sender:  .[0].sender,
                 content: ([.[].content] | join("")),
-                timestamp: .[0].timestamp
+                timestamp: ([.[].timestamp] | min),
+                status: (if any(.[]; .status == "unread") then "unread" else "read" end)
             }]
         ) as $merged |
-        ($singles + $merged) | sort_by(-.indexes[0])
+        ($singles + $merged) | sort_by(.timestamp) | reverse
     ' 2>/dev/null)
     [ -z "$messages" ] && messages="[]"
     printf '%s' "$messages" | jq empty 2>/dev/null || messages="[]"
