@@ -328,6 +328,59 @@ function decode_gsm7_address(h, ndigits,    abytes, n_septets) {
     return gsm7_unpack(h, n_septets, 0)
 }
 
+# Emit a Unicode code point (0..0x10FFFF) as a UTF-8 byte sequence (string).
+function emit_utf8_codepoint(cp,    b1, b2, b3, b4) {
+    if (cp < 128) {
+        return sprintf("%c", cp)
+    } else if (cp < 2048) {
+        b1 = 192 + int(cp / 64)
+        b2 = 128 + (cp % 64)
+        return sprintf("%c%c", b1, b2)
+    } else if (cp < 65536) {
+        b1 = 224 + int(cp / 4096)
+        b2 = 128 + int((cp / 64) % 64)
+        b3 = 128 + (cp % 64)
+        return sprintf("%c%c%c", b1, b2, b3)
+    } else {
+        b1 = 240 + int(cp / 262144)
+        b2 = 128 + int((cp / 4096) % 64)
+        b3 = 128 + int((cp / 64) % 64)
+        b4 = 128 + (cp % 64)
+        return sprintf("%c%c%c%c", b1, b2, b3, b4)
+    }
+}
+
+# Decode UCS-2 BE / UTF-16 BE hex to a UTF-8 string.
+# udhl_bytes: if non-zero, skip the first (udhl_bytes + 1) bytes of `hex`
+#             (UDHL byte itself + UDH IE bytes). UCS-2 is byte-aligned so
+#             no bitstream offset is needed.
+function ucs2_to_utf8(hex, udhl_bytes,
+                      i, n_chars, skip_chars, hi, lo, cp, out) {
+    if (udhl_bytes > 0) {
+        skip_chars = (udhl_bytes + 1) * 2
+        hex = substr(hex, skip_chars + 1)
+    }
+    n_chars = int(length(hex) / 4)
+    out = ""
+    i = 0
+    while (i < n_chars) {
+        hi = hex2dec(substr(hex, i * 4 + 1, 4))
+        if (hi >= 55296 && hi <= 56319 && i + 1 < n_chars) {
+            # High surrogate; combine with the next low surrogate.
+            lo = hex2dec(substr(hex, (i + 1) * 4 + 1, 4))
+            if (lo >= 56320 && lo <= 57343) {
+                cp = 65536 + (hi - 55296) * 1024 + (lo - 56320)
+                out = out emit_utf8_codepoint(cp)
+                i += 2
+                continue
+            }
+        }
+        out = out emit_utf8_codepoint(hi)
+        i++
+    }
+    return out
+}
+
 # Parse a UDH for concat-SMS IEs.
 # udh_hex: raw hex of the UDH IEs (excluding the leading UDHL byte).
 # Sets globals (self-cleared at function entry; do_decode_one also zeroes
@@ -416,9 +469,9 @@ function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
     if (dcs_alphabet == 0) {
         content = gsm7_unpack(ud_hex, udl, udhl_bytes)
     } else if (dcs_alphabet == 2) {
-        content = ud_hex   # UCS2 — Task 4
+        content = ucs2_to_utf8(ud_hex, udhl_bytes)
     } else {
-        content = ud_hex   # 8-bit binary or reserved
+        content = ud_hex   # 8-bit binary or reserved — emit raw hex
     }
 
     # Emit JSON. Field order: index, sender, timestamp, status, [concat fields,] content.
