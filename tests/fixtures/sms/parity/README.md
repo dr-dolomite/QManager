@@ -75,3 +75,36 @@ byte-for-byte modulo field ordering. Diff with:
 
     diff <(jq -S '.msg' baseline.recv.json) \
          <(ssh modem 'jq -S ".msg" /tmp/qmanager_sms_inbox.json')
+
+## Post-migration verification (2026-05-29)
+
+- **Date:** 2026-05-29
+- **Branch:** `feature/sms-native-backend`
+- **Method:** SSH to the live test modem (RM551E, BusyBox awk); deployed
+  `sms_pdu.awk` + native `sms.sh`, then exercised the inbox GET and POST paths.
+- **BusyBox awk portability:** confirmed. Arithmetic bitwise ops, GSM-7 decode,
+  and — critically — UCS-2 `sprintf("%c", N)` byte emission all behave
+  identically to GAWK. `od -c` on a "Hi 你好" decode showed the correct
+  3-byte UTF-8 sequences (`344 275 240` / `345 245 275`); jq rendered "Hi 你好".
+- **Content parity:** CLEAN. Normalizing both baseline and current with
+  `jq -S 'del(.storage) | .messages |= (map(del(.timestamp, .status)) | sort_by(.indexes))'`
+  (array re-sorted because default order changed from storage-slot to
+  timestamp-desc) yields a zero-line diff across all 51 merged messages.
+  The native awk codec decodes real device PDUs byte-identically to sms_tool.
+- **Storage:** fixed — `{used: 73, total: 255}` (pre-existing `0/0` parser bug
+  resolved via `AT+CPMS?`).
+- **Sort:** newest-first confirmed (`2026-05-27...` first, `2026-03-19...` last).
+- **mark_read:** plumbing verified end-to-end — POST returned `{"success":true}`
+  and the log showed `Marking SMS indexes as read: [65]` → `mark_read complete`.
+  NOTE: the inbox had **0 unread messages** at verification time
+  (`AT+CMGL=0` → 0), so an actual unread→read transition could not be observed;
+  only the CMGR no-op path (harmless OK on an already-read message) was
+  exercised. Re-verify the live flip when an unread message is present.
+- **Error paths:** `missing_indexes` and `invalid_action` (message now lists
+  `mark_read`) both correct.
+- **Lock coordination:** `/var/lock/qmanager.lock` present, no orphaned
+  `qmanager.pid`, no lock errors in `/tmp/qmanager.log`. qcmd's flock is the
+  sole serialization point (native recv adds none — no self-deadlock).
+- **Rollback:** pre-deploy `sms.sh` backed up to `/tmp/sms.sh.bak.predeploy`
+  on the device (note: `/tmp` is volatile). Full rollback = restore that file
+  and `rm /usr/lib/qmanager/sms_pdu.awk`.
