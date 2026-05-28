@@ -23,7 +23,7 @@ export interface SmsMessage {
   /**
    * ISO 8601 timestamp with timezone offset, e.g. "2026-05-11T10:00:00+08:00".
    * Earliest part's timestamp for merged multi-part messages.
-   * Lexicographic sort == chronological sort.
+   * Lexicographic sort == chronological sort (assumes consistent SMSC timezone offset).
    */
   timestamp: string;
   /**
