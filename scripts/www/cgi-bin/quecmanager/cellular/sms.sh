@@ -276,9 +276,16 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
         qlog_info "Deleting SMS indexes: $INDEXES_JSON"
         fail_count=0
-        idx_tmp="/tmp/qmanager_sms_idx.tmp"
+        idx_tmp="/tmp/qmanager_sms_idx.$$"
         printf '%s' "$INDEXES_JSON" | jq -r '.[]' > "$idx_tmp"
         while read -r idx; do
+            case "$idx" in
+                ''|*[!0-9]*)
+                    qlog_warn "Skipping non-numeric delete index: $idx"
+                    fail_count=$((fail_count + 1))
+                    continue
+                    ;;
+            esac
             result=$(_sms_run delete "$idx")
             rc=$?
             if [ $rc -ne 0 ]; then
@@ -333,6 +340,13 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         idx_tmp="/tmp/qmanager_sms_mark_idx.$$"
         printf '%s' "$INDEXES_JSON" | jq -r '.[]' > "$idx_tmp"
         while read -r idx; do
+            case "$idx" in
+                ''|*[!0-9]*)
+                    qlog_warn "Skipping non-numeric mark_read index: $idx"
+                    fail_count=$((fail_count + 1))
+                    continue
+                    ;;
+            esac
             # CMGR with mode=0 reads the message AND clears the unread flag.
             if ! qcmd "AT+CMGR=$idx,0" >/dev/null 2>&1; then
                 qlog_warn "Failed to mark index $idx as read"
