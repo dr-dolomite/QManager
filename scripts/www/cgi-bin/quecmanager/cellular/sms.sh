@@ -3,7 +3,7 @@
 # =============================================================================
 # sms.sh — CGI Endpoint: SMS Center (GET + POST)
 # =============================================================================
-# GET:  Returns all received SMS messages and storage status via sms_tool.
+# GET:  Returns all received SMS messages and storage status via native CMGL pipeline.
 # POST: Sends, deletes individual, or deletes all SMS messages.
 #
 # External tool (bundled; hard-wired to /dev/smd11):
@@ -91,14 +91,68 @@ _sms_run() {
     ) 9<"$_SMS_LOCK_FILE"
 }
 
+# --- Native CMGL → JSON pipeline ---------------------------------------------
+# Replaces sms_tool recv -j with: qcmd CMGF=0 + qcmd CMGL=4, parse +CMGL
+# headers, pipe (idx|stat|hex) lines into sms_pdu.awk op=decode_list.
+#
+# qcmd already serializes via /var/lock/qmanager.lock, so this function does
+# NOT add its own flock — that would risk a self-deadlock against qcmd.
+#
+# Echoes the decoder's JSON envelope ({"msg":[...]}) on stdout. Echoes an
+# empty envelope on failure rather than aborting the CGI request.
+_sms_native_recv() {
+    # Ensure PDU mode. CMGF=0 is idempotent; cheap to issue every call.
+    qcmd "AT+CMGF=0" >/dev/null 2>&1 || {
+        qlog_warn "CMGF=0 failed; native recv aborted, returning empty inbox"
+        echo '{"msg":[]}'
+        return 0
+    }
+
+    # List all stored messages. Output mixes header lines and PDU hex lines.
+    raw=$(qcmd "AT+CMGL=4" 2>/dev/null)
+    if [ -z "$raw" ]; then
+        qlog_warn "CMGL=4 returned empty; native recv returning empty inbox"
+        echo '{"msg":[]}'
+        return 0
+    fi
+
+    # Build the pipe-delimited input for decode_list.
+    # State machine: read a +CMGL header (capture idx, stat); next non-empty
+    # non-OK line is the PDU hex; emit "idx|stat|hex".
+    pipe_in=$(printf '%s\n' "$raw" | awk '
+        /^\+CMGL:/ {
+            # +CMGL: <idx>,<stat>,<alpha>,<len>
+            sub(/^\+CMGL: */, "")
+            n = split($0, f, ",")
+            if (n >= 2) { cur_idx = f[1]; cur_stat = f[2]; have_hdr = 1 }
+            next
+        }
+        /^OK$/   { next }
+        /^ERROR/ { next }
+        NF == 0  { next }
+        have_hdr {
+            # First non-blank line after header is the PDU hex.
+            printf "%s|%s|%s\n", cur_idx, cur_stat, $0
+            have_hdr = 0
+        }
+    ')
+
+    if [ -z "$pipe_in" ]; then
+        echo '{"msg":[]}'
+        return 0
+    fi
+
+    printf '%s\n' "$pipe_in" | awk -f /usr/lib/qmanager/sms_pdu.awk -v op=decode_list
+}
+
 # =============================================================================
 # GET — Fetch inbox messages + storage status
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
     qlog_info "Fetching SMS inbox and status"
 
-    # 1. Get messages via sms_tool recv -j (JSON output: {"msg":[...]})
-    raw_json=$(_sms_run recv -j)
+    # 1. Get messages via native CMGL pipeline (JSON output: {"msg":[...]})
+    raw_json=$(_sms_native_recv)
     if [ -n "$raw_json" ]; then
         raw_msgs=$(printf '%s' "$raw_json" | jq '.msg // []' 2>/dev/null)
         [ -z "$raw_msgs" ] && raw_msgs="[]"
