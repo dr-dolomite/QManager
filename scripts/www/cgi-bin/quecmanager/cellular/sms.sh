@@ -183,6 +183,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 status: (if any(.[]; .status == "unread") then "unread" else "read" end)
             }]
         ) as $merged |
+        # Lexicographic sort == chronological only when all messages share one
+        # TZ offset; true in practice for a single modem (SMSC stamps consistent).
         ($singles + $merged) | sort_by(.timestamp) | reverse
     ' 2>/dev/null)
     [ -z "$messages" ] && messages="[]"
