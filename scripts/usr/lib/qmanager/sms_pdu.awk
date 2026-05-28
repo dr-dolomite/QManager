@@ -367,10 +367,11 @@ function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
         content = ud_hex   # 8-bit binary or reserved
     }
 
-    # Emit JSON. Field order matches sms_tool recv -j.
-    printf "{\"index\":%d,\"sender\":%s,\"timestamp\":%s",
-        idx_in, json_str(sender), json_str(ts)
-    # reference/part/total filled by Task 5 when UDHI=1
+    # Emit JSON. Field order matches sms_tool recv -j plus the new status field.
+    printf "{\"index\":%d,\"sender\":%s,\"timestamp\":%s,\"status\":%s",
+        idx_in, json_str(sender), json_str(ts),
+        json_str((stat_in == 0) ? "unread" : "read")
+    # reference/part/total filled by Task 3 when UDHI=1
     printf ",\"content\":%s}", json_str(content)
 }
 
@@ -393,7 +394,8 @@ function json_str(s,    out, i, c) {
     pdu = toupper($0)
     gsub(/[^0-9A-F]/, "", pdu)
     if (op == "decode_one") {
-        idx_in = (idx == "") ? 0 : idx + 0
+        idx_in  = (idx == "")  ? 0 : idx + 0
+        stat_in = (stat == "") ? 1 : stat + 0
         do_decode_one()
         print ""
     }

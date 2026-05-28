@@ -2,5 +2,6 @@
   "index": 0,
   "sender": "9876543210",
   "timestamp": "05/11/26 11:00:00",
+  "status": "read",
   "content": "GSM7 ext: [brackets] and ^caret^."
 }
