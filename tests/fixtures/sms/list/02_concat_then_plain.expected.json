@@ -1,0 +1,21 @@
+{
+  "msg": [
+    {
+      "index": 0,
+      "sender": "1234567890",
+      "timestamp": "2026-05-11T10:00:00+00:00",
+      "status": "read",
+      "reference": 42,
+      "part": 1,
+      "total": 2,
+      "content": "Part one of two"
+    },
+    {
+      "index": 1,
+      "sender": "SmartApp",
+      "timestamp": "2026-03-29T13:49:11+08:00",
+      "status": "read",
+      "content": "You earned 4.95 GigaPoints on your promo purchase! Simple. Easy. Smart. Thats the Smart App!"
+    }
+  ]
+}

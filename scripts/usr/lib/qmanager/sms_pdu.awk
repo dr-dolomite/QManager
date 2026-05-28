@@ -521,6 +521,7 @@ function json_str(s,    out, i, c) {
 
 # --- Driver: read input lines and dispatch to the selected operation --------
 
+# Init per-op state; the op=="" error guard is the first BEGIN above.
 BEGIN {
     if (op == "decode_list") {
         list_out = ""
