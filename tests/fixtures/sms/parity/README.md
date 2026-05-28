@@ -58,6 +58,17 @@ strip these fields first:
 Any remaining diff is a real regression and must be investigated before the
 phase tag advances.
 
+- **`.msg[].timestamp` format change** — pre-migration sms_tool emitted `"MM/DD/YY HH:MM:SS"`;
+  the native codec emits ISO 8601 `"YYYY-MM-DDTHH:MM:SS±HH:MM"`. Strip or transform the
+  timestamp before parity diff:
+
+      jq -S 'del(.storage) | .messages |= map(del(.timestamp))' baseline.cgi.json > /tmp/baseline.notime.json
+      jq -S 'del(.storage) | .messages |= map(del(.timestamp))' <new-cgi-output>    > /tmp/current.notime.json
+      diff /tmp/baseline.notime.json /tmp/current.notime.json
+
+- **`.msg[].status` is new** — pre-migration baselines have no `status` field. Strip with the same
+  `del(...)` pattern above when comparing.
+
 For `baseline.recv.json` (raw sms_tool output) vs the post-migration cache
 (`/tmp/qmanager_sms_inbox.json`), the .msg array shape should match
 byte-for-byte modulo field ordering. Diff with:

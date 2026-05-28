@@ -37,16 +37,33 @@ function decode_digits(h, ndigits,    i, out, pair) {
     return out
 }
 
-# Decode SCTS (7 octets, semi-octet swapped: YY MM DD HH mm ss TZ)
-function decode_scts(h,    y, mo, d, hh, mm, ss) {
+# Decode the TZ semi-octet (octet 7 of SCTS).
+# Per 3GPP TS 23.040 §9.2.3.11: bit 3 of the byte is the sign (0=+, 1=-);
+# remaining bits form a semi-octet-swapped BCD quarter-hour count.
+# Returns "±HH:MM".
+function decode_tz(h,    raw, sign, masked, swapped, qhours, hh, mm, sgn) {
+    raw     = hex2dec(h)
+    sign    = and_int(raw, 8)             # bit 3 of byte
+    masked  = and_int(raw, 247)           # clear bit 3 → 0xF7
+    swapped = swap_pair(sprintf("%02X", masked))
+    qhours  = swapped + 0                 # BCD digits → decimal
+    hh      = int(qhours / 4)
+    mm      = (qhours % 4) * 15
+    sgn     = (sign == 0) ? "+" : "-"
+    return sgn sprintf("%02d:%02d", hh, mm)
+}
+
+# Decode SCTS (7 octets, semi-octet swapped: YY MM DD HH mm ss TZ).
+# Returns ISO 8601: "20YY-MM-DDTHH:MM:SS±HH:MM".
+function decode_scts(h,    y, mo, d, hh, mm, ss, tz) {
     y  = swap_pair(substr(h, 1,  2))
     mo = swap_pair(substr(h, 3,  2))
     d  = swap_pair(substr(h, 5,  2))
     hh = swap_pair(substr(h, 7,  2))
     mm = swap_pair(substr(h, 9,  2))
     ss = swap_pair(substr(h, 11, 2))
-    # Match sms_tool format: "MM/DD/YY HH:MM:SS"
-    return mo "/" d "/" y " " hh ":" mm ":" ss
+    tz = decode_tz(substr(h, 13, 2))
+    return "20" y "-" mo "-" d "T" hh ":" mm ":" ss tz
 }
 
 # Pop N hex chars from the front of state's "pdu" string

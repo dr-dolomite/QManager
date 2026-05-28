@@ -1,7 +1,7 @@
 {
   "index": 0,
   "sender": "1234567890",
-  "timestamp": "2026-05-11T10:00:00+00:00",
+  "timestamp": "2026-05-11T10:00:00-05:00",
   "status": "read",
   "content": "Hello from QManager! This is a GSM-7 test message."
 }
