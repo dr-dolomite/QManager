@@ -487,15 +487,22 @@ function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
         content = ud_hex   # 8-bit binary or reserved — emit raw hex
     }
 
-    # Emit JSON. Field order: index, sender, timestamp, status, [concat fields,] content.
-    printf "{\"index\":%d,\"sender\":%s,\"timestamp\":%s,\"status\":%s",
+    # Build JSON into record_buf. Field order: index, sender, timestamp, status,
+    # [concat fields,] content.
+    # record_buf and emit_to_buf are globals so decode_list can read record_buf
+    # after the call. Do NOT add them to this function's parameter list.
+    record_buf = ""
+    record_buf = record_buf sprintf("{\"index\":%d,\"sender\":%s,\"timestamp\":%s,\"status\":%s",
         idx_in, json_str(sender), json_str(ts),
-        json_str((stat_in == 0) ? "unread" : "read")
+        json_str((stat_in == 0) ? "unread" : "read"))
     if (udh_found) {
-        printf ",\"reference\":%d,\"part\":%d,\"total\":%d",
-            udh_ref, udh_part, udh_total
+        record_buf = record_buf sprintf(",\"reference\":%d,\"part\":%d,\"total\":%d",
+            udh_ref, udh_part, udh_total)
     }
-    printf ",\"content\":%s}", json_str(content)
+    record_buf = record_buf sprintf(",\"content\":%s}", json_str(content))
+    if (!emit_to_buf) {
+        printf "%s", record_buf
+    }
 }
 
 function json_str(s,    out, i, c) {
@@ -512,14 +519,46 @@ function json_str(s,    out, i, c) {
     return out "\""
 }
 
-# --- Driver: read hex from input -------------------------------------------
+# --- Driver: read input lines and dispatch to the selected operation --------
+
+BEGIN {
+    if (op == "decode_list") {
+        list_out = ""
+        list_n   = 0
+    }
+}
+
 {
-    pdu = toupper($0)
-    gsub(/[^0-9A-F]/, "", pdu)
     if (op == "decode_one") {
-        idx_in  = (idx == "")  ? 0 : idx + 0
+        pdu = toupper($0)
+        gsub(/[^0-9A-F]/, "", pdu)
+        idx_in  = (idx  == "") ? 0 : idx  + 0
         stat_in = (stat == "") ? 1 : stat + 0
         do_decode_one()
         print ""
+    } else if (op == "decode_list") {
+        # Parse "idx|stat|hex" lines.
+        n = split($0, parts, "|")
+        if (n < 3) next
+        idx_in  = parts[1] + 0
+        stat_in = parts[2] + 0
+        pdu = toupper(parts[3])
+        gsub(/[^0-9A-F]/, "", pdu)
+        if (length(pdu) == 0) next
+
+        record_buf = ""
+        emit_to_buf = 1
+        do_decode_one()
+        emit_to_buf = 0
+
+        if (list_n > 0) list_out = list_out ","
+        list_out = list_out record_buf
+        list_n++
+    }
+}
+
+END {
+    if (op == "decode_list") {
+        printf "{\"msg\":[%s]}\n", list_out
     }
 }

@@ -49,6 +49,28 @@ for pdu in "$FIXTURE_ROOT"/decode/*.pdu; do
     rm -f /tmp/sms_test_diff.$$
 done
 
+for input in "$FIXTURE_ROOT"/list/*.input; do
+    [ -f "$input" ] || continue
+    base="${input%.input}"
+    expected="${base}.expected.json"
+
+    if [ ! -f "$expected" ]; then
+        echo "SKIP (no expected): $input"
+        continue
+    fi
+
+    actual=$(awk -f "$AWK_FILE" -v op=decode_list < "$input")
+    if diff <(echo "$actual" | jq -S .) <(jq -S . "$expected") > /tmp/sms_test_diff.$$ 2>&1; then
+        echo "PASS: $input"
+        pass=$((pass + 1))
+    else
+        echo "FAIL: $input"
+        cat /tmp/sms_test_diff.$$
+        fail=$((fail + 1))
+    fi
+    rm -f /tmp/sms_test_diff.$$
+done
+
 echo "---"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]
