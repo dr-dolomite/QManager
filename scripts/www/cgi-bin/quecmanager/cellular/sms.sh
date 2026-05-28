@@ -316,8 +316,43 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         exit 0
     fi
 
+    # --- action: mark_read ---------------------------------------------------
+    # Per-index AT+CMGR=<idx>,0 flips REC UNREAD → REC READ as a documented
+    # side effect. We discard the body; only the status change matters.
+    if [ "$ACTION" = "mark_read" ]; then
+        INDEXES_JSON=$(printf '%s' "$POST_DATA" | jq -c '.indexes // empty' 2>/dev/null)
+
+        if [ -z "$INDEXES_JSON" ] || [ "$INDEXES_JSON" = "null" ]; then
+            cgi_error "missing_indexes" "indexes array is required"
+            exit 0
+        fi
+
+        qlog_info "Marking SMS indexes as read: $INDEXES_JSON"
+        fail_count=0
+        idx_tmp="/tmp/qmanager_sms_mark_idx.$$"
+        printf '%s' "$INDEXES_JSON" | jq -r '.[]' > "$idx_tmp"
+        while read -r idx; do
+            # CMGR with mode=0 reads the message AND clears the unread flag.
+            if ! qcmd "AT+CMGR=$idx,0" >/dev/null 2>&1; then
+                qlog_warn "Failed to mark index $idx as read"
+                fail_count=$((fail_count + 1))
+            fi
+        done < "$idx_tmp"
+        rm -f "$idx_tmp"
+
+        if [ "$fail_count" -gt 0 ]; then
+            qlog_warn "mark_read completed with $fail_count failure(s)"
+            cgi_error "partial_failure" "$fail_count message(s) failed to mark as read"
+            exit 0
+        fi
+
+        qlog_info "mark_read complete"
+        cgi_success
+        exit 0
+    fi
+
     # --- Unknown action ------------------------------------------------------
-    cgi_error "invalid_action" "action must be send, delete, or delete_all"
+    cgi_error "invalid_action" "action must be send, delete, delete_all, or mark_read"
     exit 0
 fi
 
