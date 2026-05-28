@@ -24,15 +24,20 @@ for pdu in "$FIXTURE_ROOT"/decode/*.pdu; do
     # expected JSON contains the index field and awk emits compatible output.
     meta="${base}.meta"
     stat_arg=""
+    idx_arg=""
     if [ -f "$meta" ]; then
         stat_val=$(grep -E '^stat=' "$meta" | head -1 | cut -d= -f2)
         if [ -n "$stat_val" ]; then
             stat_arg="-v stat=$stat_val"
         fi
+        idx_val=$(grep -E '^idx=' "$meta" | head -1 | cut -d= -f2)
+        if [ -n "$idx_val" ]; then
+            idx_arg="-v idx=$idx_val"
+        fi
     fi
 
-    # shellcheck disable=SC2086  # intentional word-split for optional args
-    actual=$(awk -f "$AWK_FILE" -v op=decode_one $stat_arg "$pdu")
+    # shellcheck disable=SC2086
+    actual=$(awk -f "$AWK_FILE" -v op=decode_one $stat_arg $idx_arg "$pdu")
     if diff <(echo "$actual" | jq -S .) <(jq -S . "$expected") > /tmp/sms_test_diff.$$ 2>&1; then
         echo "PASS: $pdu"
         pass=$((pass + 1))

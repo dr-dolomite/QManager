@@ -3,5 +3,8 @@
   "sender": "639686973969",
   "timestamp": "2025-01-15T09:48:18+08:00",
   "status": "read",
+  "reference": 69,
+  "part": 1,
+  "total": 4,
   "content": "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, "
 }

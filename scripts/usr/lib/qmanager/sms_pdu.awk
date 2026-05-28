@@ -328,6 +328,37 @@ function decode_gsm7_address(h, ndigits,    abytes, n_septets) {
     return gsm7_unpack(h, n_septets, 0)
 }
 
+# Parse a UDH for concat-SMS IEs.
+# udh_hex: raw hex of the UDH IEs (excluding the leading UDHL byte).
+# Sets globals (cleared by do_decode_one before each call):
+#   udh_ref   — concat reference (0 = none found)
+#   udh_total — total parts
+#   udh_part  — this part number
+#   udh_found — 1 if a concat IE was parsed
+function parse_udh_concat(udh_hex,    pos, iei, iedl) {
+    udh_ref = 0; udh_total = 0; udh_part = 0; udh_found = 0
+    pos = 1
+    while (pos < length(udh_hex)) {
+        iei  = hex2dec(substr(udh_hex, pos, 2));     pos += 2
+        iedl = hex2dec(substr(udh_hex, pos, 2));     pos += 2
+        if (iei == 0 && iedl == 3) {
+            udh_ref   = hex2dec(substr(udh_hex, pos,     2))
+            udh_total = hex2dec(substr(udh_hex, pos + 2, 2))
+            udh_part  = hex2dec(substr(udh_hex, pos + 4, 2))
+            udh_found = 1
+            return
+        } else if (iei == 8 && iedl == 4) {
+            udh_ref   = hex2dec(substr(udh_hex, pos,     2)) * 256 \
+                      + hex2dec(substr(udh_hex, pos + 2, 2))
+            udh_total = hex2dec(substr(udh_hex, pos + 4, 2))
+            udh_part  = hex2dec(substr(udh_hex, pos + 6, 2))
+            udh_found = 1
+            return
+        }
+        pos += iedl * 2
+    }
+}
+
 # --- Operation: decode_one --------------------------------------------------
 # Reads one line of hex from input, emits one JSON object (no trailing newline).
 function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
@@ -369,13 +400,15 @@ function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
     dcs_alphabet = rshift_int(and_int(dcs, 12), 2)
 
     # UDH parsing (header bytes do NOT need to be stripped — gsm7_unpack
-    # reads them as part of the bitstream and skips the corresponding septets)
+    # reads them as part of the bitstream and skips the corresponding septets).
     udhi_present = udhi
     udhl_bytes   = 0
     udh_hex      = ""
+    udh_found    = 0
     if (udhi_present) {
         udhl_bytes = hex2dec(substr(ud_hex, 1, 2))
         udh_hex    = substr(ud_hex, 3, udhl_bytes * 2)
+        parse_udh_concat(udh_hex)
     }
 
     if (dcs_alphabet == 0) {
@@ -386,11 +419,14 @@ function do_decode_one(    smsc_len, tpdu_first, oa_len, ton, oa_digits,
         content = ud_hex   # 8-bit binary or reserved
     }
 
-    # Emit JSON. Field order matches sms_tool recv -j plus the new status field.
+    # Emit JSON. Field order: index, sender, timestamp, status, [concat fields,] content.
     printf "{\"index\":%d,\"sender\":%s,\"timestamp\":%s,\"status\":%s",
         idx_in, json_str(sender), json_str(ts),
         json_str((stat_in == 0) ? "unread" : "read")
-    # reference/part/total filled by Task 3 when UDHI=1
+    if (udh_found) {
+        printf ",\"reference\":%d,\"part\":%d,\"total\":%d",
+            udh_ref, udh_part, udh_total
+    }
     printf ",\"content\":%s}", json_str(content)
 }
 
