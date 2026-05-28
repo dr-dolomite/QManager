@@ -131,6 +131,7 @@ _sms_native_recv() {
         }
         /^OK$/   { next }
         /^ERROR/ { next }
+        /^\+(CME|CMS) ERROR/ { next }
         NF == 0  { next }
         have_hdr {
             # First non-blank line after header is the PDU hex.
@@ -190,7 +191,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     [ -z "$messages" ] && messages="[]"
     printf '%s' "$messages" | jq empty 2>/dev/null || messages="[]"
 
-    # 2. Get storage status via AT+CPMS? (response: +CPMS: "ME",used,total,...)
+    # 3. Get storage status via AT+CPMS? (response: +CPMS: "ME",used,total,...)
     cpms_raw=$(qcmd "AT+CPMS?" 2>/dev/null)
     # Match the first two numbers after +CPMS:
     storage_used=$(printf '%s\n' "$cpms_raw" | sed -n 's/^.*+CPMS:[^,]*,\([0-9]*\),\([0-9]*\).*/\1/p' | head -1)
@@ -198,7 +199,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     [ -z "$storage_used" ] && storage_used=0
     [ -z "$storage_total" ] && storage_total=0
 
-    # 3. Build JSON response
+    # 4. Build JSON response
     jq -n \
         --argjson messages "$messages" \
         --argjson used "$storage_used" \

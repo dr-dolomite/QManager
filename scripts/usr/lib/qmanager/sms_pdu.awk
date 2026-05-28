@@ -2,8 +2,8 @@
 # Operations (selected via -v op=...):
 #   decode_one   — read hex PDU lines from stdin/file, emit one JSON object
 #   decode_list  — read N hex PDU lines, emit {"msg":[...]} array
-#   encode_ucs2  — read recipient + UTF-8 body, emit TPDU hex
-#   encode_gsm7  — read recipient + ASCII body, emit TPDU hex
+#   encode_ucs2  — [PLANNED, not yet implemented] read recipient + UTF-8 body, emit TPDU hex
+#   encode_gsm7  — [PLANNED, not yet implemented] read recipient + ASCII body, emit TPDU hex
 
 BEGIN {
     if (op == "") { print "ERROR: -v op=... required" > "/dev/stderr"; exit 2 }
