@@ -101,6 +101,7 @@ _sms_run() {
 # Echoes the decoder's JSON envelope ({"msg":[...]}) on stdout. Echoes an
 # empty envelope on failure rather than aborting the CGI request.
 _sms_native_recv() {
+    local raw pipe_in
     # Ensure PDU mode. CMGF=0 is idempotent; cheap to issue every call.
     qcmd "AT+CMGF=0" >/dev/null 2>&1 || {
         qlog_warn "CMGF=0 failed; native recv aborted, returning empty inbox"
@@ -120,6 +121,7 @@ _sms_native_recv() {
     # State machine: read a +CMGL header (capture idx, stat); next non-empty
     # non-OK line is the PDU hex; emit "idx|stat|hex".
     pipe_in=$(printf '%s\n' "$raw" | awk '
+        { sub(/\r$/, "") }
         /^\+CMGL:/ {
             # +CMGL: <idx>,<stat>,<alpha>,<len>
             sub(/^\+CMGL: */, "")
