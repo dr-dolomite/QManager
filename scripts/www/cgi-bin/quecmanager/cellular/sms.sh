@@ -190,11 +190,11 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     [ -z "$messages" ] && messages="[]"
     printf '%s' "$messages" | jq empty 2>/dev/null || messages="[]"
 
-    # 2. Get storage status via sms_tool status (plain text, needs parsing)
-    status_raw=$(_sms_run status)
-    # Parse "used" and "total" from output — expected pattern: N/M somewhere in output
-    storage_used=$(printf '%s' "$status_raw" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d'/' -f1)
-    storage_total=$(printf '%s' "$status_raw" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d'/' -f2)
+    # 2. Get storage status via AT+CPMS? (response: +CPMS: "ME",used,total,...)
+    cpms_raw=$(qcmd "AT+CPMS?" 2>/dev/null)
+    # Match the first two numbers after +CPMS:
+    storage_used=$(printf '%s\n' "$cpms_raw" | sed -n 's/^.*+CPMS:[^,]*,\([0-9]*\),\([0-9]*\).*/\1/p' | head -1)
+    storage_total=$(printf '%s\n' "$cpms_raw" | sed -n 's/^.*+CPMS:[^,]*,\([0-9]*\),\([0-9]*\).*/\2/p' | head -1)
     [ -z "$storage_used" ] && storage_used=0
     [ -z "$storage_total" ] && storage_total=0
 
