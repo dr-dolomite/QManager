@@ -63,6 +63,8 @@ function decode_scts(h,    y, mo, d, hh, mm, ss, tz) {
     mm = swap_pair(substr(h, 9,  2))
     ss = swap_pair(substr(h, 11, 2))
     tz = decode_tz(substr(h, 13, 2))
+    # SMS PDU year field is 2-digit BCD; we hardcode century to 20xx (good
+    # through 2099). Modem firmware won't outlive that horizon.
     return "20" y "-" mo "-" d "T" hh ":" mm ":" ss tz
 }
 
