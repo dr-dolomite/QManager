@@ -5,7 +5,6 @@ import { ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 
-import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EASE_OUT_EXPO, DUR } from "@/lib/motion";
 
@@ -267,8 +266,23 @@ export function LanReconnecting({
                 />
               </svg>
 
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Spinner className="size-6" />
+              <div
+                className="absolute inset-0 flex items-center justify-center gap-1.5"
+                aria-hidden="true"
+              >
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="size-2 rounded-full bg-primary"
+                    animate={{ opacity: [0.25, 1, 0.25] }}
+                    transition={{
+                      duration: 1.05,
+                      ease: "easeInOut",
+                      repeat: Infinity,
+                      delay: i * 0.18,
+                    }}
+                  />
+                ))}
               </div>
             </div>
 
