@@ -22,7 +22,7 @@ const ForwardingCenterComponent = () => {
           {t("sms.forwarding.page.description")}
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:items-stretch">
         <SmsForwardingCard fwd={fwd} />
         <DeliveryHealthCard fwd={fwd} />
       </div>

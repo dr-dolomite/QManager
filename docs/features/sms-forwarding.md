@@ -138,7 +138,7 @@ A single derived health state drives the entire card:
 | `unconfigured` | `enabled=true`, `target_phone` empty |
 | `off` | `enabled=false` |
 
-The state drives a header status badge, a focal icon + label + destination row, and the badge tone (`success` / `warning` / `muted`).
+The state drives a focal icon + label + destination row, toned `success` / `warning` / `muted`. There is intentionally **no** header status badge — it duplicated the focal-row label (the old `Active · healthy` badge), so the focal row is the single status surface.
 
 **Recipient preview:** a static bubble showing `From +15550142: <sample body>` teaches the relay format. The sample sender is a placeholder — the recipient's number is not the sender, it is the destination.
 

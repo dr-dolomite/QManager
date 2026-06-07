@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { motion } from "motion/react";
 
 import {
   Card,
@@ -26,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
 import { AlertCircle, RefreshCcwIcon } from "lucide-react";
+import { DUR, EASE_OUT_EXPO } from "@/lib/motion";
 import {
   type SmsForwardingData,
   type UseSmsForwardingReturn,
@@ -89,9 +91,11 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
   };
 
   // --- Loading skeleton ------------------------------------------------------
+  // Mirrors the real form geometry (toggle row → labeled input → button) so the
+  // card holds its height and nothing snaps when data lands.
   if (isLoading) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card h-full">
         <CardHeader>
           <CardTitle>{t("sms.forwarding.sms.card_title")}</CardTitle>
           <CardDescription>
@@ -99,10 +103,20 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4">
-            <Skeleton className="h-8 w-56" />
-            <Skeleton className="h-10 w-full max-w-sm" />
-            <Skeleton className="h-9 w-28" />
+          <div className="grid gap-6">
+            {/* Enable toggle row */}
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-9 rounded-full" />
+            </div>
+            {/* Target field: label + input + helper */}
+            <div className="grid gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-9 w-full max-w-sm" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            {/* Save */}
+            <Skeleton className="h-9 w-24" />
           </div>
         </CardContent>
       </Card>
@@ -112,7 +126,7 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
   // --- Initial fetch error ---------------------------------------------------
   if (!isLoading && error && !data) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card h-full">
         <CardHeader>
           <CardTitle>{t("sms.forwarding.sms.card_title")}</CardTitle>
           <CardDescription>
@@ -143,7 +157,7 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
 
   // --- Render ----------------------------------------------------------------
   return (
-    <Card className="@container/card">
+    <Card className="@container/card h-full">
       <CardHeader>
         <CardTitle>{t("sms.forwarding.sms.card_title")}</CardTitle>
         <CardDescription>
@@ -151,7 +165,13 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="grid gap-4" onSubmit={handleSave}>
+        <motion.form
+          className="grid gap-4"
+          onSubmit={handleSave}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: EASE_OUT_EXPO }}
+        >
           <FieldSet>
             <FieldGroup>
               {/* Enable toggle */}
@@ -210,7 +230,7 @@ const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
               />
             </FieldGroup>
           </FieldSet>
-        </form>
+        </motion.form>
       </CardContent>
     </Card>
   );

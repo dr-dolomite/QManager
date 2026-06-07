@@ -14,7 +14,7 @@ This release adds LAN address configuration to the Local Network page and polish
 
 ## ✅ Improvements
 
-- **SMS Forwarding now has a Delivery & Health panel.** The forwarding page's right-hand card shows the live relay state at a glance (active, issue, off, or unconfigured), a preview bubble of exactly what your recipient will receive, a test-send button that verifies the saved path end-to-end, and a delivery-failure history with a clear action. Call Forwarding has been removed — it was not reliably supported on most carriers and data-only plans.
+- **SMS Forwarding now has a Delivery & Health panel.** The forwarding page's right-hand card shows the live relay state at a glance (active, issue, off, or unconfigured), a preview bubble of exactly what your recipient will receive, a test-send button that verifies the saved path end-to-end, and a delivery-failure history with a clear action. On wider screens the two forwarding cards now line up to the same height, and the page settles into place as it loads instead of the layout shifting when data arrives. Call Forwarding has been removed — it was not reliably supported on most carriers and data-only plans.
 
 - **The watchdog's first recovery step now re-registers the modem on the network** instead of bouncing the software WAN interface. This gives the modem a real chance to recover a stalled network attach and is a more effective first action before escalating to a radio toggle or reboot.
 

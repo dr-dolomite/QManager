@@ -641,7 +641,7 @@
       "health": {
         "card_title": "Delivery & health",
         "card_description": "Live relay status, a preview of what the recipient sees, and any delivery problems.",
-        "state_active": "Active · healthy",
+        "state_active": "Active",
         "state_issue": "Delivering with issues",
         "state_off": "Forwarding is off",
         "state_unconfigured": "No destination set",

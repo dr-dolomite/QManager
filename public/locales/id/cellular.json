@@ -641,7 +641,7 @@
       "health": {
         "card_title": "Pengiriman & status",
         "card_description": "Status penerusan langsung, pratinjau yang dilihat penerima, dan masalah pengiriman apa pun.",
-        "state_active": "Aktif · normal",
+        "state_active": "Aktif",
         "state_issue": "Pengiriman bermasalah",
         "state_off": "Penerusan nonaktif",
         "state_unconfigured": "Tujuan belum disetel",

@@ -7,14 +7,12 @@ import { AnimatePresence, motion } from "motion/react";
 
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -25,7 +23,7 @@ import {
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
-import { EASE_OUT_QUART } from "@/lib/motion";
+import { DUR, EASE_OUT_EXPO, EASE_OUT_QUART } from "@/lib/motion";
 import { type UseSmsForwardingReturn } from "@/hooks/use-sms-forwarding";
 
 // =============================================================================
@@ -42,12 +40,6 @@ const SAMPLE_SENDER = "+15550142";
 type Health = "active" | "issue" | "off" | "unconfigured";
 
 type Tone = "success" | "warning" | "muted";
-
-const TONE_CLASS: Record<Tone, string> = {
-  success: "border-success/30 bg-success/15 text-success",
-  warning: "border-warning/30 bg-warning/15 text-warning",
-  muted: "border-muted-foreground/30 bg-muted/50 text-muted-foreground",
-};
 
 const ICON_WRAP_CLASS: Record<Tone, string> = {
   success: "bg-success/15 text-success",
@@ -79,20 +71,35 @@ const DeliveryHealthCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
   };
 
   // --- Loading skeleton ------------------------------------------------------
+  // Mirrors the real content geometry (focal row → preview box → test action)
+  // so the card holds its height and nothing snaps when data lands.
   if (isLoading || !data) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card h-full">
         <CardHeader>
           <CardTitle>{t("sms.forwarding.health.card_title")}</CardTitle>
           <CardDescription>
             {t("sms.forwarding.health.card_description")}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-16 w-full" />
+        <CardContent className="grid gap-5">
+          {/* Focal state + destination */}
+          <div className="flex items-start gap-3">
+            <Skeleton className="size-9 shrink-0 rounded-lg" />
+            <div className="grid flex-1 gap-1.5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-44" />
+            </div>
+          </div>
+          {/* Recipient preview */}
+          <div className="grid gap-1.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-12 w-full rounded-lg" />
+          </div>
+          {/* Test action + hint */}
+          <div className="grid gap-1.5">
             <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-3 w-52" />
           </div>
         </CardContent>
       </Card>
@@ -144,20 +151,20 @@ const DeliveryHealthCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
 
   // --- Render ----------------------------------------------------------------
   return (
-    <Card className="@container/card">
+    <Card className="@container/card h-full">
       <CardHeader>
         <CardTitle>{t("sms.forwarding.health.card_title")}</CardTitle>
         <CardDescription>
           {t("sms.forwarding.health.card_description")}
         </CardDescription>
-        <CardAction>
-          <Badge variant="outline" className={TONE_CLASS[state.tone]}>
-            <Icon className="size-3" />
-            {state.label}
-          </Badge>
-        </CardAction>
       </CardHeader>
-      <CardContent className="grid gap-5">
+      <CardContent>
+        <motion.div
+          className="grid gap-5"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: EASE_OUT_EXPO }}
+        >
         {/* Focal state + destination */}
         <div className="flex items-start gap-3">
           <span
@@ -300,6 +307,7 @@ const DeliveryHealthCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
             </motion.p>
           )}
         </AnimatePresence>
+        </motion.div>
       </CardContent>
     </Card>
   );
