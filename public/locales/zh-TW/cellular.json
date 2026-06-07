@@ -641,7 +641,7 @@
       "health": {
         "card_title": "投遞與狀態",
         "card_description": "即時轉發狀態、收件者看到的內容預覽，以及任何投遞問題。",
-        "state_active": "運作中",
+        "state_active": "運作中 · 正常",
         "state_issue": "投遞發生問題",
         "state_off": "轉發已關閉",
         "state_unconfigured": "未設定轉發號碼",

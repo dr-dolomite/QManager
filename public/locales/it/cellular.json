@@ -641,7 +641,7 @@
       "health": {
         "card_title": "Consegna e stato",
         "card_description": "Stato dell'inoltro in tempo reale, un'anteprima di ciò che vede il destinatario ed eventuali problemi di consegna.",
-        "state_active": "Attivo",
+        "state_active": "Attivo · funzionante",
         "state_issue": "Consegna con problemi",
         "state_off": "Inoltro disattivato",
         "state_unconfigured": "Nessuna destinazione impostata",
