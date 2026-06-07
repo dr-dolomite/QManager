@@ -167,18 +167,25 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             exit 0
         fi
 
+        # Success check follows the codebase convention (imei.sh / settings.sh):
+        # fail ONLY on an explicit *ERROR* in the response. atcli_smd11 does not
+        # reliably echo a trailing "OK" for every command/firmware, so a positive
+        # "*OK*" match (the old behaviour) wrongly rejected valid supplementary-
+        # service replies — the reported "couldn't save" bug. A genuine network
+        # rejection (+CME ERROR: 257) is already intercepted above.
         case "$raw" in
-            *OK*)
+            *ERROR*)
+                qlog_error "Call forwarding set failed: $raw"
+                cgi_error "cf_set_failed" "$raw"
+                exit 0
+                ;;
+            *)
+                uci set quecmanager.call_forwarding=call_forwarding 2>/dev/null
                 uci set quecmanager.call_forwarding.last_number="$NUMBER"
                 uci commit quecmanager 2>/dev/null
                 qlog_info "Call forwarding enabled to $NUMBER"
                 jq -n --arg number "$NUMBER" \
                     '{success:true, active:true, number:$number}'
-                exit 0
-                ;;
-            *)
-                qlog_error "Call forwarding set failed: $raw"
-                cgi_error "cf_set_failed" "$raw"
                 exit 0
                 ;;
         esac
@@ -195,15 +202,16 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             exit 0
         fi
 
+        # Negative success check (see the set action above for the rationale).
         case "$raw" in
-            *OK*)
-                qlog_info "Call forwarding disabled"
-                jq -n '{success:true, active:false}'
+            *ERROR*)
+                qlog_error "Call forwarding disable failed: $raw"
+                cgi_error "cf_set_failed" "$raw"
                 exit 0
                 ;;
             *)
-                qlog_error "Call forwarding disable failed: $raw"
-                cgi_error "cf_set_failed" "$raw"
+                qlog_info "Call forwarding disabled"
+                jq -n '{success:true, active:false}'
                 exit 0
                 ;;
         esac

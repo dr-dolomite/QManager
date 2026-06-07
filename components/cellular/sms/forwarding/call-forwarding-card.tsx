@@ -301,7 +301,7 @@ const CallForwardingCard = () => {
                 />
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   className="w-fit"
                   disabled={isSaving}
                   onClick={() => refresh()}

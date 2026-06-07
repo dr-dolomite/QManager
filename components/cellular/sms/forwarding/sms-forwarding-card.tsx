@@ -300,7 +300,7 @@ const SmsForwardingCard = () => {
                   />
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     className="w-fit"
                     disabled={!canSendTest}
                     onClick={handleSendTest}
