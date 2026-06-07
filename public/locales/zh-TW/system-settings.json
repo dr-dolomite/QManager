@@ -5,12 +5,12 @@
   "system": {
     "card_title": "系統設定",
     "card_description": "設定裝置偏好和顯示選項。",
-    "wan_guard_label": "WAN 守護",
-    "wan_guard_info_aria": "WAN 守護說明",
-    "wan_guard_tooltip": "在啟動時檢查 WAN 介面設定，並停用沒有活動資料連線的設定，避免不必要的 CPU 佔用。",
-    "wan_guard_toast_enabled": "已啟用 WAN 守護",
-    "wan_guard_toast_disabled": "已停用 WAN 守護",
-    "wan_guard_toast_failed": "更新 WAN 守護失敗",
+    "force_tailscale_fixes_label": "強制 Tailscale 修復",
+    "force_tailscale_fixes_info_aria": "強制 Tailscale 修復說明",
+    "force_tailscale_fixes_tooltip": "在韌體之上疊加套用 QManager 自身的 Tailscale 防火牆與路由修復。推薦 R02 韌體使用者啟用。",
+    "force_tailscale_fixes_toast_enabled": "已啟用強制 Tailscale 修復——正在套用防火牆區域與 mwan3 例外",
+    "force_tailscale_fixes_toast_disabled": "已停用強制 Tailscale 修復——正在移除防火牆區域",
+    "force_tailscale_fixes_toast_failed": "更新強制 Tailscale 修復失敗",
     "temperature_unit_label": "溫度單位",
     "temperature_unit_aria": "溫度單位",
     "temperature_celsius": "攝氏度",
@@ -547,5 +547,19 @@
       "tier_4": "正在毀滅您的網路",
       "tier_5": "正在腐化核心"
     }
+  },
+  "known_sims": {
+    "row_label": "已知 SIM 卡",
+    "info_aria": "已知 SIM 卡資訊",
+    "tooltip": "QManager 會記住已識別過的 SIM 卡，僅在插入全新 SIM 卡時才提醒您。清除會忘記除當前插入之外的所有 SIM 卡。",
+    "remembered_count_one": "{{count}} 張",
+    "remembered_count_other": "{{count}} 張",
+    "clear_button": "清除",
+    "clear_dialog_title": "清除已知 SIM 卡？",
+    "clear_dialog_description": "這將忘記 QManager 識別過的所有 SIM 卡，但保留當前插入的這張——因此您正在使用的 SIM 卡不會被標記為新卡。之前用過的 SIM 卡在下次插入時會再次提醒。",
+    "clear_dialog_confirm": "清除",
+    "clear_dialog_clearing": "正在清除…",
+    "toast_cleared": "已清除已知 SIM 卡",
+    "toast_clear_failed": "清除已知 SIM 卡失敗"
   }
 }

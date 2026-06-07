@@ -78,7 +78,7 @@
   "library_missing": "找不到必需的库",
   "limit_reached": "已达到最大限制",
   "list_failed": "获取列表失败",
-  "logout_failed": "登出失败",
+  "logout_failed": "退出登录失败",
   "method_not_allowed": "HTTP 方法不被允许 — 使用 GET 或 POST",
   "migration_in_progress": "Tailscale 软件包迁移正在进行中。请稍候再试。",
   "missing_action": "操作字段为必填项",

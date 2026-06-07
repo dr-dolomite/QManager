@@ -55,6 +55,13 @@ export const AVAILABLE_LANGUAGES: readonly LanguageMeta[] = [
     rtl: false,
     bundled: false,
   },
+  {
+    code: "zh-TW",
+    native_name: "繁體中文",
+    english_name: "Traditional Chinese",
+    rtl: false,
+    bundled: false,
+  },
 ];
 
 export const BUNDLED_CODES: readonly LanguageCode[] =

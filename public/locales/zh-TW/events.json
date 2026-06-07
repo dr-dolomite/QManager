@@ -21,12 +21,14 @@
     "profile_applied": "設定檔已套用",
     "profile_failed": "設定檔套用失敗",
     "profile_deactivated": "設定檔已停用",
+    "verizon_mpdn_applied": "Verizon 路由已套用",
+    "verizon_mpdn_reverted": "Verizon 路由已還原",
     "config_backup_collected": "備份已生成",
     "config_restore_started": "恢復已開始",
     "config_restore_section_success": "分段恢復成功",
     "config_restore_section_failed": "分段恢復失敗",
     "config_restore_section_skipped": "分段已跳過",
     "config_restore_completed": "恢復完成",
-    "wol_changed": "WoL 設定已變更"
+    "lan_address_changed": "LAN 地址已更改"
   }
 }

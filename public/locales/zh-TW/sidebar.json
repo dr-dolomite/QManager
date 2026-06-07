@@ -31,6 +31,7 @@
     "ttl_mtu_settings": "TTL 和 MTU 設定",
     "video_optimizer": "影片最佳化器",
     "traffic_masquerade": "流量偽裝",
+    "traffic_engine": "流量引擎",
     "network_events": "網路事件",
     "latency_monitor": "延遲監控",
     "email_alerts": "郵件提醒",
@@ -41,6 +42,7 @@
     "system_settings": "系統設定",
     "configuration_backup": "設定備份",
     "ssh_password": "SSH 密碼",
+    "connection_quality": "連線質量",
     "bandwidth_monitor": "頻寬監控",
     "logs": "日誌",
     "software_update": "軟體更新",
@@ -50,5 +52,8 @@
     "support": "支援",
     "donate": "捐贈專案",
     "languages": "語言"
+  },
+  "switcher": {
+    "opens_new_tab": "在新標籤頁中開啟"
   }
 }
