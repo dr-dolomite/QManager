@@ -75,22 +75,25 @@ Applies a new gateway IP and subnet prefix.
 After flushing this response, the CGI fire-and-forgets a sequenced background job:
 
 ```sh
-# Always: rebind br-lan L3 address
-( ( sleep 1 && /etc/init.d/network reload ) </dev/null >/dev/null 2>&1 & )
-
-# Only when IP or netmask changed (LAN_CHANGED=1):
+# One detached double-fork (lan_config.sh:318-333):
 ( (
-    sleep 2 && /etc/init.d/dnsmasq reload
-    sleep 13 &&
-    for m in $LAN_MEMBERS; do
-        ip link set "$m" down
+    sleep 1
+    /etc/init.d/network reload                 # br-lan rebinds to new IP ≈ +1s
+    if [ "$LAN_CHANGED" = "1" ]; then
+        /etc/init.d/dnsmasq reload             # new DHCP pool active ≈ +1s
+        # Safety-net watchdog: force every member back up after 15s no matter what.
+        ( ( sleep 15
+            for _m in $LAN_MEMBERS; do ip link set "$_m" up 2>/dev/null; done
+          ) </dev/null >/dev/null 2>&1 & )
+        sleep 3
+        for _m in $LAN_MEMBERS; do ip link set "$_m" down 2>/dev/null; done   # +4s
         sleep 4
-        ip link set "$m" up
-    done
+        for _m in $LAN_MEMBERS; do ip link set "$_m" up   2>/dev/null; done   # +8s
+    fi
 ) </dev/null >/dev/null 2>&1 & )
 ```
 
-The 1-second sleep before `network reload` ensures HTTP bytes have flushed before `br-lan` rebinds. The `dnsmasq reload` at +2 s applies the new DHCP pool to `dnsmasq` before the bounce brings clients back up. The carrier bounce fires at +15 s (after the independent `sleep 13` following `dnsmasq reload`) via a separate detached double-fork watchdog.
+The 1-second sleep before `network reload` ensures HTTP bytes have flushed before `br-lan` rebinds. `dnsmasq reload` runs immediately after so the daemon is already serving the new pool before the bounce brings clients back. The carrier bounce then takes every member **down at +4 s** and back **up at +8 s** — the deterministic "modem floor" at which `br-lan` is live again at the new IP. The `sleep 15` block is a *parallel* safety watchdog (force-up if the bounce is killed), **not** the bounce trigger. After +8 s the cable-sense upstream router (Flint 2) must still re-run DHCP, so the new gateway is typically reachable from a browser at **≈ +11–18 s** (empirically ~15 s).
 
 **Error codes:**
 
@@ -116,7 +119,7 @@ The fix: after `network reload`, the CGI bounces every bridge member (`ip link s
 
 **Change gate:** The bounce only fires when the submitted `ipaddr` or `netmask` differs from what is already in UCI (`OLD_IP` / `OLD_MASK` captured before the `uci set`). An identical re-submit is a no-op: no bounce, `disconnect_window_seconds` returns 5, `carrier_bounce` returns false.
 
-**dnsmasq reload:** Immediately before the bounce watchdog arms, the CGI reloads dnsmasq (instance `lan_dns`, leasefile `/tmp/data/dhcp.leases.lan`). This ensures the daemon is already serving the new DHCP pool and scope when bounced clients send their DISCOVER. Without this step, clients could receive an address from the old pool during the window between `network reload` and the first dnsmasq restart.
+**dnsmasq reload:** Immediately after `network reload` (and before the `sleep 3` that precedes the bounce), the CGI reloads dnsmasq (instance `lan_dns`, leasefile `/tmp/data/dhcp.leases.lan`). This ensures the daemon is already serving the new DHCP pool and scope when bounced clients send their DISCOVER. Without this step, clients could receive an address from the old pool during the window between `network reload` and the first dnsmasq restart.
 
 **Device constraints — no `setsid`, no `base64`:** The RM551E BusyBox does not include `setsid` or `base64`. Background detachment therefore uses the double-fork pattern (`( ( ... ) & )`) for both the `network reload` job and the carrier-bounce watchdog. They are independent forks — the bounce is not chained inside the `network reload` subshell — so the reload completing or failing does not affect the bounce timer.
 
@@ -172,20 +175,21 @@ Emit HTTP response  ← MUST flush before the reload severs the connection
   (disconnect_window_seconds = 30 if LAN_CHANGED, 5 if no-op)
   (carrier_bounce = true if LAN_CHANGED, false if no-op)
   ↓
-Fire-and-forget (double-fork, independent of LAN_CHANGED):
-  ( sleep 1 && /etc/init.d/network reload )   ← always; 1s ensures TCP buffer drains
+Fire-and-forget (one detached double-fork):
+  sleep 1 → /etc/init.d/network reload         ← 1s ensures TCP buffer drains; br-lan rebinds L3
   ↓
   br-lan rebinds L3; old HTTP origin is dead
 
-  [only if LAN_CHANGED=1 — separate detached double-fork]:
-  sleep 2 → /etc/init.d/dnsmasq reload        ← new DHCP pool active before clients return
-  sleep 13 → for each bridge member in /sys/class/net/$LAN_DEV/brif:
-               ip link set <m> down
-               sleep 4
-               ip link set <m> up             ← carrier bounce → upstream DHCP re-discovery
+  [only if LAN_CHANGED=1, in the SAME fork]:
+  /etc/init.d/dnsmasq reload                   ← immediate; new DHCP pool active before clients return
+  ( sleep 15 → force every member up ) &       ← parallel safety watchdog (not the bounce)
+  sleep 3 → for each member: ip link set <m> down   ← carrier down  ≈ +4s
+  sleep 4 → for each member: ip link set <m> up     ← carrier up    ≈ +8s (modem floor)
+               ↓
+  upstream router re-runs DHCP → new gateway reachable from a browser ≈ +11–18s (~15s)
 ```
 
-No reboot is issued. `network reload` re-reads UCI and rebinds `br-lan` without touching the cellular interface or other network sections. The carrier bounce is a separate background watchdog that fires ~15 s after the response — independent from the `network reload` subprocess, so the timing is not affected by how long the reload takes.
+No reboot is issued. `network reload` re-reads UCI and rebinds `br-lan` without touching the cellular interface or other network sections. The carrier bounce restores link at ~+8 s (the deterministic modem floor); the upstream DHCP re-lease adds a few more seconds, putting real client reachability at ~+11–18 s.
 
 ---
 
@@ -193,11 +197,20 @@ No reboot is issued. `network reload` re-reads UCI and rebinds `br-lan` without 
 
 | File | Purpose |
 |---|---|
-| `components/local-network/lan-config-card.tsx` | Card with gateway IP `Input` + CIDR prefix `Select` (/16–/30), `AlertDialog` confirm warning, post-apply persistent `Alert` banner. Shows `lan_config.applied_body_auto` copy when `carrierBounce` is true (auto-reconnect messaging); falls back to `lan_config.applied_body` (manual cable re-plug copy) when false. |
+| `components/local-network/lan-config-card.tsx` | Card with gateway IP `Input` + CIDR prefix `Select` (/16–/30), `AlertDialog` confirm warning. On a successful apply it crossfades the form out and renders `LanReconnecting` in its place. |
+| `components/local-network/lan-reconnecting.tsx` | Post-apply reconnect state: a determinate progress ring + spinner that **grace-waits, then reachability-probes the new address once per second**. On a real change (carrier bounce) it graces 8s and rides the backend's 30s window; a no-op graces 2s with a short ceiling. On the first successful probe it auto-navigates to `http://<new-ipaddr>/` (ref-guarded, fires once); if nothing answers by the ceiling it falls back to a manual warning banner (`applied_title` + `applied_body`/`applied_body_auto` + the address link). |
 | `hooks/use-lan-config.ts` | Fetch/save hook; flips to `applied` state on success — no retry after apply. `LanApplied` shape carries `carrierBounce: boolean` (from `json.carrier_bounce ?? false`). |
 | `types/lan-config.ts` | `LanConfigStatus`, `LanConfigSaveRequest`, `LanConfigSaveResponse` (includes `carrier_bounce?: boolean`) |
 
 The card slots into `components/local-network/ethernet-status.tsx`, replacing the removed Wake-on-LAN card.
+
+### 5. Auto-redirect uses an event-driven no-cors reachability probe
+
+After the IP changes the device is reachable only at a **new origin**. A normal `fetch()` against it can't *read* the response (CORS) and the auth cookie is scoped to the old origin — but `LanReconnecting` doesn't need to read anything, only to know whether the device **answers**. It probes with `fetch(\`http://<new-ip>/?_qm=<ts>\`, { mode: "no-cors", redirect: "manual", signal })`, which **resolves on any HTTP response (opaque)** and **rejects on a connection failure** — a clean cross-origin reachability signal. Each probe is `AbortController`-bounded (1.5 s) so an unreachable host can't hang the poll. PNA doesn't block it because the serving page is itself on a private IP (private→private).
+
+The redirect is **event-driven, not a fixed timer**: it navigates the instant a probe succeeds, so the typical felt experience is the real reconnect time (~15 s), not the ceiling. The ceiling is only the give-up point.
+
+Timing is anchored to the measured apply sequence (invariant #1): the carrier bounce restores link at **+8 s** (modem floor) and the upstream DHCP tail puts client reachability at **~+11–18 s**. So on a real change `LanReconnecting` **graces 8 s** (no point probing while the modem is down) and uses the backend's **`disconnect_window_seconds` (30 s) as the ceiling** — long enough for the auto-redirect to win, with the manual banner only if reconnection genuinely overruns 30 s. A no-op apply (same IP, no bounce — only the `network reload` blip) graces 2 s with a short ceiling. A **10 s ceiling was tried and rejected**: it expires before the ~15 s reconnect and would force the manual fallback every time. The address link stays visible the whole time as a manual fallback (notably for static-IP clients that never auto-reconnect).
 
 ### i18n keys affected (all 5 locales: en, zh-CN, zh-TW, it, id)
 
@@ -206,6 +219,9 @@ The card slots into `components/local-network/ethernet-status.tsx`, replacing th
 | `lan_config.applied_body_auto` | **New.** Auto-reconnect body copy — shown when `carrier_bounce` is true. Tells the user that DHCP devices reconnect automatically; static-IP devices need a manual subnet move. |
 | `lan_config.confirm_reconnect` | **Rewritten.** Previously implied a manual cable re-plug was always required. Now distinguishes: DHCP devices reconnect automatically; static-IP devices need manual reconfiguration. |
 | `lan_config.applied_body` | Unchanged. Manual fallback body — shown when `carrier_bounce` is false (no-op apply). |
+| `lan_config.reconnecting_title` | **New.** Heading shown during the grace + probe phase ("Reconnecting to the new address…"). |
+| `lan_config.reconnecting_auto_note` | **New.** Small note under the address link telling the user the page will open the new address automatically. |
+| `lan_config.reconnecting_opening` | **New.** Heading shown the instant a probe succeeds and the navigation fires ("Opening the new address…"). |
 
 ---
 

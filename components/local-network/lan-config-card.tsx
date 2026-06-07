@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { TriangleAlertIcon, ExternalLinkIcon } from "lucide-react";
+import { TriangleAlertIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { EASE_OUT_EXPO, DUR } from "@/lib/motion";
 
@@ -40,10 +40,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { useLanConfig } from "@/hooks/use-lan-config";
+import { LanReconnecting } from "@/components/local-network/lan-reconnecting";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 
 // =============================================================================
@@ -183,9 +184,7 @@ const LanConfigCard = () => {
     );
   }
 
-  // --- Unified render (applied banner + normal form, crossfaded) --------------
-  const appliedUrl = applied ? `http://${applied.newIpaddr}` : null;
-
+  // --- Unified render (reconnect countdown + normal form, crossfaded) ---------
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -195,38 +194,13 @@ const LanConfigCard = () => {
       <CardContent>
         <AnimatePresence mode="wait" initial={false}>
           {applied ? (
-            <motion.div
-              key="applied"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: DUR.base, ease: EASE_OUT_EXPO }}
-            >
-              <Alert variant="warning">
-                <TriangleAlertIcon />
-                <AlertTitle>{t("lan_config.applied_title")}</AlertTitle>
-                <AlertDescription>
-                  <p>
-                    {t(
-                      applied.carrierBounce
-                        ? "lan_config.applied_body_auto"
-                        : "lan_config.applied_body",
-                      {
-                        address: `${applied.newIpaddr}/${applied.prefix}`,
-                        seconds: applied.windowSeconds,
-                      },
-                    )}
-                  </p>
-                  <a
-                    href={appliedUrl!}
-                    className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4 tabular-nums"
-                  >
-                    <ExternalLinkIcon className="size-3.5" />
-                    {appliedUrl}
-                  </a>
-                </AlertDescription>
-              </Alert>
-            </motion.div>
+            <LanReconnecting
+              key="reconnecting"
+              newIpaddr={applied.newIpaddr}
+              prefix={applied.prefix}
+              windowSeconds={applied.windowSeconds}
+              carrierBounce={applied.carrierBounce}
+            />
           ) : (
             <motion.div
               key="form"

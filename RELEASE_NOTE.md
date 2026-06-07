@@ -1,6 +1,6 @@
 # 🚀 QManager BETA v0.1.25
 
-This release adds LAN address configuration to the Local Network page and polishes the login screen.
+This release adds automatic SMS forwarding, a smarter connection watchdog that can recover from slow-but-reachable links, full hardware band-capability in Band Locking, and LAN address configuration on the Local Network page — plus Traditional Chinese as a downloadable language pack.
 
 ## ✨ New Features
 
@@ -9,12 +9,10 @@ This release adds LAN address configuration to the Local Network page and polish
 - **The connection watchdog can now recover from degraded-but-reachable links.** When enabled, you can set a latency ceiling (ms) and a packet-loss ceiling (%) — if either is exceeded for a configurable number of consecutive checks, the watchdog runs through the same recovery steps it uses for a full outage. The feature is off by default; turn it on in Monitoring → Connection Watchdog under Connection Quality Monitoring.
 
 - **Band Locking now shows your modem's full band capability.** The band checkboxes reflect every band the RM551E hardware can use, not just what the current SIM announces. Bands your network or SIM actively uses are highlighted in the usual accent color; bands the modem supports but your carrier doesn't use are marked in yellow — so you know exactly what you're choosing between before you lock. The band list also refreshes automatically after a SIM swap, keeping the display accurate without a reboot.
-- **Set your LAN gateway address and subnet from the Local Network page.** You can now change the modem's LAN IP address and subnet prefix (/16–/30) directly in QManager — no SSH required. A confirmation dialog reminds you that the LAN briefly drops on apply, and a persistent banner shows the new address to browse to. If a router is plugged into the modem's LAN port in DHCP/WAN mode (such as a GL.iNet device), QManager briefly bounces the LAN link on apply so the router drops its old lease and picks up the new gateway on its own — no unplugging the cable. Devices with a static IP still need to be moved to the new subnet manually.
+- **Set your LAN gateway address and subnet from the Local Network page.** You can now change the modem's LAN IP address and subnet prefix (/16–/30) directly in QManager — no SSH required. A confirmation dialog reminds you that the LAN briefly drops on apply, then a live countdown shows the reconnect progress and automatically opens the new address for you once the device is back — no need to retype it. Devices with a static IP still need to be moved to the new subnet manually.
 - **One-tap Bypass Hotspot in the Traffic Engine.** A new switch under each engine mode pins TTL and hop-limit to 64 so tethered devices aren't flagged as a hotspot — no need to open the TTL/HL page. If TTL/HL is already set elsewhere (the TTL page or a SIM profile), the switch shows on and stays locked so it never fights your existing setup.
 
 ## ✅ Improvements
-
-- **SMS Forwarding now has a Delivery & Health panel.** The forwarding page's right-hand card shows the live relay state at a glance (active, issue, off, or unconfigured), a preview bubble of exactly what your recipient will receive, a test-send button that verifies the saved path end-to-end, and a delivery-failure history with a clear action. On wider screens the two forwarding cards now line up to the same height, and the page settles into place as it loads instead of the layout shifting when data arrives. Call Forwarding has been removed — it was not reliably supported on most carriers and data-only plans.
 
 - **The watchdog's first recovery step now re-registers the modem on the network** instead of bouncing the software WAN interface. This gives the modem a real chance to recover a stalled network attach and is a more effective first action before escalating to a radio toggle or reboot.
 
