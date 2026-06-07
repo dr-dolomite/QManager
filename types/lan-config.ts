@@ -32,6 +32,13 @@ export interface LanConfigSaveResponse {
   apply_in_progress?: boolean;
   /** Seconds the LAN is expected to be unreachable while br-lan rebinds */
   disconnect_window_seconds?: number;
+  /**
+   * True when the backend will physically bounce the LAN port carrier after the
+   * reload (only when ipaddr/netmask actually changed). A cable-sense upstream
+   * router then re-runs DHCP and picks up the new gateway automatically — so the
+   * UI can promise an automatic reconnect rather than a manual cable re-plug.
+   */
+  carrier_bounce?: boolean;
   /** The address the device will be reachable at after the reload */
   new_ipaddr?: string;
   netmask?: string;

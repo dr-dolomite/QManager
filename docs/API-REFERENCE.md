@@ -766,14 +766,18 @@ Read or write the LAN bridge (`br-lan`) IPv4 address and subnet. Auth-gated. See
 {
   "success": true,
   "apply_in_progress": true,
-  "disconnect_window_seconds": 15,
+  "disconnect_window_seconds": 30,
+  "carrier_bounce": true,
   "new_ipaddr": "192.168.2.1",
   "netmask": "255.255.255.0",
   "prefix": 24
 }
 ```
 
-> ⚠️ WARNING: This response is emitted **before** the `network reload` fires. Changing the LAN IP severs the serving HTTP connection and makes the old origin unreachable. The frontend hook does not retry — it transitions directly to an applied state and shows a persistent banner with the new address.
+- `disconnect_window_seconds` — **30** when the IP or netmask changed (a carrier bounce follows `network reload`); **5** when the submitted values match UCI exactly (no-op, no bounce).
+- `carrier_bounce` — `true` when a physical LAN-port bounce was scheduled (mirrors `disconnect_window_seconds == 30`); `false` on a no-op apply.
+
+> ⚠️ WARNING: This response is emitted **before** the `network reload` fires. Changing the LAN IP severs the serving HTTP connection and makes the old origin unreachable. The frontend hook does not retry — it transitions directly to an applied state and shows a persistent banner with the new address. When `carrier_bounce` is true, the card shows auto-reconnect copy (`lan_config.applied_body_auto`) instead of the manual fallback.
 
 **Error codes:** `invalid_ipaddr`, `invalid_prefix`, `invalid_host_in_subnet` (IP is the network/broadcast address of the resulting subnet), `lan_read_failed`, `lan_save_failed`
 

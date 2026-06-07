@@ -21,10 +21,19 @@
 #
 # POST body:   { "ipaddr": "192.168.1.1", "prefix": 24 }
 # POST response (emitted BEFORE the apply that severs this connection):
-#   { success, apply_in_progress, disconnect_window_seconds, new_ipaddr,
-#     netmask, prefix }
+#   { success, apply_in_progress, disconnect_window_seconds, carrier_bounce,
+#     new_ipaddr, netmask, prefix }
 # Apply: fire-and-forget `/etc/init.d/network reload` (rebinds br-lan from
-#        UCI without a reboot). Never reboot / AT+CFUN here.
+#        UCI without a reboot). When the address/netmask actually changed, the
+#        apply ALSO reloads dnsmasq and physically carrier-bounces the LAN
+#        bridge member port(s) (ip link down/up). `network reload` rebinds
+#        br-lan but never drops the physical port's carrier, so a cable-sense
+#        upstream router (e.g. GL.iNet Flint 2 in WAN/DHCP mode) keeps its
+#        stale lease/gateway. The carrier bounce forces it to re-DHCP into the
+#        new subnet. An independent watchdog force-ups every member after 15 s
+#        so an interrupted bounce can never strand the LAN. The response
+#        reports `carrier_bounce` (true only when armed). Never reboot /
+#        AT+CFUN here.
 #
 # Endpoint: GET/POST /cgi-bin/quecmanager/network/lan_config.sh
 # Install location: /www/cgi-bin/quecmanager/network/lan_config.sh
@@ -242,6 +251,25 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
     qlog_info "Applying LAN config: ipaddr=$ipaddr netmask=$netmask prefix=$prefix"
 
+    # --- Capture pre-change config to decide whether a carrier bounce is warranted.
+    OLD_IP=$(uci -q get network.lan.ipaddr 2>/dev/null)
+    OLD_MASK=$(uci -q get network.lan.netmask 2>/dev/null)
+    LAN_CHANGED=0
+    if [ "$OLD_IP" != "$ipaddr" ] || [ "$OLD_MASK" != "$netmask" ]; then
+        LAN_CHANGED=1
+    fi
+
+    # --- Physical port(s) to carrier-bounce so cable-sense routers re-DHCP. ---
+    # Derive from the bridge's kernel member list; fall back to the device
+    # itself if it isn't a bridge. No hardcoded eth0.
+    LAN_DEV=$(uci -q get network.lan.device 2>/dev/null)
+    [ -z "$LAN_DEV" ] && LAN_DEV="br-lan"
+    if [ -d "/sys/class/net/$LAN_DEV/brif" ]; then
+        LAN_MEMBERS=$(ls "/sys/class/net/$LAN_DEV/brif" 2>/dev/null | tr '\n' ' ')
+    else
+        LAN_MEMBERS="$LAN_DEV"
+    fi
+
     # --- Persist to UCI -------------------------------------------------------
     uci set network.lan.ipaddr="$ipaddr" 2>/dev/null
     uci set network.lan.netmask="$netmask" 2>/dev/null
@@ -254,23 +282,55 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     append_event "lan_address_changed" "LAN address changed to $ipaddr/$prefix" "info"
 
     # --- Emit HTTP response BEFORE the network reload severs this connection -
+    # Report whether a carrier bounce is armed and a realistic window for it.
+    if [ "$LAN_CHANGED" = "1" ]; then
+        _bounce=true
+        _window=30
+    else
+        _bounce=false
+        _window=5
+    fi
     jq -n \
         --arg new_ipaddr "$ipaddr" \
         --arg netmask "$netmask" \
         --argjson prefix "$prefix" \
+        --argjson carrier_bounce "$_bounce" \
+        --argjson disconnect_window_seconds "$_window" \
         '{
             success: true,
             apply_in_progress: true,
-            disconnect_window_seconds: 15,
+            disconnect_window_seconds: $disconnect_window_seconds,
+            carrier_bounce: $carrier_bounce,
             new_ipaddr: $new_ipaddr,
             netmask: $netmask,
             prefix: $prefix
         }'
 
-    # --- Fire-and-forget network reload (double-fork) -------------------------
-    # 1 s delay ensures HTTP bytes flush before br-lan rebinds. reload (not
-    # restart/ifup) re-reads UCI without a reboot.
-    ( ( sleep 1 && /etc/init.d/network reload ) </dev/null >/dev/null 2>&1 & )
+    # --- Fire-and-forget: reload network, then carrier-bounce the LAN port(s) -
+    # The 1 s delay flushes HTTP bytes before br-lan rebinds. When the address
+    # actually changed, we also reload dnsmasq (so it serves the new pool) and
+    # then physically bounce each bridge member's carrier — this is what makes a
+    # cable-sense upstream router (e.g. Flint 2) drop its stale lease and
+    # re-DHCP into the new subnet with the new gateway. `network reload` alone
+    # never drops carrier, so the router would otherwise keep the old lease.
+    # An independent watchdog force-ups every member after 15 s so an
+    # interrupted bounce can never strand the LAN. NEVER reboot / AT+CFUN here.
+    ( (
+        sleep 1
+        /etc/init.d/network reload
+        if [ "$LAN_CHANGED" = "1" ]; then
+            /etc/init.d/dnsmasq reload
+            # Safety net: guarantee links return even if the bounce is killed.
+            ( ( sleep 15
+                for _m in $LAN_MEMBERS; do ip link set "$_m" up 2>/dev/null; done
+              ) </dev/null >/dev/null 2>&1 & )
+            sleep 3
+            # Word-splitting of $LAN_MEMBERS is intentional (iterate members).
+            for _m in $LAN_MEMBERS; do ip link set "$_m" down 2>/dev/null; done
+            sleep 4
+            for _m in $LAN_MEMBERS; do ip link set "$_m" up 2>/dev/null; done
+        fi
+    ) </dev/null >/dev/null 2>&1 & )
 
     exit 0
 fi

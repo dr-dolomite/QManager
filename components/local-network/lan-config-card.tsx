@@ -207,10 +207,15 @@ const LanConfigCard = () => {
                 <AlertTitle>{t("lan_config.applied_title")}</AlertTitle>
                 <AlertDescription>
                   <p>
-                    {t("lan_config.applied_body", {
-                      address: `${applied.newIpaddr}/${applied.prefix}`,
-                      seconds: applied.windowSeconds,
-                    })}
+                    {t(
+                      applied.carrierBounce
+                        ? "lan_config.applied_body_auto"
+                        : "lan_config.applied_body",
+                      {
+                        address: `${applied.newIpaddr}/${applied.prefix}`,
+                        seconds: applied.windowSeconds,
+                      },
+                    )}
                   </p>
                   <a
                     href={appliedUrl!}

@@ -37,6 +37,12 @@ export interface LanApplied {
   prefix: number;
   /** Seconds the LAN is expected to be unreachable */
   windowSeconds: number;
+  /**
+   * True when the backend bounced the LAN port carrier — a DHCP upstream router
+   * reconnects automatically, so the banner can say so instead of asking for a
+   * manual cable re-plug.
+   */
+  carrierBounce: boolean;
 }
 
 export interface SaveLanConfigResult {
@@ -217,6 +223,7 @@ export function useLanConfig(): UseLanConfigReturn {
           newIpaddr: json.new_ipaddr ?? ipaddr,
           prefix: json.prefix ?? prefix,
           windowSeconds: json.disconnect_window_seconds ?? 15,
+          carrierBounce: json.carrier_bounce ?? false,
         });
       }
       return { success: true };
