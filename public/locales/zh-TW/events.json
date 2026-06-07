@@ -1,0 +1,32 @@
+{
+  "type": {
+    "network_mode": "網路模式變更",
+    "band_change": "頻段變更",
+    "pci_change": "小區切換",
+    "scc_pci_change": "輔小區頻段變更",
+    "ca_change": "載波聚合",
+    "nr_anchor": "5G 錨點變更",
+    "signal_lost": "訊號丟失",
+    "signal_restored": "訊號恢復",
+    "internet_lost": "網路中斷",
+    "internet_restored": "網路恢復",
+    "high_latency": "高延遲",
+    "latency_recovered": "延遲恢復",
+    "high_packet_loss": "高丟包率",
+    "packet_loss_recovered": "丟包率恢復",
+    "watchcat_recovery": "看門狗恢復",
+    "sim_failover": "SIM 卡切換",
+    "sim_swap_detected": "檢測到 SIM 卡更換",
+    "airplane_mode": "飛航模式",
+    "profile_applied": "設定檔已套用",
+    "profile_failed": "設定檔套用失敗",
+    "profile_deactivated": "設定檔已停用",
+    "config_backup_collected": "備份已生成",
+    "config_restore_started": "恢復已開始",
+    "config_restore_section_success": "分段恢復成功",
+    "config_restore_section_failed": "分段恢復失敗",
+    "config_restore_section_skipped": "分段已跳過",
+    "config_restore_completed": "恢復完成",
+    "wol_changed": "WoL 設定已變更"
+  }
+}

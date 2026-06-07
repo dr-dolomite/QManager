@@ -1,0 +1,36 @@
+{
+  "reboot": "重啟",
+  "disconnect": "斷開連線",
+  "connect": "連線",
+  "signal_info": "訊號資訊",
+  "ca_info": "載波聚合資訊",
+  "get_sim_slot": "取得當前 SIM 卡槽",
+  "switch_sim_slot_1": "切換到 SIM 卡槽 1",
+  "switch_sim_slot_2": "切換到 SIM 卡槽 2",
+  "get_apn_list": "取得當前 APN 列表",
+  "set_apn_nrbroadband": "將 APN 設為 NRBROADBAND",
+  "show_imei": "顯示當前 IMEI",
+  "show_network_mode": "顯示當前網路模式",
+  "set_network_mode_auto": "將網路模式設為 AUTO",
+  "set_network_mode_5g_lte": "將網路模式設為 僅 5G NR/4G LTE",
+  "set_network_mode_5g_only": "將網路模式設為 僅 5G NR",
+  "set_network_mode_lte_only": "將網路模式設為 僅 4G LTE",
+  "check_sa_nsa_status": "檢查 SA/NSA 停用狀態",
+  "enable_sa_nsa": "啟用 SA 與 NSA",
+  "disable_sa_only": "僅停用 SA",
+  "disable_nsa_only": "僅停用 NSA",
+  "get_5g_sa_bands": "取得已啟用的 5G NR SA 頻段",
+  "get_5g_nsa_bands": "取得已啟用的 5G NR NSA 頻段",
+  "get_4g_lte_bands": "取得已啟用的 4G LTE 頻段",
+  "view_ip_addresses": "檢視已分配的 IP 地址",
+  "enable_ippt": "啟用 IPPT（MAC 直通）",
+  "disable_ippt": "停用 IPPT",
+  "blocked": {
+    "qscanfreq": "請使用“小區掃描”頁面進行頻率掃描。",
+    "qscan": "請使用“小區掃描”頁面進行網路掃描。",
+    "factory_reset": "不允許從終端執行出廠重置。"
+  },
+  "warnings": {
+    "disable_radio": "這將關閉調變解調器射頻。如透過 Tailscale 連線，可能會丟失對此介面的存取。"
+  }
+}

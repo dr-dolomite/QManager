@@ -1,0 +1,44 @@
+{
+  "actions": {
+    "save": "儲存",
+    "cancel": "取消",
+    "confirm": "確認",
+    "apply": "套用",
+    "close": "關閉",
+    "retry": "重試",
+    "reboot": "重啟",
+    "log_out": "登出",
+    "reboot_device": "重啟裝置",
+    "reconnect_modem": "重新連線調變解調器",
+    "change_display_name": "變更顯示名稱",
+    "change_password": "變更密碼"
+  },
+  "state": {
+    "loading": "載入中…",
+    "saving": "儲存中…",
+    "applying": "套用中…",
+    "disconnecting": "斷開連線中…",
+    "reconnecting": "重新連線中…",
+    "installing": "正在安裝…",
+    "removing": "正在刪除…",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "on": "開",
+    "off": "關"
+  },
+  "time": {
+    "just_now": "剛剛",
+    "now": "現在",
+    "unknown": "未知",
+    "minutes_ago_one": "{{count}} 分鐘前",
+    "minutes_ago_other": "{{count}} 分鐘前",
+    "hours_ago_one": "{{count}} 小時前",
+    "hours_ago_other": "{{count}} 小時前",
+    "days_ago_one": "{{count}} 天前",
+    "days_ago_other": "{{count}} 天前"
+  },
+  "language": {
+    "label": "語言",
+    "switch_aria": "切換語言"
+  }
+}
