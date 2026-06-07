@@ -6,8 +6,6 @@ This release adds LAN address configuration to the Local Network page and polish
 
 - **SMS Forwarding: incoming texts are automatically relayed to any phone number you choose.** Enable it in SMS Center → Forwarding, enter a destination number, and every new message that arrives in your modem's inbox is sent on as "From &lt;sender&gt;: &lt;message&gt;". Enabling never blasts your existing inbox — only messages received after you turn it on are forwarded. A built-in test button lets you confirm the path works before you rely on it. If a message can't be delivered after three attempts, a persistent alert tells you exactly which message failed and why; you can clear the alert once you've acknowledged it. The feature stays on regardless of individual delivery failures.
 
-- **Call Forwarding: redirect all incoming calls via your carrier.** Set a forwarding number in SMS Center → Forwarding and your carrier routes all inbound calls there at the network level — no modem answer needed. Note that call forwarding is a carrier supplementary service: if your carrier or plan doesn't support it, the card will tell you clearly rather than showing a generic error.
-
 - **The connection watchdog can now recover from degraded-but-reachable links.** When enabled, you can set a latency ceiling (ms) and a packet-loss ceiling (%) — if either is exceeded for a configurable number of consecutive checks, the watchdog runs through the same recovery steps it uses for a full outage. The feature is off by default; turn it on in Monitoring → Connection Watchdog under Connection Quality Monitoring.
 
 - **Band Locking now shows your modem's full band capability.** The band checkboxes reflect every band the RM551E hardware can use, not just what the current SIM announces. Bands your network or SIM actively uses are highlighted in the usual accent color; bands the modem supports but your carrier doesn't use are marked in yellow — so you know exactly what you're choosing between before you lock. The band list also refreshes automatically after a SIM swap, keeping the display accurate without a reboot.
@@ -15,6 +13,8 @@ This release adds LAN address configuration to the Local Network page and polish
 - **One-tap Bypass Hotspot in the Traffic Engine.** A new switch under each engine mode pins TTL and hop-limit to 64 so tethered devices aren't flagged as a hotspot — no need to open the TTL/HL page. If TTL/HL is already set elsewhere (the TTL page or a SIM profile), the switch shows on and stays locked so it never fights your existing setup.
 
 ## ✅ Improvements
+
+- **SMS Forwarding now has a Delivery & Health panel.** The forwarding page's right-hand card shows the live relay state at a glance (active, issue, off, or unconfigured), a preview bubble of exactly what your recipient will receive, a test-send button that verifies the saved path end-to-end, and a delivery-failure history with a clear action. Call Forwarding has been removed — it was not reliably supported on most carriers and data-only plans.
 
 - **The watchdog's first recovery step now re-registers the modem on the network** instead of bouncing the software WAN interface. This gives the modem a real chance to recover a stalled network attach and is a more effective first action before escalating to a radio toggle or reboot.
 

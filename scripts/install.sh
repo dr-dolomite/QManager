@@ -858,17 +858,11 @@ seed_uci_defaults() {
         info "quecmanager.sms_forwarding.target_phone already set — preserving user choice"
     fi
 
-    # Call Forwarding — unconditional CCFC. Only persisted knob is last_number
-    # (UI prefill; live state is queried from the network on demand). Seed the
-    # section + empty last_number. Idempotent + preserve-user-choice.
-    if ! uci -q get quecmanager.call_forwarding >/dev/null 2>&1; then
-        uci set quecmanager.call_forwarding=call_forwarding
-    fi
-    if ! uci -q get quecmanager.call_forwarding.last_number >/dev/null 2>&1; then
-        uci set quecmanager.call_forwarding.last_number=''
-        info "Seeded quecmanager.call_forwarding.last_number=''"
-    else
-        info "quecmanager.call_forwarding.last_number already set — preserving user choice"
+    # Call Forwarding (removed) — drop the stale section on upgrade from a build
+    # that seeded quecmanager.call_forwarding. Harmless no-op on fresh installs.
+    if uci -q get quecmanager.call_forwarding >/dev/null 2>&1; then
+        uci -q delete quecmanager.call_forwarding 2>/dev/null
+        info "Removed retired quecmanager.call_forwarding section"
     fi
 
     uci commit quecmanager 2>/dev/null || warn "uci commit quecmanager failed"

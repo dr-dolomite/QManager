@@ -160,8 +160,5 @@
   "lan_read_failed": "Couldn't read the current LAN settings",
   "lan_save_failed": "Couldn't save the LAN settings",
   "write_failed": "Failed to write configuration to storage",
-  "wrong_schema": "Backup schema version does not match the current version",
-  "cf_network_rejected": "Your carrier doesn't allow call-forwarding control on this network",
-  "cf_query_failed": "Couldn't read call-forwarding state from the modem",
-  "cf_set_failed": "Couldn't update call forwarding"
+  "wrong_schema": "Backup schema version does not match the current version"
 }

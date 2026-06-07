@@ -3,11 +3,9 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { AnimatePresence, motion } from "motion/react";
 
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -24,82 +22,29 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
+import { AlertCircle, RefreshCcwIcon } from "lucide-react";
 import {
-  AlertCircle,
-  CheckCircle2Icon,
-  Loader2,
-  MinusCircleIcon,
-  RefreshCcwIcon,
-  SendIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
-import { EASE_OUT_QUART } from "@/lib/motion";
-import {
-  useSmsForwarding,
   type SmsForwardingData,
+  type UseSmsForwardingReturn,
 } from "@/hooks/use-sms-forwarding";
 
 // =============================================================================
-// SmsForwardingCard — app-level SMS relay (daemon-backed)
+// SmsForwardingCard — the control surface for the daemon-backed SMS relay.
+// Setup only: enable toggle + destination number + save. Live status, the
+// recipient preview, the test action, and delivery failures all live in the
+// companion DeliveryHealthCard, which shares this card's lifted hook.
 // =============================================================================
 
 // E.164-ish: optional leading +, first digit 1-9, total 7-15 digits.
 const PHONE_REGEX = /^\+?[1-9]\d{6,14}$/;
 
-function StatusBadge({ data }: { data: SmsForwardingData }) {
+const SmsForwardingCard = ({ fwd }: { fwd: UseSmsForwardingReturn }) => {
   const { t } = useTranslation("cellular");
-  if (!data.settings.enabled) {
-    return (
-      <Badge
-        variant="outline"
-        className="border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-      >
-        <MinusCircleIcon className="size-3" />
-        {t("sms.forwarding.sms.status_off")}
-      </Badge>
-    );
-  }
-  if (data.failure_count > 0) {
-    return (
-      <Badge
-        variant="outline"
-        className="border-warning/30 bg-warning/15 text-warning"
-      >
-        <TriangleAlertIcon className="size-3" />
-        {t("sms.forwarding.sms.status_issue")}
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="border-success/30 bg-success/15 text-success"
-    >
-      <CheckCircle2Icon className="size-3" />
-      {t("sms.forwarding.sms.status_on")}
-    </Badge>
-  );
-}
-
-const SmsForwardingCard = () => {
-  const { t } = useTranslation("cellular");
-  const {
-    data,
-    isLoading,
-    isSaving,
-    isSendingTest,
-    isClearing,
-    error,
-    saveSettings,
-    sendTest,
-    clearFailures,
-    refresh,
-  } = useSmsForwarding();
+  const { data, isLoading, isSaving, isSendingTest, error, saveSettings, refresh } =
+    fwd;
 
   const { saved, markSaved } = useSaveFlash();
   const [prevData, setPrevData] = useState<SmsForwardingData | null>(null);
@@ -113,8 +58,10 @@ const SmsForwardingCard = () => {
     setTargetPhone(data.settings.target_phone);
   }
 
+  // Only validate while enabling — turning forwarding off must never be blocked
+  // by a stale/invalid number left in the field.
   const phoneError =
-    targetPhone && !PHONE_REGEX.test(targetPhone)
+    isEnabled && targetPhone && !PHONE_REGEX.test(targetPhone)
       ? t("sms.forwarding.sms.validation_phone")
       : null;
 
@@ -124,14 +71,6 @@ const SmsForwardingCard = () => {
     : false;
 
   const canSave = !phoneError && isDirty && !isSaving && !isSendingTest;
-
-  // Test only makes sense against a saved, valid, enabled target.
-  const canSendTest =
-    !!data?.settings.enabled &&
-    !!data?.settings.target_phone &&
-    !isDirty &&
-    !isSaving &&
-    !isSendingTest;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,24 +88,6 @@ const SmsForwardingCard = () => {
     }
   };
 
-  const handleSendTest = async () => {
-    const success = await sendTest();
-    if (success) {
-      toast.success(t("sms.forwarding.sms.toast_test_success"));
-    } else {
-      toast.error(error || t("sms.forwarding.sms.toast_test_error"));
-    }
-  };
-
-  const handleClear = async () => {
-    const success = await clearFailures();
-    if (success) {
-      toast.success(t("sms.forwarding.sms.toast_clear_success"));
-    } else {
-      toast.error(error || t("sms.forwarding.sms.toast_clear_error"));
-    }
-  };
-
   // --- Loading skeleton ------------------------------------------------------
   if (isLoading) {
     return (
@@ -181,10 +102,7 @@ const SmsForwardingCard = () => {
           <div className="grid gap-4">
             <Skeleton className="h-8 w-56" />
             <Skeleton className="h-10 w-full max-w-sm" />
-            <div className="flex gap-2">
-              <Skeleton className="h-9 w-28" />
-              <Skeleton className="h-9 w-32" />
-            </div>
+            <Skeleton className="h-9 w-28" />
           </div>
         </CardContent>
       </Card>
@@ -223,8 +141,6 @@ const SmsForwardingCard = () => {
     );
   }
 
-  const failures = data?.failures ?? [];
-
   // --- Render ----------------------------------------------------------------
   return (
     <Card className="@container/card">
@@ -233,11 +149,6 @@ const SmsForwardingCard = () => {
         <CardDescription>
           {t("sms.forwarding.sms.card_description")}
         </CardDescription>
-        {data && (
-          <CardAction>
-            <StatusBadge data={data} />
-          </CardAction>
-        )}
       </CardHeader>
       <CardContent>
         <form className="grid gap-4" onSubmit={handleSave}>
@@ -289,103 +200,16 @@ const SmsForwardingCard = () => {
                 )}
               </Field>
 
-              {/* Actions */}
-              <div className="grid gap-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <SaveButton
-                    type="submit"
-                    isSaving={isSaving}
-                    saved={saved}
-                    disabled={!canSave}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-fit"
-                    disabled={!canSendTest}
-                    onClick={handleSendTest}
-                  >
-                    {isSendingTest ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        {t("sms.forwarding.sms.test_sending")}
-                      </>
-                    ) : (
-                      <>
-                        <SendIcon className="size-4" />
-                        {t("sms.forwarding.sms.test_button")}
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {isDirty && isEnabled && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("sms.forwarding.sms.save_before_test_hint")}
-                  </p>
-                )}
-              </div>
+              {/* Save */}
+              <SaveButton
+                type="submit"
+                isSaving={isSaving}
+                saved={saved}
+                disabled={!canSave}
+                className="w-fit"
+              />
             </FieldGroup>
           </FieldSet>
-
-          {/* Persistent failure alert */}
-          <AnimatePresence initial={false}>
-            {failures.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-                style={{ overflow: "hidden" }}
-              >
-                <Alert variant="destructive">
-                  <TriangleAlertIcon className="size-4" />
-                  <AlertTitle>
-                    {t("sms.forwarding.sms.failure_title", {
-                      count: failures.length,
-                    })}
-                  </AlertTitle>
-                  <AlertDescription className="grid gap-2">
-                    <p>{t("sms.forwarding.sms.failure_description")}</p>
-                    <ul className="grid gap-1 text-xs">
-                      {failures.slice(0, 5).map((f, i) => (
-                        <li
-                          key={`${f.sender}-${f.timestamp}-${i}`}
-                          className="flex flex-wrap items-baseline gap-x-2"
-                        >
-                          <span className="font-mono font-medium">
-                            {f.sender || t("sms.forwarding.sms.failure_unknown_sender")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {f.timestamp}
-                          </span>
-                          {f.last_error && (
-                            <span className="text-muted-foreground">
-                              — {f.last_error}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-1 w-fit"
-                      disabled={isClearing}
-                      onClick={handleClear}
-                    >
-                      {isClearing ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <XIcon className="size-3.5" />
-                      )}
-                      {t("sms.forwarding.sms.clear_button")}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </form>
       </CardContent>
     </Card>

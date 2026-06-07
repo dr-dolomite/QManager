@@ -492,7 +492,7 @@ Phone-number handling: the endpoint strips a leading `+` before calling `sms_too
 
 ### GET/POST `/cellular/sms_forwarding.sh`
 
-Manages the SMS forwarding daemon (settings + failure state). See [`docs/features/sms-call-forwarding.md`](features/sms-call-forwarding.md) for daemon invariants (seed-on-first-run, loop guard, 3-attempt abandon).
+Manages the SMS forwarding daemon (settings + failure state). See [`docs/features/sms-forwarding.md`](features/sms-forwarding.md) for daemon invariants (seed-on-first-run, loop guard, 3-attempt abandon) and the Delivery & Health card derived-state model.
 
 **GET Response:**
 
@@ -545,68 +545,6 @@ Deletes `/tmp/qmanager_sms_forward_failures.json`. Returns `{ "success": true }`
 Reads target from UCI (ignores request body). Single send attempt. Test body: `From QManager: SMS forwarding test`. Returns `{ "success": true }` or `{ "success": false, "error": "send_failed", "detail": "..." }`.
 
 **Error codes:** `invalid_phone`, `missing_action`, `invalid_action`, `send_failed`
-
----
-
-### GET/POST `/cellular/call_forwarding.sh`
-
-Unconditional call forwarding (3GPP `AT+CCFC`, reason 0, voice class). No daemon — each request issues a live AT command via `qcmd`. See [`docs/features/sms-call-forwarding.md`](features/sms-call-forwarding.md) for the CME-error-is-a-state invariant and the grep-anchor rule.
-
-**GET Response (success):**
-
-```json
-{
-  "success": true,
-  "supported": true,
-  "active": false,
-  "number": "",
-  "last_number": "14155551234"
-}
-```
-
-`number` is the network-reported forwarding number when `active: true`; empty otherwise. `last_number` is the UCI-persisted value (`quecmanager.call_forwarding.last_number`) written on the last successful `set` — it is a UI prefill convenience only, not a source of truth for active state.
-
-**GET Response (carrier rejects supplementary-service interrogation — HTTP 200):**
-
-```json
-{ "success": false, "error": "cf_network_rejected" }
-```
-
-> ⚠️ WARNING: The GET handler checks for `+CME ERROR: 257` / `"network rejected"` **before** it parses any `+CCFC:` status line. This is a first-class state, not a generic failure. Common on MVNOs and IoT data plans.
-
-**GET Response (other modem error):**
-
-```json
-{ "success": false, "error": "cf_query_failed" }
-```
-
-**POST (`set`):**
-
-```json
-{ "action": "set", "number": "+14155551234" }
-```
-
-Issues `AT+CCFC=0,3,"<number>"`. On `OK`, persists `last_number` to UCI and returns:
-
-```json
-{ "success": true, "active": true, "number": "+14155551234" }
-```
-
-**POST (`disable`):**
-
-```json
-{ "action": "disable" }
-```
-
-Issues `AT+CCFC=0,0`. On `OK` returns:
-
-```json
-{ "success": true, "active": false }
-```
-
-Both `set` and `disable` also check for `cf_network_rejected` before the `OK` test and return the same carrier-rejection envelope.
-
-**Error codes:** `cf_network_rejected`, `cf_set_failed`, `invalid_phone`, `missing_action`, `invalid_action`
 
 ---
 
