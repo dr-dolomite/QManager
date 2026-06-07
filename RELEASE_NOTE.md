@@ -41,6 +41,8 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 
 ## 💙 Thank You
 
+Special thanks to **[@po1son7](https://github.com/po1son7)** for contributing the **Traditional Chinese (繁體中文)** translation — and a Simplified Chinese terminology fix along the way. Community translations like this are what bring QManager to more people in their own language. 🙏
+
 Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
 
 Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
