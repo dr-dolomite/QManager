@@ -25,6 +25,7 @@ This release adds LAN address configuration to the Local Network page and polish
 - **The login device-name line now reads "Sign in as <your device name>" in every supported language.**
 - **Wake-on-LAN removed.** The WoL toggle has been removed. Upgrading devices will have the stale WoL configuration cleaned up automatically.
 - **Indonesian and Italian translations are caught up with the rest of the app.** Recently added screens — including the public overview page, Tower Locking's simple-mode controls, and the Tailscale connectivity-fixes toggle — now appear in Indonesian and Italian instead of falling back to English. **Translation contributors:** these strings were filled in to restore full key parity, so please double-check the wording for the `overview.*` (in `common.json`), `cell_locking.tower_locking.*` (in `cellular.json`), and `force_tailscale_fixes_*` (in `system-settings.json`) keys in the `id` and `it` locales and refine anything that reads awkwardly.
+- **Traditional Chinese (繁體中文) is now available as a downloadable language pack.** Contributed by @po1son7 and completed to full parity with the rest of the app. Install it from System Settings → Languages. Simplified Chinese also gets a small terminology fix (the "log out" wording now matches mainland convention).
 
 ## 📥 Installation
 
