@@ -104,7 +104,12 @@ const data = {
         { t_key: "antenna_alignment", url: "/cellular/antenna-alignment" },
       ],
     },
-    { t_key: "sms_center", url: "/cellular/sms", icon: MessageCircleIcon },
+    {
+      t_key: "sms_center",
+      url: "/cellular/sms",
+      icon: MessageCircleIcon,
+      items: [{ t_key: "forwarding", url: "/cellular/sms/forwarding" }],
+    },
     {
       t_key: "custom_profiles",
       url: "/cellular/custom-profiles",

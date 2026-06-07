@@ -51,7 +51,8 @@
     "about_device": "Informazioni sul dispositivo",
     "support": "Supporto",
     "donate": "Dona al progetto",
-    "languages": "Lingue"
+    "languages": "Lingue",
+    "forwarding": "Inoltro"
   },
   "switcher": {
     "opens_new_tab": "Si apre in una nuova scheda"

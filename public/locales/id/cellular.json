@@ -620,6 +620,61 @@
         "success": "SMS berhasil terkirim",
         "error": "SMS gagal terkirim"
       }
+    },
+    "forwarding": {
+      "page": {
+        "title": "Penerusan",
+        "description": "Teruskan pesan masuk ke nomor lain, dan kontrol penerusan panggilan jaringan."
+      },
+      "sms": {
+        "card_title": "Penerusan SMS",
+        "card_description": "Secara otomatis mengirim ulang setiap pesan masuk ke nomor yang Anda pilih.",
+        "status_on": "Aktif",
+        "status_off": "Nonaktif",
+        "status_issue": "Masalah pengiriman",
+        "enable_label": "Teruskan pesan masuk",
+        "target_label": "Teruskan ke",
+        "target_placeholder": "+6281234567890",
+        "target_description": "Setiap pesan baru dikirim ulang ke sini sebagai \"Dari <sender>: <message>\".",
+        "validation_phone": "Masukkan nomor telepon yang valid (mis. +6281234567890).",
+        "test_button": "Kirim tes",
+        "test_sending": "Mengirim…",
+        "save_before_test_hint": "Simpan perubahan Anda sebelum mengirim tes.",
+        "toast_save_success": "Pengaturan penerusan disimpan.",
+        "toast_save_error": "Tidak dapat menyimpan pengaturan penerusan.",
+        "toast_test_success": "Pesan tes terkirim ke nomor penerusan Anda.",
+        "toast_test_error": "Tidak dapat mengirim pesan tes.",
+        "toast_clear_success": "Dibersihkan.",
+        "toast_clear_error": "Tidak dapat membersihkan peringatan.",
+        "error_load": "Tidak dapat memuat pengaturan penerusan",
+        "failure_title_one": "{{count}} pesan tidak dapat diteruskan",
+        "failure_title_other": "{{count}} pesan tidak dapat diteruskan",
+        "failure_description": "Penerusan tetap aktif untuk pesan baru. Pesan berikut dibatalkan setelah 3 kali percobaan gagal:",
+        "failure_unknown_sender": "Pengirim tidak dikenal",
+        "clear_button": "Bersihkan peringatan"
+      },
+      "call": {
+        "card_title": "Penerusan Panggilan",
+        "card_description": "Teruskan semua panggilan masuk ke nomor lain melalui operator Anda.",
+        "status_on": "Aktif",
+        "status_off": "Nonaktif",
+        "status_unsupported": "Tidak di jaringan ini",
+        "status_error": "Kesalahan baca",
+        "enable_label": "Teruskan semua panggilan",
+        "number_label": "Teruskan ke",
+        "number_placeholder": "+6281234567890",
+        "number_description": "Operator Anda meneruskan panggilan sebelum mencapai modem ini.",
+        "validation_phone": "Masukkan nomor telepon yang valid (mis. +6281234567890).",
+        "live_readout": "Saat ini diteruskan ke",
+        "refresh_button": "Muat ulang",
+        "rejected_title": "Operator Anda tidak mengizinkan kontrol penerusan panggilan",
+        "rejected_description": "Jaringan ini menolak permintaan untuk membaca status penerusan panggilan. Anda masih dapat mencoba menyetel nomor; jika operator memblokir perubahan, Anda akan melihat kesalahan.",
+        "error_title": "Tidak dapat membaca status penerusan panggilan",
+        "error_description": "Modem tidak mengembalikan respons yang dapat digunakan.",
+        "toast_set_success": "Penerusan panggilan diaktifkan.",
+        "toast_disable_success": "Penerusan panggilan dinonaktifkan.",
+        "toast_error": "Tidak dapat memperbarui penerusan panggilan."
+      }
     }
   },
   "cell_locking": {

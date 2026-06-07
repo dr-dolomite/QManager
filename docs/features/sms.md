@@ -148,15 +148,11 @@ The frontend (`parseSmsTimestamp` in `hooks/use-sms-read-state.ts`) parses the s
 
 ## Deferred Features
 
-Two SMS Center capabilities were scoped and deliberately deferred.
-
 ### Cross-Page Toast Notification (deferred)
 
 Goal: show a toast when a new SMS arrives while the user is on a different page. The only AT-channel-safe path is piggybacking on `qmanager_poller` — a full `sms.sh` GET holds the shared `/var/lock/qmanager.lock` for ~0.26 s, making it too heavyweight to run app-wide on every poll cycle. The intended design: `qmanager_poller` writes an unread/new-count field into `/tmp/qmanager_status.json`; an `AppLayout` hook consumes that field; the existing global `<Toaster/>` fires the notification. Latency would be bounded by the poller's SMS-check cadence (not instant). This is a known, intended follow-up — the plumbing is not yet in place.
 
-### SMS Forwarding (deferred)
-
-Goal: automatically forward incoming SMS to a configured phone number. This is a Tier 4 change: it requires a new-incoming detector in the poll loop, persisted last-seen state (message index or timestamp watermark), a UCI/JSON config surface (target number, enable toggle), and auto-send loop guards to prevent forwarding loops. It also depends on the read-state authority question being settled first (the forwarding daemon needs to decide which messages are "new" independently of client-side read state). Document as a known follow-up when the poll-loop plumbing for cross-page toasts is in place.
+> ℹ️ NOTE: SMS Forwarding (automatic relay of incoming messages to another number) shipped as a separate daemon — see [`docs/features/sms-call-forwarding.md`](sms-call-forwarding.md). `qmanager_sms_forward` is the **only** server-side inbox reader in the project; all other read-state is client-side.
 
 ---
 

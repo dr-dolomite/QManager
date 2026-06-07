@@ -82,7 +82,7 @@ CONFLICT_PACKAGES="sms-tool socat-at-bridge socat"
 # UCI-gated services — only enabled if a prior install had them enabled.
 # Everything else is enabled unconditionally. This is the ONLY hardcoded
 # service list in this script.
-UCI_GATED_SERVICES="qmanager_tower_failover qmanager_watchcat qmanager_bandwidth qmanager_dpi qmanager_vpn_zone"
+UCI_GATED_SERVICES="qmanager_tower_failover qmanager_watchcat qmanager_bandwidth qmanager_dpi qmanager_vpn_zone qmanager_sms_forward"
 
 # Expected modem firmware signature (after normalization: upper + alnum only)
 REQUIRED_FIRMWARE="RM551EGL"
@@ -836,6 +836,39 @@ seed_uci_defaults() {
         info "Seeded quecmanager.watchcat.quality_consecutive=5"
     else
         info "quecmanager.watchcat.quality_consecutive already set — preserving user choice"
+    fi
+
+    # SMS Forwarding — opt-in inbound-SMS relay daemon (qmanager_sms_forward,
+    # gated via UCI_GATED_SERVICES so install never force-enables it). Seed the
+    # section + concrete defaults so a fresh install has a stable shape. Disabled
+    # by default; empty target. Idempotent + preserve-user-choice across upgrade.
+    if ! uci -q get quecmanager.sms_forwarding >/dev/null 2>&1; then
+        uci set quecmanager.sms_forwarding=sms_forwarding
+    fi
+    if ! uci -q get quecmanager.sms_forwarding.enabled >/dev/null 2>&1; then
+        uci set quecmanager.sms_forwarding.enabled='0'
+        info "Seeded quecmanager.sms_forwarding.enabled=0 (off by default)"
+    else
+        info "quecmanager.sms_forwarding.enabled already set — preserving user choice"
+    fi
+    if ! uci -q get quecmanager.sms_forwarding.target_phone >/dev/null 2>&1; then
+        uci set quecmanager.sms_forwarding.target_phone=''
+        info "Seeded quecmanager.sms_forwarding.target_phone=''"
+    else
+        info "quecmanager.sms_forwarding.target_phone already set — preserving user choice"
+    fi
+
+    # Call Forwarding — unconditional CCFC. Only persisted knob is last_number
+    # (UI prefill; live state is queried from the network on demand). Seed the
+    # section + empty last_number. Idempotent + preserve-user-choice.
+    if ! uci -q get quecmanager.call_forwarding >/dev/null 2>&1; then
+        uci set quecmanager.call_forwarding=call_forwarding
+    fi
+    if ! uci -q get quecmanager.call_forwarding.last_number >/dev/null 2>&1; then
+        uci set quecmanager.call_forwarding.last_number=''
+        info "Seeded quecmanager.call_forwarding.last_number=''"
+    else
+        info "quecmanager.call_forwarding.last_number already set — preserving user choice"
     fi
 
     uci commit quecmanager 2>/dev/null || warn "uci commit quecmanager failed"

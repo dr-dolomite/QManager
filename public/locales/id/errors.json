@@ -160,5 +160,8 @@
   "usbnet_failed": "Konfigurasi antarmuka jaringan USB gagal",
   "usb_mode_incompatible_for_verizon": "Profil Verizon memerlukan mode USB ECM atau RNDIS — ubah mode USB di pengaturan IP Passthrough sebelum mengaktifkan",
   "write_failed": "Gagal menulis konfigurasi ke penyimpanan",
-  "wrong_schema": "Versi skema cadangan tidak cocok dengan versi saat ini"
+  "wrong_schema": "Versi skema cadangan tidak cocok dengan versi saat ini",
+  "cf_network_rejected": "Operator Anda tidak mengizinkan kontrol penerusan panggilan di jaringan ini",
+  "cf_query_failed": "Tidak dapat membaca status penerusan panggilan dari modem",
+  "cf_set_failed": "Tidak dapat memperbarui penerusan panggilan"
 }

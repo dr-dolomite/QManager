@@ -4,6 +4,10 @@ This release adds LAN address configuration to the Local Network page and polish
 
 ## ✨ New Features
 
+- **SMS Forwarding: incoming texts are automatically relayed to any phone number you choose.** Enable it in SMS Center → Forwarding, enter a destination number, and every new message that arrives in your modem's inbox is sent on as "From &lt;sender&gt;: &lt;message&gt;". Enabling never blasts your existing inbox — only messages received after you turn it on are forwarded. A built-in test button lets you confirm the path works before you rely on it. If a message can't be delivered after three attempts, a persistent alert tells you exactly which message failed and why; you can clear the alert once you've acknowledged it. The feature stays on regardless of individual delivery failures.
+
+- **Call Forwarding: redirect all incoming calls via your carrier.** Set a forwarding number in SMS Center → Forwarding and your carrier routes all inbound calls there at the network level — no modem answer needed. Note that call forwarding is a carrier supplementary service: if your carrier or plan doesn't support it, the card will tell you clearly rather than showing a generic error.
+
 - **The connection watchdog can now recover from degraded-but-reachable links.** When enabled, you can set a latency ceiling (ms) and a packet-loss ceiling (%) — if either is exceeded for a configurable number of consecutive checks, the watchdog runs through the same recovery steps it uses for a full outage. The feature is off by default; turn it on in Monitoring → Connection Watchdog under Connection Quality Monitoring.
 
 - **Band Locking now shows your modem's full band capability.** The band checkboxes reflect every band the RM551E hardware can use, not just what the current SIM announces. Bands your network or SIM actively uses are highlighted in the usual accent color; bands the modem supports but your carrier doesn't use are marked in yellow — so you know exactly what you're choosing between before you lock. The band list also refreshes automatically after a SIM swap, keeping the display accurate without a reboot.

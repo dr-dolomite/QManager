@@ -160,5 +160,8 @@
   "lan_read_failed": "Impossibile leggere le impostazioni LAN attuali",
   "lan_save_failed": "Impossibile salvare le impostazioni LAN",
   "write_failed": "Impossibile scrivere la configurazione nell'archivio",
-  "wrong_schema": "La versione dello schema di backup non corrisponde alla versione corrente"
+  "wrong_schema": "La versione dello schema di backup non corrisponde alla versione corrente",
+  "cf_network_rejected": "Il tuo operatore non consente il controllo dell'inoltro di chiamata su questa rete",
+  "cf_query_failed": "Impossibile leggere lo stato dell'inoltro di chiamata dal modem",
+  "cf_set_failed": "Impossibile aggiornare l'inoltro di chiamata"
 }

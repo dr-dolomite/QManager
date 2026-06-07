@@ -160,5 +160,8 @@
   "lan_read_failed": "無法讀取當前 LAN 設定",
   "lan_save_failed": "無法儲存 LAN 設定",
   "write_failed": "將設定寫入儲存失敗",
-  "wrong_schema": "備份架構版本與當前版本不匹配"
+  "wrong_schema": "備份架構版本與當前版本不匹配",
+  "cf_network_rejected": "您的電信業者在此網路上不允許控制來電轉接",
+  "cf_query_failed": "無法從數據機讀取來電轉接狀態",
+  "cf_set_failed": "無法更新來電轉接"
 }

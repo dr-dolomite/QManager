@@ -160,5 +160,8 @@
   "lan_read_failed": "无法读取当前 LAN 设置",
   "lan_save_failed": "无法保存 LAN 设置",
   "write_failed": "将配置写入存储失败",
-  "wrong_schema": "备份架构版本与当前版本不匹配"
+  "wrong_schema": "备份架构版本与当前版本不匹配",
+  "cf_network_rejected": "您的运营商在此网络上不允许控制来电转接",
+  "cf_query_failed": "无法从调制解调器读取来电转接状态",
+  "cf_set_failed": "无法更新来电转接"
 }

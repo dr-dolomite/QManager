@@ -453,6 +453,10 @@ remove_runtime_state() {
           /tmp/qmanager_*.pid \
           /tmp/qmanager_email_reload \
           /tmp/qmanager_sms_reload \
+          /tmp/qmanager_sms_forward_reload \
+          /tmp/qmanager_sms_forward_seen \
+          /tmp/qmanager_sms_forward_failures.json \
+          /tmp/qmanager_sms_forward_failures.json.tmp \
           /tmp/qmanager_ping_reload \
           /tmp/qmanager_quality_reload \
           /tmp/qmanager_imei_check_done \
