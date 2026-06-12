@@ -7,7 +7,10 @@
 # This daemon NEVER touches the modem serial port.
 #
 # Probing is HTTP (curl) — NOT ICMP. A probe succeeds when curl exits 0 AND the
-# HTTP status is 2xx/204/3xx; latency_ms is curl's time_total * 1000.
+# HTTP status is 2xx/204/3xx. latency_ms is the TCP-connect RTT
+# (time_connect − time_namelookup), i.e. one round-trip of the TCP handshake —
+# comparable to ICMP ping. time_total is NOT reported: it folds in DNS + server
+# TTFB and ran ~3.3× real RTT.
 #
 # Output: /tmp/qmanager_ping.json (atomic writes, slim — no stats/history)
 # History: /tmp/qmanager_ping_history (flat-file ring buffer, read by poller)
@@ -42,8 +45,8 @@ qlog_init "ping"
 # via resolve_profile(); the daemon holds the profile->params table as the
 # single source of truth (UCI stores only the profile name + 2 targets).
 PING_PROFILE="${PING_PROFILE:-relaxed}"
-PING_TARGET_1="${PING_TARGET_1:-https://cloudflare.com}"
-PING_TARGET_2="${PING_TARGET_2:-https://google.com}"
+PING_TARGET_1="${PING_TARGET_1:-http://cp.cloudflare.com/}"
+PING_TARGET_2="${PING_TARGET_2:-http://www.gstatic.com/generate_204}"
 PING_INTERVAL="${PING_INTERVAL:-5}"
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-3}"
 RECOVER_THRESHOLD="${RECOVER_THRESHOLD:-2}"
@@ -139,22 +142,28 @@ load_config() {
 
 # --- Execute a single HTTP probe against a target URL ------------------------
 # curl exit 0 AND http_code in 2xx/204/3xx == success. On success the latency
-# in ms (time_total * 1000, 1 decimal) is written to stdout.
+# in ms is written to stdout: the TCP-connect RTT
+# (time_connect − time_namelookup) * 1000, 1 decimal — one round-trip of the
+# TCP handshake, comparable to ICMP ping. DNS lookup and server TTFB are
+# excluded by construction (time_total used to fold them in and ran ~3.3× high).
 # Returns: 0 = success (latency_ms on stdout), 1 = failure
 do_ping() {
     local target
     target=$(normalize_target "$1")
 
     local result
-    local code
-    result=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' \
+    result=$(curl -s -o /dev/null \
+        -w '%{http_code} %{time_namelookup} %{time_connect} %{time_total}' \
         --connect-timeout "$PROBE_CONNECT_TIMEOUT" --max-time "$PROBE_MAX_TIME" \
         "$target" 2>/dev/null)
     [ $? -ne 0 ] && return 1
 
-    # result == "200 0.123456" — split on the single space.
-    code="${result%% *}"
-    local secs="${result##* }"
+    # result == "200 0.012 0.031 0.123" — 4 space-separated fields.
+    # shellcheck disable=SC2086 — intentional word-split on known curl format.
+    set -- $result
+    local code="$1"
+    local dns="$2"
+    local connect="$3"
 
     # HTTP success: 2xx, 204, or 3xx redirect.
     case "$code" in
@@ -162,18 +171,25 @@ do_ping() {
         *) return 1 ;;
     esac
 
-    # time_total must be numeric (digits + dot).
-    case "$secs" in
+    # time_namelookup + time_connect must both be numeric (digits + dot).
+    case "$dns" in
+        ''|*[!0-9.]*) return 1 ;;
+    esac
+    case "$connect" in
         ''|*[!0-9.]*) return 1 ;;
     esac
 
-    # latency_ms = secs * 1000, rounded to 1 decimal. awk avoids float-less sh.
+    # latency_ms = (time_connect − time_namelookup) * 1000, 1 decimal. awk
+    # avoids float-less sh. On a successful HTTP response time_connect is always
+    # > time_namelookup ≥ 0, so a ≤ 0 / non-numeric delta means parsing went
+    # wrong — treat it as a probe failure (same fail-safe as the field guards).
     local rtt
-    rtt=$(awk -v s="$secs" 'BEGIN { printf "%.1f", s * 1000 }')
+    rtt=$(awk -v c="$connect" -v d="$dns" 'BEGIN { printf "%.1f", (c - d) * 1000 }')
 
     case "$rtt" in
         ''|*[!0-9.]*) return 1 ;;
     esac
+    awk -v r="$rtt" 'BEGIN { exit (r > 0) ? 0 : 1 }' || return 1
 
     echo "$rtt"
 }

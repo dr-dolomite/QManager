@@ -92,7 +92,7 @@ The watchdog has two independent paths into the recovery ladder.
 
 **Reachability trigger (always active when watchdog is enabled):** The daemon reads `qmanager_ping.json` every cycle. If `streak_fail` rises above `max_failures` consecutive cycles, the reachability path fires, sets `recovery_reason="unreachable"`, and runs `do_recovery`.
 
-**Quality trigger (opt-in, `quality_enabled=0` by default):** On every cycle while in `monitor` or `suspect` state, the daemon also calls `evaluate_quality`. If either `avg_latency_ms` or `packet_loss_pct` exceeds its ceiling for `quality_consecutive` consecutive cycles, the quality path fires, sets `recovery_reason="quality"`, and runs the same `do_recovery` engine.
+**Quality trigger (opt-in, `quality_enabled=0` by default):** On every cycle while in `monitor` or `suspect` state, the daemon also calls `evaluate_quality`. If either `avg_latency_ms` or `packet_loss_pct` exceeds its ceiling for `quality_consecutive` consecutive cycles, the quality path fires, sets `recovery_reason="quality"`, and runs the same `do_recovery` engine. `avg_latency_ms` reflects TCP-connect RTT (ICMP-comparable, not HTTP transaction time) — see the [probe mechanics note in connection-quality.md](connection-quality.md#probe-mechanics).
 
 The two paths are independent. Each has its own counter. A quality breach does not advance the reachability `failure_counter`, and vice versa.
 
@@ -159,7 +159,7 @@ Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `
 | UCI Key | Range | Default | Meaning |
 |---|---|---|---|
 | `quality_enabled` | 0/1 | 0 | Master opt-in for quality triggering |
-| `latency_ceiling_ms` | int 0–10000 | 800 | `avg_latency_ms` ceiling; **0 = ignore latency** |
+| `latency_ceiling_ms` | int 0–10000 | 800 | `avg_latency_ms` ceiling (TCP-connect RTT, ICMP-comparable); **0 = ignore latency** |
 | `loss_ceiling_pct` | int 0–100 | 20 | `packet_loss_pct` ceiling; **0 = ignore loss** |
 | `quality_consecutive` | int 1–60 | 5 | Consecutive breach cycles before recovery fires |
 
@@ -175,7 +175,7 @@ Setting `latency_ceiling_ms=0` skips the latency check entirely. Setting `loss_c
 
 ### 2. Data source and staleness guard
 
-Latency and loss come from `status.json` `.connectivity.avg_latency_ms` and `.connectivity.packet_loss_pct`, which are written by the poller. The `.connectivity` object has no timestamp of its own, so freshness is judged from the root `.timestamp` field against `STATUS_STALE_THRESHOLD=30` seconds.
+Latency and loss come from `status.json` `.connectivity.avg_latency_ms` and `.connectivity.packet_loss_pct`, which are written by the poller. `avg_latency_ms` is TCP-connect RTT (milliseconds), not HTTP transaction time — values are ICMP-comparable (typically 35–65 ms on a healthy cellular link). The default `latency_ceiling_ms` of 800 ms is therefore very generous headroom (~10–20× normal RTT). The `.connectivity` object has no timestamp of its own, so freshness is judged from the root `.timestamp` field against `STATUS_STALE_THRESHOLD=30` seconds.
 
 A stale or missing `status.json` is treated as NO-SIGNAL: the `evaluate_quality` function returns early, and the breach counter is left unchanged. A stale poller is never treated as a healthy 0% loss reading.
 

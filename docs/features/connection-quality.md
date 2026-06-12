@@ -21,7 +21,13 @@ The Connection Quality settings page (System Settings → Connection Quality) le
 
 ## Probe Mechanics
 
-`qmanager_ping` is an HTTP probe daemon — not ICMP. It issues a `curl` request against the active target and considers the probe successful when curl exits 0 **and** the HTTP status is 2xx or 3xx. The reported latency is curl's `time_total * 1000`, which includes TCP connect, TLS handshake, and time-to-first-byte. This is meaningfully higher than a raw ICMP RTT — factor that in when reading numbers on the dashboard.
+`qmanager_ping` is an HTTP probe daemon — not ICMP. It issues a `curl` request against the active target using the timing format string `'%{http_code} %{time_namelookup} %{time_connect} %{time_total}'`, which produces four fields parsed via `set -- $result`. A probe is considered successful when curl exits 0 **and** the HTTP status is 2xx or 3xx.
+
+The reported latency is **TCP-connect RTT = (time_connect − time_namelookup) × 1000**. This isolates the TCP three-way handshake time, discarding DNS resolution time and server TTFB/redirect time that dominated the old `time_total` metric. The result is directly comparable to ICMP ping — live-verified values of 35–65 ms match ICMP 35–40 ms on the test device.
+
+**Fail-safe:** if the computed delta is malformed or non-positive (e.g. DNS failure, curl error, clock skew), the probe is counted as a failure rather than emitting a bogus near-zero latency reading.
+
+**Why not `time_total`:** `time_total` bundled DNS lookup (~30%), TCP connect (~29%), and server TTFB + redirects (~33%), producing readings ~3.3× true RTT. Users routinely saw ~300 ms reported when real network RTT was 16–20 ms, making thresholds difficult to calibrate against real-world speed test readings.
 
 > ⚠️ WARNING: `curl` (full build, 8.7.1+) is a hard runtime dependency of `qmanager_ping`. The daemon does not fall back to ICMP — without curl the daemon will emit no probe results and all connectivity data on the dashboard will remain null.
 
@@ -53,11 +59,15 @@ The daemon holds the profile→parameters table. UCI stores only the **profile n
 ```
 quecmanager.ping_profile=ping_profile
 quecmanager.ping_profile.profile=relaxed
-quecmanager.ping_profile.target_1=https://cloudflare.com
-quecmanager.ping_profile.target_2=https://google.com
+quecmanager.ping_profile.target_1=http://cp.cloudflare.com/
+quecmanager.ping_profile.target_2=http://www.gstatic.com/generate_204
 ```
 
 The `ping_profile.sh` CGI also seeds these defaults on-read (via `ensure_ping_profile_config`) if the section is absent — so the section always exists after the first GET.
+
+**Why lightweight HTTP targets:** The previous defaults (`https://cloudflare.com`, `https://google.com`) are full HTTPS root pages. On weak signal, a `--max-time` expiry returns curl exit code 28 with HTTP code 000, which the daemon treats as a failed probe — accurate, but easily misread as packet loss. The lightweight endpoints (`http://cp.cloudflare.com/` and `http://www.gstatic.com/generate_204`) are plain HTTP connectivity-check URLs with no TLS handshake and immediate 204/200 responses. They complete reliably even under marginal signal and are already what the frontend reset-to-default path used.
+
+**Migration on upgrade:** `install.sh seed_uci_defaults()` migrates existing devices from the old defaults **only on exact match** — if `target_1` is still `https://cloudflare.com` it is rewritten; if the user customised it, it is left untouched. The migration touches `/tmp/qmanager_ping_reload` so the running daemon picks up the new target within one probe cycle.
 
 ---
 
@@ -121,8 +131,8 @@ Both daemons check for their respective flag at the **top of their main loop**, 
 {
   "success": true,
   "profile": "relaxed",
-  "target1": "https://cloudflare.com",
-  "target2": "https://google.com"
+  "target1": "http://cp.cloudflare.com/",
+  "target2": "http://www.gstatic.com/generate_204"
 }
 ```
 
@@ -134,8 +144,8 @@ Both daemons check for their respective flag at the **top of their main loop**, 
 {
   "action": "save",
   "profile": "sensitive",
-  "target_1": "https://cloudflare.com",
-  "target_2": "https://google.com"
+  "target_1": "http://cp.cloudflare.com/",
+  "target_2": "http://www.gstatic.com/generate_204"
 }
 ```
 
@@ -237,7 +247,10 @@ Types are in `types/modem-status.ts`: `PING_PROFILES`, `PingProfile`, `QUALITY_P
 
 ## Known Gotchas
 
-- **HTTP latency is not ICMP RTT.** The curl probe includes TCP+TLS overhead. Readings of 150–300 ms on a healthy connection are normal. Don't tune `standard` latency (150 ms threshold) on a high-latency cellular link — it will fire constantly. `tolerant` (250 ms) is the shipping default.
+- **Latency readings are now ICMP-comparable.** The daemon reports TCP-connect RTT, not HTTP transaction time. Readings of 35–65 ms on a healthy cellular connection are typical. The quality preset thresholds (150/250/500 ms) are generous — `tolerant` (250 ms) is the shipping default and provides well over 3× normal RTT headroom.
+- **HTTPS root pages as probe targets cause phantom packet loss on weak signal.** If you hand-edit UCI targets back to full HTTPS pages like `https://cloudflare.com`, a `--max-time` expiry on slow signal returns exit code 28 (HTTP 000), which the daemon counts as a probe failure. Use lightweight connectivity-check URLs (HTTP, no body, immediate response) as targets.
+- **Non-positive TCP delta is a failure, not zero latency.** If `time_connect − time_namelookup` is ≤ 0 (DNS failure, curl timing anomaly), the probe is counted as failed. This prevents a spuriously low latency reading from masking a real connectivity problem.
+- **Quality preset thresholds (150/250/500 ms) are now effectively ~3× more tolerant than before.** They were calibrated against the old `time_total` metric. Against honest RTT they are generous. If a device was previously using `standard` (150 ms) and sees no alerts, that is expected and correct.
 - **The `quality_thresholds` section must not be pre-seeded in new installs.** If it is, the frontend will never show `isDefault: true` and users won't know they haven't customised it. The installer intentionally skips seeding it.
 - **Reload is flag-file per loop, not a signal.** If the daemon is in the middle of a long curl probe (up to `PROBE_MAX_TIME=3 s`) when the flag is written, the reload happens at the start of the *next* cycle. The effective delay after save is `0 → PROBE_MAX_TIME + PING_INTERVAL`.
 - **Scheme-less targets in hand-edited UCI are safe.** Both the CGI and the daemon call `normalize_target()` which prepends `https://` when no scheme is present.

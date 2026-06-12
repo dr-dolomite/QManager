@@ -29,8 +29,8 @@ ensure_ping_profile_config() {
     uci -q get quecmanager.ping_profile >/dev/null 2>&1 && return
     uci set quecmanager.ping_profile=ping_profile
     uci set quecmanager.ping_profile.profile='relaxed'
-    uci set quecmanager.ping_profile.target_1='https://cloudflare.com'
-    uci set quecmanager.ping_profile.target_2='https://google.com'
+    uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
+    uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
     uci commit quecmanager
 }
 
@@ -81,9 +81,9 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
     [ -z "$profile" ] && profile="relaxed"
     target1=$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)
-    [ -z "$target1" ] && target1="https://cloudflare.com"
+    [ -z "$target1" ] && target1="http://cp.cloudflare.com/"
     target2=$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)
-    [ -z "$target2" ] && target2="https://google.com"
+    [ -z "$target2" ] && target2="http://www.gstatic.com/generate_204"
 
     jq -n \
         --arg profile "$profile" \

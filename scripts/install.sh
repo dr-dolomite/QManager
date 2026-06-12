@@ -793,16 +793,40 @@ seed_uci_defaults() {
         info "quecmanager.ping_profile.profile already set — preserving user choice"
     fi
     if ! uci -q get quecmanager.ping_profile.target_1 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_1='https://cloudflare.com'
-        info "Seeded quecmanager.ping_profile.target_1=https://cloudflare.com"
+        uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
+        info "Seeded quecmanager.ping_profile.target_1=http://cp.cloudflare.com/"
     else
         info "quecmanager.ping_profile.target_1 already set — preserving user choice"
     fi
     if ! uci -q get quecmanager.ping_profile.target_2 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_2='https://google.com'
-        info "Seeded quecmanager.ping_profile.target_2=https://google.com"
+        uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
+        info "Seeded quecmanager.ping_profile.target_2=http://www.gstatic.com/generate_204"
     else
         info "quecmanager.ping_profile.target_2 already set — preserving user choice"
+    fi
+
+    # Upgrade migration — the seeded probe targets were the old heavy HTTPS root
+    # pages (https://cloudflare.com / https://google.com). Those fold DNS + TCP
+    # + server TTFB into the reported latency (~3.3× real RTT) and hard-fail
+    # (curl 000) on weak signal, registering phantom packet loss. Migrate ONLY
+    # the exact old seeded values to the lightweight HTTP probe pages the daemon
+    # now reports TCP-connect RTT against. A user-customized target (any other
+    # value) is sacred and never touched. uci commit happens once at the end of
+    # this function; touch the reload flag so a running daemon re-reads.
+    _ping_migrated=0
+    if [ "$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)" = "https://cloudflare.com" ]; then
+        uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
+        info "Migrated ping target_1: https://cloudflare.com -> http://cp.cloudflare.com/"
+        _ping_migrated=1
+    fi
+    if [ "$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)" = "https://google.com" ]; then
+        uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
+        info "Migrated ping target_2: https://google.com -> http://www.gstatic.com/generate_204"
+        _ping_migrated=1
+    fi
+    if [ "$_ping_migrated" = "1" ]; then
+        touch /tmp/qmanager_ping_reload
+        info "Dropped /tmp/qmanager_ping_reload — running ping daemon will pick up migrated targets"
     fi
 
     # Connection Watchdog (watchcat) — connection-quality trigger keys. The

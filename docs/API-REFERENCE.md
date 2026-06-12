@@ -1096,8 +1096,8 @@ Read or write the ping-daemon sensitivity profile and probe targets. See [`docs/
 {
   "success": true,
   "profile": "relaxed",
-  "target1": "https://google.com",
-  "target2": "https://cloudflare.com"
+  "target1": "http://cp.cloudflare.com/",
+  "target2": "http://www.gstatic.com/generate_204"
 }
 ```
 
@@ -1109,8 +1109,8 @@ Read or write the ping-daemon sensitivity profile and probe targets. See [`docs/
 {
   "action": "save",
   "profile": "sensitive",
-  "target_1": "https://google.com",
-  "target_2": "https://cloudflare.com"
+  "target_1": "http://cp.cloudflare.com/",
+  "target_2": "http://www.gstatic.com/generate_204"
 }
 ```
 
