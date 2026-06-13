@@ -19,7 +19,8 @@ export type RebootSource =
   | "netbird"
   | "mbn"
   | "manual"
-  | "software_update";
+  | "software_update"
+  | "ipa_offload";
 
 const REBOOT_CGI = "/cgi-bin/quecmanager/system/reboot.sh";
 

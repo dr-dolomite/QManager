@@ -1182,6 +1182,83 @@ Creates the `quality_thresholds` UCI section on first save, then drops `/tmp/qma
 
 ---
 
+### POST `/system/diagnostics.sh`
+
+Generate an on-demand plain-text diagnostics snapshot and return it inline for download. Auth-gated. Only POST is accepted. See [`docs/features/diagnostics.md`](../features/diagnostics.md) for the daemon–CGI contract, redaction invariants, and size-cap behaviour.
+
+**Request:**
+
+```json
+{ "action": "capture" }
+```
+
+**Success Response:**
+
+```json
+{
+  "success": true,
+  "filename": "/tmp/qmanager_debug_1718300000.txt",
+  "content": "===== QManager Debug Report =====\n..."
+}
+```
+
+`filename` is the full on-device path. `content` is the plain-text report embedded as a JSON string via `jq --rawfile` (no base64). The report is byte-sanitized (non-printable bytes stripped) and capped at ~300 KB. The frontend materializes `content` into a `text/plain` Blob and triggers a browser download.
+
+**Error Codes:**
+
+| Code | Meaning |
+|---|---|
+| `report_tool_missing` | `/usr/bin/qmanager_debug_report` absent or not executable |
+| `capture_failed` | Daemon ran but produced no artifact |
+| `unknown_action` | `action` was not `"capture"` |
+| `method_not_allowed` | Request was not POST |
+
+---
+
+### GET/POST `/system/ipa_offload.sh`
+
+Read or toggle the boot-enable state of the Realtek r8125 NIC hardware offload (IPA). Auth-gated. The change takes effect only after a reboot — this endpoint never reboots inline. See [`docs/features/diagnostics.md`](../features/diagnostics.md) for the armed-on-reboot design, the `r8125_ioss` service name invariant, and the pessimistic toggle pattern.
+
+**GET Response (`available: true`):**
+
+```json
+{ "success": true, "available": true, "enabled": true }
+```
+
+**GET Response (`available: false` — NIC absent on this SKU):**
+
+```json
+{ "success": true, "available": false, "enabled": false }
+```
+
+`available` reflects whether `/etc/init.d/r8125_ioss.init` exists. `enabled` reflects boot-enable state (the `/etc/rc.d/S91r8125_ioss.init` symlink), not whether the module is currently loaded.
+
+**POST Request:**
+
+```json
+{ "action": "enable" }
+```
+
+Values: `"enable"` or `"disable"`.
+
+**POST Success Response:**
+
+```json
+{ "success": true, "enabled": true, "pending_reboot_required": true }
+```
+
+`pending_reboot_required` is always `true`. The `stop()` function in the VENDOR init script is a no-op; the module remains loaded until the next reboot. The frontend calls `requestRebootLater("ipa_offload")` to surface the deferred-reboot banner.
+
+**Error Codes:**
+
+| Code | Meaning |
+|---|---|
+| `not_available` | `r8125_ioss.init` absent — SKU does not have this NIC |
+| `invalid_action` | `action` was not `"enable"` or `"disable"` |
+| `method_not_allowed` | Request was not GET or POST |
+
+---
+
 ### GET/POST `/system/settings.sh`
 
 System preferences, scheduled reboot, and low power mode.

@@ -26,6 +26,27 @@
     "toast_saved": "Settings saved",
     "toast_failed": "Failed to save settings"
   },
+  "diagnostics": {
+    "card_title": "Diagnostics",
+    "card_description": "Capture a debug report to share when troubleshooting.",
+    "body": "Generates a plain-text snapshot of the modem's current state — radio status, network configuration, and recent logs — and downloads it to your device. No data leaves the modem until you choose to share the file.",
+    "button_capture": "Download Debug Report",
+    "button_capturing": "Capturing…",
+    "toast_success": "Debug report downloaded",
+    "toast_failed": "Couldn't capture diagnostics. Please try again."
+  },
+  "ipa_offload": {
+    "card_title": "Hardware Offload",
+    "card_description": "Route packet processing through the modem's IPA hardware path.",
+    "enable_label": "Enable Hardware Offload",
+    "cpu_warning": "Hardware offload reduces CPU load on high-throughput connections, but bypasses some software packet processing. Leave it off unless you are troubleshooting throughput.",
+    "unavailable_hint": "This modem's firmware does not expose the IPA hardware offload path, so this setting cannot be changed.",
+    "status_label": "Status",
+    "pending_reboot_badge": "Takes effect after reboot",
+    "toast_enabled": "Hardware offload enabled — reboot to apply",
+    "toast_disabled": "Hardware offload disabled — reboot to apply",
+    "toast_failed": "Failed to update hardware offload"
+  },
   "scheduled_operations": {
     "card_title": "Scheduled Operations",
     "card_description": "Set up automated system tasks on a schedule.",

@@ -196,8 +196,11 @@ qlog_at_cmd() {
         truncated="$response"
     fi
 
-    # Replace newlines with ↵ for single-line log readability
-    truncated=$(echo "$truncated" | tr '\n' '↵' | tr -d '\r')
+    # Collapse newlines to spaces for single-line log readability. printf (not
+    # echo) + a single-byte space replacement keeps this multi-byte-safe; the
+    # previous multi-byte ↵ replacement could split a UTF-8 sequence under
+    # BusyBox tr and emit mojibake into the log.
+    truncated=$(printf '%s' "$truncated" | tr '\n' ' ' | tr -d '\r')
 
     if [ "$exit_code" -eq 0 ]; then
         qlog_debug "AT_CMD: ${cmd} → ${truncated}"
