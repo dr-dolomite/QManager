@@ -54,6 +54,8 @@ The form body is a shadcn `Tabs` with four tabs, all freely clickable:
 
 Submit and Cancel buttons sit below the tabs, always visible.
 
+> ⚠️ INVARIANT: The footer button morphs between "Next" (`type="button"`, advances the tab) and the Submit button (`type="submit"`) depending on whether the Review tab is active. These two `<Button>`s **must carry distinct `key`s** (`profile-next` / `profile-submit`). Without them React reconciles by position, reuses the same `<button>` DOM node, and mutates `type` in place; because React 18 flushes the "Next" click synchronously, the node becomes `type="submit"` *before* the browser performs the click's default action — silently submitting (saving) the profile on every Next→Review step. Do not remove the keys.
+
 ### MNO Presets and Verizon Guard
 
 Selecting a carrier from the MNO picker auto-fills APN, TTL, and HL from `MNO_PRESETS` (`constants/mno-presets.ts`). Selecting **Verizon** opens a brick-warning `AlertDialog` before committing — the user must confirm. On confirm, CID is locked to 3 (the `Select` is disabled with a helper note) for the lifetime of that MNO selection.
@@ -157,8 +159,11 @@ While the apply is in flight (not terminal) and `applyState.profile_id` matches 
 
 ## Apply Pipeline
 
-- **Async 4-step apply** (APN → TTL/HL → IMEI → MPDN rule, least → most disruptive). Each step skips when unchanged. Worker: `qmanager_profile_apply`, polled via `profiles/apply_status.sh` at 500ms.
-- Active marker: `/etc/qmanager/active_profile` (plain text, profile ID). Written BEFORE `AT+CFUN=1,1` (USB reset can kill the script). Finalization re-writes on success/partial; clears on total failure.
+- **Async 4-step apply** (`APN → TTL/HL → MPDN rule → IMEI`, ordered so the reboot-risk step is strictly last). Each step skips when unchanged. Worker: `qmanager_profile_apply`, polled via `profiles/apply_status.sh` at 500ms.
+- **Why IMEI is last**: the IMEI step issues `AT+CFUN=1,1`, which on some configs USB-resets or reboots the host and kills the worker mid-run. Placing IMEI last ensures APN, TTL/HL, and the Verizon MPDN routing rule are all applied — and the active-profile marker pre-set — before that reboot. A worker death at the IMEI step cannot leave data routing or a carrier-switch revert half-applied.
+- **MPDN rule pinned before reboot**: the MPDN step (step 3) always leaves the rule in a pinned state — PDP3 for a Verizon activation, or re-pinned to PDP1 on a Verizon revert. Rebooting with a pinned rule is safe. Only a bare-released rule followed by a reboot risks the firmware quirk; that sequence never occurs here because the IMEI reboot always follows a pinned rule.
+- The state-file `steps[]` array order and `STEP_NAMES` in the worker match this sequence (`[apn, ttl_hl, mpdn_rule, imei]`), keeping `current_step` monotonic. The `ApplyProgressDialog` is data-driven and renders `steps[]` in array order.
+- Active marker: `/etc/qmanager/active_profile` (plain text, profile ID). Written BEFORE the IMEI step (`AT+CFUN=1,1`) so a USB reset cannot lose the activation record. Finalization re-writes on success/partial; clears on total failure.
 - Activate = runs full pipeline. Deactivate = clears marker + tears down scenario cron + resets `mode_pref` to AUTO + (non-Verizon only) calls `reapply_active_apn_slot`: reapplies the stored APN slot if `active != 0`, or is a no-op if `active == 0` (carrier-default preserved). Verizon deactivation sets `requires_reboot=true` and defers APN reapply to the poller's boot APN reconcile.
 - **SIM mismatch**: poller `collect_boot_data()` auto-clears marker + emits `profile_deactivated` when active profile's `sim_iccid` ≠ current SIM. Empty `sim_iccid` = SIM-agnostic, left alone.
 - TTL override: `ttl-settings-card.tsx` disables form when active profile has TTL/HL > 0.

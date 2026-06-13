@@ -173,7 +173,7 @@ export type ApplyStatus = "idle" | "applying" | "complete" | "partial" | "failed
 
 /** Status of a single step in the apply sequence */
 export interface ApplyStep {
-  /** Step name: apn, ttl_hl, imei, mpdn_rule */
+  /** Step name, in apply order: apn, ttl_hl, mpdn_rule, imei (imei last — reboot) */
   name: string;
   /** Current step status */
   status: ApplyStepStatus;

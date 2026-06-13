@@ -56,12 +56,17 @@ interface ApplyProgressDialogProps {
   error: string | null;
 }
 
-/** Default steps shown while waiting for the first poll response. */
+/**
+ * Default steps shown while waiting for the first poll response. Order MUST
+ * mirror the worker's execution/serialization order (apn → ttl_hl → mpdn_rule →
+ * imei) so the placeholder ledger doesn't reshuffle when the first real poll
+ * lands. IMEI is last because it carries the AT+CFUN=1,1 reboot.
+ */
 const DEFAULT_STEPS: ApplyStep[] = [
   { name: "apn", status: "pending", detail: "" },
   { name: "ttl_hl", status: "pending", detail: "" },
-  { name: "imei", status: "pending", detail: "" },
   { name: "mpdn_rule", status: "pending", detail: "" },
+  { name: "imei", status: "pending", detail: "" },
 ];
 
 const EXPO = EASE_OUT_EXPO;

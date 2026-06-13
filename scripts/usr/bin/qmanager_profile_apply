@@ -12,11 +12,18 @@
 # State file: /tmp/qmanager_profile_state.json
 # PID file:   /tmp/qmanager_profile_apply.pid
 #
-# Apply steps (4 total):
+# Apply steps (4 total), ordered least → most disruptive:
 #   1. APN       — AT+CGDCONT (no modem reboot)
 #   2. TTL/HL    — iptables/ip6tables (no modem lock needed)
-#   3. IMEI      — AT+EGMR + AT+CFUN=1,1 reboot (most disruptive, last)
-#   4. MPDN rule — Verizon PDP3 routing or revert on carrier switch
+#   3. MPDN rule — Verizon PDP3 routing or revert on carrier switch (no reboot)
+#   4. IMEI      — AT+EGMR + AT+CFUN=1,1 reboot (MOST disruptive — STRICTLY last)
+#
+# IMEI is last because AT+CFUN=1,1 may trigger a full USB-bus / system reset
+# that kills this worker mid-run. Every other step (APN, TTL/HL, and the MPDN
+# rule — which is left PINNED, never bare-released) must already be applied and
+# the active marker pre-set BEFORE that reboot, so a worker death at IMEI cannot
+# leave data routing or carrier-switch revert half-done. Rebooting with a pinned
+# MPDN rule is safe; only a bare-released rule + reboot bricks the modem.
 #
 # NOTE: Band locking and network mode are NOT part of SIM Profiles.
 # They will be owned by the Connection Scenarios feature.
@@ -81,8 +88,9 @@ trap cleanup EXIT INT TERM
 # State File Management
 # =============================================================================
 
-# Step names (4 steps)
-STEP_NAMES="apn ttl_hl imei mpdn_rule"
+# Step names (4 steps) — execution AND state-file array order. IMEI is last
+# (reboot-bearing); mpdn_rule runs before it so its rule is pinned pre-reboot.
+STEP_NAMES="apn ttl_hl mpdn_rule imei"
 STEP_COUNT=4
 
 # Step statuses (initialized to "pending")
@@ -131,10 +139,10 @@ write_state() {
         --arg s1_detail    "$step_detail_apn" \
         --arg s2_status    "$step_status_ttl_hl" \
         --arg s2_detail    "$step_detail_ttl_hl" \
-        --arg s3_status    "$step_status_imei" \
-        --arg s3_detail    "$step_detail_imei" \
-        --arg s4_status    "$step_status_mpdn_rule" \
-        --arg s4_detail    "$step_detail_mpdn_rule" \
+        --arg s3_status    "$step_status_mpdn_rule" \
+        --arg s3_detail    "$step_detail_mpdn_rule" \
+        --arg s4_status    "$step_status_imei" \
+        --arg s4_detail    "$step_detail_imei" \
         --argjson reboot   "$apply_requires_reboot" \
         --arg err          "$err_val" \
         '{
@@ -147,8 +155,8 @@ write_state() {
             steps: [
                 {name: "apn",       status: $s1_status, detail: $s1_detail},
                 {name: "ttl_hl",    status: $s2_status, detail: $s2_detail},
-                {name: "imei",      status: $s3_status, detail: $s3_detail},
-                {name: "mpdn_rule", status: $s4_status, detail: $s4_detail}
+                {name: "mpdn_rule", status: $s3_status, detail: $s3_detail},
+                {name: "imei",      status: $s4_status, detail: $s4_detail}
             ],
             requires_reboot: $reboot,
             error: (if $err == "null" then null else $err end)
@@ -356,7 +364,7 @@ apply_ttl_hl() {
 }
 
 # =============================================================================
-# Step 3: IMEI (most disruptive — last)
+# Step 4: IMEI (most disruptive — STRICTLY last; carries AT+CFUN=1,1 reboot)
 # =============================================================================
 apply_imei() {
     mark_step_running "imei" "Checking IMEI..."
@@ -444,7 +452,7 @@ apply_imei() {
 }
 
 # =============================================================================
-# Step 4: MPDN rule (Verizon CID routing or revert on carrier switch)
+# Step 3: MPDN rule (Verizon CID routing or revert on carrier switch — no reboot)
 # =============================================================================
 apply_mpdn_rule() {
     if [ "$p_mno" = "Verizon" ]; then
@@ -510,12 +518,19 @@ apply_apn
 sleep "$CMD_GAP"
 
 apply_ttl_hl
-# No CMD_GAP — TTL doesn't use modem
+# No CMD_GAP after TTL — it's system-level (iptables), no modem command.
 
-apply_imei
-
+# MPDN BEFORE IMEI: the rule must be applied/reverted and left PINNED while the
+# modem is stable and attached, so it rides through IMEI's reboot intact. (A
+# pinned rule survives AT+CFUN=1,1; only a bare-released rule + reboot bricks.)
 sleep "$CMD_GAP"
 apply_mpdn_rule
+
+# IMEI LAST: AT+CFUN=1,1 may USB-reset / reboot the host and kill this worker.
+# Everything above is already applied + the active marker pre-set inside the
+# IMEI step before the reboot, so a death here cannot half-apply the profile.
+sleep "$CMD_GAP"
+apply_imei
 
 # =============================================================================
 # FINALIZE

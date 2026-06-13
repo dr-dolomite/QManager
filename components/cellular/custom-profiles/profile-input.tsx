@@ -1129,8 +1129,20 @@ const ProfileInputComponent = ({
             </Tabs>
             <FieldSeparator />
             <Field orientation="horizontal">
+              {/*
+                Distinct keys are LOAD-BEARING, not cosmetic. Without them React
+                reconciles these two buttons by position and reuses the same
+                <button> DOM node, mutating its `type` from "button" to "submit"
+                in place. Because React 18 flushes the "Next" click synchronously,
+                that mutation lands BEFORE the browser performs the click's
+                default action — so the browser sees a submit button and submits
+                the form, silently saving the profile on every Next→Review step.
+                Separate keys force a remount: the clicked node stays type="button"
+                for its whole life, so no stray submit fires.
+              */}
               {isReview ? (
                 <Button
+                  key="profile-submit"
                   type="submit"
                   disabled={submitting || !requiredFilled || duplicateIccid}
                 >
@@ -1140,7 +1152,7 @@ const ProfileInputComponent = ({
                     : t("custom_profiles.form.submit_add")}
                 </Button>
               ) : (
-                <Button type="button" onClick={goNext}>
+                <Button key="profile-next" type="button" onClick={goNext}>
                   {t("custom_profiles.form.next")}
                 </Button>
               )}
