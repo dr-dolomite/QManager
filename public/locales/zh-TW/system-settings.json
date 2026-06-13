@@ -26,6 +26,27 @@
     "toast_saved": "設定已儲存",
     "toast_failed": "儲存設定失敗"
   },
+  "diagnostics": {
+    "card_title": "診斷",
+    "card_description": "產生偵錯報告，方便排查問題時分享。",
+    "body": "產生數據機目前狀態的純文字快照（無線狀態、網路設定與近期日誌）並下載到您的裝置。在您選擇分享該檔案之前，不會有任何資料離開數據機。",
+    "button_capture": "下載偵錯報告",
+    "button_capturing": "正在產生…",
+    "toast_success": "偵錯報告已下載",
+    "toast_failed": "無法產生診斷報告，請重試。"
+  },
+  "ipa_offload": {
+    "card_title": "硬體卸載",
+    "card_description": "透過數據機的 IPA 硬體路徑處理封包。",
+    "enable_label": "啟用硬體卸載",
+    "cpu_warning": "硬體卸載預設開啟，由專用硬體處理 Ethernet 流量。如果出現隨機的 Ethernet 斷線，可將其關閉，讓流量改由 CPU 處理（在部分韌體與電信業者上已知有效）；CPU 能夠輕鬆應對高速流量。",
+    "unavailable_hint": "此數據機的韌體未提供 IPA 硬體卸載路徑，因此無法變更此設定。",
+    "status_label": "狀態",
+    "pending_reboot_badge": "重啟後生效",
+    "toast_enabled": "硬體卸載已啟用。重啟後生效。",
+    "toast_disabled": "硬體卸載已停用。重啟後生效。",
+    "toast_failed": "更新硬體卸載失敗"
+  },
   "scheduled_operations": {
     "card_title": "排程任務",
     "card_description": "為系統任務設定自動化排程。",

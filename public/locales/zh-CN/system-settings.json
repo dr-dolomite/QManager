@@ -26,6 +26,27 @@
     "toast_saved": "设置已保存",
     "toast_failed": "保存设置失败"
   },
+  "diagnostics": {
+    "card_title": "诊断",
+    "card_description": "生成调试报告，便于排查问题时分享。",
+    "body": "生成调制解调器当前状态的纯文本快照（无线状态、网络配置和近期日志）并下载到您的设备。在您选择分享该文件之前，不会有任何数据离开调制解调器。",
+    "button_capture": "下载调试报告",
+    "button_capturing": "正在生成…",
+    "toast_success": "调试报告已下载",
+    "toast_failed": "无法生成诊断报告，请重试。"
+  },
+  "ipa_offload": {
+    "card_title": "硬件卸载",
+    "card_description": "通过调制解调器的 IPA 硬件路径处理数据包。",
+    "enable_label": "启用硬件卸载",
+    "cpu_warning": "硬件卸载默认开启，由专用硬件处理 Ethernet 流量。如果出现随机的 Ethernet 断线，可将其关闭，使流量改由 CPU 处理（在部分固件和运营商上已知有效）；CPU 能够轻松应对高速流量。",
+    "unavailable_hint": "此调制解调器的固件未提供 IPA 硬件卸载路径，因此无法更改此设置。",
+    "status_label": "状态",
+    "pending_reboot_badge": "重启后生效",
+    "toast_enabled": "硬件卸载已启用。重启后生效。",
+    "toast_disabled": "硬件卸载已禁用。重启后生效。",
+    "toast_failed": "更新硬件卸载失败"
+  },
   "scheduled_operations": {
     "card_title": "计划任务",
     "card_description": "为系统任务设置自动化计划。",

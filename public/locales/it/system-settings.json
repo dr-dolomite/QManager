@@ -26,6 +26,27 @@
     "force_tailscale_fixes_toast_disabled": "Forza correzioni Tailscale disabilitato — rimozione della zona firewall in corso",
     "force_tailscale_fixes_toast_failed": "Impossibile aggiornare Forza correzioni Tailscale"
   },
+  "diagnostics": {
+    "card_title": "Diagnostica",
+    "card_description": "Acquisisci un report di debug da condividere durante la risoluzione dei problemi.",
+    "body": "Genera un'istantanea in testo semplice dello stato attuale del modem (stato radio, configurazione di rete e log recenti) e la scarica sul tuo dispositivo. Nessun dato lascia il modem finché non scegli di condividere il file.",
+    "button_capture": "Scarica report di debug",
+    "button_capturing": "Acquisizione…",
+    "toast_success": "Report di debug scaricato",
+    "toast_failed": "Impossibile acquisire la diagnostica. Riprova."
+  },
+  "ipa_offload": {
+    "card_title": "Offload hardware",
+    "card_description": "Instrada l'elaborazione dei pacchetti attraverso il percorso hardware IPA del modem.",
+    "enable_label": "Abilita offload hardware",
+    "cpu_warning": "L'offload hardware è attivo per impostazione predefinita ed elabora il traffico Ethernet in hardware dedicato. Se noti disconnessioni Ethernet casuali, disattivalo per instradare il traffico attraverso la CPU (una soluzione nota su alcuni firmware e operatori); la CPU gestisce le alte velocità senza problemi.",
+    "unavailable_hint": "Il firmware di questo modem non espone il percorso di offload hardware IPA, quindi questa impostazione non può essere modificata.",
+    "status_label": "Stato",
+    "pending_reboot_badge": "Attivo dopo il riavvio",
+    "toast_enabled": "Offload hardware abilitato. Riavvia per applicare.",
+    "toast_disabled": "Offload hardware disabilitato. Riavvia per applicare.",
+    "toast_failed": "Impossibile aggiornare l'offload hardware"
+  },
   "scheduled_operations": {
     "card_title": "Operazioni programmate",
     "card_description": "Imposta attività di sistema automatizzate in base a una pianificazione.",

@@ -26,6 +26,27 @@
     "toast_saved": "Pengaturan tersimpan",
     "toast_failed": "Gagal menyimpan pengaturan"
   },
+  "diagnostics": {
+    "card_title": "Diagnostik",
+    "card_description": "Ambil laporan debug untuk dibagikan saat pemecahan masalah.",
+    "body": "Membuat snapshot teks-biasa dari kondisi modem saat ini (status radio, konfigurasi jaringan, dan log terbaru) lalu mengunduhnya ke perangkat Anda. Tidak ada data yang keluar dari modem sampai Anda memilih untuk membagikan file tersebut.",
+    "button_capture": "Unduh Laporan Debug",
+    "button_capturing": "Mengambil…",
+    "toast_success": "Laporan debug terunduh",
+    "toast_failed": "Tidak dapat mengambil diagnostik. Silakan coba lagi."
+  },
+  "ipa_offload": {
+    "card_title": "Hardware Offload",
+    "card_description": "Arahkan pemrosesan paket melalui jalur perangkat keras IPA pada modem.",
+    "enable_label": "Aktifkan Hardware Offload",
+    "cpu_warning": "Hardware offload aktif secara default dan memproses lalu lintas Ethernet di perangkat keras khusus. Jika Anda mengalami Ethernet terputus secara acak, matikan agar lalu lintas dialihkan melalui CPU (perbaikan yang diketahui pada sebagian firmware dan operator); CPU mampu menangani kecepatan tinggi tanpa masalah.",
+    "unavailable_hint": "Firmware modem ini tidak menyediakan jalur hardware offload IPA, sehingga pengaturan ini tidak dapat diubah.",
+    "status_label": "Status",
+    "pending_reboot_badge": "Berlaku setelah reboot",
+    "toast_enabled": "Hardware offload diaktifkan. Reboot untuk menerapkan.",
+    "toast_disabled": "Hardware offload dinonaktifkan. Reboot untuk menerapkan.",
+    "toast_failed": "Gagal memperbarui hardware offload"
+  },
   "scheduled_operations": {
     "card_title": "Operasi Terjadwal",
     "card_description": "Atur tugas sistem otomatis sesuai jadwal.",
