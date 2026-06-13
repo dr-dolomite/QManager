@@ -18,7 +18,7 @@
 # Install location: /usr/bin/qmanager_debug_report  (mode 755)
 # Dependencies: BusyBox applets only (printf, tr, head, tail, wc, sed, grep,
 #               cat, ls, date, dmesg, logread, ip, ifconfig, free, df, uptime,
-#               lsmod, uci, jq). No bashisms.
+#               lsmod, uci, jq) plus ubus (OpenWRT core). No bashisms.
 # =============================================================================
 
 # --- Logging (optional) ------------------------------------------------------
@@ -43,7 +43,17 @@ STATUS_FILE="/tmp/qmanager_status.json"
 # Driver / subsystem keywords for the targeted dmesg grep. BusyBox grep -E is
 # confirmed available on this device (RM551E OpenWRT 23.05 aarch64), so the
 # ERE alternation form is used directly.
-DRIVER_GREP='ipa|ioss|r8125|rtl|ssr|subsys|fatal|smd|qrtr'
+#
+# Two keyword families:
+#   1. Driver / Qualcomm-subsystem signatures (the original set) — baseband and
+#      offload-driver chatter, plus recoverable MPSS subsystem restarts (SSR).
+#   2. App-processor crash / watchdog signatures — added for the RM551E-GL
+#      random-drop investigation. Recoverable drops show
+#      `qcom_q6v5_pas ...remoteproc-mss: crash detected ... type fatal error`;
+#      the hard wedge is an AP kernel hang surfaced via panic/hung/rcu/lockup
+#      markers. Kept literal (no ERE metacharacters) so the alternation is safe
+#      inside the double-quoted `sh -c "... grep -E '$DRIVER_GREP'"` below.
+DRIVER_GREP='ipa|ioss|r8125|rtl|ssr|subsys|fatal|smd|qrtr|remoteproc|q6v5|qcom_q6v5|watchdog|wdog|wdt|panic|Oops|BUG:|hung|rcu_sched|stall|lockup'
 
 # --- Sanitizer ---------------------------------------------------------------
 # Strip every byte that is not TAB, LF, or printable ASCII (0x20-0x7E). This
@@ -161,6 +171,40 @@ redact_uci | section_raw "uci_show_quecmanager_redacted"
 # Offload / driver module state
 section "lsmod_offload"    sh -c "lsmod 2>/dev/null | grep -i -E 'ipa|ioss|r8125|offload'"
 section "r8125_ioss_enabled" sh -c '/etc/init.d/r8125_ioss.init enabled 2>&1; echo "enabled_rc=$?"'
+
+# --- Crash-forensics captures (RM551E-GL random-drop investigation) ----------
+# All read-only and individually fault-tolerant: each capture self-guards with
+# 2>/dev/null so a missing source (no HW watchdog, no /data ramdumps, no
+# pstore) prints nothing and the surrounding `section` helper emits its
+# "(no output)" marker rather than failing the report.
+
+# Watchdog state. On the affected RM551E-GL build there is NO hardware
+# watchdog (/dev/watchdog absent, `ubus call system watchdog` reports
+# "status":"offline"), which is precisely why an AP hang needs a manual power
+# cycle. Capturing this in every report makes that condition visible.
+section "watchdog_state" sh -c '
+    ubus call system watchdog 2>/dev/null
+    ls -la /dev/watchdog* 2>/dev/null
+    cat /sys/class/watchdog/watchdog0/state 2>/dev/null
+'
+
+# Modem SSR ramdumps — LISTINGS ONLY. These are large binary .elf ramdumps;
+# cat-ing them would blow MAX_BYTES and inject binary the sanitizer would
+# mangle. Recoverable Qualcomm MPSS subsystem restarts drop dated ELF dumps
+# into /data/vendor/ramdump/ (persistent UBI), so listing them lets us count
+# and timestamp baseband crashes across reboots.
+section "modem_ssr_dumps" sh -c '
+    ls -la /data/vendor/ramdump/ 2>/dev/null
+    ls -la /data/ssr_kpi/ 2>/dev/null
+    ls -la /data/minidump/ 2>/dev/null
+'
+
+# pstore. Today this build captures pmsg only, so an AP panic leaves no
+# record; if the firmware is later fixed to record panics, this surfaces it.
+section "pstore" sh -c '
+    ls -la /sys/fs/pstore/ 2>/dev/null
+    cat /sys/module/pstore/parameters/backend 2>/dev/null
+'
 
 # QManager application log
 section "qmanager_log_tail_200" sh -c 'tail -n 200 /tmp/qmanager.log 2>/dev/null'

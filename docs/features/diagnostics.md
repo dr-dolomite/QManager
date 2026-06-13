@@ -48,7 +48,7 @@ The daemon assembles sections in this order:
 | `memory` | `free` |
 | `df_tmp` | `df /tmp` |
 | `dmesg_tail_300` | `dmesg \| tail -n 300` |
-| `dmesg_driver_grep` | `dmesg \| grep -i -E 'ipa\|ioss\|r8125\|rtl\|ssr\|subsys\|fatal\|smd\|qrtr'` |
+| `dmesg_driver_grep` | `dmesg \| grep -i -E 'ipa\|ioss\|r8125\|rtl\|ssr\|subsys\|fatal\|smd\|qrtr\|remoteproc\|q6v5\|qcom_q6v5\|watchdog\|wdog\|wdt\|panic\|Oops\|BUG:\|hung\|rcu_sched\|stall\|lockup'` |
 | `logread_tail_300` | `logread \| tail -n 300` |
 | `ip_link_stats` | `ip -s link` |
 | `ip_route` | `ip route` |
@@ -56,10 +56,41 @@ The daemon assembles sections in this order:
 | `uci_show_quecmanager_redacted` | `uci show quecmanager` — with secrets masked (see below) |
 | `lsmod_offload` | `lsmod \| grep -i -E 'ipa\|ioss\|r8125\|offload'` |
 | `r8125_ioss_enabled` | `/etc/init.d/r8125_ioss.init enabled; echo "enabled_rc=$?"` |
+| `watchdog_state` | `ubus call system watchdog` + `ls -la /dev/watchdog*` + `cat /sys/class/watchdog/watchdog0/state` |
+| `modem_ssr_dumps` | `ls -la /data/vendor/ramdump/` + `ls -la /data/ssr_kpi/` + `ls -la /data/minidump/` |
+| `pstore` | `ls -la /sys/fs/pstore/` + `cat /sys/module/pstore/parameters/backend` |
 | `qmanager_log_tail_200` | `tail -n 200 /tmp/qmanager.log` |
 | runtime JSON files | all `/tmp/qmanager_*.json` (ping_history limited to last 50 lines) |
 
 Each section is wrapped in `===== <title> =====` banners. A failed or empty command still emits its banner with `(no output)` so the report structure is always predictable.
+
+#### `dmesg_driver_grep` — broadened keyword set
+
+The grep pattern was extended beyond the original driver/SSR families (`ipa|ioss|r8125|rtl|ssr|subsys|fatal|smd|qrtr`) to also include app-processor crash and watchdog signatures: `remoteproc|q6v5|qcom_q6v5|watchdog|wdog|wdt|panic|Oops|BUG:|hung|rcu_sched|stall|lockup`.
+
+**Why:** recoverable baseband MPSS SSRs surface in dmesg as `qcom_q6v5_pas ... remoteproc-mss: crash detected ... type fatal error`. A full AP hang produces `BUG:`, `Oops`, `hung_task`, or RCU stall messages instead. The broadened set catches both failure modes in a single section.
+
+#### `watchdog_state`
+
+Calls `ubus call system watchdog`, `ls -la /dev/watchdog*`, and reads `/sys/class/watchdog/watchdog0/state`.
+
+**Why:** on affected RM551E builds the hardware watchdog is disabled in firmware (`ubus` returns `"status":"offline"` and `/dev/watchdog` is absent). When the AP hangs, there is no watchdog to reset it — only a manual power cycle recovers the device. This section makes that firmware gap visible in every capture.
+
+**Dependency:** uses `ubus`, which is an OpenWRT core binary (not an add-on). It is available on all supported builds.
+
+#### `modem_ssr_dumps`
+
+Lists the contents of `/data/vendor/ramdump/`, `/data/ssr_kpi/`, and `/data/minidump/` using `ls -la`.
+
+**Why:** Qualcomm MPSS (baseband Q6) subsystem restarts leave dated `.elf` ramdump files in `/data/vendor/ramdump/` on persistent UBI storage. Because these files survive reboots, counting and timestamping them lets support staff determine how many baseband crashes have occurred across the device's uptime, not just since the most recent boot.
+
+> ⚠️ WARNING: `modem_ssr_dumps` emits **directory listings only — it never `cat`s the `.elf` files**. Ramdump binaries are large; reading them into the report would blow the `MAX_BYTES` cap (307 200 bytes) and inject binary content that the byte sanitizer would mangle. `ls -la` metadata (timestamps + file sizes) is all that is needed to count and date crashes.
+
+#### `pstore`
+
+Lists `/sys/fs/pstore/` and reads `/sys/module/pstore/parameters/backend`.
+
+**Why:** pstore is the kernel mechanism for persisting crash records (oops, panics) across a reboot. On affected RM551E builds, only `pmsg` is wired into ramoops — AP panics are therefore not captured. This section surfaces that firmware gap explicitly: if `backend` shows `ramoops` and the pstore directory is empty after a suspected AP panic, the crash was not recorded.
 
 ### Byte Sanitizer
 
@@ -96,6 +127,8 @@ Any option whose name matches one of these globs has its value replaced with `[R
 - **Never reboots or modifies any config.** Read-only data collection only.
 - **qlog is optional.** The daemon guards `source /usr/lib/qmanager/qlog.sh` and stubs all log functions if the library is absent, so it runs in recovery contexts.
 - **Last stdout line = artifact path.** All other stdout is informational. The CGI relies on this contract.
+- **`modem_ssr_dumps` is listings-only.** The ramdump `.elf` files are never read into the report. See the section note above.
+- **Depends on `ubus`.** The `watchdog_state` section calls `ubus call system watchdog`. `ubus` is an OpenWRT core binary present on all supported builds; it is not an optional add-on.
 
 ---
 
