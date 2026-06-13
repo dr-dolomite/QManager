@@ -146,7 +146,12 @@ qm_validate_session() {
     [ ! -f "$_session_file" ] && return 1
 
     _created=$(cat "$_session_file" 2>/dev/null)
-    [ -z "$_created" ] && return 1
+    # Reject empty or non-numeric content. A bare epoch timestamp is the only
+    # valid session-file body; anything else (e.g. a stale pre-2026-03-17
+    # JSON session blob) would crash the $(( )) arithmetic below under ash.
+    case "$_created" in
+        ''|*[!0-9]*) rm -f "$_session_file"; return 1 ;;
+    esac
 
     _now=$(date +%s)
     _age=$(( _now - _created ))
@@ -173,7 +178,13 @@ qm_cleanup_sessions() {
     for _f in "${SESSIONS_DIR}"/*; do
         [ ! -f "$_f" ] && continue
         _created=$(cat "$_f" 2>/dev/null)
-        [ -z "$_created" ] && { rm -f "$_f"; continue; }
+        # Evict any file whose body is empty or non-numeric. Feeding a
+        # non-integer into $(( )) is a FATAL ash error that would abort the
+        # caller (login) mid-flow — a single malformed/stale file must not
+        # be able to take down the whole login path.
+        case "$_created" in
+            ''|*[!0-9]*) rm -f "$_f"; continue ;;
+        esac
         _age=$(( _now - _created ))
         [ "$_age" -gt "$SESSION_MAX_AGE" ] && rm -f "$_f"
     done

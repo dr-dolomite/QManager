@@ -11,6 +11,7 @@ This release makes Connection Quality latency readings honest, eliminates false 
 
 - **Latency readings now reflect true network round-trip time.** Connection Quality previously measured the full HTTP transaction time of each probe, which ran roughly 3× higher than your real network latency — many users saw ~300 ms while their speed test showed 16–20 ms. The probe now measures the network round trip itself, so the dashboard value is directly comparable to ping and Ookla results (typically 35–65 ms on cellular). Quality thresholds and watchdog ceilings keep their existing values, which now give you comfortable headroom against the honest numbers.
 - **No more phantom packet loss on weak signal.** The default probe targets have been switched to lightweight connectivity-check endpoints. The previous full-page HTTPS targets could time out entirely on a weak link and register as packet loss even though the connection was working. If you never customized your probe targets, the upgrade switches them automatically; custom targets are left untouched.
+- **Login can no longer be blocked by a stale session file.** In a rare case, a leftover or malformed login-session file could cause the login page to reject your *correct* password (the request failed silently after the password was already accepted). Sign-in is now hardened to clear out any unreadable session file automatically, so a single bad file can't lock you out.
 
 ## 📥 Installation
 
