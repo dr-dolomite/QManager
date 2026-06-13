@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { rebootNow } from "@/lib/reboot";
+import { cn } from "@/lib/utils";
 
 import {
   Card,
@@ -28,6 +29,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -79,6 +82,7 @@ export function TailscaleConnectionCard({
   isConnecting,
   isDisconnecting,
   isTogglingService,
+  isTogglingExitNode,
   isUninstalling,
   installResult,
   error,
@@ -88,6 +92,7 @@ export function TailscaleConnectionCard({
   startService,
   stopService,
   setBootEnabled,
+  setExitNodeAdvertised,
   uninstall,
   runInstall,
   refresh,
@@ -95,6 +100,9 @@ export function TailscaleConnectionCard({
   const { t } = useTranslation("monitoring");
   const [showRebootDialog, setShowRebootDialog] = useState(false);
   const [isRebooting, setIsRebooting] = useState(false);
+  const [installVariant, setInstallVariant] = useState<"official" | "tiny">(
+    "official",
+  );
 
   const handleReboot = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -191,6 +199,20 @@ export function TailscaleConnectionCard({
   if (status && !status.installed) {
     const installCmd =
       status.install_hint || t("tailscale.install_command");
+    const installing = installResult.status === "running";
+
+    const installVariants = [
+      {
+        id: "official" as const,
+        title: t("tailscale.variant_official_title"),
+        desc: t("tailscale.variant_official_description"),
+      },
+      {
+        id: "tiny" as const,
+        title: t("tailscale.variant_tiny_title"),
+        desc: t("tailscale.variant_tiny_description"),
+      },
+    ];
 
     return (
       <Card className="@container/card">
@@ -237,12 +259,52 @@ export function TailscaleConnectionCard({
               </Alert>
             )}
 
+            <div className="w-full max-w-sm space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("tailscale.choose_variant_label")}
+              </p>
+              <RadioGroup
+                value={installVariant}
+                onValueChange={(v) =>
+                  setInstallVariant(v as "official" | "tiny")
+                }
+                disabled={installing}
+                aria-label={t("tailscale.choose_variant_label")}
+              >
+                {installVariants.map((v) => (
+                  <Label
+                    key={v.id}
+                    htmlFor={`ts-variant-${v.id}`}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent/40",
+                      installVariant === v.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border",
+                      installing && "opacity-60 pointer-events-none",
+                    )}
+                  >
+                    <RadioGroupItem
+                      id={`ts-variant-${v.id}`}
+                      value={v.id}
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium leading-none">
+                        {v.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{v.desc}</p>
+                    </div>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+
             <div className="flex items-center gap-2">
               <Button
-                onClick={runInstall}
-                disabled={installResult.status === "running"}
+                onClick={() => runInstall(installVariant)}
+                disabled={installing}
               >
-                {installResult.status === "running" ? (
+                {installing ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
                     {installResult.message || t("tailscale.installing_label")}
@@ -258,20 +320,24 @@ export function TailscaleConnectionCard({
                 variant="outline"
                 size="sm"
                 onClick={() => refresh()}
-                disabled={installResult.status === "running"}
+                disabled={installing}
               >
                 <RefreshCcwIcon className="size-3.5" />
                 {t("tailscale.check_again_button")}
               </Button>
             </div>
 
-            <div className="w-full flex items-center gap-3 text-xs text-muted-foreground">
-              <div className="h-px flex-1 bg-border" />
-              <span>{t("tailscale.install_manually_label")}</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
+            {installVariant === "tiny" && (
+              <>
+                <div className="w-full flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="h-px flex-1 bg-border" />
+                  <span>{t("tailscale.install_manually_label")}</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
 
-            <CopyableCommand command={installCmd} />
+                <CopyableCommand command={installCmd} />
+              </>
+            )}
           </div>
           {rebootDialog}
         </CardContent>
@@ -295,6 +361,18 @@ export function TailscaleConnectionCard({
 
   // --- From here, Tailscale IS installed -------------------------------------
   const version = status?.version;
+  // Installed-variant identity: quiet muted text in the description, never a
+  // badge. "opcg" (legacy pre-existing installs) shows nothing.
+  const variantLabel =
+    status?.install_variant === "tiny"
+      ? t("tailscale.variant_tiny_short")
+      : status?.install_variant === "official"
+        ? t("tailscale.variant_official_short")
+        : "";
+  // Shared description prefix reused across all installed states to avoid drift.
+  const descriptionPrefix = version
+    ? `Tailscale v${version}${variantLabel ? ` · ${variantLabel}` : ""} · `
+    : "";
   const backendState = status?.backend_state || "";
   const daemonRunning = status?.daemon_running;
   const bootEnabled = status?.enabled_on_boot ?? false;
@@ -404,7 +482,7 @@ export function TailscaleConnectionCard({
         <CardHeader>
           <CardTitle>{t("tailscale.connection_title")}</CardTitle>
           <CardDescription>
-            {version ? `Tailscale v${version} · ` : ""}{t("tailscale.connection_description")}
+            {descriptionPrefix}{t("tailscale.connection_description")}
           </CardDescription>
         </CardHeader>
         <CardContent aria-live="polite">
@@ -458,7 +536,7 @@ export function TailscaleConnectionCard({
         <CardHeader>
           <CardTitle>{t("tailscale.connection_title")}</CardTitle>
           <CardDescription>
-            {version ? `Tailscale v${version} · ` : ""}{t("tailscale.connection_description")}
+            {descriptionPrefix}{t("tailscale.connection_description")}
           </CardDescription>
         </CardHeader>
         <CardContent aria-live="polite">
@@ -612,7 +690,7 @@ export function TailscaleConnectionCard({
         <CardHeader>
           <CardTitle>{t("tailscale.connection_title")}</CardTitle>
           <CardDescription>
-            {version ? `Tailscale v${version} · ` : ""}{t("tailscale.connection_description")}
+            {descriptionPrefix}{t("tailscale.connection_description")}
           </CardDescription>
         </CardHeader>
         <CardContent aria-live="polite">
@@ -670,6 +748,27 @@ export function TailscaleConnectionCard({
                 </motion.div>
               </React.Fragment>
             ))}
+
+            {/* Exit node toggle (Connected only) */}
+            <Separator />
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-muted-foreground">
+                  {t("tailscale.exit_node_label")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("tailscale.exit_node_description")}
+                </p>
+              </div>
+              <Switch
+                checked={status?.exit_node_advertised ?? false}
+                onCheckedChange={() =>
+                  setExitNodeAdvertised(!(status?.exit_node_advertised ?? false))
+                }
+                disabled={isTogglingExitNode}
+                aria-label={t("tailscale.exit_node_label")}
+              />
+            </div>
 
             {/* Actions */}
             <Separator />

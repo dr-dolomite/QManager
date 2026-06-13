@@ -61,6 +61,8 @@ export interface TailscaleStatus {
   peers?: TailscalePeer[];
   health?: string[];
   install_hint?: string;
+  install_variant?: "official" | "tiny" | "opkg";
+  exit_node_advertised?: boolean;
   error_detail?: string;
   other_vpn_installed?: boolean;
   other_vpn_name?: string;
@@ -72,6 +74,7 @@ export interface UseTailscaleReturn {
   isConnecting: boolean;
   isDisconnecting: boolean;
   isTogglingService: boolean;
+  isTogglingExitNode: boolean;
   isUninstalling: boolean;
   installResult: InstallResult;
   error: string | null;
@@ -81,8 +84,9 @@ export interface UseTailscaleReturn {
   startService: () => Promise<boolean>;
   stopService: () => Promise<boolean>;
   setBootEnabled: (enabled: boolean) => Promise<boolean>;
+  setExitNodeAdvertised: (enabled: boolean) => Promise<boolean>;
   uninstall: () => Promise<boolean>;
-  runInstall: () => Promise<void>;
+  runInstall: (variant: "official" | "tiny") => Promise<void>;
   refresh: () => void;
 }
 
@@ -95,6 +99,7 @@ export function useTailscale(): UseTailscaleReturn {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isTogglingService, setIsTogglingService] = useState(false);
+  const [isTogglingExitNode, setIsTogglingExitNode] = useState(false);
   const [isUninstalling, setIsUninstalling] = useState(false);
   const [installResult, setInstallResult] = useState<InstallResult>({
     success: true,
@@ -347,6 +352,38 @@ export function useTailscale(): UseTailscaleReturn {
     [postAction, fetchStatus, t],
   );
 
+  const setExitNodeAdvertised = useCallback(
+    async (enabled: boolean): Promise<boolean> => {
+      setIsTogglingExitNode(true);
+      setError(null);
+
+      try {
+        const json = await postAction({
+          action: "set_exit_node",
+          enabled,
+        });
+        if (!mountedRef.current) return false;
+
+        if (!json.success) {
+          setError(resolveErrorMessage(t, json.error, json.detail, "Failed to update exit node setting"));
+          return false;
+        }
+
+        await fetchStatus(true);
+        return true;
+      } catch (err) {
+        if (!mountedRef.current) return false;
+        setError(
+          err instanceof Error ? err.message : "Failed to update exit node setting",
+        );
+        return false;
+      } finally {
+        if (mountedRef.current) setIsTogglingExitNode(false);
+      }
+    },
+    [postAction, fetchStatus, t],
+  );
+
   // ---------------------------------------------------------------------------
   // Install via opkg
   // ---------------------------------------------------------------------------
@@ -372,13 +409,13 @@ export function useTailscale(): UseTailscaleReturn {
     }
   }, [postAction, stopInstallPolling, fetchStatus]);
 
-  const runInstall = useCallback(async () => {
+  const runInstall = useCallback(async (variant: "official" | "tiny") => {
     setInstallResult({ success: true, status: "running", message: "Starting installation..." });
     try {
       await authFetch(CGI_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "install" }),
+        body: JSON.stringify({ action: "install", variant }),
       });
       installPollRef.current = setInterval(pollInstallStatus, 2000);
     } catch (err) {
@@ -421,6 +458,7 @@ export function useTailscale(): UseTailscaleReturn {
     isConnecting,
     isDisconnecting,
     isTogglingService,
+    isTogglingExitNode,
     isUninstalling,
     installResult,
     error,
@@ -430,6 +468,7 @@ export function useTailscale(): UseTailscaleReturn {
     startService,
     stopService,
     setBootEnabled,
+    setExitNodeAdvertised,
     uninstall,
     runInstall,
     refresh: fetchStatus,

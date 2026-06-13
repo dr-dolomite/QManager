@@ -310,6 +310,25 @@ remove_backend() {
         fi
     fi
 
+    # --- Official (tarball) Tailscale install cleanup ---
+    # An official-variant Tailscale install (QManager static-tarball, not opkg)
+    # leaves binaries in /usr/bin, a heredoc-written /etc/init.d/tailscale, its
+    # rc.d symlinks, and a tailscale UCI section that opkg removal can't reach.
+    # The marker file at /etc/tailscale/.qm_install_method identifies it. Remove
+    # all of it before /etc/tailscale is wiped below.
+    if [ "$(cat /etc/tailscale/.qm_install_method 2>/dev/null | tr -d ' \n\r')" = "official" ]; then
+        [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale stop 2>/dev/null || true
+        [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale disable 2>/dev/null || true
+        rm -f /usr/bin/tailscale /usr/bin/tailscaled /etc/init.d/tailscale
+        rm -f /etc/rc.d/*tailscale 2>/dev/null || true
+        uci -q delete tailscale 2>/dev/null && uci -q commit tailscale 2>/dev/null || true
+        # uci delete+commit does NOT remove /etc/config/tailscale on-device —
+        # the section resurrects on next read. Remove the file outright.
+        rm -f /etc/config/tailscale 2>/dev/null || true
+        rm -rf /var/lib/tailscale /etc/tailscale 2>/dev/null || true
+        info "Removed official (tarball) Tailscale install"
+    fi
+
     # --- Shared libraries ---
     if [ -d "$LIB_DIR" ]; then
         rm -rf "$LIB_DIR"

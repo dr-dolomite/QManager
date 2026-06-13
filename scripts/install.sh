@@ -1130,7 +1130,9 @@ migrate_tailscale_firewall_zone() {
     fi
 
     # Find a 'tailscale' named zone in UCI
-    local found=0 i=0 val
+    local found=0
+    local i=0
+    local val
     while true; do
         val=$(uci -q get "firewall.@zone[$i].name") || break
         if [ "$val" = "tailscale" ]; then
@@ -1152,7 +1154,9 @@ migrate_tailscale_firewall_zone() {
     # Only break on src lookup failure (end-of-list). A missing dest is
     # treated as a non-match so manual or partial UCI edits don't truncate
     # the scan early.
-    local fwd_indices="" src dest
+    local fwd_indices=""
+    local src
+    local dest
     i=0
     while true; do
         src=$(uci -q get "firewall.@forwarding[$i].src") || break
@@ -1221,6 +1225,14 @@ migrate_tailscale_packages() {
         return 0
     fi
 
+    # Official (static-tarball) installs are owned by the tailscale.sh CGI, not
+    # opkg. They carry a marker file and have no opkg package entry to migrate —
+    # skip entirely so this never tries to opkg-swap a tarball install.
+    if [ "$(cat /etc/tailscale/.qm_install_method 2>/dev/null | tr -d ' \n\r')" = "official" ]; then
+        info "Official (tarball) Tailscale install detected — skipping opkg migration"
+        return 0
+    fi
+
     local lock="/var/lock/qmanager_tailscale_migrate.lock"
     if ! ( set -C; echo $$ > "$lock" ) 2>/dev/null; then
         warn "Tailscale migration lock held by another process — skipping"
@@ -1231,7 +1243,8 @@ migrate_tailscale_packages() {
     local installed
     installed=$(opkg list-installed 2>/dev/null | awk '{print $1}')
 
-    local has_legacy=0 has_tiny=0
+    local has_legacy=0
+    local has_tiny=0
     echo "$installed" | grep -qE '^(tailscale|tailscaled|luci-app-tailscale)$' && has_legacy=1 || true
     echo "$installed" | grep -qE '^(tailscale-tiny|luci-app-tailscale-community-tiny)$' && has_tiny=1 || true
 
@@ -1269,7 +1282,8 @@ migrate_tailscale_packages() {
     fi
 
     # Snapshot prior state.
-    local was_boot_enabled was_running
+    local was_boot_enabled
+    local was_running
     was_boot_enabled=$(uci -q get tailscale.@tailscale[0].enabled 2>/dev/null)
     [ "$was_boot_enabled" = "1" ] || was_boot_enabled="0"
     if pidof tailscaled >/dev/null 2>&1; then
@@ -1426,7 +1440,8 @@ health_check() {
 
     sleep 2
 
-    local poller_pid ping_pid
+    local poller_pid
+    local ping_pid
     poller_pid=$(pidof qmanager_poller 2>/dev/null || true)
     ping_pid=$(pidof qmanager_ping 2>/dev/null || true)
 

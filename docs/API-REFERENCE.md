@@ -1535,4 +1535,61 @@ Returns `{"success": true, "status": "started"}` if the installer was spawned, o
 
 ### GET/POST `/vpn/tailscale.sh`
 
-Tailscale VPN status and configuration.
+Tailscale VPN status and configuration. Full contract: [`docs/features/tailscale-vpn.md`](features/tailscale-vpn.md).
+
+**GET — tiered response by install/daemon state:**
+
+| Condition | Key fields returned |
+|---|---|
+| Not installed | `installed:false`, `install_hint`, `install_variants:["official","tiny"]` |
+| Installed, daemon stopped | `installed:true`, `daemon_running:false`, `version`, `install_variant`, `enabled_on_boot` |
+| Daemon running | All of the above + `backend_state`, `exit_node_advertised`, `auth_url`, `self`, `tailnet`, `peers`, `health` |
+
+`install_variant` — `"official"` (QManager static tarball), `"tiny"` (opkg `tailscale-tiny`), or `"opkg"` (pre-marker legacy). The marker file `/etc/tailscale/.qm_install_method` is authoritative; opkg detection is the fallback.
+
+`exit_node_advertised` — boolean derived from `.Self.ExitNodeOption` in `tailscale status --json`. Present on the Tier-3 (daemon running) response only.
+
+**POST actions:**
+
+| Action | Required fields | Notes |
+|---|---|---|
+| `install` | `variant` (`"official"`\|`"tiny"`, absent→`"tiny"`) | Background; poll `install_status` |
+| `install_status` | — | Returns `/tmp/qmanager_tailscale_install.json` |
+| `connect` | — | Orphaned double-fork `tailscale up --accept-dns=false --json` |
+| `disconnect` | — | `tailscale down`; stays registered |
+| `logout` | — | `tailscale logout`; removes device from tailnet |
+| `start_service` | — | Starts `tailscaled` |
+| `stop_service` | — | Stops `tailscaled` |
+| `set_boot_enabled` | `enabled` (bool) | Writes `tailscale.settings.service_enabled` + `init.d enable/disable` |
+| `set_exit_node` | `enabled` (bool) | `tailscale set --advertise-exit-node=<bool>`; requires `BackendState=="Running"` |
+| `uninstall` | — | Method-aware: tarball path removes binaries + init.d + rc.d + UCI + `/etc/config/tailscale`; opkg path uses smart 6-package removal |
+
+**Install progress shape** (polled via `install_status`):
+
+```json
+{ "success": true, "status": "running", "message": "Downloading Tailscale 1.98.4..." }
+```
+
+Terminal `status` values: `"complete"` (with `"variant"` field) or `"error"` (with `"detail"` field).
+
+**Error codes:**
+
+| Code | Action(s) | Meaning |
+|---|---|---|
+| `invalid_variant` | install | `variant` present but not `"official"` or `"tiny"` |
+| `other_vpn_installed` | install | NetBird is installed |
+| `already_running` | install, start_service | Already in progress / already running |
+| `already_installed` | install | Binaries already present |
+| `not_installed` | any post-install action | Tailscale not installed |
+| `migration_in_progress` | all mutating | `migrate_tailscale_packages` lock held |
+| `daemon_start_failed` | connect | Daemon did not start within 5 s |
+| `auth_timeout` | connect | No auth URL appeared within 10 s |
+| `disconnect_failed` | disconnect | `tailscale down` non-zero exit |
+| `logout_failed` | logout | `tailscale logout` non-zero exit |
+| `start_failed` | start_service | Daemon not running after start |
+| `missing_field` | set_boot_enabled, set_exit_node | Required field absent |
+| `no_init_script` | set_boot_enabled | `/etc/init.d/tailscale` absent |
+| `invalid_value` | set_boot_enabled, set_exit_node | Field present but wrong type/value |
+| `not_connected` | set_exit_node | Daemon not running or `BackendState != "Running"` |
+| `set_failed` | set_exit_node | `tailscale set` non-zero exit |
+| `uninstall_failed` | uninstall | Binary still present after removal |

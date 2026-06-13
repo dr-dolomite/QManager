@@ -1,6 +1,11 @@
 # 🚀 QManager BETA v0.1.26
 
-This release makes Connection Quality latency readings honest — what you see now matches what ping and speed tests report — and eliminates false packet-loss readings on weak signal.
+This release makes Connection Quality latency readings honest, eliminates false packet-loss readings on weak signal, and brings two major Tailscale upgrades.
+
+## ✨ New Features
+
+- **Choose your Tailscale install.** When installing Tailscale from the Monitoring page you can now pick between the latest Official build (downloaded directly from Tailscale's CDN — always the newest stable version) and the lightweight Tiny package (smaller footprint, via opkg). The card shows which variant is installed and lets you pick at install time.
+- **Advertise this device as a Tailscale exit node.** Once connected to your tailnet, a single toggle on the Tailscale card lets you advertise the modem as an exit node so other devices on your tailnet can route through it. Requires approval in the Tailscale admin console before peers can use it.
 
 ## ✅ Improvements
 

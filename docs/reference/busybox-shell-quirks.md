@@ -77,6 +77,14 @@ Using a literal NUL (`\x00`) as a sentinel instead is dangerous: `cp -r` (the pr
 
 This is the pattern used in `network/lan_config.sh`'s `ipaddr` parser (`" not_object"`, `" missing"`, `" not_string"` sentinels).
 
+### `uci delete` + `uci commit` Does NOT Remove the Config File
+
+Running `uci -q delete <section>` and then `uci -q commit <package>` removes the section from UCI's in-memory map and flushes the change, but it does **not** delete `/etc/config/<package>` from disk. On the next `uci get <package>.*`, UCI re-reads the file and the section reappears — it silently resurrects.
+
+**Rule:** After any `uci delete` on a section you intend to fully remove, also run `rm -f /etc/config/<package>` to remove the backing file. The Tailscale uninstall path (both `tailscale.sh` and `uninstall.sh`) demonstrates this pattern: `uci -q delete tailscale && uci -q commit tailscale` is always followed by `rm -f /etc/config/tailscale`.
+
+This is an OpenWRT/UCI behavior, not specific to BusyBox shell. It affects any CGI or script that removes a package-owned UCI section and then checks whether the section is gone.
+
 ## Known Debt — Cron Writers Without Crond Reload
 
 The existing scheduler subsystems — `tower/schedule.sh` (`qmanager_tower_schedule`), scheduled-reboot, and low-power (`system/settings.sh`) — write the crontab via `crontab -` without issuing `( /etc/init.d/cron reload & )`. This means they share the "dormant crond" gap: on a device that has never had a crontab, the schedule writes correctly but crond never fires because procd has not spawned it yet.
