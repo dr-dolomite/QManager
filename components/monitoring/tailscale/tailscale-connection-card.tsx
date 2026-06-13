@@ -698,6 +698,28 @@ export function TailscaleConnectionCard({
             {staleWarning}
             {/* Boot toggle */}
             {bootToggle}
+
+            {/* Exit node toggle (Connected only) */}
+            <Separator />
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-muted-foreground">
+                  {t("tailscale.exit_node_label")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("tailscale.exit_node_description")}
+                </p>
+              </div>
+              <Switch
+                checked={status?.exit_node_advertised ?? false}
+                onCheckedChange={() =>
+                  setExitNodeAdvertised(!(status?.exit_node_advertised ?? false))
+                }
+                disabled={isTogglingExitNode}
+                aria-label={t("tailscale.exit_node_label")}
+              />
+            </div>
+
             {/* Health warnings */}
             {health.length > 0 && (
               <>
@@ -748,27 +770,6 @@ export function TailscaleConnectionCard({
                 </motion.div>
               </React.Fragment>
             ))}
-
-            {/* Exit node toggle (Connected only) */}
-            <Separator />
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-muted-foreground">
-                  {t("tailscale.exit_node_label")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("tailscale.exit_node_description")}
-                </p>
-              </div>
-              <Switch
-                checked={status?.exit_node_advertised ?? false}
-                onCheckedChange={() =>
-                  setExitNodeAdvertised(!(status?.exit_node_advertised ?? false))
-                }
-                disabled={isTogglingExitNode}
-                aria-label={t("tailscale.exit_node_label")}
-              />
-            </div>
 
             {/* Actions */}
             <Separator />
