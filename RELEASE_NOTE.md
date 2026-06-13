@@ -1,23 +1,10 @@
-# 🚀 QManager BETA v0.1.26
+# 🚀 QManager BETA v0.1.27-draft
 
-This release makes Connection Quality latency readings honest, eliminates false packet-loss readings on weak signal, and brings two major Tailscale upgrades.
-
-## ✨ New Features
-
-- **One-click Debug Report.** The System Settings page now has a Diagnostics card. Hit the Capture button and QManager assembles a complete snapshot of your modem's state — kernel logs, system metrics, network interfaces, and app logs — and downloads it as a plain-text file. Attach it to a GitHub issue or support request so bugs can be diagnosed without needing SSH access.
-- **Ethernet Hardware Offload toggle.** A new card in System Settings lets you disable the r8125 NIC's hardware acceleration at next boot. This is the community-recommended fix for intermittent Ethernet drop-outs reported on some carrier configurations (notably AT&T). The toggle arms the change and a reboot prompt appears; your connection is not interrupted while you decide when to reboot.
-- **Choose your Tailscale install.** When installing Tailscale from the Monitoring page you can now pick between the latest Official build (downloaded directly from Tailscale's CDN — always the newest stable version) and the lightweight Tiny package (smaller footprint, via opkg). The card shows which variant is installed and lets you pick at install time.
-- **Advertise this device as a Tailscale exit node.** Once connected to your tailnet, a single toggle on the Tailscale card lets you advertise the modem as an exit node so other devices on your tailnet can route through it. Requires approval in the Tailscale admin console before peers can use it.
+This release deepens the Debug Report so random disconnections and hard lock-ups can be diagnosed from a single capture.
 
 ## ✅ Improvements
 
-- **Tailscale (standard install) reconnects automatically after a reboot.** You no longer need to press Connect again every time the modem restarts. If you deliberately disconnect, it stays disconnected across reboots — only a plain reboot auto-reconnects. Existing installs self-heal on the next Software Update without any manual steps.
-- **AT command log lines are clean again.** Multi-line modem responses in the application log no longer contain stray `â` characters (mojibake). The log formatter now uses a plain space to join lines instead of a multi-byte arrow symbol that BusyBox's byte-oriented text tools could not handle correctly.
-- **Latency readings now reflect true network round-trip time.** Connection Quality previously measured the full HTTP transaction time of each probe, which ran roughly 3× higher than your real network latency — many users saw ~300 ms while their speed test showed 16–20 ms. The probe now measures the network round trip itself, so the dashboard value is directly comparable to ping and Ookla results (typically 35–65 ms on cellular). Quality thresholds and watchdog ceilings keep their existing values, which now give you comfortable headroom against the honest numbers.
-- **No more phantom packet loss on weak signal.** The default probe targets have been switched to lightweight connectivity-check endpoints. The previous full-page HTTPS targets could time out entirely on a weak link and register as packet loss even though the connection was working. If you never customized your probe targets, the upgrade switches them automatically; custom targets are left untouched.
-- **Profiles with an IMEI override now apply cleanly even if the modem resets mid-apply.** All settings — including Verizon data routing — are written before the IMEI reboot, so an interrupted reboot can no longer leave a profile partially applied.
-- **Stepping through the Scenario tab no longer silently saves your profile.** Clicking Next on the Scenario tab could unexpectedly save an in-progress profile before you reached the Review step. This has been fixed.
-- **Login can no longer be blocked by a stale session file.** In a rare case, a leftover or malformed login-session file could cause the login page to reject your *correct* password (the request failed silently after the password was already accepted). Sign-in is now hardened to clear out any unreadable session file automatically, so a single bad file can't lock you out.
+- **The Debug Report now captures crash evidence.** Hitting Capture in the Diagnostics card now also records your modem's hardware-watchdog status, any baseband (cellular modem) crash dumps the device has saved, and kernel crash markers (panics, hangs, subsystem restarts). If your modem drops the connection at random or locks up hard enough to need a power cycle, the report now contains the evidence needed to pin down whether it is a recoverable modem restart or a deeper firmware-level hang — without needing SSH access. Modem crash dumps are listed by name and date only, never copied in full, so the report stays small and safe to share on a GitHub issue.
 
 ## 📥 Installation
 
@@ -27,9 +14,9 @@ This release makes Connection Quality latency readings honest, eliminates false 
 curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
 ```
 
-### Upgrading from v0.1.25
+### Upgrading from v0.1.26
 
-**System Settings → Software Update.** No migration steps needed. All settings preserved — default probe targets are updated automatically, custom targets are kept as-is.
+**System Settings → Software Update.** No migration steps needed. All settings preserved.
 
 ## 💙 Thank You
 
