@@ -121,40 +121,35 @@ get_install_variant() {
 # /etc/init.d/tailscale of a tiny install. Heredoc keeps the official init
 # script confined to the official path only.
 write_ts_initd() {
-    cat > /etc/init.d/tailscale <<'INITD_EOF'
-#!/bin/sh /etc/rc.common
-
-START=99
-STOP=10
-USE_PROCD=1
-
-# Match the state path the QManager CGI fallback uses (tailscale.sh connect /
-# start_service). Installed by the QManager official-variant installer.
-TS_STATE="/etc/tailscale/tailscaled.state"
-
-start_service() {
-    procd_open_instance
-    procd_set_param command /usr/bin/tailscaled --state="$TS_STATE"
-    procd_set_param respawn
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_close_instance
-}
-
-stop_service() {
-    /usr/bin/tailscale down 2>/dev/null
-}
-INITD_EOF
-    chmod 755 /etc/init.d/tailscale
+    if [ ! -f /usr/lib/qmanager/tailscale_initd.sh ]; then
+        return 1
+    fi
+    . /usr/lib/qmanager/tailscale_initd.sh
+    qm_write_ts_initd
 }
 
 # --- Helper: seed the tailscale.settings UCI section -------------------------
 # Defensive parity with the tiny package: get_boot_enabled / set_boot_enabled
 # treat tailscale.settings.service_enabled as authoritative. Seed it (off by
 # default) if absent. Idempotent.
+#
+# NOTE: `uci set tailscale=tailscale` cannot create /etc/config/tailscale from
+# scratch — on this device `uci set <pkg>=<type>` returns "Entry not found"
+# when the config FILE does not yet exist (a known BusyBox/UCI quirk; see
+# docs/reference/busybox-shell-quirks.md). On a fresh official install (no prior
+# tiny package), the file is absent, so we bootstrap it on disk first; UCI then
+# reads it cleanly. Without this the connect-time boot-enable would leave the
+# UCI flag unset (boot still works via get_boot_enabled's init.d fallback, but
+# the UCI mirror would drift).
 seed_ts_uci_settings() {
-    if ! uci -q get tailscale.settings >/dev/null 2>&1; then
-        uci -q set tailscale=tailscale 2>/dev/null
+    if [ ! -f /etc/config/tailscale ]; then
+        # Section TYPE is 'settings' (name also 'settings') to stay byte-identical
+        # with the elif branch below and the legacy `uci set tailscale.settings=
+        # settings`, and to match the tiny package's parity. All readers address
+        # it by section NAME (tailscale.settings.*), never by type.
+        printf 'config settings '\''settings'\''\n\toption service_enabled '\''0'\''\n' \
+            > /etc/config/tailscale
+    elif ! uci -q get tailscale.settings >/dev/null 2>&1; then
         uci -q set tailscale.settings=settings 2>/dev/null
     fi
     uci -q get tailscale.settings.service_enabled >/dev/null 2>&1 \
@@ -246,7 +241,10 @@ install_official() {
     # Phase: write service + marker + UCI parity.
     printf '{"success":true,"status":"running","message":"Writing service..."}' > "$TS_INSTALL_RESULT"
     mkdir -p /etc/tailscale
-    write_ts_initd
+    if ! write_ts_initd; then
+        printf '{"success":false,"status":"error","message":"Failed to write Tailscale service","detail":"tailscale_initd.sh lib missing"}' > "$TS_INSTALL_RESULT"
+        exit 1
+    fi
     printf 'official\n' > "$TS_INSTALL_MARKER"
     seed_ts_uci_settings
 
@@ -601,6 +599,18 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                 cgi_error "daemon_start_failed" "Could not start tailscale daemon"
                 exit 0
             fi
+        fi
+
+        # Auto-enable boot persistence on connect for the OFFICIAL variant so
+        # the node reconnects after a reboot without the user re-clicking
+        # Connect. The tiny/opkg variant manages its own boot lifecycle and is
+        # left untouched. Writes both the UCI flag and the init.d enable so the
+        # two stay in lockstep (get_boot_enabled reads UCI first).
+        if [ "$(get_install_variant)" = "official" ]; then
+            uci -q get tailscale.settings >/dev/null 2>&1 || seed_ts_uci_settings
+            uci -q set tailscale.settings.service_enabled='1' 2>/dev/null
+            uci -q commit tailscale 2>/dev/null
+            [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale enable >/dev/null 2>&1
         fi
 
         # Kill any stale tailscale up process from a previous attempt

@@ -1359,6 +1359,23 @@ migrate_tailscale_packages() {
     return 0
 }
 
+# Refreshes the official-variant Tailscale procd init script so its stop hook
+# no longer runs `tailscale down` (which persisted WantRunning=false and
+# stranded the node disconnected across reboots). Existing official installs
+# carry the old init on disk; the CGI heredoc fix only affects fresh installs,
+# so OTA upgrades self-heal here. OFFICIAL VARIANT ONLY — no-op for tiny/opkg
+# or any install without the marker. Idempotent.
+migrate_tailscale_initd_boot_fix() {
+    [ "$(cat /etc/tailscale/.qm_install_method 2>/dev/null | tr -d ' \n\r')" = "official" ] || return 0
+    if [ ! -f /usr/lib/qmanager/tailscale_initd.sh ]; then
+        warn "Official Tailscale init refresh skipped — tailscale_initd.sh lib missing"
+        return 0
+    fi
+    . /usr/lib/qmanager/tailscale_initd.sh
+    qm_write_ts_initd
+    info "Refreshed official Tailscale init script (boot-reconnect fix)"
+}
+
 # --- Cleanup Legacy ----------------------------------------------------------
 # Removes qmanager_* files on disk that are NOT in the fresh source tree.
 # This is the ONLY place where legacy cleanup happens — integrated into the
@@ -1653,7 +1670,7 @@ main() {
         TOTAL_STEPS=$(( TOTAL_STEPS + 2 ))                            # backup + frontend
     fi
     if [ "$DO_BACKEND" = "1" ]; then
-        TOTAL_STEPS=$(( TOTAL_STEPS + 6 ))                            # backend + bundled + cleanup + migrate_tailscale_fw + migrate_tailscale_pkg + seed
+        TOTAL_STEPS=$(( TOTAL_STEPS + 7 ))                            # backend + bundled + cleanup + migrate_tailscale_fw + migrate_tailscale_pkg + migrate_tailscale_initd + seed
         [ "$DO_ENABLE" = "1" ] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))  # enable
         if [ "$DO_START" = "1" ]; then
             TOTAL_STEPS=$(( TOTAL_STEPS + 3 ))                        # start + health + at_stack_check
@@ -1694,6 +1711,7 @@ main() {
         cleanup_legacy_scripts
         migrate_tailscale_firewall_zone
         migrate_tailscale_packages
+        migrate_tailscale_initd_boot_fix
         seed_uci_defaults
 
         [ "$DO_ENABLE" = "1" ] && enable_services

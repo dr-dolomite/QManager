@@ -11,6 +11,7 @@ QManager provides a first-class Tailscale integration that installs, connects, a
 | CGI script | `scripts/www/cgi-bin/quecmanager/vpn/tailscale.sh` |
 | Install path | `/www/cgi-bin/quecmanager/vpn/tailscale.sh` |
 | Endpoint | `GET/POST /cgi-bin/quecmanager/vpn/tailscale.sh` |
+| Official init writer (shared lib) | `scripts/usr/lib/qmanager/tailscale_initd.sh` → `/usr/lib/qmanager/tailscale_initd.sh` (canonical `qm_write_ts_initd`; sourced by both the CGI and the OTA migration) |
 | Install marker | `/etc/tailscale/.qm_install_method` (`official` or `tiny`) |
 | Tailscale state | `/etc/tailscale/tailscaled.state` |
 | Install progress | `/tmp/qmanager_tailscale_install.json` |
@@ -20,7 +21,7 @@ QManager provides a first-class Tailscale integration that installs, connects, a
 | `tailscale up` output | `/tmp/qmanager_tailscale_up_output` |
 | Migration lock | `/var/lock/qmanager_tailscale_migrate.lock` |
 | UCI key (boot enable) | `tailscale.settings.service_enabled` (`0`/`1`) |
-| init.d script | `/etc/init.d/tailscale` (written by official installer; opkg-owned for tiny) |
+| init.d script | `/etc/init.d/tailscale` (written via `qm_write_ts_initd` from the shared lib on the official path; opkg-owned for tiny) |
 | Reboot? | No |
 | Hook | `hooks/use-tailscale.ts` |
 | Frontend component | `components/monitoring/tailscale/tailscale-connection-card.tsx` |
@@ -171,6 +172,8 @@ Returns the contents of `/tmp/qmanager_tailscale_install.json` (or `{"success":t
 
 Ensures the daemon is running, then launches `tailscale up --accept-dns=false --json` as an orphaned background job. Polls the output file for up to 10 seconds. Returns the auth URL if one appears, or confirms already-authenticated.
 
+On the **official variant only**, a successful connect also auto-enables boot persistence: it sets `tailscale.settings.service_enabled='1'` (UCI) and calls `/etc/init.d/tailscale enable`. This happens after the daemon is confirmed running and before the `tailscale up` launch, covering both the auth-URL and already-authenticated paths. The effect is that "Connect" implies "stay connected across reboot" without the user needing to flip the boot toggle separately. The tiny/opkg variant is not touched — it manages its own boot lifecycle.
+
 **Response (auth URL available):**
 
 ```json
@@ -261,12 +264,12 @@ Stops and removes Tailscale. Method-aware: the official (tarball) path removes b
 4. Extracts with `tar -xzf`; falls back to `gzip -dc | tar -x` if the BusyBox `tar` applet lacks `-z`.
 5. Guards `/overlay` for ≥ 80 MB free before copying binaries.
 6. Copies `tailscale` and `tailscaled` to `/usr/bin/`.
-7. Writes `/etc/init.d/tailscale` via heredoc (`write_ts_initd`).
+7. Writes `/etc/init.d/tailscale` via `write_ts_initd`, which sources `qm_write_ts_initd` from `/usr/lib/qmanager/tailscale_initd.sh` (the shared lib). Returns `1` if the lib is absent; the installer errors the install JSON in that case.
 8. Writes marker: `printf 'official\n' > /etc/tailscale/.qm_install_method`.
 9. Seeds `tailscale.settings.service_enabled = 0` via `seed_ts_uci_settings` (idempotent).
 10. Cleans up `/tmp` artifacts.
 
-The procd init script is written by heredoc from the CGI — it is **never** shipped as a static file under `scripts/etc/init.d/` (see Invariant #3 below).
+The procd init script body lives in `scripts/usr/lib/qmanager/tailscale_initd.sh` — its `qm_write_ts_initd()` function is the single source of truth. It is **never** shipped as a static file under `scripts/etc/init.d/` (see Invariant #3 below).
 
 ### Tiny (opkg)
 
@@ -297,9 +300,30 @@ A simple `( cmd ) &` without stdin redirection keeps the process in the CGI's pr
 
 ### 3. The init.d script must never be shipped as a static file
 
-The official tarball ships no init.d script. The CGI writes `/etc/init.d/tailscale` via heredoc (`write_ts_initd`). This file must NOT be placed under `scripts/etc/init.d/tailscale` in the repo.
+The official tarball ships no init.d script. `write_ts_initd` in the CGI writes `/etc/init.d/tailscale` by sourcing `qm_write_ts_initd` from `/usr/lib/qmanager/tailscale_initd.sh`. This file must NOT be placed under `scripts/etc/init.d/tailscale` in the repo.
 
-**Why:** `scripts/install.sh` force-copies every file under `scripts/etc/init.d/` to the device on every install and OTA upgrade. If a static `scripts/etc/init.d/tailscale` existed, it would be copied unconditionally — clobbering the opkg-owned `/etc/init.d/tailscale` of a tiny install and breaking its daemon management. Keeping the init script in the heredoc ensures it is only written on the official variant path.
+**Why:** `scripts/install.sh` force-copies every file under `scripts/etc/init.d/` to the device on every install and OTA upgrade. If a static `scripts/etc/init.d/tailscale` existed, it would be copied unconditionally — clobbering the opkg-owned `/etc/init.d/tailscale` of a tiny install and breaking its daemon management. Keeping the init body in the shared lib, written only on the official variant path, confines it correctly.
+
+### 9. The official init `stop_service()` must be a no-op
+
+The official `/etc/init.d/tailscale` `stop_service()` function returns `0` immediately and does NOT run `tailscale down`.
+
+**Why:** `tailscale down` persists `WantRunning=false` in `tailscaled.state`. If `stop_service()` called it, procd would run the hook on every reboot/shutdown, saving the node as "down." The daemon would then boot idle on every restart, requiring a manual "Connect" click. procd kills the tracked `tailscaled` instance on service stop without `stop_service()` doing anything — the hook is only needed to block procd's default kill behavior, but procd handles the kill correctly for `USE_PROCD=1` services already.
+
+Deliberate disconnects belong in the CGI `disconnect` action (`tailscale down`), not the init script. This preserves the semantics: a **plain reboot reconnects**; a **deliberate Disconnect stays down across reboot** (because `WantRunning=false` was persisted by the CGI action, not the init hook).
+
+### 10. Boot-reconnect relies on Tailscale's persisted `WantRunning` — no boot-time `tailscale up`
+
+There is intentionally no boot-time `tailscale up` call in the init script. When `WantRunning=true` is in `tailscaled.state`, `tailscaled` reconnects itself on startup without any external trigger. A boot-time `tailscale up` would override a deliberate Disconnect (`WantRunning=false`), which is the wrong behavior.
+
+The reboot/disconnect semantics in full:
+
+| Event | `WantRunning` after | Result on next boot |
+|---|---|---|
+| Plain reboot (`/etc/init.d/tailscale stop` → start) | Unchanged (preserved) | Daemon reconnects automatically |
+| Deliberate Disconnect (CGI `disconnect` → `tailscale down`) | `false` (persisted by `tailscale down`) | Daemon boots idle; stays disconnected |
+| "Stop Service" (init stop, boot still enabled) | Unchanged | Daemon restarts on boot and reconnects |
+| Successful Connect (official variant) | `true` (set by `tailscale up`) | Auto-boot enabled; reconnects after reboot |
 
 ### 4. `uci delete` + `uci commit` does NOT remove the config file
 
@@ -342,7 +366,8 @@ Spawn background subshell (orphaned, no stdout):
   4. tar -xzf (gzip -dc | tar -x fallback)
   5. df -k /overlay → guard ≥80MB
   6. cp tailscale tailscaled → /usr/bin/; chmod 755
-  7. write_ts_initd → /etc/init.d/tailscale (heredoc, chmod 755)
+  7. write_ts_initd → sources qm_write_ts_initd from /usr/lib/qmanager/tailscale_initd.sh
+        → /etc/init.d/tailscale (chmod 755); errors install JSON if lib absent
   8. printf 'official\n' → /etc/tailscale/.qm_install_method
   9. seed_ts_uci_settings (idempotent)
   10. rm -rf /tmp/qm_tailscale_dl.tgz /tmp/qm_tailscale_extract
@@ -412,6 +437,7 @@ verify no binary at /usr/bin/tailscale, /usr/sbin/tailscale, /usr/sbin/tailscale
 
 - `migrate_tailscale_firewall_zone()` — removes the legacy fw4 tailscale zone unconditionally (idempotent; skipped when `quecmanager.tailscale_workarounds.enabled=1`).
 - `migrate_tailscale_packages()` — migrates legacy opkg tailscale packages to `tailscale-tiny`. Reads the marker file first; returns immediately (no-op) when marker = `official`. Lock-protected (`/var/lock/qmanager_tailscale_migrate.lock`, noclobber + EXIT trap). Preserves node identity by copying `tailscaled.state` before removing legacy packages.
+- `migrate_tailscale_initd_boot_fix()` — **official variant only** (returns immediately if marker is absent or not `official`). Sources `qm_write_ts_initd` from `/usr/lib/qmanager/tailscale_initd.sh` and rewrites the on-disk `/etc/init.d/tailscale`. Called after `migrate_tailscale_packages` on every OTA upgrade. Idempotent — safe to run multiple times. This is what makes existing official installs self-heal: the CGI heredoc change alone only affects fresh installs; this migration patches the init on disk for devices that installed before the boot-reconnect fix.
 
 ### `scripts/uninstall.sh`
 
@@ -459,7 +485,10 @@ New keys added in this release (EN only; **other locales need backfill**):
 - **`--accept-routes` is destructive.** Never pass it. There is no software recovery path on this hardware — only a physical reboot restores network connectivity.
 - **`tailscale set` vs `tailscale up` for pref changes.** `tailscale up` resets every preference not explicitly passed. Use `tailscale set` for targeted preference changes like exit-node advertising, so `--accept-dns=false` and other live prefs are preserved.
 - **UCI delete leaves the config file.** `uci delete tailscale && uci commit tailscale` removes the section from uci's in-memory map but the `/etc/config/tailscale` file persists. The next `uci get` re-reads it and the section reappears. Always follow UCI delete with `rm -f /etc/config/tailscale` during uninstall.
-- **No static init.d file in the repo.** `scripts/install.sh` force-copies all files under `scripts/etc/init.d/` on every install. A static `tailscale` init script would clobber the opkg-owned one on tiny installs. The official variant writes it via heredoc only.
+- **No static init.d file in the repo.** `scripts/install.sh` force-copies all files under `scripts/etc/init.d/` on every install. A static `tailscale` init script would clobber the opkg-owned one on tiny installs. The official variant writes it via `qm_write_ts_initd` (shared lib) only.
+- **The official init `stop_service()` must never call `tailscale down`.** That call persists `WantRunning=false`, stranding the node disconnected across every reboot. procd kills the daemon instance on its own when the service stops. See Invariants #9 and #10.
+- **Boot-reconnect is passive — no boot-time `tailscale up`.** Reconnect after reboot depends on Tailscale's persisted `WantRunning=true`. A boot-time `tailscale up` would override a deliberate Disconnect. Do not add one.
+- **UCI `service_enabled` may not be seeded on very old installs.** `seed_ts_uci_settings` cannot create an `/etc/config/tailscale` file if it does not exist — the `uci set <pkg>=<type>` pattern requires the config file to already exist on some BusyBox builds. `get_boot_enabled()` falls back to the `init.d enabled` check when the UCI section is absent, so boot-enable still works.
 - **Device jq has no regex.** Version resolution from `pkgs.tailscale.com` uses plain key access (`.Tarballs.arm64`, `.Version`) — no `test()`, `match()`, or `sub()`. See [`docs/reference/busybox-shell-quirks.md`](../reference/busybox-shell-quirks.md).
 - **Exit-node advertising requires admin console approval.** Setting `--advertise-exit-node=true` does not make peers route through the device. The node must be approved in the Tailscale admin console. IP-forwarding warnings surface in the `health` array until the kernel is configured.
 - **`timeout` command may be absent.** `tailscale status --json` calls are guarded with `command -v timeout` and fall back to direct calls when `timeout` is not in the path.
