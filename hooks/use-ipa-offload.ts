@@ -11,7 +11,7 @@ import type {
 } from "@/types/ipa-offload";
 
 // =============================================================================
-// useIpaOffload — read/toggle IPA hardware offload.
+// useIpaOffload: read/toggle IPA hardware offload.
 // =============================================================================
 // Backend: /cgi-bin/quecmanager/system/ipa_offload.sh
 //   GET                                  → { available, enabled }

@@ -7,13 +7,13 @@ import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import type { DiagnosticsCaptureResponse } from "@/types/diagnostics";
 
 // =============================================================================
-// useDiagnostics — capture a plain-text debug report and download it.
+// useDiagnostics: capture a plain-text debug report and download it.
 // =============================================================================
 // Backend: POST /cgi-bin/quecmanager/system/diagnostics.sh  body {"action":"capture"}
 //   → { success: true, filename, content }
 // On success we materialize `content` into a text/plain Blob and trigger a
 // browser download via the createObjectURL → <a download> → revoke pattern
-// (mirrors use-config-backup). No mount fetch — this is action-only.
+// (mirrors use-config-backup). No mount fetch; this is action-only.
 // =============================================================================
 
 const CGI_ENDPOINT = "/cgi-bin/quecmanager/system/diagnostics.sh";

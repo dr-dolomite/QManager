@@ -32,7 +32,7 @@ const IpaOffloadCard = () => {
   const handleToggle = async (checked: boolean) => {
     const ok = await setEnabled(checked);
     if (ok) {
-      // The change only takes effect after a reboot — queue the deferred banner.
+      // The change only takes effect after a reboot, so queue the deferred banner.
       requestRebootLater("ipa_offload");
       toast.success(
         checked
@@ -83,7 +83,7 @@ const IpaOffloadCard = () => {
             initial="hidden"
             animate="visible"
           >
-            {/* CPU-routing warning — always present so the tradeoff is explicit */}
+            {/* CPU-routing warning, always present so the tradeoff is explicit */}
             <motion.div variants={itemVariants}>
               <Alert>
                 <AlertTriangleIcon className="size-4" />
@@ -120,7 +120,7 @@ const IpaOffloadCard = () => {
               </div>
             </motion.div>
 
-            {/* Unavailable explanation — card stays visible, switch disabled */}
+            {/* Unavailable explanation: card stays visible, switch disabled */}
             {unavailable && (
               <motion.p
                 variants={itemVariants}
