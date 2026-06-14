@@ -1,4 +1,4 @@
-# 🚀 QManager BETA v0.1.27-draft
+# 🚀 QManager BETA v0.1.27
 
 This release cuts background modem load when the dashboard is idle and deepens the Debug Report so random disconnections and hard lock-ups can be diagnosed from a single capture. It also brings a round of refinements: a simpler APN form, a calmer and steadier System Logs page, more accurate IP Passthrough reporting, and a tidier System Settings layout.
 
