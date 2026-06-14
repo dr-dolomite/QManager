@@ -139,7 +139,13 @@ function LiveStatusBadge({
 
   // active === 1 — check if stored APN matches live CID's APN
   const liveCtx = activeCid !== null ? cids.find((c) => c.cid === activeCid) : null;
-  const liveApn = liveCtx?.apn ?? null;
+  // An empty live APN ("") is the backend's "couldn't read it" sentinel, not a
+  // confirmed value — the compound AT read fails transiently (notably during the
+  // COPS settle window right after a save). Collapse "" to null with `||` (NOT
+  // `??`, which preserves "") so an unknown live APN falls through to "Active"
+  // instead of a false "Not live". A genuinely different non-empty APN (a real
+  // carrier override) still produces a mismatch.
+  const liveApn = liveCtx?.apn || null;
 
   const isMatch =
     liveApn !== null &&

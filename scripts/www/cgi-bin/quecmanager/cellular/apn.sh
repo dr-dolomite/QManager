@@ -91,6 +91,18 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     # (process spawn + flock + modem channel handshake) that dominates the AT
     # payload itself; chaining all four queries pays that cost once.
     blob=$(run_at 'AT+CGDCONT?;+CGACT?;+CGPADDR;+QMAP="WWAN"')
+    # The live read fails transiently right after a COPS attach (AT channel
+    # busy -> run_at returns 1, empty stdout). A single immediate retry absorbs
+    # that common case without adding latency to the happy path. A sustained
+    # failure must surface honestly via die() -- returning active:1 with an
+    # all-empty cids[] would make the frontend badge mis-read the stored APN as
+    # a confirmed "Not live" mismatch.
+    if [ -z "$blob" ]; then
+        blob=$(run_at 'AT+CGDCONT?;+CGACT?;+CGPADDR;+QMAP="WWAN"')
+    fi
+    if [ -z "$blob" ]; then
+        die "at_failed" "Could not read modem PDP contexts"
+    fi
     cgdcont_raw=$(printf '%s\n' "$blob" | grep '+CGDCONT:')
 
     # --- Active CID (inline, NOT detect_active_cid which re-queries) --------

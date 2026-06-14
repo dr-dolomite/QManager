@@ -79,7 +79,9 @@ The page label changed to "APN Settings" in the sidebar and breadcrumb; the **ro
 { "success": false, "error": "<code>", "detail": "<human detail>" }
 ```
 
-Error codes: `parse_failed`.
+Error codes: `parse_failed`, `at_failed`.
+
+- `at_failed` — emitted when the compound live AT read (`AT+CGDCONT?;+CGACT?;+CGPADDR;+QMAP="WWAN"`) returns empty even after one immediate retry. The GET never pairs `active:1` with an empty `cids[]`; it dies instead, and the hook's `if (!data.success) return;` preserves the last-known-good `cids` state rather than clobbering it.
 
 ## POST Contracts
 
@@ -150,6 +152,15 @@ PDP type translation: `ipv4` → `IP`, `ipv6` → `IPV6`, `ipv4v6` → `IPV4V6`.
 
 ## Key Invariants
 
+### Empty live read is unknown, not a mismatch
+
+An empty `cids[].apn` value (`""`) means "the live AT read failed or the context has no APN defined" — it is NOT confirmation that the modem has APN `""`. Both layers treat it as unknown:
+
+- **Backend:** the GET now retries the compound AT call exactly once on empty; if still empty, it calls `die "at_failed"` rather than returning `active:1` alongside an empty `cids[]`. No `success:true` response ever carries a fully empty `cids[]`.
+- **Frontend:** `liveApn` is derived as `liveCtx?.apn || null` — the `||` operator (not `??`) collapses an empty string to `null`. The existing `liveApn !== null` guards then fall through to the **"Active"** badge. Only a *non-empty* live APN that differs from the stored one produces a confirmed "Not live".
+
+> ℹ️ NOTE: The `||` vs `??` distinction is load-bearing. `??` passes through `""` as a defined value, causing the badge comparison to treat an AT-read failure as a confirmed APN mismatch. Always use `||` here.
+
 ### Single compound GET round-trip
 
 The GET handler issues one `run_at` call: `AT+CGDCONT?;+CGACT?;+CGPADDR;+QMAP="WWAN"`. All four sections parse from the single `blob`.
@@ -214,7 +225,7 @@ IMS and SOS contexts appear in the `cids` array (the CID picker) with their `apn
 |---|---|
 | Custom SIM Profile active with APN | **Overridden** (muted + CircleSlashIcon) — fieldset disabled; `ProfileOverrideAlert` shown |
 | `active == 1` and stored APN matches live CID APN | **Active** (success/green + GlobeIcon) |
-| `active == 1` and stored APN does not match live CID APN | **Not live** (warning/amber + TriangleAlertIcon) — suppressed while `isSaving` to avoid flicker |
+| `active == 1` and live CID APN is non-empty and differs from stored APN | **Not live** (warning/amber + TriangleAlertIcon) — suppressed while `isSaving` to avoid flicker; an empty or absent live APN falls through to **Active** (unknown, not a mismatch) |
 | `active == 0` | **Carrier default** (muted) — form is pre-filled with stored APN but "Use carrier default" button state reflects that carrier is in control |
 
 **Why "Not live" exists:** if for any reason the boot reconcile does not run or cannot match the APN (e.g. a carrier that overrides the APN string on attach), `active == 1` but the live CID APN differs. The badge makes this visible without requiring manual intervention. It also appears when the carrier genuinely replaces the configured APN string.
