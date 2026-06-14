@@ -110,13 +110,31 @@ export function useAdaptivePolling(): UseAdaptivePollingReturn {
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // Initial load always fires, regardless of visibility, so the card
+    // populates even if it's mounted while the tab is briefly hidden.
     fetchSettings();
-    const id = setInterval(() => {
+
+    const tick = () => {
+      if (document.hidden) return;
       fetchSettings(true);
-    }, TIER_REFRESH_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        // Immediate refresh the moment the user returns so the tier badge
+        // is current without waiting for the next interval tick.
+        fetchSettings(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const id = setInterval(tick, TIER_REFRESH_MS);
+
     return () => {
       mountedRef.current = false;
       clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [fetchSettings]);
 

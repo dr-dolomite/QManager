@@ -2,7 +2,6 @@
 
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { motion } from "motion/react";
 import {
   AlertTriangleIcon,
   GaugeIcon,
@@ -33,7 +32,6 @@ import type {
   AdaptivePollingSettings,
   PollerTier,
 } from "@/types/modem-status";
-import { staggerContainer, staggerItem } from "@/lib/motion-presets";
 import { cn } from "@/lib/utils";
 
 // ─── Live-tier badge metadata ────────────────────────────────────────────────
@@ -51,12 +49,12 @@ const TIER_META: Record<PollerTier, TierMeta> = {
   active: {
     label: "Active · full rate",
     icon: ZapIcon,
-    className: "bg-success/15 text-success border-success/30",
+    className: "bg-success/15 text-success-on-surface border-success/30",
   },
   idle: {
     label: "Idle · slowed",
     icon: GaugeIcon,
-    className: "bg-warning/15 text-warning border-warning/30",
+    className: "bg-warning/15 text-warning-on-surface border-warning/30",
   },
   deep: {
     label: "Deep idle · minimal",
@@ -102,28 +100,28 @@ const FIELDS: FieldMeta[] = [
   {
     key: "active_grace",
     label: "Active grace",
-    hint: "Stay full-rate this long after the page is closed.",
+    hint: "Stay full-rate this long after the page is closed, in seconds.",
     min: 0,
     max: 600,
   },
   {
     key: "idle_interval",
     label: "Idle interval",
-    hint: "How often to poll while idle.",
+    hint: "How often to poll while idle, in seconds.",
     min: 2,
     max: 600,
   },
   {
     key: "idle_threshold",
     label: "Deep-idle threshold",
-    hint: "When idle becomes deep-idle.",
+    hint: "Time idle before switching to deep-idle, in seconds.",
     min: 30,
     max: 3600,
   },
   {
     key: "deep_idle_interval",
     label: "Deep-idle interval",
-    hint: "How often to poll when deep-idle.",
+    hint: "How often to poll when deep-idle, in seconds.",
     min: 5,
     max: 3600,
   },
@@ -214,8 +212,9 @@ export default function AdaptivePollingCard() {
         <CardHeader>
           <CardTitle>Adaptive Polling</CardTitle>
           <CardDescription>
-            Slow the modem&apos;s AT polling when no one is viewing the UI, then
-            snap back to full rate the moment the dashboard is opened.
+            Idle and deep-sleep tiers reduce AT command frequency when the
+            dashboard is closed. Background alerts and connection recovery are
+            unaffected by tier changes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -244,8 +243,9 @@ export default function AdaptivePollingCard() {
         <CardHeader>
           <CardTitle>Adaptive Polling</CardTitle>
           <CardDescription>
-            Slow the modem&apos;s AT polling when no one is viewing the UI, then
-            snap back to full rate the moment the dashboard is opened.
+            Idle and deep-sleep tiers reduce AT command frequency when the
+            dashboard is closed. Background alerts and connection recovery are
+            unaffected by tier changes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -267,9 +267,9 @@ export default function AdaptivePollingCard() {
       <CardHeader>
         <CardTitle>Adaptive Polling</CardTitle>
         <CardDescription>
-          Slow the modem&apos;s AT polling when no one is viewing the UI, then
-          snap back to full rate the moment the dashboard is opened. Background
-          alerts and connection recovery are unaffected.
+          Idle and deep-sleep tiers reduce AT command frequency when the
+          dashboard is closed. Background alerts and connection recovery are
+          unaffected by tier changes.
         </CardDescription>
         <CardAction>
           <TierBadge tier={tier} />
@@ -283,17 +283,9 @@ export default function AdaptivePollingCard() {
           </Alert>
         )}
 
-        <motion.div
-          className="grid gap-5"
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-        >
+        <div className="grid gap-5">
           {/* ── Enable row ──────────────────────────────────────────────── */}
-          <motion.div
-            variants={staggerItem}
-            className="flex items-center justify-between gap-4"
-          >
+          <div className="flex items-center justify-between gap-4">
             <div className="grid gap-1">
               <Label htmlFor={enabledId} className="text-sm font-medium">
                 Slow polling when idle
@@ -310,13 +302,12 @@ export default function AdaptivePollingCard() {
               }
               aria-label="Slow polling when idle"
             />
-          </motion.div>
+          </div>
 
           <Separator />
 
           {/* ── Numeric controls ────────────────────────────────────────── */}
-          <motion.div
-            variants={staggerItem}
+          <div
             className="grid gap-4 @md/card:grid-cols-2"
             aria-disabled={fieldsDisabled}
           >
@@ -329,43 +320,48 @@ export default function AdaptivePollingCard() {
                 onChange={(n) => setDraft({ ...draft, [field.key]: n })}
               />
             ))}
-          </motion.div>
+          </div>
 
           {fieldsDisabled && (
-            <motion.p
-              variants={staggerItem}
-              className="text-xs text-muted-foreground"
-            >
+            <p className="text-xs text-muted-foreground">
               Backoff is off — the poller stays at full rate. Enable it to tune
               the intervals above.
-            </motion.p>
+            </p>
           )}
 
           {isDefault && !fieldsDisabled && (
-            <motion.p
-              variants={staggerItem}
-              className="text-xs text-muted-foreground"
-            >
+            <p className="text-xs text-muted-foreground">
               Using default backoff timings.
-            </motion.p>
+            </p>
           )}
 
           {/* ── Save button ─────────────────────────────────────────────── */}
-          <motion.div variants={staggerItem} className="flex justify-end">
+          <div className="flex justify-end">
             <SaveButton
               onClick={handleSave}
               isSaving={isSaving}
               saved={saved}
               disabled={!canSave}
             />
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
 // ─── Numeric field ────────────────────────────────────────────────────────────
+// Three a11y / UX hardening points:
+//
+// 1. Hint is wired via aria-describedby so screen readers hear it.
+// 2. Hint copy includes "in seconds", so the unit is conveyed through the
+//    already-wired describedby — the visible `s` adornment remains aria-hidden.
+// 3. Local string state lets the user clear the field and retype freely;
+//    the parent draft only receives a parsed number while input is valid.
+//    On blur, an empty field resets to whatever the parent currently holds.
+//    Uses the "store previous prop" pattern (no setState-in-effect) to keep
+//    the local display in sync when the external value changes (e.g. after a
+//    successful save round-trips from the server).
 
 function NumericField({
   meta,
@@ -379,6 +375,31 @@ function NumericField({
   onChange: (next: number) => void;
 }) {
   const id = useId();
+  const hintId = `${id}-hint`;
+
+  // Local string state — allows transient empty / partial inputs without
+  // immediately snapping back to the min. The parent still receives a valid
+  // number on every well-formed keystroke.
+  const [localStr, setLocalStr] = useState<string>(
+    Number.isFinite(value) ? String(value) : "",
+  );
+
+  // "Store previous prop value" sync — mirrors the pattern at lines 174-181 in
+  // the parent card. When the external value changes (server round-trip or a
+  // reset), bring the local display in sync — but only if the field is not
+  // mid-edit (i.e. the current local string parses back to the same value the
+  // parent already has, meaning no user edit is in flight).
+  const [prevValue, setPrevValue] = useState<number>(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    // Only sync the local display string when the user is not actively editing
+    // a different value.
+    const localParsed = parseInt(localStr, 10);
+    if (localParsed !== value) {
+      setLocalStr(Number.isFinite(value) ? String(value) : "");
+    }
+  }
+
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id} className="text-sm font-medium">
@@ -392,11 +413,27 @@ function NumericField({
           min={meta.min}
           max={meta.max}
           step={1}
-          value={Number.isFinite(value) ? value : ""}
+          value={localStr}
           disabled={disabled}
+          aria-describedby={hintId}
           onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onChange(Number.isNaN(n) ? meta.min : n);
+            const raw = e.target.value;
+            setLocalStr(raw);
+            const n = parseInt(raw, 10);
+            // Only push a number to the parent when the string is a valid
+            // finite integer. Empty / partial strings are held locally so the
+            // user can clear and retype without the field fighting them.
+            if (Number.isFinite(n)) {
+              onChange(n);
+            }
+          }}
+          onBlur={() => {
+            // On blur, if the field is empty or unparseable, reset the local
+            // display to whatever the parent draft currently holds.
+            const n = parseInt(localStr, 10);
+            if (!Number.isFinite(n)) {
+              setLocalStr(Number.isFinite(value) ? String(value) : "");
+            }
           }}
           className="pr-8 tabular-nums"
         />
@@ -407,7 +444,9 @@ function NumericField({
           s
         </span>
       </div>
-      <span className="text-xs text-muted-foreground">{meta.hint}</span>
+      <span id={hintId} className="text-xs text-muted-foreground">
+        {meta.hint}
+      </span>
     </div>
   );
 }
