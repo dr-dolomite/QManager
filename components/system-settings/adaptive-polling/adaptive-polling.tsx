@@ -12,7 +12,9 @@ const AdaptivePollingSettings = () => {
           whether the UI is active.
         </p>
       </div>
-      <AdaptivePollingCard />
+      <div className="grid grid-cols-1 @3xl/main:grid-cols-2 grid-flow-row gap-4">
+        <AdaptivePollingCard />
+      </div>
     </div>
   );
 };

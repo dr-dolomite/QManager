@@ -66,7 +66,6 @@ const data = {
           t_key: "configuration_backup",
           url: "/system-settings/config-backup",
         },
-        { t_key: "ssh_password", url: "/system-settings/ssh-password" },
         {
           t_key: "connection_quality",
           url: "/system-settings/connection-quality",

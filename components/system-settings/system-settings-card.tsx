@@ -41,12 +41,19 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   AlertTriangleIcon,
   Check,
+  ChevronDownIcon,
   ChevronsUpDown,
 } from "lucide-react";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
 import KnownSimsRow from "@/components/system-settings/known-sims-row";
+import SshPasswordSection from "@/components/system-settings/ssh-password/ssh-password-section";
 import { motion } from "motion/react";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { TbInfoCircleFilled } from "react-icons/tb";
@@ -187,6 +194,10 @@ function SystemSettingsForm({
   const [zonename, setZonename] = useState(settings?.zonename ?? "UTC");
   const [timezone, setTimezone] = useState(settings?.timezone ?? "UTC0");
   const [tzOpen, setTzOpen] = useState(false);
+
+  // SSH password change lives in a disclosure under the Timezone row. Its own
+  // mutation (ssh_password.sh) is independent of this card's Save button.
+  const [sshOpen, setSshOpen] = useState(false);
 
   // Force Tailscale Fixes toggle state (saves immediately, not via Save button).
   // Re-introduces the historical fw4 zone + mwan3 ipset workarounds for
@@ -435,6 +446,45 @@ function SystemSettingsForm({
                 </Command>
               </PopoverContent>
             </Popover>
+          </motion.div>
+
+          {/* ── SSH Password (disclosed form) ─────────────────────── */}
+          <Separator />
+          <motion.div variants={itemVariants}>
+            <Collapsible open={sshOpen} onOpenChange={setSshOpen}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex"
+                        aria-label={t("ssh_password.enforce_strong_info_aria")}
+                      >
+                        <TbInfoCircleFilled className="size-5 text-info" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-balance max-w-sm">
+                        {t("ssh_password.card_description")}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <p className="font-semibold text-muted-foreground text-sm">
+                    {t("ssh_password.card_title")}
+                  </p>
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="group gap-1.5">
+                    {t("ssh_password.button_change")}
+                    <ChevronDownIcon className="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="pt-4">
+                <SshPasswordSection />
+              </CollapsibleContent>
+            </Collapsible>
           </motion.div>
 
           {/* ── Save Button ───────────────────────────────────────── */}
