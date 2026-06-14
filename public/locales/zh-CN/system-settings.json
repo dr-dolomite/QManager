@@ -332,7 +332,15 @@
     "clear_dialog_clear_all": "清除全部日志",
     "toast_load_failed": "加载系统日志失败",
     "toast_cleared": "日志文件已清除",
-    "toast_clear_failed": "清除日志文件失败"
+    "toast_clear_failed": "清除日志文件失败",
+    "table_empty_filtered": "没有符合这些筛选条件的日志",
+    "error_message": "无法加载日志",
+    "error_retry": "重试",
+    "actions_clear_filters": "清除筛选",
+    "actions_copy_aria": "复制可见日志",
+    "toast_copied_one": "已复制 {{count}} 行日志",
+    "toast_copied_other": "已复制 {{count}} 行日志",
+    "toast_copy_failed": "无法复制日志"
   },
   "at_terminal": {
     "page_title": "AT 终端",

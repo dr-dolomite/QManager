@@ -332,7 +332,15 @@
     "clear_dialog_clear_all": "清除全部日誌",
     "toast_load_failed": "載入系統日誌失敗",
     "toast_cleared": "日誌檔案已清除",
-    "toast_clear_failed": "清除日誌檔案失敗"
+    "toast_clear_failed": "清除日誌檔案失敗",
+    "table_empty_filtered": "沒有符合這些篩選條件的日誌",
+    "error_message": "無法載入日誌",
+    "error_retry": "重試",
+    "actions_clear_filters": "清除篩選",
+    "actions_copy_aria": "複製可見日誌",
+    "toast_copied_one": "已複製 {{count}} 行日誌",
+    "toast_copied_other": "已複製 {{count}} 行日誌",
+    "toast_copy_failed": "無法複製日誌"
   },
   "at_terminal": {
     "page_title": "AT 終端",

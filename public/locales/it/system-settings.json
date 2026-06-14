@@ -332,7 +332,15 @@
     "clear_dialog_clear_all": "Cancella tutti i registri",
     "toast_load_failed": "Impossibile caricare i log di sistema",
     "toast_cleared": "File di registro cancellati",
-    "toast_clear_failed": "Impossibile cancellare i file di registro"
+    "toast_clear_failed": "Impossibile cancellare i file di registro",
+    "table_empty_filtered": "Nessun log corrisponde a questi filtri",
+    "error_message": "Impossibile caricare i log",
+    "error_retry": "Riprova",
+    "actions_clear_filters": "Cancella filtri",
+    "actions_copy_aria": "Copia i log visibili",
+    "toast_copied_one": "{{count}} riga di log copiata",
+    "toast_copied_other": "{{count}} righe di log copiate",
+    "toast_copy_failed": "Impossibile copiare i log"
   },
   "at_terminal": {
     "page_title": "AT Terminale",

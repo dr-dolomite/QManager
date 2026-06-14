@@ -332,7 +332,15 @@
     "clear_dialog_clear_all": "Hapus Semua Log",
     "toast_load_failed": "Gagal memuat log sistem",
     "toast_cleared": "File log dibersihkan",
-    "toast_clear_failed": "Gagal membersihkan file log"
+    "toast_clear_failed": "Gagal membersihkan file log",
+    "table_empty_filtered": "Tidak ada log yang cocok dengan filter ini",
+    "error_message": "Gagal memuat log",
+    "error_retry": "Coba lagi",
+    "actions_clear_filters": "Hapus filter",
+    "actions_copy_aria": "Salin log yang terlihat",
+    "toast_copied_one": "{{count}} baris log disalin",
+    "toast_copied_other": "{{count}} baris log disalin",
+    "toast_copy_failed": "Gagal menyalin log"
   },
   "at_terminal": {
     "page_title": "AT Terminal",

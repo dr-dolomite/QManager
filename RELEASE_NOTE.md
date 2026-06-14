@@ -16,6 +16,8 @@ This release reduces background modem load when the dashboard is idle, and deepe
 
 - **SSH Password now lives inside System Settings.** Changing the modem's SSH/root password no longer has its own page. It's now an expandable section at the bottom of the System Settings card, just below Save Settings — same form, one less place to hunt through.
 
+- **System Logs filtering is calmer and steadier.** Changing a level, picking a component, or searching no longer blanks the whole panel — the toolbar stays in place and only the table reloads, so searches no longer lose focus mid-word. Log level tags now use QManager's quiet outline style instead of solid blocks, a failed load shows a clear Retry instead of looking empty, and you can now copy the visible log lines, clear all filters in one click, or click a component name to filter by it.
+
 - **The Debug Report now captures crash evidence.** Hitting Capture in the Diagnostics card now also records your modem's hardware-watchdog status, any baseband (cellular modem) crash dumps the device has saved, and kernel crash markers (panics, hangs, subsystem restarts). If your modem drops the connection at random or locks up hard enough to need a power cycle, the report now contains the evidence needed to pin down whether it is a recoverable modem restart or a deeper firmware-level hang — without needing SSH access. Modem crash dumps are listed by name and date only, never copied in full, so the report stays small and safe to share on a GitHub issue.
 
 ## 📥 Installation

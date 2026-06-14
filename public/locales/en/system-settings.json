@@ -332,7 +332,15 @@
     "clear_dialog_clear_all": "Clear All Logs",
     "toast_load_failed": "Failed to load system logs",
     "toast_cleared": "Log files cleared",
-    "toast_clear_failed": "Failed to clear log files"
+    "toast_clear_failed": "Failed to clear log files",
+    "table_empty_filtered": "No logs match these filters",
+    "error_message": "Couldn't load logs",
+    "error_retry": "Retry",
+    "actions_clear_filters": "Clear filters",
+    "actions_copy_aria": "Copy visible logs",
+    "toast_copied_one": "Copied {{count}} log line",
+    "toast_copied_other": "Copied {{count}} log lines",
+    "toast_copy_failed": "Couldn't copy logs"
   },
   "at_terminal": {
     "page_title": "AT Terminal",
