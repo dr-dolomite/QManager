@@ -557,7 +557,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | Script | Method | Description |
 |--------|--------|-------------|
 | `settings.sh` | GET/POST | Mode, roaming, AMBR configuration |
-| `apn.sh` | GET/POST | APN profile CRUD |
+| `apn.sh` | GET/POST | APN settings — single APN (save / deactivate); shared lib `apn_mgr.sh` |
 | `mbn.sh` | GET/POST | MBN profile select/auto |
 | `imei.sh` | GET/POST | IMEI read/write/backup |
 | `network_priority.sh` | GET/POST | LTE/NR mode preferences |

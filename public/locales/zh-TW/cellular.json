@@ -80,6 +80,7 @@
         "reuse_apn_label": "APN 配置",
         "reuse_apn_placeholder": "選擇已儲存的 APN…",
         "reuse_apn_custom": "自訂",
+        "use_saved_apn": "使用我已儲存的 APN（{{apn}}）",
         "apn_name_label": "APN 名稱",
         "apn_name_placeholder": "internet",
         "ip_protocol_label": "IP 協議",
@@ -1358,10 +1359,36 @@
     },
     "apn": {
       "page": {
-        "title": "APN 管理",
-        "description": "設定 APN 和運營商韌體設定。",
-        "error_load_title": "載入 WAN 配置失敗",
+        "title": "APN 設定",
+        "description": "設定 SIM 卡用於連線的 APN、IP 協定及資料連線情境。",
+        "error_load_title": "載入 APN 設定失敗",
         "error_load_description": "顯示的值可能已過時。"
+      },
+      "card": {
+        "title": "APN 設定",
+        "description": "數據機用於建立資料連線的存取點名稱。"
+      },
+      "status": {
+        "active": "已啟用",
+        "not_live": "未生效",
+        "carrier_default": "電信商預設",
+        "network_using": "網路正在使用：{{apn}}"
+      },
+      "save_connection_notice": "儲存時數據機重新連線期間蜂窩連線會短暫中斷。",
+      "carrier_default": {
+        "button": "使用電信商預設",
+        "dialog": {
+          "title": "使用電信商預設 APN？",
+          "description": "您的電信商將自動選擇 APN。數據機重新連線時，蜂窩連線會短暫中斷。",
+          "confirm": "使用電信商預設",
+          "cancel": "取消"
+        }
+      },
+      "toast": {
+        "saved": "APN 設定已儲存",
+        "save_error": "儲存 APN 設定失敗",
+        "deactivated": "已還原至電信商預設 APN",
+        "deactivate_error": "還原至電信商預設失敗"
       },
       "controls_label": "APN 配置",
       "managed_by_profile_fallback": "活動的自訂 SIM 設定",

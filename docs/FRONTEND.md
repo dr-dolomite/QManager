@@ -200,7 +200,7 @@ if (result.success) { /* toast success */ }
 | Hook | CGI Endpoint | Types File |
 |------|-------------|------------|
 | `useCellularSettings` | `/cellular/settings.sh` | `cellular-settings.ts` |
-| `useAPNSettings` | `/cellular/apn.sh` | `apn-settings.ts` |
+| `useApnSettings` | `/cellular/apn.sh` | `apn-settings.ts` |
 | `useMBNSettings` | `/cellular/mbn.sh` | `mbn-settings.ts` |
 | `useIMEISettings` | `/cellular/imei.sh` | `imei-settings.ts` |
 | `useBandLocking` | `/bands/lock.sh` | `band-locking.ts` |

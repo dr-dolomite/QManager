@@ -80,6 +80,7 @@
         "reuse_apn_label": "Profil APN",
         "reuse_apn_placeholder": "Pilih APN tersimpan…",
         "reuse_apn_custom": "Kustom",
+        "use_saved_apn": "Gunakan APN tersimpan saya ({{apn}})",
         "apn_name_label": "Nama APN",
         "apn_name_placeholder": "internet",
         "ip_protocol_label": "Protokol IP",
@@ -1358,10 +1359,36 @@
     },
     "apn": {
       "page": {
-        "title": "Manajemen APN",
-        "description": "Kelola profil koneksi APN seluler dan konfigurasi operator.",
-        "error_load_title": "Gagal memuat profil WAN",
+        "title": "Pengaturan APN",
+        "description": "Atur APN, protokol IP, dan konteks data yang digunakan SIM Anda untuk terhubung.",
+        "error_load_title": "Gagal memuat pengaturan APN",
         "error_load_description": "Nilai yang ditampilkan mungkin sudah usang."
+      },
+      "card": {
+        "title": "Konfigurasi APN",
+        "description": "Nama Titik Akses yang digunakan modem untuk membangun koneksi data."
+      },
+      "status": {
+        "active": "Aktif",
+        "not_live": "Tidak live",
+        "carrier_default": "Default operator",
+        "network_using": "Jaringan menggunakan: {{apn}}"
+      },
+      "save_connection_notice": "Menyimpan akan memutus koneksi seluler sebentar saat modem menyambung ulang.",
+      "carrier_default": {
+        "button": "Gunakan default operator",
+        "dialog": {
+          "title": "Gunakan APN default operator?",
+          "description": "Operator Anda akan memilih APN secara otomatis. Koneksi seluler akan terputus sebentar saat modem menyambung ulang.",
+          "confirm": "Gunakan default operator",
+          "cancel": "Batal"
+        }
+      },
+      "toast": {
+        "saved": "Pengaturan APN disimpan",
+        "save_error": "Gagal menyimpan pengaturan APN",
+        "deactivated": "Dikembalikan ke APN default operator",
+        "deactivate_error": "Gagal kembali ke default operator"
       },
       "controls_label": "Konfigurasi APN",
       "managed_by_profile_fallback": "Profil SIM Kustom aktif",

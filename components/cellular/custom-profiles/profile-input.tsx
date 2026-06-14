@@ -61,7 +61,7 @@ import type {
 } from "@/hooks/use-sim-profiles";
 import type { UseCurrentSettingsReturn } from "@/hooks/use-current-settings";
 import { useScenarioList } from "@/hooks/use-scenario-list";
-import { useWanProfiles } from "@/hooks/use-wan-profiles";
+import { useApnSettings } from "@/hooks/use-apn-settings";
 import type { DayOfWeek } from "@/types/sim-profile";
 import {
   MNO_PRESETS,
@@ -165,7 +165,7 @@ const ProfileInputComponent = ({
   const { t } = useTranslation("cellular");
   const router = useRouter();
   const { scenarios, nameForId } = useScenarioList();
-  const wan = useWanProfiles();
+  const savedApn = useApnSettings();
 
   const [tab, setTab] = React.useState("identity");
   const [tabDir, setTabDir] = React.useState(1);
@@ -376,36 +376,38 @@ const ProfileInputComponent = ({
     if (!currentSettings.isLoading) setLoadingSim(false);
   }, [currentSettings.isLoading]);
 
-  // --- APN Profiles picker --------------------------------------------------
-  // The named 5-slot APN registry (APN Management) is a third pre-fill source,
-  // alongside MNO presets and Load-from-SIM. Only configured slots (non-empty
-  // apn) are offered. Picking one copies apn + IP protocol + CID into the
-  // editable fields; the PDP token space is identical (ipv4/ipv6/ipv4v6), so no
-  // translation is needed here. CID is NOT copied while Verizon is selected —
-  // that field is locked to context 3 and we must not fight the brick-guard.
-  const savedApnProfiles = React.useMemo(
-    () => (wan.profiles ?? []).filter((p) => p.apn.trim() !== ""),
-    [wan.profiles],
-  );
+  // --- APN Settings quick-pick ----------------------------------------------
+  // The single stored APN setting (APN Settings page) is offered as a one-click
+  // pre-fill source alongside MNO presets and Load-from-SIM. Only shown when
+  // the stored APN is non-empty. Picking it copies apn + pdp_type + cid into
+  // the editable fields. CID is NOT copied while Verizon is selected — that
+  // field is locked to context 3 and we must not fight the brick-guard.
+  const hasSavedApn =
+    (savedApn.apn?.apn ?? "").trim() !== "";
 
   // The Select value is DERIVED from the typed APN — no separate state. If the
-  // current APN matches a saved slot, that slot is shown selected; otherwise a
-  // synthetic "Custom" option is shown (only once the field is non-empty), so
-  // the trigger reflects reality as the user types or picks.
-  const matchedApnProfile = savedApnProfiles.find((p) => p.apn === apn);
-  const apnSelectValue = matchedApnProfile
-    ? String(matchedApnProfile.id)
+  // current typed APN matches the one saved APN setting, the "Use my saved APN"
+  // option shows as selected; otherwise a synthetic "Custom" option is shown
+  // (only once the field is non-empty), so the trigger reflects reality as the
+  // user types.
+  const savedApnMatch =
+    hasSavedApn &&
+    savedApn.apn !== null &&
+    apn.trim().toLowerCase() === savedApn.apn.apn.trim().toLowerCase();
+  const apnSelectValue = savedApnMatch
+    ? "saved_apn"
     : apn.trim() !== ""
       ? APN_CUSTOM_VALUE
       : "";
 
   const handleApnSelect = (value: string) => {
     if (value === APN_CUSTOM_VALUE) return; // display-only; keep typed APN
-    const p = savedApnProfiles.find((x) => String(x.id) === value);
-    if (!p) return;
-    if (p.apn) setApn(p.apn);
-    if (p.pdp_type in PDP_DISPLAY) setPdp(p.pdp_type);
-    if (!isVerizon) setCid(String(p.cid));
+    if (value === "saved_apn" && savedApn.apn) {
+      setApn(savedApn.apn.apn);
+      if (savedApn.apn.pdp_type in PDP_DISPLAY) setPdp(savedApn.apn.pdp_type);
+      // CID is NOT copied while Verizon is selected (locked to CID 3).
+      if (!isVerizon) setCid(String(savedApn.apn.cid));
+    }
   };
 
   // --- Submit / Cancel ------------------------------------------------------
@@ -611,7 +613,7 @@ const ProfileInputComponent = ({
                     {t("custom_profiles.form.network_desc")}
                   </FieldDescription>
                   <FieldGroup>
-                    {savedApnProfiles.length > 0 ? (
+                    {hasSavedApn ? (
                       <div className="grid grid-cols-2 gap-4">
                         <Field>
                           <FieldLabel>
@@ -650,13 +652,11 @@ const ProfileInputComponent = ({
                                     )}
                                   </SelectItem>
                                 )}
-                                {savedApnProfiles.map((p) => (
-                                  <SelectItem key={p.id} value={String(p.id)}>
-                                    {p.name.trim()
-                                      ? `${p.name.trim()} — ${p.apn}`
-                                      : p.apn}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="saved_apn">
+                                  {t("custom_profiles.form.fields.use_saved_apn", {
+                                    apn: savedApn.apn?.apn ?? "",
+                                  })}
+                                </SelectItem>
                               </SelectGroup>
                             </SelectContent>
                           </Select>

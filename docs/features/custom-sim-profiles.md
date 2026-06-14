@@ -66,19 +66,19 @@ Selecting a carrier from the MNO picker auto-fills APN, TTL, and HL from `MNO_PR
 
 The "Load from SIM" button (Identity tab header) calls `currentSettings.refresh()` and autofills ICCID, IMEI, APN, CID, and PDP type once the response lands. A `loadRequestedRef` flag gates the autofill so the coordinator's mount fetch never triggers it — only an explicit user button press fills the form.
 
-### APN Profiles Picker
+### APN Quick-Pick
 
-The Network tab pairs the free-text **APN Name** input with an **"APN Profiles"** `Select` in a two-column row, shown when at least one APN Management slot has a non-empty `apn`. (With no configured slots the APN Name input spans the row on its own.) The picker reads the named 5-slot APN registry via `useWanProfiles()` (`hooks/use-wan-profiles.ts`, GET `cellular/apn.sh`) and filters to slots where `apn.trim() !== ""`.
+The Network tab's **APN Name** input includes a **"Use my saved APN"** quick-pick button, visible only when the APN Settings slot 1 has a non-empty `apn`. The picker reads slot 1 via `useApnSettings()` (`hooks/use-apn-settings.ts`, GET `cellular/apn.sh`).
 
-Picking a slot copies three fields into the editable form:
+Selecting it copies three fields into the editable form:
 
 | Field | Source | Notes |
 |---|---|---|
-| APN string (`apn_name`) | `p.apn` | Always copied |
-| IP protocol (`pdp_type`) | `p.pdp_type` | Token space is identical (`ipv4/ipv6/ipv4v6`) — no translation needed |
-| CID | `p.cid` | **NOT copied** when Verizon MNO is selected (the CID field is locked to 3 by the brick-guard; copying would fight it) |
+| APN string (`apn_name`) | `slot1.apn` | Always copied |
+| IP protocol (`pdp_type`) | `slot1.pdp_type` | Token space is identical (`ipv4/ipv6/ipv4v6`) — no translation needed |
+| CID | `slot1.cid` | **NOT copied** when Verizon MNO is selected (the CID field is locked to 3 by the brick-guard; copying would fight it) |
 
-The Select value is **derived from the typed APN**, not held in its own state: when the current APN matches a saved slot that slot shows selected; otherwise a synthetic **"Custom"** option appears automatically (once the field is non-empty) so the trigger reflects a hand-typed APN. Picking "Custom" is a no-op — the APN Name input remains the source of truth and stays fully editable. This is a frontend-only feature: the form still emits the standard flat `apn_name/pdp_type/cid` body to `profiles/save.sh`; the backend is unchanged.
+This is a frontend-only feature: the form still emits the standard flat `apn_name/pdp_type/cid` body to `profiles/save.sh`; the backend is unchanged.
 
 This is the third APN pre-fill source alongside MNO presets (`constants/mno-presets.ts`) and Load from SIM (`currentSettings.refresh()`).
 

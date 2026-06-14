@@ -24,7 +24,7 @@ const routeNameMap: Record<string, string> = {
   'neighbourcell-scanner': 'Neighboring Cells',
   'frequency-calculator': 'Frequency Calculator',
   settings: 'Settings',
-  'apn-management': 'APN Management',
+  'apn-management': 'APN Settings',
   'network-priority': 'Network Priority',
   'imei-settings': 'IMEI Settings',
   'fplmn-settings': 'FPLMN Settings',

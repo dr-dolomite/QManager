@@ -80,6 +80,7 @@
         "reuse_apn_label": "APN Profiles",
         "reuse_apn_placeholder": "Choose a saved APN…",
         "reuse_apn_custom": "Custom",
+        "use_saved_apn": "Use my saved APN ({{apn}})",
         "apn_name_label": "APN Name",
         "apn_name_placeholder": "internet",
         "ip_protocol_label": "IP Protocol",
@@ -1358,10 +1359,36 @@
     },
     "apn": {
       "page": {
-        "title": "APN Management",
-        "description": "Manage cellular APN connection profiles and carrier configuration.",
-        "error_load_title": "Failed to load WAN profiles",
+        "title": "APN Settings",
+        "description": "Set the APN, IP protocol, and data context your SIM uses to connect.",
+        "error_load_title": "Failed to load APN settings",
         "error_load_description": "Displayed values may be outdated."
+      },
+      "card": {
+        "title": "APN Configuration",
+        "description": "The Access Point Name the modem uses to establish a data connection."
+      },
+      "status": {
+        "active": "Active",
+        "not_live": "Not live",
+        "carrier_default": "Carrier default",
+        "network_using": "Network is using: {{apn}}"
+      },
+      "save_connection_notice": "Saving briefly drops the cellular connection while the modem reconnects.",
+      "carrier_default": {
+        "button": "Use carrier default",
+        "dialog": {
+          "title": "Use carrier default APN?",
+          "description": "Your carrier will choose the APN automatically. The cellular connection will drop briefly while the modem reconnects.",
+          "confirm": "Use carrier default",
+          "cancel": "Cancel"
+        }
+      },
+      "toast": {
+        "saved": "APN settings saved",
+        "save_error": "Failed to save APN settings",
+        "deactivated": "Reverted to carrier default APN",
+        "deactivate_error": "Failed to revert to carrier default"
       },
       "controls_label": "APN configuration",
       "managed_by_profile_fallback": "active Custom SIM Profile",
