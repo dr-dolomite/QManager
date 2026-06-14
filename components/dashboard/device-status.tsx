@@ -6,11 +6,27 @@ import { motion } from "motion/react";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 
 import type { DeviceStatus } from "@/types/modem-status";
+
+/**
+ * Per-row [label, value] skeleton bar widths, mirroring the real field lengths
+ * (Firmware Version → QManager Version) so the placeholder reads as this card,
+ * not a generic list. Keeps the loading rhythm aligned with the loaded layout.
+ */
+const SKELETON_ROW_WIDTHS: ReadonlyArray<readonly [string, string]> = [
+  ["w-32", "w-40"], // Firmware Version
+  ["w-24", "w-24"], // Build Date
+  ["w-12", "w-20"], // APN
+  ["w-28", "w-32"], // Phone Number
+  ["w-14", "w-36"], // IMSI
+  ["w-14", "w-44"], // ICCID
+  ["w-28", "w-36"], // Device IMEI
+  ["w-28", "w-32"], // Active MIMO
+  ["w-32", "w-20"], // QManager Version
+];
 
 interface DeviceStatusComponentProps {
   data: DeviceStatus | null;
@@ -55,27 +71,35 @@ const DeviceStatusComponent = ({
 
   if (isLoading) {
     return (
-      <Card className="@container/card col-span-2">
+      <Card className="@container/card col-span-2" aria-busy="true">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl text-center">
+          <CardTitle className="text-2xl font-semibold @[250px]/card:text-3xl text-center flex-1">
             {t("device_status.title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4">
             <div className="flex items-center justify-center mb-8">
-              <Skeleton className="size-44 rounded-full" />
+              <div className="size-44 bg-primary/15 rounded-full p-4 flex items-center justify-center">
+                <Skeleton className="size-full rounded-full" />
+              </div>
             </div>
+
             <div className="grid gap-2">
-              {Array.from({ length: 9 }).map((_, i) => (
-                <div key={i}>
-                  <Separator />
-                  <div className="flex items-center justify-between py-1">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-4 w-36" />
+              <div className="flex justify-end">
+                <Skeleton className="size-9 rounded-md" />
+              </div>
+              <div className="grid divide-y divide-border border-y border-border">
+                {SKELETON_ROW_WIDTHS.map(([labelW, valueW], i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between py-2"
+                  >
+                    <Skeleton className={`h-5 xl:h-6 ${labelW}`} />
+                    <Skeleton className={`h-5 xl:h-6 ${valueW}`} />
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </CardContent>
