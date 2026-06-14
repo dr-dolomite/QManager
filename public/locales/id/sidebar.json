@@ -43,6 +43,7 @@
     "configuration_backup": "Cadangan Konfigurasi",
     "ssh_password": "Kata Sandi SSH",
     "connection_quality": "Kualitas Koneksi",
+    "adaptive_polling": "Polling Adaptif",
     "bandwidth_monitor": "Monitor Bandwidth",
     "logs": "Log",
     "software_update": "Pembaruan Perangkat Lunak",

@@ -15,6 +15,11 @@ qlog_init "cgi_public_overview"
 cgi_headers
 cgi_handle_options
 
+# UI heartbeat — any overview hit is activity (including setup_required /
+# unavailable paths). The poller reads this epoch to keep AT reads at the Active
+# cadence while a browser is open (adaptive backoff).
+date +%s > /tmp/qmanager_ui_active 2>/dev/null
+
 STATUS_FILE="/tmp/qmanager_status.json"
 
 # Fresh-install gate: if no password is set, frontend must reroute to /setup/.

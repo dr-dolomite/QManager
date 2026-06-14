@@ -43,6 +43,7 @@
     "configuration_backup": "Backup della configurazione",
     "ssh_password": "Password SSH",
     "connection_quality": "Qualità della connessione",
+    "adaptive_polling": "Polling Adattivo",
     "bandwidth_monitor": "Monitor banda",
     "logs": "Log",
     "software_update": "Aggiornamento del software",

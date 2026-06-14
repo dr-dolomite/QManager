@@ -17,6 +17,10 @@ qlog_init "cgi_fetch"
 cgi_headers
 cgi_handle_options
 
+# UI heartbeat — any dashboard fetch is activity. The poller reads this epoch to
+# keep AT reads at the Active cadence while a browser is open (adaptive backoff).
+date +%s > /tmp/qmanager_ui_active 2>/dev/null
+
 CACHE_FILE="/tmp/qmanager_status.json"
 
 # --- Serve the cache ---------------------------------------------------------

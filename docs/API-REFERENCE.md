@@ -1182,6 +1182,71 @@ Creates the `quality_thresholds` UCI section on first save, then drops `/tmp/qma
 
 ---
 
+### GET/POST `/system/adaptive_polling.sh`
+
+Read or write the poller's adaptive-backoff settings. Auth-gated. See [`docs/features/adaptive-polling.md`](../features/adaptive-polling.md) for the full tier architecture, apply pipeline, force-tier2 chokepoints, and watchdog dependency invariant.
+
+**GET Response (section present — user has saved at least once):**
+
+```json
+{
+  "success": true,
+  "settings": {
+    "enabled": true,
+    "active_grace": 20,
+    "idle_interval": 15,
+    "idle_threshold": 300,
+    "deep_idle_interval": 60
+  },
+  "isDefault": false,
+  "tier": "active"
+}
+```
+
+**GET Response (section absent — factory / never saved):**
+
+Same shape with `"isDefault": true`. The returned `settings` values are the hardcoded defaults, not stored UCI values.
+
+`tier` is read from `.device.poller_tier` in `status.json`; falls back to `"active"` if the cache file is absent. Values: `"active"`, `"idle"`, `"deep"`.
+
+**POST Request (`action: "save"`):**
+
+```json
+{
+  "action": "save",
+  "enabled": true,
+  "active_grace": 20,
+  "idle_interval": 15,
+  "idle_threshold": 300,
+  "deep_idle_interval": 60
+}
+```
+
+- `enabled` — boolean. When `false`, the poller stays at the base 2 s cadence unconditionally.
+- `active_grace` — seconds before transitioning from Active to Idle after the last heartbeat. Must be a positive integer.
+- `idle_interval` — seconds between AT reads while Idle. Clamped `>= POLL_INTERVAL` (2 s).
+- `idle_threshold` — seconds of heartbeat age at which the poller transitions from Idle to Deep.
+- `deep_idle_interval` — seconds between AT reads while Deep. Clamped `>= POLL_INTERVAL` (2 s).
+
+**POST Success:**
+
+```json
+{ "success": true }
+```
+
+Commits UCI and drops `/tmp/qmanager_poller_reload`. The running poller applies the new config within one base cycle (~2 s). No daemon restart, no reboot.
+
+**Error codes:**
+
+| Code | Meaning |
+|---|---|
+| `missing_action` | `action` field absent |
+| `unknown_action` | `action` not `"save"` |
+| `invalid_value` | Any numeric field is non-positive, non-integer, or out of range |
+| `method_not_allowed` | Request was not GET or POST |
+
+---
+
 ### POST `/system/diagnostics.sh`
 
 Generate an on-demand plain-text diagnostics snapshot and return it inline for download. Auth-gated. Only POST is accepted. See [`docs/features/diagnostics.md`](../features/diagnostics.md) for the daemon–CGI contract, redaction invariants, and size-cap behaviour.

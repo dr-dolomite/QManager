@@ -42,9 +42,26 @@ HW_BANDS_FILE="/etc/qmanager/supported_bands_hw.env"
 # Boot-cached policy_band-derived supported bands (queried once per poller life).
 SUPPORTED_BANDS_FILE="/tmp/qmanager_supported_bands.env"
 POLL_INTERVAL=2        # seconds between Tier 1 cycles
-TIER1_5_EVERY=5        # Tier 1.5 (watchcat state + ping history) runs every N cycles (10s)
-TIER2_EVERY=15         # Tier 2 runs every N cycles
+TIER1_5_EVERY=5        # Tier 1.5 (watchcat state + ping history) runs every N Tier-1 cycles
+TIER2_EVERY=15         # Tier 2 runs every N Tier-1 cycles
 SIP_DELAY=0.1          # Delay between AT commands (seconds)
+
+# --- Adaptive (UI-aware tiered) backoff --------------------------------------
+# When no browser is open the poller graduates AT-port reads to a slower cadence
+# while keeping local-only work (proc metrics, ping read, write_cache) at the
+# base POLL_INTERVAL so watchdog .connectivity + root .timestamp stay fresh.
+# AP_* are runtime-resolved from quecmanager.poller.* (resolve_poller_config);
+# the values below are the built-in defaults used when the UCI section is absent.
+UI_ACTIVE_FILE="/tmp/qmanager_ui_active"          # heartbeat epoch, touched by status CGIs
+POLLER_RELOAD_FLAG="/tmp/qmanager_poller_reload"  # live-reload handshake (CGI drops it)
+TOWER_LOCK_FILE="/etc/qmanager/tower_lock.json"   # presence of an active lock forces Active
+AP_ENABLED=1
+AP_ACTIVE_GRACE=20      # seconds since last UI hit to stay in Active
+AP_IDLE_INTERVAL=15     # AT-read cadence (s) in the Idle tier
+AP_IDLE_THRESHOLD=300   # seconds of idle before dropping to Deep
+AP_DEEP_INTERVAL=60     # AT-read cadence (s) in the Deep tier
+ap_tier="active"        # current tier ("active"|"idle"|"deep"); emitted in .device.poller_tier
+_tower_lock_active=0    # cached on the Tier 1.5 cadence (cheap; rarely changes)
 
 # Signal history (NDJSON file for chart data)
 SIGNAL_HISTORY_FILE="/tmp/qmanager_signal_history.json"
@@ -896,6 +913,57 @@ resolve_quality_thresholds() {
     esac
 }
 
+# =============================================================================
+# ADAPTIVE BACKOFF CONFIG (UCI quecmanager.poller.* -> AP_* globals)
+# =============================================================================
+# Maps quecmanager.poller.{enabled,active_grace,idle_interval,idle_threshold,
+# deep_idle_interval} to the AP_* globals the tier decision reads. The section's
+# ABSENCE means "default" -> built-in values. Empty/non-numeric fields fall back
+# to their default so a hand-edited UCI never leaves an AP_* var blank.
+# idle_interval and deep_idle_interval are clamped to be >= POLL_INTERVAL (the
+# AT-due modulo divides by POLL_INTERVAL, so a cadence below it would be a no-op
+# divisor of 0 / 1 and break the graduated cadence).
+resolve_poller_config() {
+    local _ap_enabled
+    local _ap_grace
+    local _ap_idle
+    local _ap_threshold
+    local _ap_deep
+
+    _ap_enabled=$(uci -q get quecmanager.poller.enabled 2>/dev/null)
+    _ap_grace=$(uci -q get quecmanager.poller.active_grace 2>/dev/null)
+    _ap_idle=$(uci -q get quecmanager.poller.idle_interval 2>/dev/null)
+    _ap_threshold=$(uci -q get quecmanager.poller.idle_threshold 2>/dev/null)
+    _ap_deep=$(uci -q get quecmanager.poller.deep_idle_interval 2>/dev/null)
+
+    # enabled is truthy unless explicitly 0/false (absence -> enabled).
+    case "$_ap_enabled" in
+        0|false|no|off) AP_ENABLED=0 ;;
+        *)              AP_ENABLED=1 ;;
+    esac
+
+    case "$_ap_grace"     in ''|*[!0-9]*) AP_ACTIVE_GRACE=20 ;;   *) AP_ACTIVE_GRACE="$_ap_grace" ;;   esac
+    case "$_ap_idle"      in ''|*[!0-9]*) AP_IDLE_INTERVAL=15 ;;  *) AP_IDLE_INTERVAL="$_ap_idle" ;;   esac
+    case "$_ap_threshold" in ''|*[!0-9]*) AP_IDLE_THRESHOLD=300 ;; *) AP_IDLE_THRESHOLD="$_ap_threshold" ;; esac
+    case "$_ap_deep"      in ''|*[!0-9]*) AP_DEEP_INTERVAL=60 ;;  *) AP_DEEP_INTERVAL="$_ap_deep" ;;   esac
+
+    # Clamp the AT-read cadences to never drop below the base cycle interval.
+    [ "$AP_IDLE_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_IDLE_INTERVAL="$POLL_INTERVAL"
+    [ "$AP_DEEP_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_DEEP_INTERVAL="$POLL_INTERVAL"
+}
+
+# is_tower_lock_active — returns 0 (true) when an LTE or NR-SA cell lock is
+# active in /etc/qmanager/tower_lock.json (.lte.enabled OR .nr_sa.enabled ==
+# true). An active lock pins the poller to the Active tier so the tower-failover
+# daemon's signal source never goes stale. Explicit null-checks (matching the
+# rest of this script) guard a missing key/file.
+is_tower_lock_active() {
+    [ -f "$TOWER_LOCK_FILE" ] || return 1
+    local _tl
+    _tl=$(jq -r '((if .lte.enabled == null then false else .lte.enabled end) or (if .nr_sa.enabled == null then false else .nr_sa.enabled end)) | tostring' "$TOWER_LOCK_FILE" 2>/dev/null)
+    [ "$_tl" = "true" ]
+}
+
 read_ping_data() {
     # Reset to defaults if ping file missing or stale
     if [ ! -f "$PING_CACHE" ]; then
@@ -1222,6 +1290,7 @@ write_cache() {
         --arg ippt_nat  "$boot_ippt_nat" \
         --arg ippt_usb  "$boot_ippt_usbnet" \
         --arg ippt_dns  "$boot_ippt_dhcpv4dns" \
+        --arg ap_tier "${ap_tier:-active}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
         --argjson lat "${conn_latency:-null}" \
@@ -1322,7 +1391,8 @@ write_cache() {
                 ippt_mac: $ippt_mac,
                 ippt_nat: $ippt_nat,
                 ippt_usbnet: $ippt_usb,
-                ippt_dhcpv4dns: $ippt_dns
+                ippt_dhcpv4dns: $ippt_dns,
+                poller_tier: $ap_tier
             },
             connectivity: {
                 internet_available: $inet, status: $conn_st,
@@ -1387,18 +1457,30 @@ poll_cycle() {
         qlog_info "Reloaded quality thresholds: lat=${QUALITY_LAT_THRESHOLD}ms/${QUALITY_LAT_DEBOUNCE} loss=${QUALITY_LOSS_THRESHOLD}%/${QUALITY_LOSS_DEBOUNCE}"
     fi
 
-    # --- Ping-based checks FIRST (no modem dependency) ---
-    # These must run before AT commands in case qcmd blocks on serial I/O.
+    # Live reload of adaptive-backoff config when adaptive_polling.sh drops it.
+    if [ -f "$POLLER_RELOAD_FLAG" ]; then
+        resolve_poller_config
+        rm -f "$POLLER_RELOAD_FLAG"
+        qlog_info "Reloaded poller config: enabled=${AP_ENABLED} grace=${AP_ACTIVE_GRACE}s idle=${AP_IDLE_INTERVAL}s threshold=${AP_IDLE_THRESHOLD}s deep=${AP_DEEP_INTERVAL}s"
+    fi
+
+    # --- LOCAL-ONLY (no modem) — ALWAYS every cycle -------------------------
+    # These run regardless of tier so the watchdog's .connectivity data and the
+    # root .timestamp stay fresh at the base cadence even when AT reads back off.
+    # They must also run before any AT command in case qcmd blocks on serial I/O.
     update_proc_metrics
     read_ping_data
     check_email_alert
     check_sms_alert
 
+    # --- Scan-in-progress early return (UNCHANGED behavior) -----------------
+    # A long-running scan IS active AT-bearing work; report the Active tier.
     if [ -f "$LONG_FLAG" ]; then
         if [ "$system_state" != "scan_in_progress" ]; then
             qlog_state_change "system_state" "$system_state" "scan_in_progress"
         fi
         system_state="scan_in_progress"
+        ap_tier="active"
         # Ping history (every Tier 1.5 interval — 10s)
         if [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
             append_ping_history
@@ -1408,80 +1490,146 @@ poll_cycle() {
         return
     fi
 
-    errors=""
-    system_state="normal"
-
-    # Refresh policy_band-derived supported bands when a SIM swap (or other apply)
-    # drops the flag — the new SIM may expose a different carrier band policy.
-    # Re-queries + rewrites the RAM cache; the next write_cache emits fresh values.
-    # hw_* is static spec-sheet data and is NOT re-read here.
-    if [ -f "$REFRESH_POLICY_FLAG" ]; then
-        rm -f "$REFRESH_POLICY_FLAG"
-        refresh_policy_band
-    fi
-
-    # Tier 1 (AT commands — may block if modem is unresponsive)
-    poll_serving_cell
-    sleep "$SIP_DELAY"
-
-    # Carrier Aggregation — QCAINFO reporting enabled at boot (Group B).
-    local ca_result
-    ca_result=$(qcmd_exec 'AT+QCAINFO')
-    if [ $? -eq 0 ] && [ -n "$ca_result" ]; then
-        parse_ca_info "$ca_result"
-    else
-        t2_ca_active=false
-        t2_ca_count=0
-        t2_nr_ca_active=false
-        t2_nr_ca_count=0
-        t2_total_bandwidth_mhz=0
-        t2_bandwidth_details=""
-        t2_carrier_components="[]"
-    fi
-    sleep "$SIP_DELAY"
-
-    # CFUN — standalone query every cycle (compound commands timeout in CFUN=0)
-    local cfun_result
-    cfun_result=$(qcmd 'AT+CFUN?' 2>/dev/null)
-    if [ -n "$cfun_result" ]; then
-        local cfun_val
-        cfun_val=$(printf '%s\n' "$cfun_result" | grep '+CFUN:' | head -1 | tr -d '\r' | awk -F': ' '{print $2}' | tr -d ' ')
-        [ -n "$cfun_val" ] && t1_cfun="$cfun_val"
-    fi
-    sleep "$SIP_DELAY"
-
-    # Tier 1 (per-antenna signal)
-    poll_per_antenna_signal
-    sleep "$SIP_DELAY"
-
-    # Tier 1.5 (watchcat state + SoC temperature via sysfs — every 10s)
+    # Refresh the cached tower-lock flag on the Tier 1.5 cadence (cheap jq read
+    # of a file that rarely changes; an active lock pins the Active tier below).
     if [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
-        read_watchcat_state
-        parse_temperature
+        if is_tower_lock_active; then _tower_lock_active=1; else _tower_lock_active=0; fi
     fi
 
-    # Tier 2 (warm data + SIM state) — also fires early when an apply script
-    # (SIM switch / band lock) has touched the force flag, so the UI reflects
-    # the new registration within ~2-4s instead of the next ~30s tier boundary.
+    # --- DECIDE TIER + whether AT work is due this cycle ---------------------
+    # Heartbeat age = now - epoch in UI_ACTIVE_FILE (missing/garbage epoch -> 0
+    # -> huge age -> deep). FORCE_TIER2 / REFRESH_POLICY / an active tower lock
+    # always force Active so automated applies + failover see fresh AT data.
+    _at_due=0
     _force_t2=0
     if [ -f "$FORCE_TIER2_FLAG" ]; then
         _force_t2=1
         rm -f "$FORCE_TIER2_FLAG"
     fi
-    if [ $((cycle_count % TIER2_EVERY)) -eq 0 ] || [ "$_force_t2" = 1 ]; then
-        poll_tier2
-        read_sim_state
-        [ "$_force_t2" = 1 ] && refresh_sim_identity
+    _refresh_policy=0
+    if [ -f "$REFRESH_POLICY_FLAG" ]; then
+        _refresh_policy=1
+        rm -f "$REFRESH_POLICY_FLAG"
+    fi
+
+    if [ "$AP_ENABLED" != "1" ]; then
+        # Adaptive backoff disabled — original behavior: Active, AT every cycle.
+        ap_tier="active"
+        _at_due=1
+    elif [ "$_force_t2" = "1" ] || [ "$_refresh_policy" = "1" ] || [ "$_tower_lock_active" = "1" ]; then
+        ap_tier="active"
+        _at_due=1
+    else
+        local _hb
+        local _now
+        local _age
+        _hb=$(cat "$UI_ACTIVE_FILE" 2>/dev/null | tr -d ' \r\n')
+        case "$_hb" in ''|*[!0-9]*) _hb=0 ;; esac
+        _now=$(date +%s)
+        _age=$((_now - _hb))
+
+        if [ "$_age" -le "$AP_ACTIVE_GRACE" ]; then
+            ap_tier="active"
+            _at_due=1
+        elif [ "$_age" -le "$AP_IDLE_THRESHOLD" ]; then
+            ap_tier="idle"
+            local _idle_div
+            _idle_div=$((AP_IDLE_INTERVAL / POLL_INTERVAL))
+            [ "$_idle_div" -lt 1 ] && _idle_div=1
+            [ $((cycle_count % _idle_div)) -eq 0 ] && _at_due=1
+        else
+            ap_tier="deep"
+            local _deep_div
+            _deep_div=$((AP_DEEP_INTERVAL / POLL_INTERVAL))
+            [ "$_deep_div" -lt 1 ] && _deep_div=1
+            [ $((cycle_count % _deep_div)) -eq 0 ] && _at_due=1
+        fi
+    fi
+
+    # --- AT-PORT block: only when AT is due ----------------------------------
+    if [ "$_at_due" = "1" ]; then
+        errors=""
+        system_state="normal"
+
+        # Refresh policy_band-derived supported bands when a SIM swap (or other
+        # apply) dropped the flag — the new SIM may expose a different carrier
+        # band policy. Re-queries + rewrites the RAM cache; the next write_cache
+        # emits fresh values. hw_* is static spec-sheet data and is NOT re-read.
+        if [ "$_refresh_policy" = "1" ]; then
+            refresh_policy_band
+        fi
+
+        # When idle/deep AND AT is due, grab a COMPLETE fresh snapshot: run
+        # Tier 1 + Tier 1.5 + Tier 2 unconditionally (ignore their per-tier
+        # modulo), because each rare modem touch should be a full refresh. In
+        # the Active tier, keep the existing graduated cadence.
+        local _full_refresh=0
+        if [ "$ap_tier" != "active" ]; then
+            _full_refresh=1
+        fi
+
+        # Tier 1 (AT commands — may block if modem is unresponsive)
+        poll_serving_cell
+        sleep "$SIP_DELAY"
+
+        # Carrier Aggregation — QCAINFO reporting enabled at boot (Group B).
+        local ca_result
+        ca_result=$(qcmd_exec 'AT+QCAINFO')
+        if [ $? -eq 0 ] && [ -n "$ca_result" ]; then
+            parse_ca_info "$ca_result"
+        else
+            t2_ca_active=false
+            t2_ca_count=0
+            t2_nr_ca_active=false
+            t2_nr_ca_count=0
+            t2_total_bandwidth_mhz=0
+            t2_bandwidth_details=""
+            t2_carrier_components="[]"
+        fi
+        sleep "$SIP_DELAY"
+
+        # CFUN — standalone query every cycle (compound commands timeout in CFUN=0)
+        local cfun_result
+        cfun_result=$(qcmd 'AT+CFUN?' 2>/dev/null)
+        if [ -n "$cfun_result" ]; then
+            local cfun_val
+            cfun_val=$(printf '%s\n' "$cfun_result" | grep '+CFUN:' | head -1 | tr -d '\r' | awk -F': ' '{print $2}' | tr -d ' ')
+            [ -n "$cfun_val" ] && t1_cfun="$cfun_val"
+        fi
+        sleep "$SIP_DELAY"
+
+        # Tier 1 (per-antenna signal)
+        poll_per_antenna_signal
+        sleep "$SIP_DELAY"
+
+        # Tier 1.5 (watchcat state + SoC temperature via sysfs — every 10s in
+        # Active; on every full-refresh touch when idle/deep).
+        if [ "$_full_refresh" = "1" ] || [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
+            read_watchcat_state
+            parse_temperature
+        fi
+
+        # Tier 2 (warm data + SIM state) — fires on the Tier 2 boundary, on a
+        # forced refresh (apply scripts), or on every full-refresh touch when
+        # idle/deep so a rare modem touch returns a complete snapshot.
+        if [ "$_full_refresh" = "1" ] || [ $((cycle_count % TIER2_EVERY)) -eq 0 ] || [ "$_force_t2" = "1" ]; then
+            poll_tier2
+            read_sim_state
+            [ "$_force_t2" = "1" ] && refresh_sim_identity
+        fi
+
+        determine_service_status
+        detect_events
     fi
     unset _force_t2
+    unset _refresh_policy
 
+    # --- ALWAYS: connectivity housekeeping + cache write --------------------
     # Ping history (every Tier 1.5 interval — 10s)
     if [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
         append_ping_history
     fi
     update_conn_uptime
-    determine_service_status
-    detect_events
     write_cache
 
     cycle_count=$((cycle_count + 1))
@@ -1500,9 +1648,16 @@ main() {
 
     collect_boot_data
     resolve_quality_thresholds
+    resolve_poller_config
     update_proc_metrics
     email_alerts_init
     sms_alerts_init
+
+    # Seed the UI heartbeat so a fresh poller start begins in the Active tier for
+    # one grace window — the dashboard is the most likely caller right after a
+    # restart, and this avoids a cold start in Deep with stale AT data.
+    date +%s > "$UI_ACTIVE_FILE" 2>/dev/null
+
     write_cache
 
     qlog_info "Boot data collected, entering poll loop"
@@ -1514,3 +1669,4 @@ main() {
 }
 
 main "$@"
+

@@ -86,6 +86,11 @@ stop_service() {
     # Clean up state files
     rm -f /tmp/qmanager_long_running
     rm -f /var/lock/qmanager.pid
+    # Adaptive-backoff runtime files: the UI heartbeat and the live-reload flag.
+    # Removed so a fresh poller start re-seeds the heartbeat (begins in Active)
+    # and never consumes a stale reload flag.
+    rm -f /tmp/qmanager_ui_active
+    rm -f /tmp/qmanager_poller_reload
     # Note: Ping cache and history are left for post-mortem debugging
     # Note: Logs in /tmp/qmanager.log are preserved for post-mortem debugging
 }

@@ -208,6 +208,8 @@ export interface NrStatus {
 }
 
 export interface DeviceStatus {
+  /** Live adaptive-polling backoff tier the poller is currently running at. */
+  poller_tier?: PollerTier;
   /** Average modem temperature in °C across all available sensors (null if unavailable) */
   temperature: number | null;
   /** CPU usage percentage (0–100), calculated from /proc/stat delta between poll cycles */
@@ -399,6 +401,31 @@ export type QualityPreset = (typeof QUALITY_PRESETS)[number];
 export interface QualityThresholdsSettings {
   latency: { preset: QualityPreset };
   loss: { preset: QualityPreset };
+}
+
+// --- Adaptive Polling --------------------------------------------------------
+
+/**
+ * Live backoff tier the poller is running at. `active` = full ~2 s rate (UI is
+ * being viewed), `idle` = slowed, `deep` = minimal background polling.
+ */
+export type PollerTier = "active" | "idle" | "deep";
+
+/**
+ * UI-aware poller backoff settings. All intervals/thresholds are in seconds.
+ * Mirrors the flat wire keys the shell CGI parses on both GET and POST.
+ */
+export interface AdaptivePollingSettings {
+  /** Master switch — when false the poller stays at full rate always. */
+  enabled: boolean;
+  /** Stay at full rate this long after the UI is closed (seconds). */
+  active_grace: number;
+  /** How often to poll while idle (seconds). */
+  idle_interval: number;
+  /** Seconds of idleness before idle becomes deep-idle. */
+  idle_threshold: number;
+  /** How often to poll while deep-idle (seconds). */
+  deep_idle_interval: number;
 }
 
 // --- Watchcat State (from /tmp/qmanager_watchcat.json via poller) ------------

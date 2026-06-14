@@ -1,6 +1,10 @@
 # 🚀 QManager BETA v0.1.27-draft
 
-This release deepens the Debug Report so random disconnections and hard lock-ups can be diagnosed from a single capture.
+This release reduces background modem load when the dashboard is idle, and deepens the Debug Report so random disconnections and hard lock-ups can be diagnosed from a single capture.
+
+## ✨ New Features
+
+- **Adaptive Polling — QManager now eases off the modem when you're away.** When no browser is viewing the dashboard, QManager automatically slows down how often it checks the modem — stepping from a 2-second rate down to every 15 s (idle) and then every 60 s (deep idle). The moment you open the dashboard, full-speed updates resume within about 2 seconds. Automated actions like scenario activation and SIM profile switching still take effect immediately in the background. This cuts unattended background traffic to the modem by roughly 97%. Configurable under **System Settings → Adaptive Polling**.
 
 ## ✅ Improvements
 

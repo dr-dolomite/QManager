@@ -72,6 +72,10 @@ const data = {
           url: "/system-settings/connection-quality",
         },
         {
+          t_key: "adaptive_polling",
+          url: "/system-settings/adaptive-polling",
+        },
+        {
           t_key: "bandwidth_monitor",
           url: "/system-settings/bandwidth-monitor",
         },

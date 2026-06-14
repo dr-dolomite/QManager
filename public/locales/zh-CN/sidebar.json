@@ -43,6 +43,7 @@
     "configuration_backup": "配置备份",
     "ssh_password": "SSH 密码",
     "connection_quality": "连接质量",
+    "adaptive_polling": "自适应轮询",
     "bandwidth_monitor": "带宽监控",
     "logs": "日志",
     "software_update": "软件更新",

@@ -279,6 +279,12 @@ apply_apn_to_modem() {
         APN_APPLY_ERR_DETAIL="AT+COPS=0 (re-register) failed for CID $_am_cid"
         return 1
     fi
+    # Force an early poller Tier-2 refresh so the UI (and adaptive-backoff Idle/
+    # Deep tiers) reflect the new APN within ~2s. This is the single success
+    # chokepoint for every APN apply — user-initiated (apn.sh CGI), profile-
+    # deactivation reapply, and boot reconcile all run through here. Detached so
+    # it never blocks the caller; idempotent (touch of an existing flag no-ops).
+    ( sleep 2; touch /tmp/qmanager_force_tier2 ) </dev/null >/dev/null 2>&1 &
     return 0
 }
 

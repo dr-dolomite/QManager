@@ -43,6 +43,7 @@
     "configuration_backup": "設定備份",
     "ssh_password": "SSH 密碼",
     "connection_quality": "連線質量",
+    "adaptive_polling": "自適應輪詢",
     "bandwidth_monitor": "頻寬監控",
     "logs": "日誌",
     "software_update": "軟體更新",
