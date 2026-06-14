@@ -8,7 +8,11 @@ This release reduces background modem load when the dashboard is idle, and deepe
 
 ## ✅ Improvements
 
+- **Tower-locked devices now shed idle AT load too.** Previously, having a tower lock active kept the modem poller running at full speed around the clock. The poller now steps down to idle and deep-idle cadences when the dashboard is away, just like any other state. Signal failover still works — it issues its own live modem query rather than relying on the polling rate.
+
 - **APN settings simplified.** The APN page is now a single, clear form — one APN, one PDP type, one context ID — instead of five labelled profile slots. Your saved APN is automatically re-applied after reboots and SIM changes. If a Custom SIM Profile is active, it still takes priority and the APN form goes read-only as before.
+
+- **Device Information now shows your active APN.** The Device Information card on the dashboard now lists the APN your modem is connected with, right below the build date. The rarely-useful "LTE Category" entry has been removed to make room for it.
 
 - **The Debug Report now captures crash evidence.** Hitting Capture in the Diagnostics card now also records your modem's hardware-watchdog status, any baseband (cellular modem) crash dumps the device has saved, and kernel crash markers (panics, hangs, subsystem restarts). If your modem drops the connection at random or locks up hard enough to need a power cycle, the report now contains the evidence needed to pin down whether it is a recoverable modem restart or a deeper firmware-level hang — without needing SSH access. Modem crash dumps are listed by name and date only, never copied in full, so the report stays small and safe to share on a GitHub issue.
 

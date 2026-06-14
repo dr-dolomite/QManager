@@ -14,11 +14,14 @@ import type { DeviceStatus } from "@/types/modem-status";
 
 interface DeviceStatusComponentProps {
   data: DeviceStatus | null;
+  /** Live APN name, sourced from network status (AT+CGCONTRDP), a sibling of `device` in the poll payload */
+  apn?: string | null;
   isLoading: boolean;
 }
 
 const DeviceStatusComponent = ({
   data,
+  apn,
   isLoading,
 }: DeviceStatusComponentProps) => {
   const { t } = useTranslation("dashboard");
@@ -27,6 +30,7 @@ const DeviceStatusComponent = ({
   const rows = [
     { label: t("device_status.firmware_version"), value: data?.firmware || "-" },
     { label: t("device_status.build_date"), value: data?.build_date || "-" },
+    { label: t("device_status.apn"), value: apn || "-", mono: true },
     {
       label: t("device_status.phone_number"),
       value: data?.phone_number || "-",
@@ -40,11 +44,6 @@ const DeviceStatusComponent = ({
       value: data?.imei || "-",
       mono: true,
       private: true,
-    },
-    {
-      label: t("device_status.lte_category"),
-      value: data?.lte_category ? `Cat ${data.lte_category}` : "-",
-      mono: true,
     },
     { label: t("device_status.active_mimo"), value: data?.mimo || "-", mono: true },
     {

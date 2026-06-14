@@ -42,11 +42,11 @@
     "hide_private": "Hide private details",
     "firmware_version": "Firmware Version",
     "build_date": "Build Date",
+    "apn": "APN",
     "phone_number": "Phone Number",
     "imsi": "IMSI",
     "iccid": "ICCID",
     "device_imei": "Device IMEI",
-    "lte_category": "LTE Category",
     "active_mimo": "Active MIMO",
     "qmanager_version": "QManager Version"
   },

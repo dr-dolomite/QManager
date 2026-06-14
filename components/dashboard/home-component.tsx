@@ -101,6 +101,7 @@ const HomeComponent = () => {
       <div className="@3xl/main:col-span-2 @5xl/main:col-span-2 col-span-1 h-full *:data-[slot=card]:h-full">
         <DeviceStatus
           data={data?.device ?? null}
+          apn={data?.network?.apn ?? null}
           isLoading={isLoading}
         />
       </div>

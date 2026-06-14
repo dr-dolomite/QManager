@@ -42,11 +42,11 @@
     "hide_private": "隱藏隱私資訊",
     "firmware_version": "韌體版本",
     "build_date": "建置日期",
+    "apn": "APN",
     "phone_number": "電話號碼",
     "imsi": "IMSI",
     "iccid": "ICCID",
     "device_imei": "裝置 IMEI",
-    "lte_category": "LTE 類別",
     "active_mimo": "活動 MIMO",
     "qmanager_version": "QManager 版本"
   },

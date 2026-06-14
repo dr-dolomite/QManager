@@ -42,11 +42,11 @@
     "hide_private": "Sembunyikan detail pribadi",
     "firmware_version": "Versi Firmware",
     "build_date": "Tanggal Build",
+    "apn": "APN",
     "phone_number": "Nomor Telepon",
     "imsi": "IMSI",
     "iccid": "ICCID",
     "device_imei": "IMEI Perangkat",
-    "lte_category": "Kategori LTE",
     "active_mimo": "MIMO Aktif",
     "qmanager_version": "Versi QManager"
   },
