@@ -1015,8 +1015,8 @@ read_ping_data() {
         ((.last_rtt_ms) | if . == null then "null" else tostring end),
         ((.during_recovery) | if . == null then "false" else tostring end),
         ((.interval_sec) | if . == null then "5" else tostring end),
-        (.targets[0] // ""),
-        (.profile // "")
+        ((.targets[0]) | if . == null then "" else . end),
+        ((.profile) | if . == null then "" else . end)
     ] | @tsv' "$PING_CACHE" 2>/dev/null)
 
     conn_internet_available=$(printf '%s' "$_pdata" | cut -f1)
@@ -1138,7 +1138,7 @@ read_watchcat_state() {
     local _wdata
     _wdata=$(jq -r '[
         ((.enabled) | if . == null then "false" else tostring end),
-        (.state // "unknown"),
+        ((.state) | if . == null then "unknown" else . end),
         ((.current_tier) | if . == null then "0" else tostring end),
         ((.failure_count) | if . == null then "0" else tostring end),
         ((.last_recovery_time) | if . == null then "null" else tostring end),
