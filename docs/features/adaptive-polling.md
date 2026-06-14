@@ -95,13 +95,12 @@ The connection watchdog (`qmanager_watchcat`) keys its freshness check on the ro
 
 ### 2. Force-to-Active flags guarantee exactly one full AT cycle then release
 
-Three conditions pin the poller to Active regardless of heartbeat age:
+Two conditions pin the poller to Active regardless of heartbeat age:
 
 - `/tmp/qmanager_force_tier2` present — written by `qmanager_profile_apply` (complete/partial finalise block) and by `apn_mgr.sh` (`apply_apn_to_modem` success path), so scenario-cron and ICCID auto-apply changes reflect in `status.json` within ~2–4 s even while the poller is deep-idle.
 - `/tmp/qmanager_refresh_policy_band` present — written on SIM-swap to trigger a policy-band re-read.
-- `/etc/qmanager/tower_lock.json` present with `.lte.enabled` or `.nr_sa.enabled` set to `true` — pins the poller to Active so `qmanager_tower_failover`'s live-RSRP signal source never goes stale.
 
-The `force_tier2` flag is idempotent: it forces exactly one Active cycle, then the poller removes the flag and returns to whatever tier the heartbeat age dictates. The other two conditions are persistent (flag file / lock JSON) and hold Active continuously while they exist.
+Both are one-shot: each flag forces exactly one Active cycle, then the poller removes the flag and returns to whatever tier the heartbeat age dictates. Tower-lock state no longer affects tier selection — see Known Gotchas.
 
 ### 3. Boot seeds the heartbeat file before entering the poll loop
 
@@ -202,7 +201,7 @@ The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"dee
 
 ## Known Gotchas
 
-- **Tower-lock-active pins to Active continuously.** If a tower lock is set, the poller never enters idle or deep, even at 3 a.m. with no browser open. This is intentional — `qmanager_tower_failover` depends on a fresh RSRP reading each cycle. Disabling the tower lock releases the pin.
+- **Tower lock follows the UI heartbeat, not a fixed pin.** A tower lock no longer forces the poller to stay in Active. When the dashboard is idle, the poller graduates to Idle then Deep even with a tower lock active. `qmanager_tower_failover` (which loops every 20 s and reads `.lte.rsrp` / `.nr.rsrp` from `status.json`) may therefore act on RSRP up to one deep interval (default 60 s) stale while the UI is idle. This is acceptable for slow signal-degradation failover; when the dashboard is open, RSRP is fresh at the 2 s cadence. Band failover (`qmanager_band_failover`) is unaffected — it is a one-shot actor that issues its own live `AT+QCAINFO` query and never relied on the poller's cadence.
 - **`write_cache` skipped = watchdog quality trigger dies silently.** Any future modification to the poller loop must preserve the invariant that `write_cache` and `read_ping_data` run every base cycle. The AT-block gating should wrap only the AT reads.
 - **Idle tier at non-2s baseline collapses to Active.** If `POLL_INTERVAL` is ever raised for diagnostic purposes, `idle_interval=15` (default) at a 15 s base becomes `15 / 15 = 1` — every cycle fires. The feature must be re-tuned if the base interval changes.
 - **Heartbeat file is not atomic.** The shell redirect `date +%s > /tmp/qmanager_ui_active` is a truncate-then-write, not an atomic rename. A poller read that races with a CGI write may see an empty file; the poller treats an empty/unreadable file as maximum age and may briefly drop to Deep before the next cycle. This is benign — the next heartbeat write recovers it within 2 s.

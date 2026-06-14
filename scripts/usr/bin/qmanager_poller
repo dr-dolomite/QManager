@@ -54,14 +54,12 @@ SIP_DELAY=0.1          # Delay between AT commands (seconds)
 # the values below are the built-in defaults used when the UCI section is absent.
 UI_ACTIVE_FILE="/tmp/qmanager_ui_active"          # heartbeat epoch, touched by status CGIs
 POLLER_RELOAD_FLAG="/tmp/qmanager_poller_reload"  # live-reload handshake (CGI drops it)
-TOWER_LOCK_FILE="/etc/qmanager/tower_lock.json"   # presence of an active lock forces Active
 AP_ENABLED=1
 AP_ACTIVE_GRACE=20      # seconds since last UI hit to stay in Active
 AP_IDLE_INTERVAL=15     # AT-read cadence (s) in the Idle tier
 AP_IDLE_THRESHOLD=300   # seconds of idle before dropping to Deep
 AP_DEEP_INTERVAL=60     # AT-read cadence (s) in the Deep tier
 ap_tier="active"        # current tier ("active"|"idle"|"deep"); emitted in .device.poller_tier
-_tower_lock_active=0    # cached on the Tier 1.5 cadence (cheap; rarely changes)
 
 # Signal history (NDJSON file for chart data)
 SIGNAL_HISTORY_FILE="/tmp/qmanager_signal_history.json"
@@ -952,18 +950,6 @@ resolve_poller_config() {
     [ "$AP_DEEP_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_DEEP_INTERVAL="$POLL_INTERVAL"
 }
 
-# is_tower_lock_active — returns 0 (true) when an LTE or NR-SA cell lock is
-# active in /etc/qmanager/tower_lock.json (.lte.enabled OR .nr_sa.enabled ==
-# true). An active lock pins the poller to the Active tier so the tower-failover
-# daemon's signal source never goes stale. Explicit null-checks (matching the
-# rest of this script) guard a missing key/file.
-is_tower_lock_active() {
-    [ -f "$TOWER_LOCK_FILE" ] || return 1
-    local _tl
-    _tl=$(jq -r '((if .lte.enabled == null then false else .lte.enabled end) or (if .nr_sa.enabled == null then false else .nr_sa.enabled end)) | tostring' "$TOWER_LOCK_FILE" 2>/dev/null)
-    [ "$_tl" = "true" ]
-}
-
 read_ping_data() {
     # Reset to defaults if ping file missing or stale
     if [ ! -f "$PING_CACHE" ]; then
@@ -1490,16 +1476,12 @@ poll_cycle() {
         return
     fi
 
-    # Refresh the cached tower-lock flag on the Tier 1.5 cadence (cheap jq read
-    # of a file that rarely changes; an active lock pins the Active tier below).
-    if [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
-        if is_tower_lock_active; then _tower_lock_active=1; else _tower_lock_active=0; fi
-    fi
-
     # --- DECIDE TIER + whether AT work is due this cycle ---------------------
     # Heartbeat age = now - epoch in UI_ACTIVE_FILE (missing/garbage epoch -> 0
-    # -> huge age -> deep). FORCE_TIER2 / REFRESH_POLICY / an active tower lock
-    # always force Active so automated applies + failover see fresh AT data.
+    # -> huge age -> deep). FORCE_TIER2 / REFRESH_POLICY force Active so automated
+    # applies + a SIM-swap policy re-read see fresh AT data. A tower lock no longer
+    # pins Active — it follows the heartbeat like every other tier consumer; the
+    # tower-failover daemon tolerates RSRP up to one deep interval stale.
     _at_due=0
     _force_t2=0
     if [ -f "$FORCE_TIER2_FLAG" ]; then
@@ -1516,7 +1498,7 @@ poll_cycle() {
         # Adaptive backoff disabled — original behavior: Active, AT every cycle.
         ap_tier="active"
         _at_due=1
-    elif [ "$_force_t2" = "1" ] || [ "$_refresh_policy" = "1" ] || [ "$_tower_lock_active" = "1" ]; then
+    elif [ "$_force_t2" = "1" ] || [ "$_refresh_policy" = "1" ]; then
         ap_tier="active"
         _at_due=1
     else
