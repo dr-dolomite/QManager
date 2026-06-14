@@ -8,8 +8,6 @@ This release cuts background modem load when the dashboard is idle and deepens t
 
 ## ✅ Improvements
 
-- **Tower-locked devices now shed idle AT load too.** Previously, having a tower lock active kept the modem poller running at full speed around the clock. The poller now steps down to idle and deep-idle cadences when the dashboard is away, just like any other state. Signal failover still works — it issues its own live modem query rather than relying on the polling rate.
-
 - **APN settings simplified.** The APN page is now a single, clear form — one APN, one PDP type, one context ID — instead of five labelled profile slots. Your saved APN is automatically re-applied after reboots and SIM changes. If a Custom SIM Profile is active, it still takes priority and the APN form goes read-only as before.
 
 - **Device Information now shows your active APN.** The Device Information card on the dashboard now lists the APN your modem is connected with, right below the build date. The rarely-useful "LTE Category" entry has been removed to make room for it.
