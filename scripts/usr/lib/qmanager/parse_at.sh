@@ -1089,11 +1089,14 @@ parse_ippt_mpdn_rule() {
 # AT+QMAP="IPPT_NAT" → boot_ippt_nat ("0"|"1")
 parse_ippt_nat() {
     local raw="$1"
+    local nat_line
     local nat_val
 
     boot_ippt_nat="1"
 
-    nat_val=$(printf '%s\n' "$raw" | awk -F',' '/IPPT_NAT/{print $2+0; exit}')
+    # Trailing comma anchors the response line; the comma-less command echo never matches
+    nat_line=$(printf '%s\n' "$raw" | grep '"IPPT_NAT",')
+    nat_val=$(printf '%s' "$nat_line" | awk -F',' '{print $2+0}')
     case "$nat_val" in
         0|1) boot_ippt_nat="$nat_val" ;;
     esac
@@ -1104,11 +1107,14 @@ parse_ippt_nat() {
 # AT+QCFG="usbnet" → boot_ippt_usbnet ("0"|"1"|"2"|"3")
 parse_ippt_usbnet() {
     local raw="$1"
+    local usb_line
     local usb_val
 
     boot_ippt_usbnet="1"
 
-    usb_val=$(printf '%s\n' "$raw" | awk -F',' '/usbnet/{print $2+0; exit}')
+    # Trailing comma anchors the response line; the comma-less command echo never matches
+    usb_line=$(printf '%s\n' "$raw" | grep '"usbnet",')
+    usb_val=$(printf '%s' "$usb_line" | awk -F',' '{print $2+0}')
     case "$usb_val" in
         0|1|2|3) boot_ippt_usbnet="$usb_val" ;;
     esac
@@ -1119,11 +1125,14 @@ parse_ippt_usbnet() {
 # AT+QMAP="DHCPV4DNS" → boot_ippt_dhcpv4dns ("enabled"|"disabled")
 parse_ippt_dhcpv4dns() {
     local raw="$1"
+    local dns_line
     local dns_val
 
     boot_ippt_dhcpv4dns="disabled"
 
-    dns_val=$(printf '%s\n' "$raw" | awk -F'"' '/DHCPV4DNS/{print $4; exit}')
+    # Trailing comma anchors the response line; the comma-less command echo never matches
+    dns_line=$(printf '%s\n' "$raw" | grep '"DHCPV4DNS",')
+    dns_val=$(printf '%s' "$dns_line" | awk -F'"' '{print $4}')
     case "$dns_val" in
         enable) boot_ippt_dhcpv4dns="enabled" ;;
     esac

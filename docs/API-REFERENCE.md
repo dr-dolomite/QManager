@@ -731,7 +731,7 @@ Custom DNS override settings.
 
 ### GET/POST `/network/ip_passthrough.sh`
 
-IP passthrough mode configuration.
+IP passthrough mode configuration. Auth-gated. See [`docs/features/ip-passthrough.md`](features/ip-passthrough.md) for the full request/response shapes, apply pipeline, boot parser invariants, and Verizon lock semantics.
 
 ### GET/POST `/network/lan_config.sh`
 
