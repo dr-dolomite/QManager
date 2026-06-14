@@ -41,14 +41,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   AlertTriangleIcon,
   Check,
-  ChevronDownIcon,
   ChevronsUpDown,
 } from "lucide-react";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
@@ -194,10 +194,6 @@ function SystemSettingsForm({
   const [zonename, setZonename] = useState(settings?.zonename ?? "UTC");
   const [timezone, setTimezone] = useState(settings?.timezone ?? "UTC0");
   const [tzOpen, setTzOpen] = useState(false);
-
-  // SSH password change lives in a disclosure under the Timezone row. Its own
-  // mutation (ssh_password.sh) is independent of this card's Save button.
-  const [sshOpen, setSshOpen] = useState(false);
 
   // Force Tailscale Fixes toggle state (saves immediately, not via Save button).
   // Re-introduces the historical fw4 zone + mwan3 ipset workarounds for
@@ -448,46 +444,10 @@ function SystemSettingsForm({
             </Popover>
           </motion.div>
 
-          {/* ── SSH Password (disclosed form) ─────────────────────── */}
-          <Separator />
-          <motion.div variants={itemVariants}>
-            <Collapsible open={sshOpen} onOpenChange={setSshOpen}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex"
-                        aria-label={t("ssh_password.enforce_strong_info_aria")}
-                      >
-                        <TbInfoCircleFilled className="size-5 text-info" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-balance max-w-sm">
-                        {t("ssh_password.card_description")}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <p className="font-semibold text-muted-foreground text-sm">
-                    {t("ssh_password.card_title")}
-                  </p>
-                </div>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" size="sm" className="group gap-1.5">
-                    {t("ssh_password.button_change")}
-                    <ChevronDownIcon className="size-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                  </Button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="pt-4">
-                <SshPasswordSection />
-              </CollapsibleContent>
-            </Collapsible>
-          </motion.div>
-
-          {/* ── Save Button ───────────────────────────────────────── */}
+          {/* ── Save Button (units + timezone) ────────────────────── */}
+          {/* Kept directly under the settings it saves, above the SSH  */}
+          {/* accordion, so this card-level Save and the SSH form's own */}
+          {/* Change Password button never share the bottom edge.       */}
           <Separator />
           <motion.div variants={itemVariants} className="flex justify-end">
             <SaveButton
@@ -496,6 +456,29 @@ function SystemSettingsForm({
               saved={saved}
               disabled={!canSave}
             />
+          </motion.div>
+
+          {/* ── SSH Password (disclosed form) ─────────────────────── */}
+          {/* Standard accordion: the row IS the trigger. Its own CGI   */}
+          {/* mutation (ssh_password.sh) is independent of the Save      */}
+          {/* button above — see SshPasswordSection.                    */}
+          <Separator />
+          <motion.div variants={itemVariants}>
+            <Accordion type="single" collapsible>
+              <AccordionItem value="ssh-password" className="border-b-0">
+                <AccordionTrigger className="items-center py-2 text-muted-foreground hover:text-foreground hover:no-underline">
+                  <span className="font-semibold text-sm">
+                    {t("ssh_password.card_title")}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pt-1 pb-1">
+                  <p className="mb-4 text-sm text-muted-foreground text-balance">
+                    {t("ssh_password.card_description")}
+                  </p>
+                  <SshPasswordSection />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </motion.div>
         </motion.div>
       </CardContent>
