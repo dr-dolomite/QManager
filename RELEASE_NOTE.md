@@ -1,3 +1,37 @@
+# 🚀 QManager BETA v0.1.28
+
+This release patches a stability regression on RM551E-class modems: periodic ~15-second connection drops that occurred on a clock-regular cadence when the dashboard was left unattended. No new features; no configuration changes needed.
+
+## ✨ New Features
+
+None in this release.
+
+## ✅ Improvements
+
+- **Resolved periodic ~15-second connection drops on RM551E-class modems.** QManager's background polling was querying the modem's data-plane subsystem on every scheduled check — even while the dashboard was closed. On v4-only carriers, the modem firmware runs a continuous IPv6 setup retry loop that puts that subsystem under sustained stress; probing it in the background on top of that amplified the load and triggered a predictable baseband restart roughly every 1 hour 40 minutes, knocking connectivity for ~15 seconds each time. The fix restricts data-plane interrogation to when the dashboard is actively open. When unattended, the poller is signal-only — the same proven-safe pattern used by QManager's predecessor. Connection detail fields (WAN IP, APN, DNS, cell distance, active MIMO) retain their last-known values while you are away and refresh the moment you open the dashboard.
+
+## 📥 Installation
+
+### Fresh Install
+
+```sh
+curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
+```
+
+### Upgrading from v0.1.27
+
+**System Settings → Software Update.** No migration steps needed. All settings preserved.
+
+## 💙 Thank You
+
+Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
+
+Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
+
+**License:** MIT + Commons Clause — **Happy connecting!**
+
+---
+
 # 🚀 QManager BETA v0.1.27
 
 This release cuts background modem load when the dashboard is idle and deepens the Debug Report so random disconnections and hard lock-ups can be diagnosed from a single capture. It also brings a round of refinements: a simpler APN form, a calmer and steadier System Logs page, more accurate IP Passthrough reporting, and a tidier System Settings layout.
