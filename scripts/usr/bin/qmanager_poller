@@ -14,15 +14,15 @@
 #                                         AT+QRSRP, AT+QRSRQ, AT+QSINR (per-antenna signal)
 #   Tier 1.5:        Every 5 cycles (10s) — watchcat state + ping history append,
 #                                         SoC temperature (thermal sysfs, no AT)
-#   Tier 2 (Warm):   Every 15 cycles    — identity (always when due):
-#                                         AT+COPS?, AT+CPIN?, AT+QUIMSLOT?, AT+CNUM
-#   Tier 2 (data-plane, UI-ACTIVE ONLY) — AT+CGCONTRDP, AT+QMAP="WWAN",
-#                                         AT+QNWCFG="*_time_advance",
-#                                         AT+QNWCFG="*_mimo_layers" (mode-gated).
-#                                         Skipped while unattended (idle/deep) so
-#                                         the poller is signal-only — avoids the
-#                                         RM551E-GL MPSS baseband SSR. See poll_tier2.
-#                                         (AT+QCAINFO runs every cycle, not here.)
+#   Tier 2 (Warm):   Every 15 cycles, UI-ACTIVE ONLY — the ENTIRE block (identity
+#                                         + data-plane) is skipped while unattended
+#                                         (idle/deep) so the poller stays signal-only,
+#                                         avoiding the RM551E-GL MPSS baseband SSR.
+#                                         Identity:   AT+COPS?, AT+CPIN?, AT+QUIMSLOT?, AT+CNUM
+#                                         Data-plane: AT+CGCONTRDP, AT+QMAP="WWAN",
+#                                                     AT+QNWCFG="*_time_advance",
+#                                                     AT+QNWCFG="*_mimo_layers" (mode-gated).
+#                                         See poll_tier2. (AT+QCAINFO runs every cycle, not here.)
 #   Boot-only:     Once at startup    — AT+CVERSION, AT+CGSN, AT+CIMI, AT+QCCID,
 #                                       AT+CNUM, AT+QGETCAPABILITY,
 #                                       AT+QNWPREFCFG="policy_band"
@@ -750,6 +750,26 @@ append_ping_history() {
 poll_tier2() {
     local result
 
+    # ENTIRE TIER 2 — UI-ACTIVE ONLY (RM551E-GL SSR fix).
+    # The whole Tier-2 block is skipped when the dashboard is NOT being actively
+    # viewed (idle/deep tier), so unattended polling is strictly signal-only
+    # (Tier 1: AT+QENG="servingcell", AT+QCAINFO, AT+CFUN?, AT+QRSRP;+QRSRQ;+QSINR).
+    # This mirrors the predecessor (QuecManager), whose only always-on AT producer
+    # is signal-only and which touches registration / SIM / data-plane state ONLY
+    # on UI demand. Two groups live below: an IDENTITY group (COPS?/QUIMSLOT?/CNUM/
+    # CPIN? — registration + SIM presence) and a DATA-PLANE / CONFIG group
+    # (CGCONTRDP, QMAP="WWAN", QNWCFG "*_time_advance" and the mode-gated
+    # "*_mimo_layers", which reach into the QCMAP / PDP / IPA subsystem). On a
+    # v4-only carrier the firmware runs a perpetual `QCMAP:bringup v6` retry storm
+    # (the data context is IPV4V6, the carrier grants v4 only); polling on top of
+    # that storm correlated with a clock-regular ~100-min MPSS baseband SSR (15s
+    # data outage) under QManager but never under QuecManager. Gating the whole
+    # block removes QManager's only recurring non-signal AT producer. The cache
+    # keeps the last-known identity + data-plane values (display-only, slow-
+    # changing). Apply paths drop FORCE_TIER2, which raises the tier to Active, so
+    # an apply still gets a full fresh snapshot (identity + data-plane).
+    [ "$ap_tier" = "active" ] || return 0
+
     # Compound AT: status queries in one call.
     # CPIN? is last — it can ERROR when SIM is absent; placing it last
     # ensures earlier responses (COPS, QUIMSLOT, CNUM) are preserved
@@ -780,21 +800,6 @@ poll_tier2() {
 
     # Network info split into 3 independent groups so that LTE errors
     # (in SA mode) or NR errors (in LTE-only) cannot kill the whole chain.
-    #
-    # DATA-PLANE / CONFIG INTROSPECTION — UI-ACTIVE ONLY (RM551E-GL SSR fix).
-    # The groups below (CGCONTRDP, QMAP="WWAN", QNWCFG "*_time_advance" and the
-    # mode-gated "*_mimo_layers") reach into the QCMAP / PDP / IPA + modem-config
-    # subsystem. On a v4-only carrier the firmware runs a perpetual
-    # `QCMAP:bringup v6` retry storm (the data context is IPV4V6, the carrier
-    # grants v4 only); polling this subsystem on top of that storm correlates
-    # with a clock-regular ~100-min MPSS baseband SSR (15s data outage). The
-    # predecessor (QuecManager) never hits it because it queries these only on
-    # UI demand, never on a daemon timer — so we mirror that. When the dashboard
-    # is NOT being actively viewed (idle/deep tier) we skip the whole block: the
-    # poller stays signal-only and the cache keeps the last-known values (these
-    # are display-only, slow-changing fields). Apply paths drop FORCE_TIER2,
-    # which raises the tier to Active, so an apply still gets a fresh snapshot.
-    [ "$ap_tier" = "active" ] || return 0
 
     # --- Group 1: APN + WAN IPs (always safe, mode-independent) ---
     result=$(qcmd 'AT+CGCONTRDP;+QMAP="WWAN"' 2>/dev/null)

@@ -1,4 +1,4 @@
-# 🚀 QManager BETA v0.1.28
+# 🚀 QManager BETA v0.1.28-draft
 
 This release patches a stability regression on RM551E-class modems: periodic ~15-second connection drops that occurred on a clock-regular cadence when the dashboard was left unattended. No new features; no configuration changes needed.
 
@@ -8,7 +8,7 @@ None in this release.
 
 ## ✅ Improvements
 
-- **Resolved periodic ~15-second connection drops on RM551E-class modems.** QManager's background polling was querying the modem's data-plane subsystem on every scheduled check — even while the dashboard was closed. On v4-only carriers, the modem firmware runs a continuous IPv6 setup retry loop that puts that subsystem under sustained stress; probing it in the background on top of that amplified the load and triggered a predictable baseband restart roughly every 1 hour 40 minutes, knocking connectivity for ~15 seconds each time. The fix restricts data-plane interrogation to when the dashboard is actively open. When unattended, the poller is signal-only — the same proven-safe pattern used by QManager's predecessor. Connection detail fields (WAN IP, APN, DNS, cell distance, active MIMO) retain their last-known values while you are away and refresh the moment you open the dashboard.
+- **Resolved periodic ~15-second connection drops on RM551E-class modems.** QManager's background polling was querying the modem's data-plane and identity subsystems on every scheduled check — even while the dashboard was closed. On v4-only carriers, the modem firmware runs a continuous IPv6 setup retry loop that puts those subsystems under sustained stress; probing them in the background on top of that amplified the load and triggered a predictable baseband restart roughly every 1 hour 40 minutes, knocking connectivity for ~15 seconds each time. The fix makes the background poller strictly signal-only — the same proven-safe pattern used by QManager's predecessor, which never touched anything beyond signal on a timer. Connection detail fields (WAN IP, APN, DNS, cell distance, active MIMO, carrier name, SIM info) retain their last-known values while you are away and refresh the moment you open the dashboard.
 
 ## 📥 Installation
 

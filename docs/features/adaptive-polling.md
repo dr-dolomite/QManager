@@ -2,7 +2,7 @@
 
 Adaptive Polling makes the QManager AT poller ease off modem interrogation when no browser session is active, and instantly resumes full-rate reads when the dashboard is opened. The base poll rate is 2 s; during an unattended idle stretch the poller steps down through graduated tiers that reduce the AT-port cadence to ~60 s per read, cutting accumulated background load by ~97% without making the dashboard sluggish for a returning user.
 
-**Origin:** this feature is the productised mitigation for the RM551E MPSS-SSR root cause — sustained 2 s polling of the modem's data-plane/config subsystem (`CGCONTRDP`, `QMAP="WWAN"`, `QNWCFG`) drives a periodic Qualcomm MPSS baseband subsystem restart (~every 100 min) on v4-only carriers, confirmed by captured `dmesg` evidence and the `QCMAP:bringup v6` retry storm. A blanket `POLL_INTERVAL=15` diagnostic patch was retired in favour of Adaptive Polling; v0.1.28 then further gates the data-plane group to Active-only (see Invariant 6).
+**Origin:** this feature is the productised mitigation for the RM551E MPSS-SSR root cause — sustained 2 s polling of the modem's data-plane/config subsystem (`CGCONTRDP`, `QMAP="WWAN"`, `QNWCFG`) drives a periodic Qualcomm MPSS baseband subsystem restart (~every 100 min) on v4-only carriers, confirmed by captured `dmesg` evidence and the `QCMAP:bringup v6` retry storm. A blanket `POLL_INTERVAL=15` diagnostic patch was retired in favour of Adaptive Polling. v0.1.28 then completed the fix by gating the entire Tier-2 block (identity + data-plane) to Active-only — the `[ "$ap_tier" = "active" ] || return 0` guard is now the first statement in `poll_tier2()`, so unattended polling is strictly signal-only (see Invariant 6).
 
 ## Quick Reference
 
@@ -116,22 +116,31 @@ Both are one-shot: each flag forces exactly one Active cycle, then the poller re
 
 If `POLL_INTERVAL` were raised to match `idle_interval` (e.g. both at 15 s), the `cycle_count % (15 / 15) == 0` gate would fire every cycle, making Idle behaviorally identical to Active. The feature is only meaningful at the 2 s baseline. The retired 15 s diagnostic patch exhibited this collapse; Adaptive Polling was introduced so the 2 s baseline could be safely restored while still shedding idle AT load.
 
-### 6. Data-plane/config introspection is gated to the Active tier (RM551E-GL SSR fix)
+### 6. The entire Tier-2 block is gated to the Active tier (RM551E-GL SSR fix)
 
-`poll_tier2()` splits into two logical groups:
+`poll_tier2()` contains two logical groups — identity and data-plane — but both are now skipped unless the poller is in the Active tier. The guard `[ "$ap_tier" = "active" ] || return 0` is the **first executable statement** in `poll_tier2()`; the entire function early-returns when the poller is Idle or Deep.
 
-- **Identity group** (always-on when the tier-2 modulo fires): `AT+COPS?`, `AT+QUIMSLOT?`, `AT+CNUM`, `AT+CPIN?`. These query cellular registration and SIM state — safe, low-load, carrier-independent.
-- **Data-plane/config group** (Active tier only): `AT+CGCONTRDP`, `AT+QMAP="WWAN"`, `AT+QNWCFG="*_time_advance"`, and mode-gated `AT+QNWCFG="*_mimo_layers"`. These reach into the QCMAP / PDP / modem-config subsystem.
+When unattended (Idle or Deep tier), the only AT commands that run are the Tier-1 signal set:
 
-The gate is a single early-return at the top of the data-plane block (`[ "$ap_tier" = "active" ] || return 0`). When the poller is in Idle or Deep tier, execution returns immediately after the identity group.
+- `AT+QENG="servingcell"` — serving-cell signal metrics
+- `AT+QCAINFO` — carrier-aggregation info
+- `AT+CFUN?` — radio function state
+- `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
 
-**Why:** On v4-only carriers the modem firmware runs a perpetual `QCMAP:bringup v6` retry storm — the PDP context is `IPV4V6`, the carrier responds with IPv4 only, and QCMAP retries forever with no backoff. Polling the data-plane subsystem from the background on top of that sustained thrashing correlates with a Qualcomm MPSS baseband subsystem restart (SSR, `qcom_q6v5_pas 4080000.remoteproc-mss: fatal error received ... DALSysLogEvent.c`) on a ~100-minute clock-regular cadence, dropping the data plane for ~15 seconds per event. The predecessor tool (QuecManager) never issued these commands on a timer — only on UI demand — and did not exhibit the drops. Restricting the data-plane group to Active-only restores that proven-safe steady state for unattended operation.
+The following are **skipped** while unattended:
 
-**Affected display fields while unattended:** WAN IP, APN, DNS servers, timing advance / cell distance, active MIMO layers. These fields go stale-but-cached — they hold the last-known value until the dashboard is opened. The cache is valid for display; no feature depends on these values being live while the UI is idle.
+- **Identity group:** `AT+COPS?` (carrier name), `AT+QUIMSLOT?` (SIM slot), `AT+CNUM` (phone number), `AT+CPIN?` (SIM/PIN status)
+- **Data-plane/config group:** `AT+CGCONTRDP` (WAN IP/APN/DNS), `AT+QMAP="WWAN"` (WAN state), `AT+QNWCFG="*_time_advance"` (timing advance / cell distance), mode-gated `AT+QNWCFG="*_mimo_layers"` (active MIMO)
 
-**Apply paths are unaffected.** `qmanager_profile_apply` and `apn_mgr.sh` drop `/tmp/qmanager_force_tier2` on success, which raises the poller to Active for one full cycle. An apply therefore always retrieves a fresh WAN/APN snapshot within ~2–4 s even while the poller is deep-idle.
+**Why:** On v4-only carriers the modem firmware runs a perpetual `QCMAP:bringup v6` retry storm — the PDP context is `IPV4V6`, the carrier responds with IPv4 only, and QCMAP retries forever with no backoff. Any recurring AT command that reaches into the registration or data-plane subsystem on top of that sustained thrashing correlates with a Qualcomm MPSS baseband subsystem restart (SSR, `qcom_q6v5_pas 4080000.remoteproc-mss: fatal error received ... DALSysLogEvent.c`) on a ~100-minute clock-regular cadence, dropping the data plane for ~15 seconds per event. The predecessor tool (QuecManager) issued none of these commands on a timer — only on UI demand — and did not exhibit the drops. Gating the whole Tier-2 block to Active-only fully restores that proven-safe steady state for unattended operation.
 
-> ⚠️ WARNING: Do not move the data-plane/config AT commands into the identity group or remove the `ap_tier` gate. Doing so re-introduces the background QCMAP polling that triggered the RM551E-GL SSR.
+**Stale-but-cached fields while unattended:** carrier name, SIM slot, phone number, SIM/PIN status, WAN IP, APN, DNS servers, timing advance / cell distance, active MIMO layers. All fields hold their last-known values until the dashboard is opened. The cache is valid for display; no feature depends on these values being live while the UI is idle.
+
+**Apply paths are unaffected.** `qmanager_profile_apply` and `apn_mgr.sh` drop `/tmp/qmanager_force_tier2` on success, which pins the poller to Active for one full cycle. An apply therefore always retrieves a fresh snapshot within ~2–4 s even while the poller is deep-idle. `read_sim_state()` and SIM-swap/failover detection are also unaffected — they read from `/tmp/` JSON files, not from AT commands.
+
+**Human verification note:** confirmation that the fix holds is a debug report captured after an extended unattended session showing the clock-regular `remoteproc-mss: fatal error` SSR cadence stretching out or stopping entirely.
+
+> ⚠️ WARNING: Do not move any Tier-2 AT command outside the `poll_tier2()` guard, or remove the `[ "$ap_tier" = "active" ] || return 0` early-return. Either change re-introduces recurring non-signal AT polling that triggered the RM551E-GL SSR.
 
 ---
 
@@ -220,7 +229,7 @@ The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"dee
 
 - **Tower lock follows the UI heartbeat, not a fixed pin.** A tower lock no longer forces the poller to stay in Active. When the dashboard is idle, the poller graduates to Idle then Deep even with a tower lock active. `qmanager_tower_failover` (which loops every 20 s and reads `.lte.rsrp` / `.nr.rsrp` from `status.json`) may therefore act on RSRP up to one deep interval (default 60 s) stale while the UI is idle. This is acceptable for slow signal-degradation failover; when the dashboard is open, RSRP is fresh at the 2 s cadence. Band failover (`qmanager_band_failover`) is unaffected — it is a one-shot actor that issues its own live `AT+QCAINFO` query and never relied on the poller's cadence.
 - **`write_cache` skipped = watchdog quality trigger dies silently.** Any future modification to the poller loop must preserve the invariant that `write_cache` and `read_ping_data` run every base cycle. The AT-block gating should wrap only the AT reads.
-- **Removing the `ap_tier` gate in `poll_tier2()` re-introduces the RM551E-GL SSR.** The data-plane/config AT group (`CGCONTRDP`, `QMAP="WWAN"`, `QNWCFG` time_advance/mimo_layers) must remain behind the `[ "$ap_tier" = "active" ] || return 0` guard. See Invariant 6.
+- **Removing or relocating the `ap_tier` gate in `poll_tier2()` re-introduces the RM551E-GL SSR.** The `[ "$ap_tier" = "active" ] || return 0` guard is the first statement in `poll_tier2()` and covers the entire function — both the identity group and the data-plane group. Moving it below any AT call, or removing it, lets that call run on a timer while unattended. See Invariant 6.
 - **Idle tier at non-2s baseline collapses to Active.** If `POLL_INTERVAL` is ever raised for diagnostic purposes, `idle_interval=15` (default) at a 15 s base becomes `15 / 15 = 1` — every cycle fires. The feature must be re-tuned if the base interval changes.
 - **Heartbeat file is not atomic.** The shell redirect `date +%s > /tmp/qmanager_ui_active` is a truncate-then-write, not an atomic rename. A poller read that races with a CGI write may see an empty file; the poller treats an empty/unreadable file as maximum age and may briefly drop to Deep before the next cycle. This is benign — the next heartbeat write recovers it within 2 s.
 - **`isDefault: true` is lost on first save, even with default values.** Once the user saves any settings (even unchanged defaults), the `quecmanager.poller` section exists and `isDefault` is always `false`. To restore the "never configured" state, delete the section directly in UCI.
