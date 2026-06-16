@@ -280,11 +280,31 @@ apply_apn_to_modem() {
         return 1
     fi
     # Force an early poller Tier-2 refresh so the UI (and adaptive-backoff Idle/
-    # Deep tiers) reflect the new APN within ~2s. This is the single success
-    # chokepoint for every APN apply — user-initiated (apn.sh CGI), profile-
-    # deactivation reapply, and boot reconcile all run through here. Detached so
-    # it never blocks the caller; idempotent (touch of an existing flag no-ops).
-    ( sleep 2; touch /tmp/qmanager_force_tier2 ) </dev/null >/dev/null 2>&1 &
+    # Deep tiers) reflect the new identity/registration state within ~2s. This is
+    # the single success chokepoint for every APN apply — user-initiated
+    # (apn.sh CGI), profile-deactivation reapply, and boot reconcile all run
+    # through here. Detached so it never blocks the caller; idempotent (touch of
+    # an existing flag no-ops).
+    #
+    # The APN / WAN / DNS display fields are no longer read by the poller (they
+    # were relocated on-demand for L1 safety), so force_tier2 alone would NOT
+    # refresh the displayed APN after an apply. Refresh the on-demand data-plane
+    # cache directly here — CGCONTRDP / QMAP only, NO L1/mimo read — so the UI
+    # shows the new APN immediately. Guarded: ondemand_radio.sh is only loaded in
+    # contexts that sourced it; absent, we degrade to "APN updates next page open".
+    (
+        sleep 2
+        touch /tmp/qmanager_force_tier2
+        # Source the on-demand libs inside the subshell so the refresh works no
+        # matter which context sourced apn_mgr.sh (CGI apn.sh, boot reconcile,
+        # profile deactivate). parse_at.sh provides the parsers ondemand_radio.sh
+        # depends on. Both guarded; absent -> APN simply updates on next page open.
+        if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
+            . /usr/lib/qmanager/parse_at.sh 2>/dev/null
+            . /usr/lib/qmanager/ondemand_radio.sh 2>/dev/null
+            command -v ondemand_dataplane_refresh >/dev/null 2>&1 && ondemand_dataplane_refresh
+        fi
+    ) </dev/null >/dev/null 2>&1 &
     return 0
 }
 

@@ -32,12 +32,19 @@ interface DeviceStatusComponentProps {
   data: DeviceStatus | null;
   /** Live APN name, sourced from network status (AT+CGCONTRDP), a sibling of `device` in the poll payload */
   apn?: string | null;
+  /**
+   * Live MIMO label from the on-demand radio-details endpoint. Preferred while
+   * the page is mounted; falls back to the poller's last-known `data.mimo` when
+   * empty/undefined (before the first on-demand fetch returns / when stale).
+   */
+  mimo?: string | null;
   isLoading: boolean;
 }
 
 const DeviceStatusComponent = ({
   data,
   apn,
+  mimo,
   isLoading,
 }: DeviceStatusComponentProps) => {
   const { t } = useTranslation("dashboard");
@@ -61,7 +68,12 @@ const DeviceStatusComponent = ({
       mono: true,
       private: true,
     },
-    { label: t("device_status.active_mimo"), value: data?.mimo || "-", mono: true },
+    {
+      // Prefer the live on-demand MIMO label; fall back to the poller snapshot.
+      label: t("device_status.active_mimo"),
+      value: mimo || data?.mimo || "-",
+      mono: true,
+    },
     {
       label: t("device_status.qmanager_version"),
       value: data?.qmanager_version || "-",

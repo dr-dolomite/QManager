@@ -262,6 +262,68 @@ export interface DeviceStatus {
   qmanager_version: string;
 }
 
+// --- On-Demand Radio Details -------------------------------------------------
+
+/**
+ * Radio details fetched ON-DEMAND from the dedicated CGI endpoint
+ * (`/cgi-bin/quecmanager/cellular/radio_details.sh`), NOT from the recurring
+ * poller. These L1-adjacent reads (MIMO layers, timing advance, CGCONTRDP,
+ * QMAP) were taken off the poller as a suspected contributor to RM551E baseband
+ * restarts; they are now read only while a page that displays them is open.
+ *
+ * The poller's status.json STILL carries last-known values for these fields
+ * (network.mimo lives in `device.mimo`, TA in `lte.ta`/`nr.ta`, etc.), so
+ * consumers prefer the live on-demand value while mounted and fall back to the
+ * poller snapshot before the first on-demand fetch returns / when stale.
+ *
+ * INVARIANT: every string field is ALWAYS present, never JSON null — an empty
+ * string `""` means unknown/not-applicable. `lte_ta`/`nr_ta` are numeric
+ * STRINGS or `""`. `mimo` is a display label, e.g. "LTE 1x4 | NR 2x4".
+ */
+export interface RadioDetails {
+  /** Active MIMO layers display label, e.g. "LTE 1x4 | NR 2x4" / "LTE 1x4" / "NR 2x4" / "" */
+  mimo: string;
+  /** LTE Timing Advance index as a numeric string (0–1282), or "" if unavailable. */
+  lte_ta: string;
+  /** NR Timing Advance (NTA) value as a numeric string, or "" if unavailable. */
+  nr_ta: string;
+  /** Active APN name (AT+CGCONTRDP), or "" if unavailable. */
+  apn: string;
+  /** WAN IPv4 address (AT+QMAP), or "" if unassigned. */
+  wan_ipv4: string;
+  /** WAN IPv6 address (AT+QMAP), or "" if unassigned. */
+  wan_ipv6: string;
+  /** Primary DNS server (AT+CGCONTRDP), or "" if unavailable. */
+  primary_dns: string;
+  /** Secondary DNS server (AT+CGCONTRDP), or "" if unavailable. */
+  secondary_dns: string;
+  /** Primary DNS IPv4 address, or "". */
+  primary_dns_v4: string;
+  /** Primary DNS IPv6 address (empty for single-stack IPv4-only APNs). */
+  primary_dns_v6: string;
+  /** Secondary DNS IPv4 address, or "". */
+  secondary_dns_v4: string;
+  /** Secondary DNS IPv6 address (empty for single-stack IPv4-only APNs). */
+  secondary_dns_v6: string;
+  /** Unix epoch (seconds) of the last successful on-demand read. 0 = never fetched. */
+  updated_at: number;
+}
+
+/** Success envelope for the on-demand radio-details endpoint. */
+export interface RadioDetailsResponse {
+  success: true;
+  /** true = modem was unreachable this call; `details` are last-known values. */
+  stale: boolean;
+  details: RadioDetails;
+}
+
+/** Error envelope for the on-demand radio-details endpoint. */
+export interface RadioDetailsErrorResponse {
+  success: false;
+  error: string;
+  detail?: string;
+}
+
 // --- Utility Types -----------------------------------------------------------
 
 /** Signal quality thresholds for UI indicators */
@@ -436,7 +498,10 @@ export type WatchcatState =
   | "recovery"
   | "cooldown"
   | "locked"
-  | "disabled";
+  | "disabled"
+  // Holding the recovery ladder while a recoverable baseband (MPSS) restart
+  // self-heals. Passed through verbatim from the daemon by the poller.
+  | "ssr_hold";
 
 export interface WatchcatStatus {
   enabled: boolean;

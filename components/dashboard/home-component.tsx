@@ -6,6 +6,7 @@ import { containerVariants, itemVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useModemStatus } from "@/hooks/use-modem-status";
+import { useRadioDetails } from "@/hooks/use-radio-details";
 import { useConnectionStatus } from "@/lib/reboot/connection";
 import NetworkStatusComponent from "./network-status";
 import DeviceStatus from "./device-status";
@@ -20,6 +21,10 @@ import LiveLatencyComponent from "./live-latency";
 
 const HomeComponent = () => {
   const { data, isLoading, isStale, error } = useModemStatus();
+  // L1-adjacent radio reads (MIMO, timing advance) are off the poller — fetch
+  // them on-demand while this page is mounted; the hook stops on unmount.
+  const { details: radioDetails, lteTa: liveLteTa, nrTa: liveNrTa } =
+    useRadioDetails();
   const { t } = useTranslation("dashboard");
   // Once a sustained outage escalates to "reconnecting", the global banner
   // (app-layout) becomes the single source of truth for the outage. Suppress
@@ -102,6 +107,7 @@ const HomeComponent = () => {
         <DeviceStatus
           data={data?.device ?? null}
           apn={data?.network?.apn ?? null}
+          mimo={radioDetails?.mimo ?? null}
           isLoading={isLoading}
         />
       </div>
@@ -118,6 +124,8 @@ const HomeComponent = () => {
               deviceData={data?.device ?? null}
               lteData={data?.lte ?? null}
               nrData={data?.nr ?? null}
+              liveLteTa={liveLteTa}
+              liveNrTa={liveNrTa}
               isLoading={isLoading}
             />
           </motion.div>

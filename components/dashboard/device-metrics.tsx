@@ -38,6 +38,14 @@ interface DeviceMetricsComponentProps {
   deviceData: DeviceStatus | null;
   lteData: LteStatus | null;
   nrData: NrStatus | null;
+  /**
+   * Live LTE Timing Advance from the on-demand radio-details endpoint.
+   * Preferred while the page is mounted; falls back to the poller's last-known
+   * `lteData.ta` when null/undefined (before first on-demand fetch / stale).
+   */
+  liveLteTa?: number | null;
+  /** Live NR Timing Advance (NTA) from the on-demand endpoint; same fallback rule. */
+  liveNrTa?: number | null;
   isLoading: boolean;
 }
 
@@ -278,6 +286,8 @@ const DeviceMetricsComponent = ({
   deviceData,
   lteData,
   nrData,
+  liveLteTa,
+  liveNrTa,
   isLoading,
 }: DeviceMetricsComponentProps) => {
   const { t } = useTranslation("dashboard");
@@ -295,8 +305,9 @@ const DeviceMetricsComponent = ({
   const isTempHigh = temp !== null && temp >= TEMP_WARN;
   const isCpuHigh = cpu !== null && cpu >= CPU_WARN;
   const memPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
-  const lteTa = lteData?.ta ?? null;
-  const nrTa = nrData?.ta ?? null;
+  // Prefer the live on-demand TA; fall back to the poller's last-known value.
+  const lteTa = liveLteTa ?? lteData?.ta ?? null;
+  const nrTa = liveNrTa ?? nrData?.ta ?? null;
   const lteDistance =
     lteTa !== null && lteTa > 0 ? calculateLteDistance(lteTa) : null;
   const nrDistance =

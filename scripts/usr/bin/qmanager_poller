@@ -14,23 +14,28 @@
 #                                         AT+QRSRP, AT+QRSRQ, AT+QSINR (per-antenna signal)
 #   Tier 1.5:        Every 5 cycles (10s) — watchcat state + ping history append,
 #                                         SoC temperature (thermal sysfs, no AT)
-#   Tier 2 (Warm):   Every 15 cycles, UI-ACTIVE ONLY — the ENTIRE block (identity
-#                                         + data-plane) is skipped while unattended
-#                                         (idle/deep) so the poller stays signal-only,
-#                                         avoiding the RM551E-GL MPSS baseband SSR.
+#   Tier 2 (Warm):   Every 15 cycles, UI-ACTIVE ONLY, IDENTITY-ONLY — skipped while
+#                                         unattended (idle/deep) so the poller stays
+#                                         signal-only, avoiding the RM551E-GL MPSS
+#                                         baseband SSR.
 #                                         Identity:   AT+COPS?, AT+CPIN?, AT+QUIMSLOT?, AT+CNUM
-#                                         Data-plane: AT+CGCONTRDP, AT+QMAP="WWAN",
-#                                                     AT+QNWCFG="*_time_advance",
-#                                                     AT+QNWCFG="*_mimo_layers" (mode-gated).
 #                                         See poll_tier2. (AT+QCAINFO runs every cycle, not here.)
+#   On-demand only:  The former Tier-2 DATA-PLANE / L1 group (AT+CGCONTRDP,
+#                                       AT+QMAP="WWAN", AT+QNWCFG="*_time_advance",
+#                                       AT+QNWCFG="*_mimo_layers") is REMOVED from the
+#                                       poller and fetched by cellular/radio_details.sh
+#                                       only while its UI page is open. Last-known
+#                                       values persist via /tmp/qmanager_ondemand.json,
+#                                       read by write_cache(). See ondemand_radio.sh.
 #   Boot-only:     Once at startup    — AT+CVERSION, AT+CGSN, AT+CIMI, AT+QCCID,
 #                                       AT+CNUM, AT+QGETCAPABILITY,
 #                                       AT+QNWPREFCFG="policy_band"
 #
 # Libraries (sourced at startup):
-#   /usr/lib/qmanager/qlog.sh      — Centralized logging
-#   /usr/lib/qmanager/parse_at.sh  — AT command response parsers
-#   /usr/lib/qmanager/events.sh    — Network event detection
+#   /usr/lib/qmanager/qlog.sh         — Centralized logging
+#   /usr/lib/qmanager/parse_at.sh     — AT command response parsers
+#   /usr/lib/qmanager/ondemand_radio.sh — Last-known on-demand radio cache reader
+#   /usr/lib/qmanager/events.sh       — Network event detection
 #
 # Install location: /usr/bin/qmanager_poller
 # =============================================================================
@@ -277,6 +282,15 @@ log_error() { qlog_error "$1"; }
 . /usr/lib/qmanager/parse_at.sh 2>/dev/null || {
     log_error "FATAL: Failed to load parse_at.sh"
     exit 1
+}
+
+# On-demand radio cache (last-known mimo / TA / APN / WAN / DNS). Non-fatal:
+# the poller no longer FETCHES these (the radio_details.sh CGI does) — it only
+# READS the cache in write_cache(). If the lib is missing, the reader is a
+# no-op and those display fields fall back to their initialized-empty defaults.
+. /usr/lib/qmanager/ondemand_radio.sh 2>/dev/null || {
+    qlog_warn "ondemand_radio.sh not found, on-demand radio cache disabled"
+    load_ondemand_cache() { :; }
 }
 
 # Event detection
@@ -571,30 +585,34 @@ collect_boot_data() {
     # =========================================================================
     # Group B: Enables + post-enable reads
     # Enable commands (,1) are unconditional — idempotent, safe in any mode.
-    # MIMO reads are gated by network_type (lte_mimo_layers crashes in SA,
-    # nr5g_mimo_layers crashes in LTE/NSA).
+    #
+    # The L1-adjacent reads (lte_mimo_layers / nr5g_mimo_layers / *_time_advance)
+    # that used to live here have been REMOVED from the poller (boot + recurring).
+    # They are now fetched on-demand by the cellular/radio_details.sh CGI only
+    # while the UI page that shows them is open — issuing them on a background
+    # timer correlated with RM551E-GL baseband SSRs (see ondemand_radio.sh /
+    # docs/features/ondemand-radio-details.md). The display values persist via
+    # /tmp/qmanager_ondemand.json, which write_cache() reads.
+    #
+    # The QCAINFO enable stays (it feeds Tier-1 carrier-aggregation parsing) and
+    # the mode-independent IPPT reads stay (config state, not L1 measurement).
     # =========================================================================
-    local boot_cmd='AT+QCAINFO=1;+QNWCFG="lte_mimo_layers",1;+QNWCFG="nr5g_mimo_layers",1;+QNWCFG="lte_time_advance",1;+QNWCFG="nr5g_time_advance",1'
-    # Append mode-appropriate MIMO read
-    if [ "$network_type" = "5G-SA" ]; then
-        boot_cmd="${boot_cmd}"';+QNWCFG="nr5g_mimo_layers"'
-    elif [ "$network_type" = "LTE" ] || [ "$network_type" = "5G-NSA" ]; then
-        boot_cmd="${boot_cmd}"';+QNWCFG="lte_mimo_layers"'
-    fi
-    # Remaining mode-independent reads
-    boot_cmd="${boot_cmd}"';+QMAP="MPDN_RULE";+QMAP="IPPT_NAT";+QCFG="usbnet";+QMAP="DHCPV4DNS"'
+    local boot_cmd='AT+QCAINFO=1;+QMAP="MPDN_RULE";+QMAP="IPPT_NAT";+QCFG="usbnet";+QMAP="DHCPV4DNS"'
     result=$(qcmd "$boot_cmd" 2>/dev/null)
 
     if [ -n "$result" ]; then
-        # MIMO layers (parser greps for each prefix independently)
-        parse_mimo "$result" "$result"
-
         # IP Passthrough settings (all parsers grep for their specific keywords)
         parse_ippt_mpdn_rule "$result"
         parse_ippt_nat "$result"
         parse_ippt_usbnet "$result"
         parse_ippt_dhcpv4dns "$result"
     fi
+
+    # Seed last-known on-demand radio values (mimo / TA / APN / WAN / DNS) into
+    # the boot variables so the very first write_cache() emits whatever a prior
+    # on-demand fetch persisted across the hotplug restart (cleared on full
+    # reboot — then they stay empty until the UI opens the page that fetches).
+    load_ondemand_cache
 
     # =========================================================================
     # Supported bands — conditional (cached to /tmp across hotplug restarts)
@@ -750,24 +768,28 @@ append_ping_history() {
 poll_tier2() {
     local result
 
-    # ENTIRE TIER 2 — UI-ACTIVE ONLY (RM551E-GL SSR fix).
-    # The whole Tier-2 block is skipped when the dashboard is NOT being actively
-    # viewed (idle/deep tier), so unattended polling is strictly signal-only
-    # (Tier 1: AT+QENG="servingcell", AT+QCAINFO, AT+CFUN?, AT+QRSRP;+QRSRQ;+QSINR).
-    # This mirrors the predecessor (QuecManager), whose only always-on AT producer
-    # is signal-only and which touches registration / SIM / data-plane state ONLY
-    # on UI demand. Two groups live below: an IDENTITY group (COPS?/QUIMSLOT?/CNUM/
-    # CPIN? — registration + SIM presence) and a DATA-PLANE / CONFIG group
-    # (CGCONTRDP, QMAP="WWAN", QNWCFG "*_time_advance" and the mode-gated
-    # "*_mimo_layers", which reach into the QCMAP / PDP / IPA subsystem). On a
-    # v4-only carrier the firmware runs a perpetual `QCMAP:bringup v6` retry storm
-    # (the data context is IPV4V6, the carrier grants v4 only); polling on top of
-    # that storm correlated with a clock-regular ~100-min MPSS baseband SSR (15s
-    # data outage) under QManager but never under QuecManager. Gating the whole
-    # block removes QManager's only recurring non-signal AT producer. The cache
-    # keeps the last-known identity + data-plane values (display-only, slow-
-    # changing). Apply paths drop FORCE_TIER2, which raises the tier to Active, so
-    # an apply still gets a full fresh snapshot (identity + data-plane).
+    # TIER 2 — IDENTITY-ONLY, UI-ACTIVE ONLY.
+    #
+    # Tier 2 now contains ONLY the registration / SIM-identity group
+    # (COPS?/QUIMSLOT?/CNUM/CPIN?). It is skipped unless the dashboard is being
+    # actively viewed (Active tier), so unattended polling is strictly
+    # signal-only (Tier 1: AT+QENG="servingcell", AT+QCAINFO, AT+CFUN?,
+    # AT+QRSRP;+QRSRQ;+QSINR).
+    #
+    # The former DATA-PLANE / L1 group (CGCONTRDP, QMAP="WWAN", QNWCFG
+    # "*_time_advance" and the mode-gated "*_mimo_layers") has been REMOVED from
+    # the poller entirely — not merely UI-gated. Those reach into the QCMAP / PDP
+    # / IPA / L1 subsystem and, issued on a background timer, eventually land
+    # mid-RAT-transition / mid-reselection, which on the RM551E-GL correlates
+    # with a Qualcomm MPSS baseband SSR. They are now fetched on-demand by the
+    # cellular/radio_details.sh CGI ONLY while the page that shows them is open,
+    # mirroring the predecessor (QuecManager), which never polls them. Their
+    # display values persist via /tmp/qmanager_ondemand.json, which
+    # write_cache() reads (see ondemand_radio.sh).
+    #
+    # Apply paths (APN / profile) still get fresh data-plane state: they issue
+    # their own detach/attach AT directly AND call ondemand_radio_fetch() to
+    # refresh the on-demand cache — they do NOT depend on these removed reads.
     [ "$ap_tier" = "active" ] || return 0
 
     # Compound AT: status queries in one call.
@@ -795,62 +817,6 @@ poll_tier2() {
             t2_sim_status="error"
             errors="sim_not_inserted"
         fi
-    fi
-    sleep "$SIP_DELAY"
-
-    # Network info split into 3 independent groups so that LTE errors
-    # (in SA mode) or NR errors (in LTE-only) cannot kill the whole chain.
-
-    # --- Group 1: APN + WAN IPs (always safe, mode-independent) ---
-    result=$(qcmd 'AT+CGCONTRDP;+QMAP="WWAN"' 2>/dev/null)
-    if [ -n "$result" ]; then
-        if printf '%s\n' "$result" | grep -q '+CGCONTRDP:'; then
-            parse_cgcontrdp "$result"
-        else
-            t2_apn="" ; t2_primary_dns="" ; t2_secondary_dns=""
-            t2_primary_dns_v4="" ; t2_primary_dns_v6=""
-            t2_secondary_dns_v4="" ; t2_secondary_dns_v6=""
-        fi
-        if printf '%s\n' "$result" | grep -q '+QMAP:'; then
-            parse_wan_ip "$result"
-        else
-            t2_wan_ipv4="" ; t2_wan_ipv6=""
-        fi
-    else
-        t2_apn="" ; t2_primary_dns="" ; t2_secondary_dns=""
-        t2_primary_dns_v4="" ; t2_primary_dns_v6=""
-        t2_secondary_dns_v4="" ; t2_secondary_dns_v6=""
-        t2_wan_ipv4="" ; t2_wan_ipv6=""
-    fi
-    sleep "$SIP_DELAY"
-
-    # --- Group 2: NR timing + MIMO ---
-    # nr5g_mimo_layers is only valid in SA mode (crashes/errors in LTE & NSA)
-    local nr_cmd='AT+QNWCFG="nr5g_time_advance"'
-    if [ "$network_type" = "5G-SA" ]; then
-        nr_cmd="${nr_cmd}"';+QNWCFG="nr5g_mimo_layers"'
-    fi
-    result=$(qcmd "$nr_cmd" 2>/dev/null)
-    if [ -n "$result" ]; then
-        parse_time_advance "$result"
-        parse_mimo "" "$result"
-    else
-        nr_ta=""
-    fi
-    sleep "$SIP_DELAY"
-
-    # --- Group 3: LTE timing + MIMO ---
-    # lte_mimo_layers is valid in LTE and NSA (crashes/errors in SA)
-    local lte_cmd='AT+QNWCFG="lte_time_advance"'
-    if [ "$network_type" = "LTE" ] || [ "$network_type" = "5G-NSA" ]; then
-        lte_cmd="${lte_cmd}"';+QNWCFG="lte_mimo_layers"'
-    fi
-    result=$(qcmd "$lte_cmd" 2>/dev/null)
-    if [ -n "$result" ]; then
-        parse_time_advance "$result"
-        parse_mimo "$result" ""
-    else
-        lte_ta=""
     fi
 }
 
@@ -1206,6 +1172,17 @@ read_sim_state() {
 write_cache() {
     local timestamp
     timestamp=$(date +%s)
+
+    # Refresh last-known on-demand radio values (mimo / TA / APN / WAN / DNS)
+    # from /tmp/qmanager_ondemand.json. The poller no longer FETCHES these
+    # (cellular/radio_details.sh and the apply paths do); reading them every
+    # cycle keeps the published snapshot showing the most recent on-demand value
+    # instead of a stale boot-time copy. No-op when the cache file is absent, so
+    # the initialized-empty defaults pass through cleanly. This runs BEFORE the
+    # jq emit so the t2_mimo / lte_ta / nr_ta / t2_apn / t2_wan_* / t2_*_dns_*
+    # variables below reflect the latest cache. Does NOT touch any Tier-1 signal
+    # or .connectivity field, so the watchdog's write_cache dependency is intact.
+    load_ondemand_cache
 
     # Build errors array
     local errors_json="[]"

@@ -40,6 +40,12 @@ interface CellDataComponentProps {
   lte: LteStatus | null;
   nr: NrStatus | null;
   device: DeviceStatus | null;
+  /**
+   * Live MIMO label from the on-demand radio-details endpoint. Preferred while
+   * the page is mounted; falls back to the poller's last-known `device.mimo`
+   * when empty/undefined (before the first on-demand fetch returns / stale).
+   */
+  mimo?: string | null;
   isLoading: boolean;
 }
 
@@ -220,6 +226,7 @@ const CellDataComponent = ({
   lte,
   nr,
   device,
+  mimo,
   isLoading,
 }: CellDataComponentProps) => {
   const { t } = useTranslation("cellular");
@@ -448,7 +455,10 @@ const CellDataComponent = ({
               {t("core_settings.info.cell_data.rows.active_mimo")}
             </p>
             <div className="flex items-center gap-1.5">
-              <p className="text-sm font-semibold">{device?.mimo || "-"}</p>
+              <p className="text-sm font-semibold">
+                {/* Prefer live on-demand MIMO; fall back to poller snapshot. */}
+                {mimo || device?.mimo || "-"}
+              </p>
               <Button
                 variant="link"
                 size="sm"

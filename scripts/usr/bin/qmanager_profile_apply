@@ -557,12 +557,26 @@ if [ "$apply_status" = "complete" ] || [ "$apply_status" = "partial" ]; then
     set_active_profile "$PROFILE_ID"
     mark_sim_acknowledged
     # Force an early poller Tier-2 refresh so the UI (and adaptive-backoff Idle/
-    # Deep tiers) reflect the applied APN/MPDN/identity within ~2s instead of
+    # Deep tiers) reflect the applied identity/registration within ~2s instead of
     # waiting for the next tier boundary. This is the single success chokepoint
     # for ALL profile applies — manual (apply.sh CGI), boot, ICCID auto-apply,
     # and scenario cron all spawn this worker. Detached so it never delays the
     # worker's own exit. Idempotent: touch of an existing flag is a no-op.
-    ( sleep 2; touch /tmp/qmanager_force_tier2 ) </dev/null >/dev/null 2>&1 &
+    #
+    # The APN / WAN / DNS display fields were relocated off the poller (L1 safety,
+    # see ondemand_radio.sh), so force_tier2 alone no longer refreshes the shown
+    # APN after a profile apply. Refresh the on-demand data-plane cache directly
+    # here — CGCONTRDP / QMAP only, NO L1/mimo read — so the UI reflects the new
+    # APN immediately. Guarded; absent lib -> APN updates on next page open.
+    (
+        sleep 2
+        touch /tmp/qmanager_force_tier2
+        if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
+            . /usr/lib/qmanager/parse_at.sh 2>/dev/null
+            . /usr/lib/qmanager/ondemand_radio.sh 2>/dev/null
+            command -v ondemand_dataplane_refresh >/dev/null 2>&1 && ondemand_dataplane_refresh
+        fi
+    ) </dev/null >/dev/null 2>&1 &
     # Scenario binding side-effect (D5: NOT a tracked apply step). Install the
     # profile's scenario schedule cron (when enabled) and snap the modem to the
     # scenario covering "now"; when the schedule is disabled this applies the

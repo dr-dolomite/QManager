@@ -3,11 +3,14 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useModemStatus } from "@/hooks/use-modem-status";
+import { useRadioDetails } from "@/hooks/use-radio-details";
 import CellDataComponent from "@/components/cellular/cell-data";
 import ActiveBandsComponent from "@/components/cellular/active-bands";
 
 const CellularInformationComponent = () => {
   const { data, isLoading } = useModemStatus();
+  // MIMO is fetched on-demand (off the poller) while this page is mounted.
+  const { details: radioDetails } = useRadioDetails();
   const { t } = useTranslation("cellular");
 
   return (
@@ -26,6 +29,7 @@ const CellularInformationComponent = () => {
           lte={data?.lte ?? null}
           nr={data?.nr ?? null}
           device={data?.device ?? null}
+          mimo={radioDetails?.mimo ?? null}
           isLoading={isLoading}
         />
         <ActiveBandsComponent
