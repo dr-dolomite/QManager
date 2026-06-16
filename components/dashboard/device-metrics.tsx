@@ -106,6 +106,25 @@ type LiveTrafficState =
   | "connected"
   | "unavailable";
 
+// A quiet pulsing status dot shared by connecting/connected.
+function StatusDot({
+  tone,
+  reduceMotion,
+}: {
+  tone: "muted" | "success";
+  reduceMotion: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-block size-2 rounded-full",
+        tone === "success" ? "bg-success" : "bg-muted-foreground/60",
+        !reduceMotion && "animate-pulse",
+      )}
+    />
+  );
+}
+
 function LiveTrafficRow() {
   const { t } = useTranslation("dashboard");
   const reduceMotion = useReducedMotion();
@@ -133,17 +152,6 @@ function LiveTrafficRow() {
           : "connecting";
 
   const websocatMissing = dependencies?.websocat_installed === false;
-
-  // A quiet pulsing status dot shared by connecting/connected.
-  const StatusDot = ({ tone }: { tone: "muted" | "success" }) => (
-    <span
-      className={cn(
-        "inline-block size-2 rounded-full",
-        tone === "success" ? "bg-success" : "bg-muted-foreground/60",
-        !reduceMotion && "animate-pulse",
-      )}
-    />
-  );
 
   let trailing: React.ReactNode;
 
@@ -198,7 +206,7 @@ function LiveTrafficRow() {
     case "connecting":
       trailing = (
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <StatusDot tone="muted" />
+          <StatusDot tone="muted" reduceMotion={reduceMotion} />
           <span>{t("metrics.live_traffic_connecting")}</span>
         </div>
       );
@@ -263,7 +271,7 @@ function LiveTrafficRow() {
             variant="outline"
             className="bg-success/15 text-success border-success/30 gap-1 px-1.5 py-0 text-[10px]"
           >
-            <StatusDot tone="success" />
+            <StatusDot tone="success" reduceMotion={reduceMotion} />
             {t("metrics.live_traffic_live_badge")}
           </Badge>
         )}
