@@ -37,6 +37,7 @@ import {
   LockIcon,
   MinusCircleIcon,
   PowerOffIcon,
+  ActivityIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DUR, EASE_OUT_EXPO } from "@/lib/motion";
@@ -67,6 +68,14 @@ const STATE_META: Record<
   cooldown: { tone: "info", icon: <ClockIcon className="size-5" /> },
   locked: { tone: "muted", icon: <LockIcon className="size-5" /> },
   disabled: { tone: "muted", icon: <MinusCircleIcon className="size-5" /> },
+  // Calm, patient — the modem is self-healing a baseband restart and we are
+  // deliberately holding off. Info tone (never destructive); the Activity icon
+  // reads as "vitals recovering" and a gentle pulse signals it is in progress.
+  ssr_hold: {
+    tone: "info",
+    icon: <ActivityIcon className="size-5" />,
+    pulse: true,
+  },
 };
 
 const TONE_RING: Record<HeroTone, string> = {
@@ -105,6 +114,7 @@ export function WatchdogOverviewCard({
       cooldown: t("watchdog.status_badge_cooldown"),
       locked: t("watchdog.status_badge_locked"),
       disabled: t("watchdog.status_badge_disabled"),
+      ssr_hold: t("watchdog.status_badge_ssr_hold"),
     }),
     [t],
   );
@@ -117,6 +127,7 @@ export function WatchdogOverviewCard({
       cooldown: t("watchdog.state_blurb_cooldown"),
       locked: t("watchdog.state_blurb_locked"),
       disabled: t("watchdog.state_blurb_disabled"),
+      ssr_hold: t("watchdog.state_blurb_ssr_hold"),
     }),
     [t],
   );

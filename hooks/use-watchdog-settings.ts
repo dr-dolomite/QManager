@@ -25,6 +25,10 @@ export interface WatchdogSettings {
   latency_ceiling_ms: number;
   loss_ceiling_pct: number;
   quality_consecutive: number;
+  // SSR-aware hold: let a recoverable baseband restart self-heal before the
+  // recovery ladder may act. Default on (the daemon defaults to 1/45 too).
+  ssr_aware: boolean;
+  ssr_grace: number;
 }
 
 export type WatchdogSavePayload = WatchdogSettings & {
@@ -48,6 +52,10 @@ export interface WatchdogLiveStatus {
   quality_breach_count?: number;
   quality_enabled?: boolean;
   last_recovery_reason?: string;
+  // Optional (older daemons won't emit them): currently holding for a
+  // self-healing baseband SSR, and the monotonic seconds when one was last seen.
+  ssr_hold?: boolean;
+  last_ssr_detected?: number | null;
 }
 
 export interface SimFailoverInfo {

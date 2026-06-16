@@ -44,6 +44,7 @@ import type { WatchdogForm } from "./use-watchdog-form";
 export function WatchdogRecoveryLadder({ form }: { form: WatchdogForm }) {
   const { t } = useTranslation("monitoring");
   const masterOff = !form.isEnabled;
+  const ssrOn = form.ssrAware;
 
   return (
     <Card className="@container/card h-full flex flex-col">
@@ -54,6 +55,80 @@ export function WatchdogRecoveryLadder({ form }: { form: WatchdogForm }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
+        {/* Step zero — wait out a recoverable baseband (radio firmware) restart
+            before the ladder is allowed to act. A precondition, not a rung, so
+            it sits above the numbered sequence on its own muted surface. */}
+        <div className="mb-5 rounded-lg border bg-muted/20 p-3">
+          <Field orientation="horizontal" className="justify-between">
+            <div className="grid min-w-0 gap-1">
+              <div className="flex items-center gap-1.5">
+                <FieldLabel htmlFor="ssr-aware" className="m-0">
+                  {t("watchdog.ssr_aware_label")}
+                </FieldLabel>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-info inline-flex shrink-0"
+                      aria-label={t("watchdog.ssr_aware_more_info_aria")}
+                    >
+                      <TbInfoCircleFilled className="size-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>{t("watchdog.ssr_aware_tooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <FieldDescription>
+                {t("watchdog.ssr_aware_description")}
+              </FieldDescription>
+            </div>
+            <Switch
+              id="ssr-aware"
+              checked={ssrOn}
+              onCheckedChange={form.setSsrAware}
+              disabled={masterOff}
+              aria-label={t("watchdog.ssr_aware_label")}
+            />
+          </Field>
+
+          {ssrOn && (
+            <div className="mt-3 animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none">
+              <Field className="@sm/card:max-w-[16rem]">
+                <FieldLabel htmlFor="ssr-grace">
+                  {t("watchdog.ssr_grace_label")}
+                </FieldLabel>
+                <Input
+                  id="ssr-grace"
+                  type="number"
+                  inputMode="numeric"
+                  min="10"
+                  max="120"
+                  placeholder={t("watchdog.ssr_grace_placeholder")}
+                  className="tabular-nums"
+                  value={form.ssrGrace}
+                  onChange={(e) => form.setSsrGrace(e.target.value)}
+                  disabled={masterOff}
+                  aria-invalid={!!form.errors.ssrGrace}
+                  aria-describedby={
+                    form.errors.ssrGrace ? "ssr-grace-error" : "ssr-grace-desc"
+                  }
+                />
+                {form.errors.ssrGrace ? (
+                  <FieldError id="ssr-grace-error">
+                    {form.errors.ssrGrace}
+                  </FieldError>
+                ) : (
+                  <FieldDescription id="ssr-grace-desc">
+                    {t("watchdog.ssr_grace_description")}
+                  </FieldDescription>
+                )}
+              </Field>
+            </div>
+          )}
+        </div>
+
         <ol className="flex flex-col h-full">
           {/* Tier 1 — Network re-registration */}
           <Step

@@ -35,6 +35,7 @@ export interface WatchdogFormErrors {
   loss: string | null;
   consecutive: string | null;
   noCeiling: string | null;
+  ssrGrace: string | null;
 }
 
 export interface WatchdogForm {
@@ -73,6 +74,12 @@ export interface WatchdogForm {
   setLossCeiling: (v: string) => void;
   qualityConsecutive: string;
   setQualityConsecutive: (v: string) => void;
+
+  // SSR-aware hold (wait out a recoverable baseband restart before recovering)
+  ssrAware: boolean;
+  setSsrAware: (v: boolean) => void;
+  ssrGrace: string;
+  setSsrGrace: (v: string) => void;
 
   // Derived
   errors: WatchdogFormErrors;
@@ -134,6 +141,8 @@ export function useWatchdogForm({
   const [qualityConsecutive, setQualityConsecutive] = useState(
     String(settings.quality_consecutive),
   );
+  const [ssrAware, setSsrAware] = useState(settings.ssr_aware);
+  const [ssrGrace, setSsrGrace] = useState(String(settings.ssr_grace));
 
   // --- Validation (mirrors the CGI field ranges in watchdog.sh) ---
   const errors = useMemo<WatchdogFormErrors>(() => {
@@ -175,6 +184,11 @@ export function useWatchdogForm({
       Number(lossCeiling) === 0
         ? t("watchdog.quality_no_ceiling_error")
         : null;
+    // Grace window only matters while SSR-aware hold is on.
+    const ssrGraceErr =
+      ssrAware && ssrGrace && !isIntInRange(ssrGrace, 10, 120)
+        ? t("watchdog.ssr_grace_error")
+        : null;
 
     return {
       maxFailures: maxFailuresErr,
@@ -185,6 +199,7 @@ export function useWatchdogForm({
       loss: lossErr,
       consecutive: consecutiveErr,
       noCeiling: noCeilingErr,
+      ssrGrace: ssrGraceErr,
     };
   }, [
     t,
@@ -197,6 +212,8 @@ export function useWatchdogForm({
     latencyCeiling,
     lossCeiling,
     qualityConsecutive,
+    ssrAware,
+    ssrGrace,
   ]);
 
   const hasValidationErrors = useMemo(
@@ -222,7 +239,9 @@ export function useWatchdogForm({
       qualityEnabled !== settings.quality_enabled ||
       latencyCeiling !== String(settings.latency_ceiling_ms) ||
       lossCeiling !== String(settings.loss_ceiling_pct) ||
-      qualityConsecutive !== String(settings.quality_consecutive),
+      qualityConsecutive !== String(settings.quality_consecutive) ||
+      ssrAware !== settings.ssr_aware ||
+      ssrGrace !== String(settings.ssr_grace),
     [
       settings,
       isEnabled,
@@ -239,6 +258,8 @@ export function useWatchdogForm({
       latencyCeiling,
       lossCeiling,
       qualityConsecutive,
+      ssrAware,
+      ssrGrace,
     ],
   );
 
@@ -263,6 +284,8 @@ export function useWatchdogForm({
       latency_ceiling_ms: parseInt(latencyCeiling || "0", 10),
       loss_ceiling_pct: parseInt(lossCeiling || "0", 10),
       quality_consecutive: parseInt(qualityConsecutive || "5", 10),
+      ssr_aware: ssrAware,
+      ssr_grace: parseInt(ssrGrace || "45", 10),
     };
 
     const ok = await saveSettings(payload);
@@ -290,6 +313,8 @@ export function useWatchdogForm({
     latencyCeiling,
     lossCeiling,
     qualityConsecutive,
+    ssrAware,
+    ssrGrace,
     saveSettings,
     markSaved,
     error,
@@ -314,6 +339,8 @@ export function useWatchdogForm({
     setLatencyCeiling(String(settings.latency_ceiling_ms));
     setLossCeiling(String(settings.loss_ceiling_pct));
     setQualityConsecutive(String(settings.quality_consecutive));
+    setSsrAware(settings.ssr_aware);
+    setSsrGrace(String(settings.ssr_grace));
   }, [settings]);
 
   return {
@@ -345,6 +372,10 @@ export function useWatchdogForm({
     setLossCeiling,
     qualityConsecutive,
     setQualityConsecutive,
+    ssrAware,
+    setSsrAware,
+    ssrGrace,
+    setSsrGrace,
     errors,
     hasValidationErrors,
     isDirty,

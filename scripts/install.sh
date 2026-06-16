@@ -861,6 +861,18 @@ seed_uci_defaults() {
     else
         info "quecmanager.watchcat.quality_consecutive already set — preserving user choice"
     fi
+    if ! uci -q get quecmanager.watchcat.ssr_aware >/dev/null 2>&1; then
+        uci set quecmanager.watchcat.ssr_aware=1
+        info "Seeded quecmanager.watchcat.ssr_aware=1 (SSR-aware hold on by default)"
+    else
+        info "quecmanager.watchcat.ssr_aware already set — preserving user choice"
+    fi
+    if ! uci -q get quecmanager.watchcat.ssr_grace >/dev/null 2>&1; then
+        uci set quecmanager.watchcat.ssr_grace=45
+        info "Seeded quecmanager.watchcat.ssr_grace=45"
+    else
+        info "quecmanager.watchcat.ssr_grace already set — preserving user choice"
+    fi
 
     # SMS Forwarding — opt-in inbound-SMS relay daemon (qmanager_sms_forward,
     # gated via UCI_GATED_SERVICES so install never force-enables it). Seed the

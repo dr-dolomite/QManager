@@ -104,17 +104,23 @@ The two paths are independent. Each has its own counter. A quality breach does n
 MONITOR ──── streak_fail > 0 ─────────────────→ SUSPECT
    ↑                                                │
    │           quality breach × consecutive         │ failure_counter >= max_failures
-   │         ↗ (evaluate_quality)                   ↓
+   │         ↗ (evaluate_quality)                   │   (or quality threshold)
+   │ (restored)                                     ▼
+   │                                         SSR_HOLD ── grace expired? ──→ RECOVERY
+   │                                             │                              │
+   │                                    connectivity                            │
+   │                                     returned                               │
+   │ ←──────────────────────────────────────────┘                              │
    │ (restored)                              RECOVERY → do_recovery() → COOLDOWN
    │                                                                        │
    └──────────────── connectivity/quality restored ────────────────────────┘
    └──────────────── escalate: find_next_tier ─────→ SUSPECT (re-enter)
-   
+
 LOCKED  ← any maintenance condition (lock file / long-running AT / profile apply)
 DISABLED ← Tier 4 auto-disabled after max_reboots_per_hour exhausted
 ```
 
-`evaluate_quality` runs only in `monitor` and `suspect` states, never during `cooldown` or `locked`.
+`evaluate_quality` runs only in `monitor` and `suspect` states, never during `cooldown`, `locked`, or `ssr_hold`.
 
 ---
 
@@ -154,7 +160,7 @@ Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `
 | `backup_sim_slot` | 1/2 | (empty) | SIM slot for Tier 3 failover |
 | `max_reboots_per_hour` | int 1–10 | 3 | Tier 4 token bucket; auto-disables at limit |
 
-### Quality trigger keys (new in this feature)
+### Quality trigger keys
 
 | UCI Key | Range | Default | Meaning |
 |---|---|---|---|
@@ -163,7 +169,70 @@ Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `
 | `loss_ceiling_pct` | int 0–100 | 20 | `packet_loss_pct` ceiling; **0 = ignore loss** |
 | `quality_consecutive` | int 1–60 | 5 | Consecutive breach cycles before recovery fires |
 
-> ℹ️ NOTE: The installer seeds only the four quality keys via `seed_uci_defaults()`, not the full watchcat section. The rest of the section is seeded lazily on the first CGI GET by `ensure_watchcat_config()`. This preserves existing user configuration on upgrade.
+### SSR-aware hold keys
+
+| UCI Key | Range | Default | Meaning |
+|---|---|---|---|
+| `ssr_aware` | 0/1 | **1 (ON)** | Hold the recovery ladder while a recoverable baseband restart self-heals |
+| `ssr_grace` | int 10–120 | 45 | Seconds to hold before falling through to the normal ladder |
+
+Both SSR keys are seeded in `install.sh`'s `seed_uci_defaults()` (idempotent, preserves user choice on upgrade) **and** lazily seeded in `ensure_watchcat_config()` on the first CGI GET. Missing keys in `read_config()` in the daemon default to `CFG_SSR_AWARE=1` / `CFG_SSR_GRACE=45`, so existing installs that have not yet received the CGI GET benefit from the hold behaviour immediately after upgrade, even before any settings page visit.
+
+> ℹ️ NOTE: The installer seeds only the quality keys and SSR keys via `seed_uci_defaults()`, not the full watchcat section. The rest of the section is seeded lazily on the first CGI GET by `ensure_watchcat_config()`. This preserves existing user configuration on upgrade.
+
+---
+
+## SSR-Aware Hold
+
+### What an MPSS SSR is
+
+The Qualcomm RM551E (and RM520N-class) modems run their radio firmware on a separate processor called the MPSS (Modem Processor SubSystem). Under certain radio conditions, the MPSS can encounter a fatal error and restart itself — logged in the kernel ring buffer as:
+
+```
+4080000.remoteproc-mss: fatal error received
+```
+
+This is a **recoverable** baseband subsystem restart (SSR). The remoteproc framework brings the MPSS back up automatically in ~3–4 seconds; the data path is restored in roughly 10–25 seconds. The modem self-heals. This is a firmware-level event that QManager does not cause and cannot prevent.
+
+### The amplification problem
+
+The watchdog's quality trigger (if enabled with an aggressive profile) or the reachability trigger both check connectivity on every cycle. During a self-healing SSR, the ~10–25 second data-path interruption looks identical to a stuck connection: reachability fails, the failure counter climbs, and the watchdog fires Tier 1 (`AT+COPS=2 → AT+COPS=0`) or Tier 2 (`AT+CFUN=0/1`) recovery actions. Each of those commands forces a network detach — ON TOP of a modem that is already mid-self-heal. The result: what should have been a 30–60 second self-correcting outage becomes a multi-minute thrash loop because QManager keeps deregistering the modem before it can re-attach.
+
+### The hold mechanism
+
+When `ssr_aware=1` (the default), the daemon intercepts at BOTH recovery initiation sites — the reachability threshold in the main loop's `suspect|ssr_hold` branch AND the quality threshold inside `evaluate_quality` — and calls `ssr_hold_gate()` before proceeding to `do_recovery`.
+
+**`ssr_in_progress()` — the dmesg evidence check:**
+
+The function runs `dmesg` once and greps for the shared crash prefix:
+
+```
+4080000.remoteproc-mss: fatal error received
+```
+
+This prefix is chosen deliberately to be firmware-variant-agnostic — it does NOT match the per-build `.c:line` suffix that varies across RM520N/RM551E builds. It takes the last matching line (`tail -n 1`), extracts the leading integer seconds from the BusyBox dmesg timestamp format (`[ 12345.678901]`) via awk field-splitting on `[][. ]+`, and compares to `/proc/uptime` (integer seconds since boot). If the crash line exists and its timestamp is within `CFG_SSR_GRACE` seconds of now, the function returns true.
+
+Graceful-degradation rule: **if dmesg yields nothing, the crash line was evicted from the ring buffer, or the timestamp fails to parse, `ssr_in_progress()` returns false and the daemon behaves exactly as before this feature existed.** The hold is best-effort; it is never a correctness dependency.
+
+**Hold posture:**
+
+When `ssr_hold_gate()` decides to hold (either starting a new hold or continuing an existing one):
+
+- State is set to `"ssr_hold"`.
+- `ssr_hold_started` records the monotonic uptime in integer seconds.
+- `last_ssr_detected` records the same value (written to the state file).
+- `do_recovery` is skipped for that cycle. `current_tier` is NOT advanced. No AT commands are issued. No cooldown is entered.
+
+While holding, each cycle re-evaluates. The merged `suspect|ssr_hold` case in the main loop checks reachability every cycle:
+
+- **Connectivity returns (modem self-healed):** The `ping_reachable=true && ping_streak_fail=0` branch runs, `ssr_hold_clear()` is called, and state returns to `monitor`. No recovery ladder ran; no forced detach occurred.
+- **Grace window expires (`held >= CFG_SSR_GRACE`):** `ssr_hold_gate()` resets `ssr_hold="false"` and returns 1 (do NOT hold). The normal ladder runs from `current_tier` (which was found by `find_next_tier` before the hold began, so there is no tier-skip on fall-through). This handles the genuine stuck/AP-hang case where the modem did NOT self-recover.
+
+`ssr_hold` is also cleared unconditionally on LOCKED-state entry and exit (via `ssr_hold_clear()`), so a maintenance window never carries stale hold state in or out.
+
+**Quality-path nuance:** When the quality trigger fires and `ssr_hold_gate()` returns hold, `evaluate_quality` returns 0 (triggering caller skips), leaving state as `"ssr_hold"` and returning to the main loop's `write_state + sleep`. On the next cycle, the merged `suspect|ssr_hold` case re-evaluates reachability. If the modem has self-healed and the link is both reachable AND the quality breach counter has already been reset (it was reset to 0 before `ssr_hold_gate` was called), the hold clears naturally. This is safe: the dominant amplification risk (forced COPS/CFUN detach on the reachability ladder) is fully held, and a quality-triggered hold that resolves via the reachability path is correct because the modem is healthy again.
+
+**Why this defaults ON:** Users affected by the amplification problem will not know to enable the feature. A user who has never seen an MPSS SSR pays no cost (the dmesg grep runs only at escalation decision time, not every cycle), while an affected user benefits immediately on upgrade.
 
 ---
 
@@ -209,7 +278,7 @@ The quality path maintains `quality_breach_counter` independently of the reachab
 
 ### 6. States where evaluate_quality runs
 
-`evaluate_quality` is called at the bottom of the main loop only when `state = "monitor"` or `state = "suspect"`. It does not run during `cooldown`, `locked`, or `recovery`. The quality breach counter is reset on:
+`evaluate_quality` is called at the bottom of the main loop only when `state = "monitor"` or `state = "suspect"`. It does not run during `cooldown`, `locked`, `recovery`, or `ssr_hold`. The `ssr_hold` exclusion is intentional — running quality evaluation while the modem is mid-SSR-self-heal would re-trigger the quality path and immediately re-enter the hold or the ladder, defeating the purpose. The quality breach counter is reset on:
 - Natural `suspect → monitor` recovery.
 - LOCKED state entry and exit.
 - Quality trigger firing (counter resets to 0 before `do_recovery`).
@@ -233,7 +302,7 @@ Written atomically via `STATE_TMP` → `mv`. The CGI GET passes the full file co
 |---|---|---|
 | `timestamp` | int (epoch) | When state was last written |
 | `enabled` | bool | Whether daemon is enabled |
-| `state` | string | Current state: `monitor`/`suspect`/`recovery`/`cooldown`/`locked`/`disabled` |
+| `state` | string | Current state: `monitor`/`suspect`/`recovery`/`cooldown`/`locked`/`disabled`/`ssr_hold` |
 | `current_tier` | int | Active recovery tier (0 = none) |
 | `failure_count` | int | Reachability failure counter |
 | `last_recovery_time` | int or null | Epoch of last recovery action |
@@ -247,8 +316,10 @@ Written atomically via `STATE_TMP` → `mv`. The CGI GET passes the full file co
 | `quality_breach_count` | int | Current consecutive quality breach counter |
 | `quality_enabled` | bool | Reflects `CFG_QUALITY_ENABLED` at time of write |
 | `last_recovery_reason` | string | `"unreachable"` or `"quality"` |
+| `ssr_hold` | bool | Whether the daemon is currently holding the recovery ladder for an in-progress SSR self-heal |
+| `last_ssr_detected` | int or null | Monotonic seconds since boot when the most recent MPSS crash line was detected; null if no SSR has been seen this session |
 
-> ℹ️ NOTE: The poller re-emits a `watchcat` object into `status.json`, but it does NOT yet carry `quality_breach_count`, `quality_enabled`, or `last_recovery_reason`. A live breach-counter readout in the watchdog status card is a deliberate follow-up feature, out of scope for this change.
+> ℹ️ NOTE: The poller re-emits a `watchcat` object into `status.json`, but it does NOT yet carry `quality_breach_count`, `quality_enabled`, `last_recovery_reason`, `ssr_hold`, or `last_ssr_detected`. The overview card reads `state` from the poller's re-emit (the poller passes `.state` verbatim, so `"ssr_hold"` flows from daemon → state file → poller → `modemStatus.watchcat.state` → the overview card without any poller change). The breach counter and SSR timestamp are available only via the CGI GET passthrough of the full state file. A live breach-counter readout in the watchdog status card is a deliberate follow-up feature, out of scope for this change.
 
 ---
 
@@ -277,7 +348,9 @@ Returns current UCI settings, live daemon state, SIM failover state, SIM swap de
     "quality_enabled": false,
     "latency_ceiling_ms": 800,
     "loss_ceiling_pct": 20,
-    "quality_consecutive": 5
+    "quality_consecutive": 5,
+    "ssr_aware": true,
+    "ssr_grace": 45
   },
   "status": { ... },
   "sim_failover": { "active": false },
@@ -310,7 +383,9 @@ Three actions are supported.
   "quality_enabled": true,
   "latency_ceiling_ms": 800,
   "loss_ceiling_pct": 20,
-  "quality_consecutive": 5
+  "quality_consecutive": 5,
+  "ssr_aware": true,
+  "ssr_grace": 45
 }
 ```
 
@@ -340,6 +415,8 @@ Three actions are supported.
 | `latency_ceiling_ms` | int 0–10000 |
 | `loss_ceiling_pct` | int 0–100 |
 | `quality_consecutive` | int 1–60 |
+| `ssr_grace` | int 10–120 |
+| `ssr_aware` | boolean |
 
 > ℹ️ NOTE: The CGI error envelope uses `reason` rather than `detail` for field validation errors (field-level errors need to name the field). The hook `useWatchdogSettings` passes `json.reason` as the `detail` argument to `resolveErrorMessage`.
 
@@ -385,13 +462,23 @@ that card's tab).
 |---|---|
 | `hooks/use-watchdog-settings.ts` | Fetch (30s poll) + save + SIM-dismiss/revert; types `WatchdogSettings`, `WatchdogLiveStatus` |
 | `components/monitoring/watchdog/watchdog.tsx` | Page coordinator: owns `useWatchdogSettings`, remounts the form on a settings signature, lays out the card grid |
-| `components/monitoring/watchdog/use-watchdog-form.ts` | Single form-state coordinator: all 14 fields, validation (mirrors CGI ranges), dirty check, `submit`, `discard` |
+| `components/monitoring/watchdog/use-watchdog-form.ts` | Single form-state coordinator: all 16 fields, validation (mirrors CGI ranges), dirty check, `submit`, `discard` |
 | `components/monitoring/watchdog/watchdog-overview-card.tsx` | Master toggle (in `CardAction`) + live state hero + pill-tiles + SIM-failover revert; reads `useModemStatus` (5s) |
 | `components/monitoring/watchdog/watchdog-triggers-card.tsx` | Tabbed card: Reachability (always-on) + Connection Quality (opt-in, with live tab dot); owns the shared Save / Discard footer |
-| `components/monitoring/watchdog/watchdog-recovery-ladder.tsx` | Numbered Tier 1→4 escalation stepper; backup-SIM picker nested in Tier 3, reboot cap in Tier 4 |
+| `components/monitoring/watchdog/watchdog-recovery-ladder.tsx` | Numbered Tier 1→4 escalation stepper; backup-SIM picker nested in Tier 3, reboot cap in Tier 4. The SSR-aware gate control ("step zero") sits above the numbered ladder on a muted surface. |
 | `components/monitoring/watchdog/sim-swap-banner.tsx` | SIM swap / SIM failover toast (rendered globally in `app-layout.tsx`) |
 
-**`WatchdogLiveStatus`** fields `quality_breach_count`, `quality_enabled`, and `last_recovery_reason` are typed as optional (`?`) because older daemon versions will not emit them. Consumers must handle their absence.
+**`WatchdogSettings`** added `ssr_aware: boolean` and `ssr_grace: number`.
+
+**`WatchdogLiveStatus`** added optional `ssr_hold?: boolean` and `last_ssr_detected?: number | null`. These are typed optional because older daemon versions will not emit them. The existing optional fields `quality_breach_count`, `quality_enabled`, and `last_recovery_reason` follow the same rule — consumers must handle their absence.
+
+**`WatchcatState`** in `types/modem-status.ts` has `"ssr_hold"` as a union member. The poller passes the daemon's `.state` field verbatim, so `"ssr_hold"` reaches `modemStatus.watchcat.state` without any poller-side change.
+
+**SSR-aware gate control (Recovery Ladder card):** The gate control lives at the top of `WatchdogRecoveryLadder` on a `bg-muted/20` surface, above the numbered `<ol>`. It renders a Switch (`ssr_aware`) with a `TbInfoCircleFilled` tooltip, and when the Switch is on, an animated-in grace-seconds `Input` field (range 10–120). This surface is disabled when the master watchdog switch is off (`masterOff`).
+
+**SSR hold hero state (Overview card):** `STATE_META["ssr_hold"]` uses `tone: "info"`, `ActivityIcon`, and `pulse: true`. The badge reads "Letting Modem Self-Recover" and the blurb explains the modem is restarting its radio firmware. Info tone is deliberate — this is calm, expected behaviour, not a destructive state.
+
+**i18n:** English keys in `public/locales/en/monitoring.json`: `status_badge_ssr_hold`, `state_blurb_ssr_hold`, `ssr_aware_label`, `ssr_aware_description`, `ssr_aware_tooltip`, `ssr_aware_more_info_aria`, `ssr_grace_label`, `ssr_grace_placeholder`, `ssr_grace_description`, `ssr_grace_error`. The `id`, `it`, `zh-CN`, and `zh-TW` locales are not yet translated; 40 i18n warnings appear at build time (fallback to `en` is configured via `fallbackLng: "en"`). A translation sweep for these locales is a tracked follow-up — not a bug.
 
 ---
 
@@ -408,3 +495,27 @@ that card's tab).
 - **Stale poller = NO-SIGNAL, not healthy.** If `qmanager_poller` is dead or crashed, `status.json` goes stale. The quality trigger treats this as no-signal and freezes the breach counter. This is correct behavior, but it means a dead poller silently disables quality triggering. Check `/tmp/qmanager_status.json` root `.timestamp` if the quality trigger appears to not be evaluating.
 
 - **Auto-disable persists across reboots (UCI).** When Tier 4 exhausts `max_reboots_per_hour`, it writes `quecmanager.watchcat.enabled=0` to UCI. This survives a reboot — the daemon won't restart even though procd is configured to do so (the init.d script checks `enabled` in UCI). Re-enabling via the settings page clears the disabled flag and restarts the daemon.
+
+- **SSR hold is best-effort: dmesg ring-buffer eviction.** The kernel ring buffer is fixed-size. On a busy modem (e.g. a QCMAP bringup storm filling dmesg with interface events), the `4080000.remoteproc-mss: fatal error received` line can be evicted before `ssr_in_progress()` reads it. In that case `ssr_in_progress()` returns false and the daemon behaves exactly as if the feature did not exist — it falls straight through to the ladder. The hold is a de-amplifier, not a correctness requirement. The existing `max_reboots_per_hour` token bucket is the backstop.
+
+- **Quality-triggered hold clears via the reachability path.** When a quality breach triggers an SSR hold, the hold resolves via the `suspect|ssr_hold` reachability check on subsequent cycles. If the modem self-heals and `ping_reachable=true && ping_streak_fail=0`, the hold clears and state returns to `monitor` — even though the recovery was quality-triggered, not reachability-triggered. This is intentional: the dominant amplification risk is the forced detach that happens during SSR self-heal, and the modem returning to a reachable state means the SSR self-heal succeeded. Do not be surprised if a quality-path hold shows a `suspect→monitor` transition in the log instead of a `ssr_hold→monitor` state label.
+
+---
+
+## On-Device Test Plan (Pending Live Modem)
+
+The static audit passed. On-device verification was skipped in this round due to no SSH access. The following scenarios must be run on a real device when available.
+
+**Scenario 1 — SSR detected, hold engaged:**
+Trigger a real MPSS SSR (or wait for one on an affected RM551E). Within one `check_interval` after the SSR log line appears, check `/tmp/qmanager_watchcat.json` for `"state":"ssr_hold"` and `"ssr_hold":true`. Confirm the watchdog log (`/tmp/qmanager.log`) shows "Recoverable baseband SSR detected; holding recovery ladder" and that NO `AT+COPS` or `AT+CFUN` commands appear in the `qcmd` log during the grace window.
+
+**Scenario 2 — Natural recovery during the hold:**
+If the modem self-heals within the grace window, confirm `/tmp/qmanager_watchcat.json` transitions back to `"state":"monitor"` with `"ssr_hold":false`, and that the UI overview card returns to the green "Monitoring" hero without passing through a recovery or cooldown state.
+
+**Scenario 3 — Grace window expiry, fallthrough to ladder:**
+Extend the outage artificially past `ssr_grace` seconds (e.g. set `ssr_grace=10` and use a test mode that keeps connectivity down). Confirm the log shows "SSR-hold grace expired without recovery; releasing to ladder" and that Tier 1 (`AT+COPS=2 → AT+COPS=0`) then runs normally.
+
+**Scenario 4 — Hold clears correctly on LOCKED entry and exit:**
+While in `ssr_hold`, trigger a maintenance lock (create `/tmp/qmanager_watchcat.lock`). Confirm the log shows LOCKED state entered, `ssr_hold` cleared, and that removing the lock brings the daemon back to `monitor` with `ssr_hold=false` (no stale hold carried through).
+
+**UI verification:** Save `ssr_aware=false` and confirm the CGI GET round-trips it correctly. Save `ssr_grace=30` and confirm it persists in UCI. Trigger the `ssr_hold` state (on a real SSR or by injecting state) and confirm the "Letting Modem Self-Recover" hero appears with the info tone and pulse.

@@ -270,7 +270,17 @@
     "triggers_title": "Recovery Triggers",
     "triggers_description": "When the watchdog decides the connection needs recovering.",
     "tab_reachability": "Reachability",
-    "tab_quality": "Connection Quality"
+    "tab_quality": "Connection Quality",
+    "status_badge_ssr_hold": "Letting Modem Self-Recover",
+    "state_blurb_ssr_hold": "The modem is restarting its radio firmware. Holding off recovery so it can heal on its own.",
+    "ssr_aware_label": "Wait Out Radio Self-Recovery",
+    "ssr_aware_description": "When the modem briefly restarts its own radio firmware, let it heal before any recovery step runs.",
+    "ssr_aware_tooltip": "Some modems briefly restart their radio firmware and recover on their own within seconds. When that's detected, the watchdog waits instead of forcing a reconnect on top, which can make the outage longer. If the connection still hasn't returned after the grace window, the recovery steps run as usual.",
+    "ssr_aware_more_info_aria": "More information about waiting out radio self-recovery",
+    "ssr_grace_label": "Grace Window (seconds)",
+    "ssr_grace_placeholder": "45",
+    "ssr_grace_description": "How long to let the modem self-recover before the recovery steps may act.",
+    "ssr_grace_error": "Must be a number between 10 and 120."
   },
   "latency": {
     "page_title": "Latency Monitoring",

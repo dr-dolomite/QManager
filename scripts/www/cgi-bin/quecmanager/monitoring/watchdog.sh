@@ -42,6 +42,8 @@ ensure_watchcat_config() {
     uci set quecmanager.watchcat.latency_ceiling_ms=800
     uci set quecmanager.watchcat.loss_ceiling_pct=20
     uci set quecmanager.watchcat.quality_consecutive=5
+    uci set quecmanager.watchcat.ssr_aware=1
+    uci set quecmanager.watchcat.ssr_grace=45
     uci commit quecmanager
 }
 
@@ -85,6 +87,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     enabled="" max_failures="" check_interval="" cooldown=""
     tier1="" tier2="" tier3="" tier4="" backup_sim="" max_reboots=""
     quality_enabled="" latency_ceiling="" loss_ceiling="" quality_consecutive=""
+    ssr_aware="" ssr_grace=""
 
     enabled=$(uci_get enabled 0)
     max_failures=$(uci_get max_failures 5)
@@ -100,6 +103,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     latency_ceiling=$(uci_get latency_ceiling_ms 800)
     loss_ceiling=$(uci_get loss_ceiling_pct 20)
     quality_consecutive=$(uci_get quality_consecutive 5)
+    ssr_aware=$(uci_get ssr_aware 1)
+    ssr_grace=$(uci_get ssr_grace 45)
 
     # Read live status from watchcat daemon state file
     status_json='{}'
@@ -138,6 +143,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --argjson latency_ceiling "$latency_ceiling" \
         --argjson loss_ceiling "$loss_ceiling" \
         --argjson quality_consecutive "$quality_consecutive" \
+        --argjson ssr_aware "$ssr_aware" \
+        --argjson ssr_grace "$ssr_grace" \
         --argjson status "$status_json" \
         --argjson sim_failover "$sim_failover_json" \
         --argjson sim_swap "$sim_swap_json" \
@@ -158,7 +165,9 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 quality_enabled: ($quality_enabled == 1),
                 latency_ceiling_ms: $latency_ceiling,
                 loss_ceiling_pct: $loss_ceiling,
-                quality_consecutive: $quality_consecutive
+                quality_consecutive: $quality_consecutive,
+                ssr_aware: ($ssr_aware == 1),
+                ssr_grace: $ssr_grace
             },
             status: $status,
             sim_failover: $sim_failover,
@@ -275,6 +284,17 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         if [ -n "$val" ]; then
             validate_int "$val" 1 60 || reject_field "quality_consecutive" "must be integer 1-60"
             uci set quecmanager.watchcat.quality_consecutive="$val"
+        fi
+
+        val=$(printf '%s' "$POST_DATA" | jq -r '.ssr_grace | if . == null then empty else tostring end')
+        if [ -n "$val" ]; then
+            validate_int "$val" 10 120 || reject_field "ssr_grace" "must be integer 10-120"
+            uci set quecmanager.watchcat.ssr_grace="$val"
+        fi
+
+        val=$(printf '%s' "$POST_DATA" | jq -r '.ssr_aware | if . == null then empty else tostring end')
+        if [ -n "$val" ]; then
+            case "$val" in true) uci set quecmanager.watchcat.ssr_aware=1 ;; false) uci set quecmanager.watchcat.ssr_aware=0 ;; esac
         fi
 
         uci commit quecmanager

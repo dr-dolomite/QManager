@@ -77,6 +77,8 @@ CFG_QUALITY_ENABLED=0
 CFG_LATENCY_CEILING_MS=800
 CFG_LOSS_CEILING_PCT=20
 CFG_QUALITY_CONSECUTIVE=5
+CFG_SSR_AWARE=1
+CFG_SSR_GRACE=45
 STATUS_CACHE="/tmp/qmanager_status.json"
 STATUS_STALE_THRESHOLD=30
 BOOT_SETTLE=30
@@ -99,6 +101,9 @@ reboots_this_hour=0
 cooldown_stale_retries=0
 quality_breach_counter=0
 recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
+ssr_hold="false"          # JSON bool literal for write_state
+last_ssr_detected="null"  # JSON null literal or monotonic-seconds integer
+ssr_hold_started=0        # monotonic seconds-since-boot when hold began; 0 = not holding
 
 # =============================================================================
 # CONFIGURATION
@@ -148,9 +153,16 @@ read_config() {
     val=$(uci -q get quecmanager.watchcat.quality_consecutive 2>/dev/null)
     [ -n "$val" ] && CFG_QUALITY_CONSECUTIVE="$val"
 
+    CFG_SSR_AWARE=$(uci -q get quecmanager.watchcat.ssr_aware 2>/dev/null)
+    [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
+
+    val=$(uci -q get quecmanager.watchcat.ssr_grace 2>/dev/null)
+    [ -n "$val" ] && CFG_SSR_GRACE="$val"
+
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s max_fail=${CFG_MAX_FAILURES} cooldown=${CFG_COOLDOWN}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency_ceiling=${CFG_LATENCY_CEILING_MS}ms loss_ceiling=${CFG_LOSS_CEILING_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE}"
+    qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
 }
 
 # =============================================================================
@@ -178,6 +190,8 @@ write_state() {
         --argjson quality_breach "$quality_breach_counter" \
         --argjson quality_enabled "$CFG_QUALITY_ENABLED" \
         --arg recovery_reason "$recovery_reason" \
+        --argjson ssr_hold "$ssr_hold" \
+        --argjson last_ssr_detected "$last_ssr_detected" \
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
@@ -192,7 +206,9 @@ write_state() {
             reboots_this_hour: $reboots,
             quality_breach_count: $quality_breach,
             quality_enabled: ($quality_enabled == 1),
-            last_recovery_reason: $recovery_reason
+            last_recovery_reason: $recovery_reason,
+            ssr_hold: $ssr_hold,
+            last_ssr_detected: $last_ssr_detected
         }' > "$STATE_TMP"
 
     mv "$STATE_TMP" "$STATE_FILE"
@@ -351,6 +367,16 @@ evaluate_quality() {
             append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning"
             quality_breach_counter=0
             recovery_reason="quality"
+
+            # SSR-aware hold: if a recoverable baseband SSR is mid-flight, hold
+            # the ladder this cycle rather than forcing a detach. Not the main
+            # loop here — return from evaluate_quality so do_recovery is skipped;
+            # the main loop's write_state + sleep proceed normally.
+            if ssr_hold_gate; then
+                state="ssr_hold"
+                return 0
+            fi
+
             state="recovery"
             if [ "$current_tier" -eq 0 ]; then
                 find_next_tier 1
@@ -377,6 +403,97 @@ count_recent_reboots() {
     cutoff=$((now - 3600))
     count=$(awk -v cutoff="$cutoff" -F'|' '$1 >= cutoff { n++ } END { print n+0 }' "$CRASH_LOG" 2>/dev/null)
     reboots_this_hour="${count:-0}"
+}
+
+# --- SSR (baseband subsystem restart) awareness ---------------------------
+# The RM551E periodically suffers RECOVERABLE Qualcomm MPSS baseband SSRs: the
+# kernel logs "4080000.remoteproc-mss: fatal error received" then brings the
+# remoteproc back up ~3-4s later, with the data path restored in ~10-25s. If
+# watchcat fires its recovery ladder (forced AT+COPS / AT+CFUN detach) WHILE the
+# baseband is mid-self-heal, it amplifies a ~30-60s self-healing outage into a
+# multi-minute thrash. This gate detects an in-progress SSR and HOLDS the ladder
+# for a grace window, only falling through to the normal ladder if connectivity
+# does not return (the genuine stuck / AP-hang case).
+
+# Best-effort read-only check of the kernel ring buffer for a RECENT MPSS crash.
+# Returns 0 (true) if a fatal-error line exists AND it is within CFG_SSR_GRACE
+# seconds of now; 1 (false) otherwise — including when dmesg yields nothing, the
+# crash line was evicted, or the timestamp fails to parse (graceful degradation:
+# absence of evidence is NOT evidence of absence; we never block recovery on it).
+# dmesg timestamps are monotonic seconds-since-boot floats like "[ 12345.678901]"
+# (BusyBox dmesg has no -T / -l); we parse integer seconds only and compare to
+# /proc/uptime. Calls dmesg ONCE per invocation (only at an escalation decision).
+ssr_in_progress() {
+    [ "$CFG_SSR_AWARE" = "1" ] || return 1
+
+    local crash_line
+    local crash_ts
+    local now
+
+    crash_line=$(dmesg 2>/dev/null | grep "4080000.remoteproc-mss: fatal error received" | tail -n 1)
+    [ -n "$crash_line" ] || return 1
+
+    # Extract leading integer seconds from the dmesg monotonic timestamp. Real
+    # lines on this kernel are double-bracketed: "[ 12345.678901][ T8033] msg"
+    # (CONFIG_PRINTK_CALLER); the older single-bracket "[ 12345.678901] msg" also
+    # works. sed (not awk -F) because BusyBox awk 1.36.1 rejects a bracket-class
+    # field separator as an "Unknown collating element" — verified on-device.
+    crash_ts=$(printf '%s' "$crash_line" | sed 's/^\[[ ]*\([0-9]*\)\..*/\1/')
+    case "$crash_ts" in ''|*[!0-9]*) return 1 ;; esac
+
+    now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+    case "$now" in ''|*[!0-9]*) return 1 ;; esac
+
+    local delta
+    delta=$((now - crash_ts))
+    [ "$delta" -ge 0 ] && [ "$delta" -le "$CFG_SSR_GRACE" ] && return 0
+    return 1
+}
+
+# Decide whether to HOLD the recovery ladder this cycle. Returns 0 to HOLD
+# (caller skips do_recovery and lets the modem self-heal), 1 to PROCEED to the
+# normal ladder. Sits BELOW all existing guards (LOCKED, cooldown, revert) and
+# only intercepts at the do_recovery initiation sites.
+ssr_hold_gate() {
+    local now
+    local held
+
+    # Already holding? Check whether the grace window expired.
+    if [ "$ssr_hold" = "true" ]; then
+        now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        held=$((now - ssr_hold_started))
+        if [ "$held" -ge "$CFG_SSR_GRACE" ]; then
+            qlog_warn "SSR-hold grace (${CFG_SSR_GRACE}s) expired without recovery; releasing to ladder"
+            ssr_hold="false"
+            ssr_hold_started=0
+            return 1   # fall through to the normal ladder (genuine stuck case)
+        fi
+        return 0       # keep holding
+    fi
+
+    # Not yet holding — start a hold only if an SSR is detectable right now.
+    if ssr_in_progress; then
+        now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        ssr_hold="true"
+        ssr_hold_started="$now"
+        last_ssr_detected="$now"   # monotonic seconds; UI surfaces "self-recovery"
+        qlog_warn "Recoverable baseband SSR detected; holding recovery ladder up to ${CFG_SSR_GRACE}s for self-heal"
+        append_event "watchcat_recovery" "Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal" "info"
+        return 0
+    fi
+    return 1
+}
+
+# Clear an SSR hold on natural recovery (connectivity returned on its own — the
+# expected happy path; we did nothing harmful). Idempotent.
+ssr_hold_clear() {
+    if [ "$ssr_hold" = "true" ]; then
+        qlog_info "SSR-hold cleared: connectivity recovered naturally"
+    fi
+    ssr_hold="false"
+    ssr_hold_started=0
 }
 
 # Wait for modem to respond to AT commands after recovery action
@@ -948,6 +1065,7 @@ main() {
                 failure_counter=0
                 cooldown_stale_retries=0
                 quality_breach_counter=0
+                ssr_hold_clear
             fi
             write_state
             sleep "$CFG_CHECK_INTERVAL"
@@ -962,6 +1080,7 @@ main() {
             failure_counter=0
             cooldown_stale_retries=0
             quality_breach_counter=0
+            ssr_hold_clear
         fi
 
         # --- COOLDOWN state ---
@@ -995,13 +1114,14 @@ main() {
                 fi
                 ;;
 
-            suspect)
+            suspect|ssr_hold)
                 if [ "$ping_reachable" = "true" ] && [ "$ping_streak_fail" -eq 0 ]; then
-                    # Naturally recovered
+                    # Naturally recovered (the expected SSR self-heal happy path)
                     qlog_info "SUSPECT → MONITOR: connectivity restored naturally"
                     state="monitor"
                     failure_counter=0
                     quality_breach_counter=0
+                    ssr_hold_clear
                 else
                     failure_counter=$((failure_counter + 1))
                     qlog_debug "SUSPECT: failure_counter=$failure_counter/$CFG_MAX_FAILURES"
@@ -1014,6 +1134,18 @@ main() {
                         # Find first enabled tier
                         if [ "$current_tier" -eq 0 ]; then
                             find_next_tier 1
+                        fi
+
+                        # SSR-aware hold: if a recoverable baseband SSR is
+                        # mid-flight, hold the ladder this cycle (leave
+                        # current_tier as found above so fall-through after grace
+                        # escalates exactly as today). continue re-evaluates next
+                        # loop iteration.
+                        if ssr_hold_gate; then
+                            state="ssr_hold"
+                            write_state
+                            sleep "$CFG_CHECK_INTERVAL"
+                            continue
                         fi
 
                         do_recovery
@@ -1033,8 +1165,10 @@ main() {
 
         # --- Quality-degradation trigger (independent of reachability) ---
         # Only when the reachability path did NOT already move us into
-        # recovery/cooldown this cycle. evaluate_quality runs the same Tier
-        # ladder via do_recovery; if it triggers it sets state itself.
+        # recovery/cooldown/ssr_hold this cycle. evaluate_quality runs the same
+        # Tier ladder via do_recovery; if it triggers it sets state itself.
+        # NOTE: ssr_hold is intentionally excluded (like recovery/cooldown) — do
+        # NOT add it to this include-set, or quality would fire during a hold.
         if [ "$state" = "monitor" ] || [ "$state" = "suspect" ]; then
             evaluate_quality
         fi
