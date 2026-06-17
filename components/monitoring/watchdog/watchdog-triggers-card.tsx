@@ -65,7 +65,10 @@ export function WatchdogTriggersCard({
         <CardDescription>{t("watchdog.triggers_description")}</CardDescription>
       </CardHeader>
 
-      <CardContent>
+      {/* flex-1 lets this card absorb the column's spare height when the ladder
+          is the taller side (watchdog disabled), keeping the save bar pinned to
+          the card foot so both desktop columns end at the same line. */}
+      <CardContent className="flex-1">
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as "reachability" | "quality")}

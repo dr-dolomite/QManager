@@ -85,9 +85,14 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
   });
 
   return (
+    // Default stretch equalizes the two desktop columns. Inside the left column,
+    // auto_1fr keeps Overview at natural height and lets the Triggers card grow
+    // to the column foot, so when the ladder is the taller column the left side
+    // fills to match it (and vice-versa when the watchdog is active). The ladder
+    // fills the right column itself.
     <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
       {/* Left column: live status, then the two triggers (tabbed) + the save. */}
-      <div className="grid gap-4">
+      <div className="grid grid-rows-[auto_1fr] gap-4">
         <WatchdogOverviewCard
           form={form}
           autoDisabled={autoDisabled}
@@ -105,14 +110,14 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
 }
 
 // -----------------------------------------------------------------------------
-// Page skeleton — mirrors the live grid exactly (no items-start, same col
+// Page skeleton — mirrors the live grid exactly (same stretch + auto_1fr column
 // structure as WatchdogForm) so content replacement is a clean fill with zero
 // reflow. Each skeleton card matches the real card's silhouette.
 // -----------------------------------------------------------------------------
 function PageSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
-      <div className="grid gap-4">
+      <div className="grid grid-rows-[auto_1fr] gap-4">
         <OverviewSkeleton />
         <TriggersSkeleton />
       </div>
@@ -159,7 +164,7 @@ function TriggersSkeleton() {
         <Skeleton className="h-5 w-36" />
         <Skeleton className="h-4 w-52" />
       </CardHeader>
-      <CardContent className="grid gap-4">
+      <CardContent className="grid flex-1 content-start gap-4">
         {/* Tab strip */}
         <Skeleton className="h-9 w-full rounded-md" />
         {/* 2-col field grid */}
@@ -190,10 +195,11 @@ function TriggersSkeleton() {
   );
 }
 
-// Ladder skeleton: full-height card (h-full flex flex-col) with 4 rung
-// silhouettes. Each rung = size-7 rounded-full node + vertical connector line
-// (dropped on last) and a body with name, description, pill, and switch bars.
-// CardContent is flex-1 so the rungs distribute to fill the column height.
+// Ladder skeleton: fills the desktop column (h-full flex-col) like the live
+// card so heights match with zero reflow. Leads with the SSR precondition block
+// (muted box + switch), then 4 rung silhouettes spaced by the same content-
+// driven rhythm (pb-6 between rungs, none on the last). Each rung = size-7 node
+// + connector line and a body with name, description, pill, and switch.
 function LadderSkeleton() {
   return (
     <Card className="@container/card flex h-full flex-col" aria-hidden>
@@ -202,7 +208,18 @@ function LadderSkeleton() {
         <Skeleton className="h-4 w-60" />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col">
-        <ol className="flex h-full flex-col">
+        {/* SSR precondition block */}
+        <div className="mb-6 rounded-lg border bg-muted/20 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="grid gap-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-56" />
+            </div>
+            <Skeleton className="mt-0.5 h-5 w-9 shrink-0 rounded-full" />
+          </div>
+        </div>
+
+        <ol>
           {[1, 2, 3, 4].map((n) => (
             <LadderRungSkeleton key={n} isLast={n === 4} />
           ))}
@@ -214,11 +231,11 @@ function LadderSkeleton() {
 
 function LadderRungSkeleton({ isLast }: { isLast: boolean }) {
   return (
-    <li className="flex flex-1 gap-3">
+    <li className={isLast ? "flex gap-3" : "flex gap-3 pb-6"}>
       {/* Left rail */}
       <div className="flex flex-col items-center">
         <Skeleton className="size-7 shrink-0 rounded-full" />
-        {!isLast && <Skeleton className="mt-1 w-px flex-1" />}
+        {!isLast && <Skeleton className="mt-1.5 w-px flex-1" />}
       </div>
       {/* Body */}
       <div className="min-w-0 flex-1">

@@ -47,18 +47,22 @@ export function WatchdogRecoveryLadder({ form }: { form: WatchdogForm }) {
   const ssrOn = form.ssrAware;
 
   return (
-    <Card className="@container/card h-full flex flex-col">
+    <Card className="@container/card flex h-full flex-col">
       <CardHeader>
         <CardTitle>{t("watchdog.recovery_steps_title")}</CardTitle>
         <CardDescription>
           {t("watchdog.recovery_steps_description")}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col">
+      {/* flex-1 + flex-col lets the card fill the (stretched) desktop column so
+          its total height matches the left column. The rungs keep their natural
+          pb-6 rhythm at the top; any height needed to match collects as one
+          quiet region at the bottom, never smeared across the rungs. */}
+      <CardContent className="flex flex-1 flex-col">
         {/* Step zero — wait out a recoverable baseband (radio firmware) restart
             before the ladder is allowed to act. A precondition, not a rung, so
             it sits above the numbered sequence on its own muted surface. */}
-        <div className="mb-5 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-6 rounded-lg border bg-muted/20 p-3">
           <Field orientation="horizontal" className="justify-between">
             <div className="grid min-w-0 gap-1">
               <div className="flex items-center gap-1.5">
@@ -129,7 +133,7 @@ export function WatchdogRecoveryLadder({ form }: { form: WatchdogForm }) {
           )}
         </div>
 
-        <ol className="flex flex-col h-full">
+        <ol>
           {/* Tier 1 — Network re-registration */}
           <Step
             index={1}
@@ -295,11 +299,12 @@ function Step({
   const active = enabled && !masterOff;
   const switchId = `tier${index}-enabled`;
 
+  // Rungs are sized by their content, with one uniform gap between them — the
+  // spacing is a chosen rhythm, not leftover card height divided by four. The
+  // connector spans each rung's full height (sub-config included), so it reads
+  // as "this config belongs to this step" rather than floating between them.
   return (
-    <li
-      className="flex flex-1 gap-3 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none"
-      style={{ animationDelay: `${(index - 1) * 60}ms`, animationFillMode: "both" }}
-    >
+    <li className={cn("flex gap-3", !isLast && "pb-6")}>
       {/* Left rail: numbered node + connector */}
       <div className="flex flex-col items-center">
         <span
@@ -316,7 +321,7 @@ function Step({
           <span
             aria-hidden
             className={cn(
-              "mt-1 w-px flex-1 transition-colors duration-300",
+              "mt-1.5 w-px flex-1 transition-colors duration-300",
               active ? "bg-secondary" : "bg-border",
             )}
           />
