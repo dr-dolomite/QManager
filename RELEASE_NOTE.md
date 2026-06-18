@@ -8,6 +8,8 @@ None in this release.
 
 - **Reduced background radio queries on RM551E devices.** QManager no longer queries MIMO layers, timing advance, APN details, and WAN IP on a recurring background timer. These are now read only while you are viewing the page that displays them, and stop as soon as you navigate away. This matches the lighter-touch behaviour of the predecessor app and removes a class of background radio commands suspected of contributing to the random baseband restarts seen on some RM551E modems.
 
+- **Overview card now respects your temperature unit preference.** The pre-login Overview page was always showing temperatures in °C even when Fahrenheit was selected in System Settings. It now reads your preference and converts correctly.
+
 - **Connection Watchdog no longer amplifies RM551E self-healing outages.** When the cellular modem briefly restarts its own radio firmware — a known RM551E behaviour that self-heals within seconds — the Connection Watchdog now waits it out instead of forcing a re-registration on top. Interrupting a modem mid-self-heal was turning a 30–60 second blip into a multi-minute thrash loop; the watchdog now holds off and only escalates if the connection has not returned after the grace window. On by default; the grace window is tunable under the Watchdog's Recovery settings.
 
 ## 📥 Installation
