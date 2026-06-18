@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 
 import { ModeToggle } from "@/components/public/mode-toggle";
 import { usePublicOverview } from "@/hooks/use-public-overview";
+import { useUnitPreferences } from "@/hooks/use-system-settings";
 import { deriveConnectionLabel } from "@/lib/public-overview/format";
 import {
   formatTemperature,
@@ -372,6 +373,7 @@ export default function OverviewCard() {
   const { t } = useTranslation("common");
   const { data, isLoading, isStale, error, refresh, consecutiveFailures } =
     usePublicOverview();
+  const unitPrefs = useUnitPreferences();
 
   // Verdict announcer: a single sr-only aria-live region that fires only when
   // a meaningful band changes (signal quality, connection state, temperature
@@ -426,7 +428,7 @@ export default function OverviewCard() {
     }
     if (prevT !== tempBand) {
       parts.push(
-        `${t("overview.status.temperature")}: ${formatTemperature(data.temperature)}`,
+        `${t("overview.status.temperature")}: ${formatTemperature(data.temperature, unitPrefs?.tempUnit)}`,
       );
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a11y live-region text is intentionally derived from change-over-time (verdict vs prevVerdictRef), which a render-phase value cannot express
@@ -495,6 +497,7 @@ export default function OverviewCard() {
           refresh,
           bandMetric,
           onBandMetricChange: setBandMetric,
+          unitPrefs,
         })}
         {/* Single visually-hidden announcer for verdict transitions. Lives
               outside the polled UI surfaces so SR users hear deltas
@@ -528,6 +531,7 @@ interface BodyProps {
   refresh: () => void;
   bandMetric: BandMetric;
   onBandMetricChange: (metric: BandMetric) => void;
+  unitPrefs: ReturnType<typeof useUnitPreferences>;
 }
 
 // After this many consecutive fetch failures, swap from "stale data + chip"
@@ -545,6 +549,7 @@ function renderBody({
   refresh,
   bandMetric,
   onBandMetricChange,
+  unitPrefs,
 }: BodyProps) {
   if (isLoading && !data) {
     return <SkeletonBody loadingLabel={t("overview.loading_status")} />;
@@ -630,7 +635,7 @@ function renderBody({
   );
   const qualityLabel = t(`overview.quality.${quality}`);
   const connectionText = t(`overview.connection.${connectionLabel}`);
-  const tempText = formatTemperature(data.temperature);
+  const tempText = formatTemperature(data.temperature, unitPrefs?.tempUnit);
   // Thermal state shown visually, not just announced: warn/danger surface a
   // tinted TriangleAlertIcon beside the value so a sighted tech (often beside
   // a hot device in sunlight) sees the rise. The digits stay neutral; the icon
