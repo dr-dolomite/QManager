@@ -8,6 +8,8 @@ None in this release.
 
 - **Reduced background radio queries on RM551E devices.** QManager no longer queries MIMO layers, timing advance, APN details, and WAN IP on a recurring background timer. These are now read only while you are viewing the page that displays them, and stop as soon as you navigate away. This matches the lighter-touch behaviour of the predecessor app and removes a class of background radio commands suspected of contributing to the random baseband restarts seen on some RM551E modems.
 
+- **Even quieter background polling when the dashboard is left idle.** When no one has the QManager dashboard open for a while, the background poller now also pauses its carrier-aggregation, radio-state, and per-antenna signal reads — keeping only the single serving-cell query that signal-based tower failover depends on. Everything resumes instantly the moment you reopen the dashboard, with no change to what you see while the app is open. This further trims the idle background radio activity linked to the RM551E baseband restarts.
+
 - **Overview card now respects your temperature unit preference.** The pre-login Overview page was always showing temperatures in °C even when Fahrenheit was selected in System Settings. It now reads your preference and converts correctly.
 
 - **IPv6 addresses no longer overflow the Cellular Information card on mobile.** A full IPv6 WAN or DNS address was running off the right edge of the card on narrow screens. The value now wraps neatly onto its own line beneath its label on small screens, and stays inline on wider layouts — so the full address is always readable.
