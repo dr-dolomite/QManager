@@ -48,6 +48,7 @@ PING_PROFILE="${PING_PROFILE:-relaxed}"
 PING_TARGET_1="${PING_TARGET_1:-http://cp.cloudflare.com/}"
 PING_TARGET_2="${PING_TARGET_2:-http://www.gstatic.com/generate_204}"
 PING_INTERVAL="${PING_INTERVAL:-5}"
+PING_INTERVAL_OVERRIDE=""    # quecmanager.ping_profile.interval_override (1–60); empty = unused
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-3}"
 RECOVER_THRESHOLD="${RECOVER_THRESHOLD:-2}"
 HISTORY_SIZE="${HISTORY_SIZE:-60}"
@@ -102,9 +103,19 @@ resolve_profile() {
             ;;
     esac
 
-    PING_INTERVAL="$_interval"
+    # Fail/recover thresholds derive from the PROFILE's interval (time-to-fail /
+    # time-to-recover stay stable per profile). The override only changes the
+    # probe cadence — it deliberately does NOT re-derive the thresholds.
     FAIL_THRESHOLD=$(ceil_div "$_fail_secs" "$_interval")
     RECOVER_THRESHOLD=$(ceil_div "$_recover_secs" "$_interval")
+
+    # Effective probe interval = interval_override ?? profile interval.
+    # Override is validated 1–60 in load_config; empty/invalid = unused.
+    if [ -n "$PING_INTERVAL_OVERRIDE" ]; then
+        PING_INTERVAL="$PING_INTERVAL_OVERRIDE"
+    else
+        PING_INTERVAL="$_interval"
+    fi
 }
 
 # --- Normalize a target to an absolute URL -----------------------------------
@@ -125,14 +136,25 @@ load_config() {
     local _profile
     local _t1
     local _t2
+    local _override
 
     _profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
     _t1=$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)
     _t2=$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)
+    _override=$(uci -q get quecmanager.ping_profile.interval_override 2>/dev/null)
 
     [ -n "$_profile" ] && PING_PROFILE="$_profile"
     [ -n "$_t1" ] && PING_TARGET_1="$_t1"
     [ -n "$_t2" ] && PING_TARGET_2="$_t2"
+
+    # interval_override: integer seconds 1–60, else treated as unused (empty).
+    # Reset first so a cleared/invalid value reverts to the profile interval
+    # live on reload rather than sticking from a prior load.
+    PING_INTERVAL_OVERRIDE=""
+    case "$_override" in
+        ''|*[!0-9]*) ;;
+        *) [ "$_override" -ge 1 ] && [ "$_override" -le 60 ] && PING_INTERVAL_OVERRIDE="$_override" ;;
+    esac
 
     PING_TARGET_1=$(normalize_target "$PING_TARGET_1")
     PING_TARGET_2=$(normalize_target "$PING_TARGET_2")
@@ -269,7 +291,7 @@ main() {
     qlog_info "QManager Ping Daemon starting (PID $$)"
     qlog_info "Profile: ${PING_PROFILE}"
     qlog_info "Targets: ${PING_TARGET_1}, ${PING_TARGET_2}"
-    qlog_info "Interval: ${PING_INTERVAL}s, Fail threshold: ${FAIL_THRESHOLD}, Recover threshold: ${RECOVER_THRESHOLD}"
+    qlog_info "Interval: ${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)}, Fail threshold: ${FAIL_THRESHOLD}, Recover threshold: ${RECOVER_THRESHOLD}"
     qlog_info "History size: ${HISTORY_SIZE}, Connect timeout: ${PROBE_CONNECT_TIMEOUT}s, Max time: ${PROBE_MAX_TIME}s"
     qlog_info "========================================"
 
@@ -284,7 +306,7 @@ main() {
         if [ -f "$RELOAD_FLAG" ]; then
             load_config
             rm -f "$RELOAD_FLAG"
-            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s fail=${FAIL_THRESHOLD} recover=${RECOVER_THRESHOLD} targets=${PING_TARGET_1},${PING_TARGET_2}"
+            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${FAIL_THRESHOLD} recover=${RECOVER_THRESHOLD} targets=${PING_TARGET_1},${PING_TARGET_2}"
         fi
 
         local target

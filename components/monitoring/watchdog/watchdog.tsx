@@ -56,7 +56,7 @@ function settingsSignature(hookData: UseWatchdogSettingsReturn): string {
   if (!s) return "empty";
   return [
     s.enabled,
-    s.max_failures,
+    s.fail_threshold,
     s.check_interval,
     s.cooldown,
     s.tier1_enabled,
@@ -66,15 +66,22 @@ function settingsSignature(hookData: UseWatchdogSettingsReturn): string {
     s.backup_sim_slot,
     s.max_reboots_per_hour,
     s.quality_enabled,
-    s.latency_ceiling_ms,
-    s.loss_ceiling_pct,
     s.quality_consecutive,
+    s.probe_profile,
+    s.interval_override,
   ].join("-");
 }
 
 function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
-  const { settings, isSaving, error, saveSettings, autoDisabled, revertSim } =
-    hookData;
+  const {
+    settings,
+    qualityThresholds,
+    isSaving,
+    error,
+    saveSettings,
+    autoDisabled,
+    revertSim,
+  } = hookData;
 
   // settings is guaranteed non-null by the caller's guard.
   const form = useWatchdogForm({
@@ -98,7 +105,10 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
           autoDisabled={autoDisabled}
           revertSim={revertSim}
         />
-        <WatchdogTriggersCard form={form} />
+        <WatchdogTriggersCard
+          form={form}
+          qualityThresholds={qualityThresholds}
+        />
       </div>
 
       {/* Right column: the recovery ladder. */}

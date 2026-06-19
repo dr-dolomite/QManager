@@ -451,18 +451,38 @@ export interface ConnectivityStatus {
 export const PING_PROFILES = ["sensitive", "regular", "relaxed", "quiet"] as const;
 export type PingProfile = (typeof PING_PROFILES)[number];
 
-/** Latency / packet-loss tolerance presets for quality-event thresholds. */
-export const QUALITY_PRESETS = ["standard", "tolerant", "very-tolerant"] as const;
+/**
+ * Latency / packet-loss tolerance presets for quality thresholds. These
+ * thresholds are now SHARED: the poller fires Recent-Activities events off them,
+ * and the watchdog (when quality recovery is enabled) recovers off them. `custom`
+ * carries a user-entered raw value (latency ms / loss %) instead of a named
+ * preset's built-in number — see `QualityThresholdsSettings`.
+ */
+export const QUALITY_PRESETS = [
+  "standard",
+  "tolerant",
+  "very-tolerant",
+  "custom",
+] as const;
 export type QualityPreset = (typeof QUALITY_PRESETS)[number];
+
+/** The three named presets, without `custom` — for rendering preset metadata. */
+export const QUALITY_NAMED_PRESETS = [
+  "standard",
+  "tolerant",
+  "very-tolerant",
+] as const;
+export type QualityNamedPreset = (typeof QUALITY_NAMED_PRESETS)[number];
 
 /**
  * Saved quality-threshold settings. The nested shape mirrors the GET envelope
  * (`thresholds.latency.preset` / `thresholds.loss.preset`); the save hook
- * flattens it to the flat wire keys the shell CGI parses.
+ * flattens it to the flat wire keys the shell CGI parses. When a side's preset
+ * is `custom`, its `custom_ms` / `custom_pct` carries the raw value.
  */
 export interface QualityThresholdsSettings {
-  latency: { preset: QualityPreset };
-  loss: { preset: QualityPreset };
+  latency: { preset: QualityPreset; custom_ms?: number | null };
+  loss: { preset: QualityPreset; custom_pct?: number | null };
 }
 
 // --- Adaptive Polling --------------------------------------------------------

@@ -101,14 +101,24 @@ export function useQualityThresholds(): UseQualityThresholdsReturn {
     setIsSaving(true);
     setSaveError(null);
     try {
+      // Flatten the nested client shape to the flat wire keys the CGI parses.
+      // Custom raw values ride along only when their side's preset is `custom`.
+      const body: Record<string, string | number> = {
+        action: "save",
+        latency_preset: settings.latency.preset,
+        loss_preset: settings.loss.preset,
+      };
+      if (settings.latency.preset === "custom" && settings.latency.custom_ms != null) {
+        body.latency_custom_ms = settings.latency.custom_ms;
+      }
+      if (settings.loss.preset === "custom" && settings.loss.custom_pct != null) {
+        body.loss_custom_pct = settings.loss.custom_pct;
+      }
+
       const response = await authFetch(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save",
-          latency_preset: settings.latency.preset,
-          loss_preset: settings.loss.preset,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

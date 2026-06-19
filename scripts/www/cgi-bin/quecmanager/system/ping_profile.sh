@@ -24,6 +24,18 @@ cgi_handle_options
 
 RELOAD_FLAG="/tmp/qmanager_ping_reload"
 
+# Map a ping profile name to its probe interval in seconds. Mirrors the
+# qmanager_ping daemon's profile->interval table. Unknown => relaxed (5 s).
+profile_interval() {
+    case "$1" in
+        sensitive) echo 1 ;;
+        regular)   echo 2 ;;
+        relaxed)   echo 5 ;;
+        quiet)     echo 10 ;;
+        *)         echo 5 ;;
+    esac
+}
+
 # Ensure the UCI section exists with concrete defaults (seed-on-read).
 ensure_ping_profile_config() {
     uci -q get quecmanager.ping_profile >/dev/null 2>&1 && return
@@ -85,11 +97,28 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     target2=$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)
     [ -z "$target2" ] && target2="http://www.gstatic.com/generate_204"
 
+    # interval_override is written exclusively by the Watchdog page; reflected
+    # here read-only so the Sensitivity card can show "overridden by Watchdog".
+    interval_override=$(uci -q get quecmanager.ping_profile.interval_override 2>/dev/null)
+    case "$interval_override" in
+        ''|*[!0-9]*)
+            interval_override_json="null"
+            effective_interval=$(profile_interval "$profile")
+            ;;
+        *)
+            interval_override_json="$interval_override"
+            effective_interval="$interval_override"
+            ;;
+    esac
+
     jq -n \
         --arg profile "$profile" \
         --arg target1 "$target1" \
         --arg target2 "$target2" \
-        '{success: true, profile: $profile, target1: $target1, target2: $target2}'
+        --argjson interval_override "$interval_override_json" \
+        --argjson effective_interval "$effective_interval" \
+        '{success: true, profile: $profile, target1: $target1, target2: $target2,
+          interval_override: $interval_override, effective_interval: $effective_interval}'
     exit 0
 fi
 

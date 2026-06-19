@@ -833,7 +833,11 @@ seed_uci_defaults() {
     # full watchcat section is otherwise seeded lazily by the watchdog.sh CGI
     # (ensure_watchcat_config) on first read; seed only the quality keys here
     # so fresh installs match that contract. Idempotent + preserve-user-choice,
-    # same shape as the blocks above. Defaults: quality off, 800ms / 20% / 5.
+    # same shape as the blocks above. Defaults: quality off, consecutive 5.
+    # NOTE: latency_ceiling_ms / loss_ceiling_pct are RETIRED — the watchdog now
+    # reads the SHARED quecmanager.quality_thresholds.* (resolved with a `custom`
+    # option). The migration block below moves any existing watchcat ceilings
+    # into the shared custom thresholds. Do NOT re-seed the retired keys here.
     if ! uci -q get quecmanager.watchcat >/dev/null 2>&1; then
         uci set quecmanager.watchcat=watchcat
     fi
@@ -842,18 +846,6 @@ seed_uci_defaults() {
         info "Seeded quecmanager.watchcat.quality_enabled=0 (off by default)"
     else
         info "quecmanager.watchcat.quality_enabled already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.latency_ceiling_ms >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.latency_ceiling_ms=800
-        info "Seeded quecmanager.watchcat.latency_ceiling_ms=800"
-    else
-        info "quecmanager.watchcat.latency_ceiling_ms already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.loss_ceiling_pct >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.loss_ceiling_pct=20
-        info "Seeded quecmanager.watchcat.loss_ceiling_pct=20"
-    else
-        info "quecmanager.watchcat.loss_ceiling_pct already set — preserving user choice"
     fi
     if ! uci -q get quecmanager.watchcat.quality_consecutive >/dev/null 2>&1; then
         uci set quecmanager.watchcat.quality_consecutive=5
@@ -872,6 +864,70 @@ seed_uci_defaults() {
         info "Seeded quecmanager.watchcat.ssr_grace=45"
     else
         info "quecmanager.watchcat.ssr_grace already set — preserving user choice"
+    fi
+
+    # ---------------------------------------------------------------------------
+    # Watchdog/Quality unification migration (idempotent, exact-match guarded)
+    # ---------------------------------------------------------------------------
+    # Three coordinated schema changes; each step is a no-op on re-run.
+    _wq_migrated=0
+
+    # (1) max_failures -> fail_threshold. The watchdog's recovery trigger is now
+    #     consecutive failed PROBES (raw ping streak_fail), not watchcat's own
+    #     loop cycles. Copy the old value across once and delete the old key. If
+    #     neither key exists (fresh install), seed fail_threshold=5.
+    if ! uci -q get quecmanager.watchcat.fail_threshold >/dev/null 2>&1; then
+        _old_max_fail=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null)
+        if [ -n "$_old_max_fail" ]; then
+            uci set quecmanager.watchcat.fail_threshold="$_old_max_fail"
+            uci -q delete quecmanager.watchcat.max_failures 2>/dev/null
+            info "Migrated watchcat.max_failures=$_old_max_fail -> watchcat.fail_threshold (deleted old key)"
+            _wq_migrated=1
+        else
+            uci set quecmanager.watchcat.fail_threshold=5
+            info "Seeded quecmanager.watchcat.fail_threshold=5"
+            _wq_migrated=1
+        fi
+    else
+        # fail_threshold already present — still drop a leftover max_failures.
+        if uci -q get quecmanager.watchcat.max_failures >/dev/null 2>&1; then
+            uci -q delete quecmanager.watchcat.max_failures 2>/dev/null
+            info "Removed retired quecmanager.watchcat.max_failures (fail_threshold already set)"
+            _wq_migrated=1
+        else
+            info "quecmanager.watchcat.fail_threshold already set — preserving user choice"
+        fi
+    fi
+
+    # (2) Retire watchcat ceilings -> shared custom thresholds. DECISION: keep the
+    #     WATCHDOG-side values. Only runs while a ceiling key still exists, so it
+    #     fires exactly once (the delete makes re-runs no-ops). We overwrite the
+    #     shared keys to `custom` here because the user's explicit watchdog
+    #     ceiling is the authoritative degraded threshold post-unification.
+    _old_lat_ceiling=$(uci -q get quecmanager.watchcat.latency_ceiling_ms 2>/dev/null)
+    _old_loss_ceiling=$(uci -q get quecmanager.watchcat.loss_ceiling_pct 2>/dev/null)
+    if [ -n "$_old_lat_ceiling" ] || [ -n "$_old_loss_ceiling" ]; then
+        if ! uci -q get quecmanager.quality_thresholds >/dev/null 2>&1; then
+            uci set quecmanager.quality_thresholds=quality_thresholds
+        fi
+        # Default device ceilings were 800ms / 20%; fall back to those if only one
+        # ceiling key happened to exist.
+        uci set quecmanager.quality_thresholds.latency_preset=custom
+        uci set quecmanager.quality_thresholds.latency_custom_ms="${_old_lat_ceiling:-800}"
+        uci set quecmanager.quality_thresholds.loss_preset=custom
+        uci set quecmanager.quality_thresholds.loss_custom_pct="${_old_loss_ceiling:-20}"
+        uci -q delete quecmanager.watchcat.latency_ceiling_ms 2>/dev/null
+        uci -q delete quecmanager.watchcat.loss_ceiling_pct 2>/dev/null
+        info "Migrated watchcat ceilings -> quality_thresholds custom (${_old_lat_ceiling:-800}ms / ${_old_loss_ceiling:-20}%); deleted retired keys"
+        _wq_migrated=1
+    fi
+    # (3) If no ceilings existed, quality_thresholds is intentionally left ABSENT
+    #     to preserve the never-seeded isDefault semantics — nothing to do.
+
+    # Pick up the changes on the running daemons without an init restart.
+    if [ "$_wq_migrated" = "1" ]; then
+        touch /tmp/qmanager_ping_reload /tmp/qmanager_quality_reload
+        info "Dropped /tmp/qmanager_ping_reload + /tmp/qmanager_quality_reload — running daemons will re-read"
     fi
 
     # SMS Forwarding — opt-in inbound-SMS relay daemon (qmanager_sms_forward,

@@ -4,21 +4,27 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSaveFlash } from "@/components/ui/save-button";
+import { PING_PROFILES, type PingProfile } from "@/types/modem-status";
 import type {
   WatchdogSettings,
   WatchdogSavePayload,
 } from "@/hooks/use-watchdog-settings";
 
 // -----------------------------------------------------------------------------
-// useWatchdogForm — the single form-state coordinator for the redesigned page.
+// useWatchdogForm — the single form-state coordinator for the watchdog page.
 // -----------------------------------------------------------------------------
-// The old design kept all of this inside one giant settings card. The redesign
-// splits the surface into four grouped cards (Status, Detection, Quality,
-// Recovery Ladder), but the backend save is still ATOMIC: one `save_settings`
-// POST carrying every field. So one hook owns the whole form — every value,
-// every validation rule, the dirty check, the submit, and the discard — and the
-// cards each consume the slice they render. A dirty-triggered save bar reads
-// `isDirty` / `canSave` / `submit` from here.
+// The page splits the surface into grouped cards (Status, Recovery Triggers,
+// Recovery Ladder), but the backend save is ATOMIC: one `save_settings` POST
+// carrying every field. So one hook owns the whole form — every value, every
+// validation rule, the dirty check, the submit, and the discard — and the cards
+// each consume the slice they render.
+//
+// Probe interval: the Reachability tab mirrors the Connection Quality sensitivity
+// Select (the 4 named profiles) plus a "Custom" escape hatch (1-60s). The named
+// profile rides UCI `ping_profile.profile`; Custom rides `ping_profile.
+// interval_override`. The watchdog is the single writer for the override, so the
+// form models the choice as: a fallback `probeProfile` (always one of the 4
+// names) + a `useCustomInterval` flag + the custom value.
 //
 // The consuming component is keyed on a signature of `settings` (see
 // `watchdog.tsx`), so this hook remounts and re-seeds its `useState` defaults
@@ -26,15 +32,26 @@ import type {
 // initial-value pattern honest without a setState-in-effect (forbidden by the
 // project's React-Compiler lint rules).
 
+// Probe interval per named profile, in seconds. Mirrors the ping daemon's
+// profile→interval table (the daemon is the source of truth; this is only for
+// previewing the effective interval before save).
+export const PROFILE_INTERVAL_SEC: Record<PingProfile, number> = {
+  sensitive: 1,
+  regular: 2,
+  relaxed: 5,
+  quiet: 10,
+};
+
+export const CUSTOM_INTERVAL_MIN = 1;
+export const CUSTOM_INTERVAL_MAX = 60;
+
 export interface WatchdogFormErrors {
-  maxFailures: string | null;
+  failThreshold: string | null;
+  customInterval: string | null;
   cooldown: string | null;
   maxReboots: string | null;
   backupSim: string | null;
-  latency: string | null;
-  loss: string | null;
   consecutive: string | null;
-  noCeiling: string | null;
   ssrGrace: string | null;
 }
 
@@ -43,11 +60,17 @@ export interface WatchdogForm {
   isEnabled: boolean;
   setIsEnabled: (v: boolean) => void;
 
-  // Reachability detection
-  maxFailures: string;
-  setMaxFailures: (v: string) => void;
-  checkInterval: string;
-  setCheckInterval: (v: string) => void;
+  // Probe interval (mirrored sensitivity Select + Custom override)
+  intervalChoice: string; // one of PING_PROFILES, or "custom"
+  setIntervalChoice: (v: string) => void;
+  customInterval: string;
+  setCustomInterval: (v: string) => void;
+  effectiveInterval: number | null; // resolved seconds, null when invalid
+  estimatedDownSecs: number | null; // effectiveInterval × failThreshold
+
+  // Reachability recovery policy
+  failThreshold: string;
+  setFailThreshold: (v: string) => void;
   cooldown: string;
   setCooldown: (v: string) => void;
 
@@ -65,13 +88,9 @@ export interface WatchdogForm {
   maxRebootsPerHour: string;
   setMaxRebootsPerHour: (v: string) => void;
 
-  // Connection-quality trigger
+  // Connection-quality recovery (acts on the shared thresholds)
   qualityEnabled: boolean;
   setQualityEnabled: (v: boolean) => void;
-  latencyCeiling: string;
-  setLatencyCeiling: (v: string) => void;
-  lossCeiling: string;
-  setLossCeiling: (v: string) => void;
   qualityConsecutive: string;
   setQualityConsecutive: (v: string) => void;
 
@@ -106,6 +125,9 @@ const isIntInRange = (raw: string, min: number, max: number) => {
   return !(raw === "" || isNaN(n) || !Number.isInteger(n) || n < min || n > max);
 };
 
+const isValidProfile = (v: string): v is PingProfile =>
+  (PING_PROFILES as readonly string[]).includes(v);
+
 export function useWatchdogForm({
   settings,
   isSaving,
@@ -116,10 +138,25 @@ export function useWatchdogForm({
   const { saved, markSaved } = useSaveFlash();
 
   const [isEnabled, setIsEnabled] = useState(settings.enabled);
-  const [maxFailures, setMaxFailures] = useState(String(settings.max_failures));
-  const [checkInterval, setCheckInterval] = useState(
-    String(settings.check_interval),
+
+  // Probe interval — fallback named profile + custom-override flag/value.
+  const seedProfile: PingProfile = isValidProfile(settings.probe_profile)
+    ? settings.probe_profile
+    : "relaxed";
+  const [probeProfile, setProbeProfile] = useState<PingProfile>(seedProfile);
+  const [useCustomInterval, setUseCustomInterval] = useState(
+    settings.interval_override != null,
   );
+  const [customInterval, setCustomInterval] = useState(
+    settings.interval_override != null ? String(settings.interval_override) : "",
+  );
+
+  const [failThreshold, setFailThreshold] = useState(
+    String(settings.fail_threshold),
+  );
+  // check_interval is no longer user-edited; carried verbatim so the atomic save
+  // never resets it.
+  const checkInterval = String(settings.check_interval);
   const [cooldown, setCooldown] = useState(String(settings.cooldown));
   const [tier1Enabled, setTier1Enabled] = useState(settings.tier1_enabled);
   const [tier2Enabled, setTier2Enabled] = useState(settings.tier2_enabled);
@@ -132,23 +169,58 @@ export function useWatchdogForm({
     String(settings.max_reboots_per_hour),
   );
   const [qualityEnabled, setQualityEnabled] = useState(settings.quality_enabled);
-  const [latencyCeiling, setLatencyCeiling] = useState(
-    String(settings.latency_ceiling_ms),
-  );
-  const [lossCeiling, setLossCeiling] = useState(
-    String(settings.loss_ceiling_pct),
-  );
   const [qualityConsecutive, setQualityConsecutive] = useState(
     String(settings.quality_consecutive),
   );
   const [ssrAware, setSsrAware] = useState(settings.ssr_aware);
   const [ssrGrace, setSsrGrace] = useState(String(settings.ssr_grace));
 
-  // --- Validation (mirrors the CGI field ranges in watchdog.sh) ---
+  // --- Interval choice as one control value ---
+  const intervalChoice = useCustomInterval ? "custom" : probeProfile;
+  const setIntervalChoice = useCallback(
+    (v: string) => {
+      if (v === "custom") {
+        setUseCustomInterval(true);
+        // Seed the custom field from the current effective interval so the input
+        // isn't blank when the user switches to Custom.
+        setCustomInterval((prev) =>
+          prev !== "" ? prev : String(PROFILE_INTERVAL_SEC[probeProfile]),
+        );
+      } else if (isValidProfile(v)) {
+        setUseCustomInterval(false);
+        setProbeProfile(v);
+      }
+    },
+    [probeProfile],
+  );
+
+  // --- Derived interval values ---
+  const effectiveInterval = useMemo<number | null>(() => {
+    if (useCustomInterval) {
+      return isIntInRange(customInterval, CUSTOM_INTERVAL_MIN, CUSTOM_INTERVAL_MAX)
+        ? Number(customInterval)
+        : null;
+    }
+    return PROFILE_INTERVAL_SEC[probeProfile];
+  }, [useCustomInterval, customInterval, probeProfile]);
+
+  const estimatedDownSecs = useMemo<number | null>(() => {
+    if (effectiveInterval == null) return null;
+    if (!isIntInRange(failThreshold, 1, 20)) return null;
+    return effectiveInterval * Number(failThreshold);
+  }, [effectiveInterval, failThreshold]);
+
+  // --- Validation (mirrors the CGI field ranges) ---
   const errors = useMemo<WatchdogFormErrors>(() => {
-    const maxFailuresErr =
-      maxFailures && !isIntInRange(maxFailures, 1, 20)
+    const failThresholdErr =
+      failThreshold && !isIntInRange(failThreshold, 1, 20)
         ? t("watchdog.failure_threshold_error")
+        : null;
+    const customIntervalErr =
+      useCustomInterval &&
+      customInterval &&
+      !isIntInRange(customInterval, CUSTOM_INTERVAL_MIN, CUSTOM_INTERVAL_MAX)
+        ? t("watchdog.custom_interval_error")
         : null;
     const cooldownErr =
       cooldown && !isIntInRange(cooldown, 10, 300)
@@ -162,55 +234,36 @@ export function useWatchdogForm({
       tier3Enabled && !backupSimSlot
         ? t("watchdog.backup_sim_required_error")
         : null;
-    // Quality rules only apply while quality monitoring is on.
-    const latencyErr =
-      qualityEnabled && latencyCeiling && !isIntInRange(latencyCeiling, 0, 10000)
-        ? t("watchdog.latency_ceiling_error")
-        : null;
-    const lossErr =
-      qualityEnabled && lossCeiling && !isIntInRange(lossCeiling, 0, 100)
-        ? t("watchdog.loss_ceiling_error")
-        : null;
     const consecutiveErr =
       qualityEnabled &&
       qualityConsecutive &&
       !isIntInRange(qualityConsecutive, 1, 60)
         ? t("watchdog.quality_consecutive_error")
         : null;
-    // With quality on, both ceilings at 0 means the trigger can never fire.
-    const noCeilingErr =
-      qualityEnabled &&
-      Number(latencyCeiling) === 0 &&
-      Number(lossCeiling) === 0
-        ? t("watchdog.quality_no_ceiling_error")
-        : null;
-    // Grace window only matters while SSR-aware hold is on.
     const ssrGraceErr =
       ssrAware && ssrGrace && !isIntInRange(ssrGrace, 10, 120)
         ? t("watchdog.ssr_grace_error")
         : null;
 
     return {
-      maxFailures: maxFailuresErr,
+      failThreshold: failThresholdErr,
+      customInterval: customIntervalErr,
       cooldown: cooldownErr,
       maxReboots: maxRebootsErr,
       backupSim: backupSimErr,
-      latency: latencyErr,
-      loss: lossErr,
       consecutive: consecutiveErr,
-      noCeiling: noCeilingErr,
       ssrGrace: ssrGraceErr,
     };
   }, [
     t,
-    maxFailures,
+    failThreshold,
+    useCustomInterval,
+    customInterval,
     cooldown,
     maxRebootsPerHour,
     tier3Enabled,
     backupSimSlot,
     qualityEnabled,
-    latencyCeiling,
-    lossCeiling,
     qualityConsecutive,
     ssrAware,
     ssrGrace,
@@ -221,11 +274,21 @@ export function useWatchdogForm({
     [errors],
   );
 
+  // An empty custom field while Custom is selected isn't a range error but still
+  // can't be saved.
+  const customIntervalMissing =
+    useCustomInterval && customInterval.trim() === "";
+
   const isDirty = useMemo(
     () =>
       isEnabled !== settings.enabled ||
-      maxFailures !== String(settings.max_failures) ||
-      checkInterval !== String(settings.check_interval) ||
+      probeProfile !== seedProfile ||
+      useCustomInterval !== (settings.interval_override != null) ||
+      customInterval !==
+        (settings.interval_override != null
+          ? String(settings.interval_override)
+          : "") ||
+      failThreshold !== String(settings.fail_threshold) ||
       cooldown !== String(settings.cooldown) ||
       tier1Enabled !== settings.tier1_enabled ||
       tier2Enabled !== settings.tier2_enabled ||
@@ -237,16 +300,17 @@ export function useWatchdogForm({
           : "") ||
       maxRebootsPerHour !== String(settings.max_reboots_per_hour) ||
       qualityEnabled !== settings.quality_enabled ||
-      latencyCeiling !== String(settings.latency_ceiling_ms) ||
-      lossCeiling !== String(settings.loss_ceiling_pct) ||
       qualityConsecutive !== String(settings.quality_consecutive) ||
       ssrAware !== settings.ssr_aware ||
       ssrGrace !== String(settings.ssr_grace),
     [
       settings,
+      seedProfile,
       isEnabled,
-      maxFailures,
-      checkInterval,
+      probeProfile,
+      useCustomInterval,
+      customInterval,
+      failThreshold,
       cooldown,
       tier1Enabled,
       tier2Enabled,
@@ -255,23 +319,23 @@ export function useWatchdogForm({
       backupSimSlot,
       maxRebootsPerHour,
       qualityEnabled,
-      latencyCeiling,
-      lossCeiling,
       qualityConsecutive,
       ssrAware,
       ssrGrace,
     ],
   );
 
-  const canSave = !hasValidationErrors && isDirty && !isSaving;
+  const canSave =
+    !hasValidationErrors && !customIntervalMissing && isDirty && !isSaving;
 
   const submit = useCallback(async () => {
-    if (hasValidationErrors || !isDirty || isSaving) return;
+    if (hasValidationErrors || customIntervalMissing || !isDirty || isSaving)
+      return;
 
     const payload: WatchdogSavePayload = {
       action: "save_settings",
       enabled: isEnabled,
-      max_failures: parseInt(maxFailures, 10),
+      fail_threshold: parseInt(failThreshold, 10),
       check_interval: parseInt(checkInterval, 10),
       cooldown: parseInt(cooldown, 10),
       tier1_enabled: tier1Enabled,
@@ -281,11 +345,13 @@ export function useWatchdogForm({
       backup_sim_slot: backupSimSlot ? parseInt(backupSimSlot, 10) : null,
       max_reboots_per_hour: parseInt(maxRebootsPerHour, 10),
       quality_enabled: qualityEnabled,
-      latency_ceiling_ms: parseInt(latencyCeiling || "0", 10),
-      loss_ceiling_pct: parseInt(lossCeiling || "0", 10),
       quality_consecutive: parseInt(qualityConsecutive || "5", 10),
       ssr_aware: ssrAware,
       ssr_grace: parseInt(ssrGrace || "45", 10),
+      probe_profile: probeProfile,
+      interval_override: useCustomInterval
+        ? parseInt(customInterval, 10)
+        : null,
     };
 
     const ok = await saveSettings(payload);
@@ -297,10 +363,11 @@ export function useWatchdogForm({
     }
   }, [
     hasValidationErrors,
+    customIntervalMissing,
     isDirty,
     isSaving,
     isEnabled,
-    maxFailures,
+    failThreshold,
     checkInterval,
     cooldown,
     tier1Enabled,
@@ -310,11 +377,12 @@ export function useWatchdogForm({
     backupSimSlot,
     maxRebootsPerHour,
     qualityEnabled,
-    latencyCeiling,
-    lossCeiling,
     qualityConsecutive,
     ssrAware,
     ssrGrace,
+    probeProfile,
+    useCustomInterval,
+    customInterval,
     saveSettings,
     markSaved,
     error,
@@ -324,8 +392,14 @@ export function useWatchdogForm({
   // Discard resets every field to the server-truth in `settings`.
   const discard = useCallback(() => {
     setIsEnabled(settings.enabled);
-    setMaxFailures(String(settings.max_failures));
-    setCheckInterval(String(settings.check_interval));
+    setProbeProfile(seedProfile);
+    setUseCustomInterval(settings.interval_override != null);
+    setCustomInterval(
+      settings.interval_override != null
+        ? String(settings.interval_override)
+        : "",
+    );
+    setFailThreshold(String(settings.fail_threshold));
     setCooldown(String(settings.cooldown));
     setTier1Enabled(settings.tier1_enabled);
     setTier2Enabled(settings.tier2_enabled);
@@ -336,20 +410,22 @@ export function useWatchdogForm({
     );
     setMaxRebootsPerHour(String(settings.max_reboots_per_hour));
     setQualityEnabled(settings.quality_enabled);
-    setLatencyCeiling(String(settings.latency_ceiling_ms));
-    setLossCeiling(String(settings.loss_ceiling_pct));
     setQualityConsecutive(String(settings.quality_consecutive));
     setSsrAware(settings.ssr_aware);
     setSsrGrace(String(settings.ssr_grace));
-  }, [settings]);
+  }, [settings, seedProfile]);
 
   return {
     isEnabled,
     setIsEnabled,
-    maxFailures,
-    setMaxFailures,
-    checkInterval,
-    setCheckInterval,
+    intervalChoice,
+    setIntervalChoice,
+    customInterval,
+    setCustomInterval,
+    effectiveInterval,
+    estimatedDownSecs,
+    failThreshold,
+    setFailThreshold,
     cooldown,
     setCooldown,
     tier1Enabled,
@@ -366,10 +442,6 @@ export function useWatchdogForm({
     setMaxRebootsPerHour,
     qualityEnabled,
     setQualityEnabled,
-    latencyCeiling,
-    setLatencyCeiling,
-    lossCeiling,
-    setLossCeiling,
     qualityConsecutive,
     setQualityConsecutive,
     ssrAware,

@@ -16,6 +16,12 @@ None in this release.
 
 - **Connection Watchdog no longer amplifies RM551E self-healing outages.** When the cellular modem briefly restarts its own radio firmware — a known RM551E behaviour that self-heals within seconds — the Connection Watchdog now waits it out instead of forcing a re-registration on top. Interrupting a modem mid-self-heal was turning a 30–60 second blip into a multi-minute thrash loop; the watchdog now holds off and only escalates if the connection has not returned after the grace window. On by default; the grace window is tunable under the Watchdog's Recovery settings.
 
+- **Connection Watchdog and Connection Quality settings no longer overlap confusingly.** Connection Sensitivity now does one thing: it sets how often the connection is checked. How many failed checks count as an outage, and every recovery step, are owned by the Connection Watchdog alone — so the two pages can no longer disagree or double-count a single drop. The Watchdog now has its own probe-interval picker (with a Custom 1–60 second option that overrides the sensitivity preset), and a live "declares the connection down after about N seconds" preview so the detection time is no longer a guessing game.
+
+- **One shared definition of "poor connection quality."** The latency and packet-loss limits you set on the Connection Quality page are now the single source of truth: they drive both the quality events shown in Network Events and the Watchdog's quality-based recovery, with each side keeping its own separate "how long must it stay bad" delay. Both now judge against a smoothed rolling average instead of a single noisy sample, and you can dial in exact custom thresholds. The Watchdog's quality tab links straight to where these limits live, instead of duplicating the inputs.
+
+- **Clearer Watchdog activity in Network Events.** Recovery attempts now log more legibly — when a recovery starts, which step ran, whether it worked, and when the Watchdog escalates or gives up — so you can see what the Watchdog actually did during an outage.
+
 ## 📥 Installation
 
 ### Fresh Install

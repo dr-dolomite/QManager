@@ -104,6 +104,8 @@ export default function ConnectivitySensitivityCard() {
     profile,
     target1,
     target2,
+    intervalOverride,
+    effectiveInterval,
     isLoading,
     error,
     isSaving,
@@ -324,15 +326,48 @@ export default function ConnectivitySensitivityCard() {
           </motion.div>
 
           {/* ── Active-profile meta panel ────────────────────────────── */}
+          {/* Sensitivity is now probe-interval only. How many failed probes
+              count as "down" and what happens next (recovery) live in the
+              Connection Watchdog. */}
           {activeMeta && (
             <motion.div variants={staggerItem}>
               <MetaPanel title={activeMeta.label} blurb={activeMeta.blurb}>
-                <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1">
-                  <MetaPair label="Probe interval" value={formatSecs(activeMeta.intervalSec)} />
-                  <MetaPair label="Fail threshold" value={formatSecs(activeMeta.failSecs)} />
-                  <MetaPair label="Recover after" value={formatSecs(activeMeta.recoverSecs)} />
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                  <MetaPair
+                    label="Probe interval"
+                    value={formatSecs(activeMeta.intervalSec)}
+                  />
+                  <MetaPair
+                    label="Checks internet"
+                    value={
+                      activeMeta.intervalSec
+                        ? `every ${activeMeta.intervalSec}s`
+                        : "—"
+                    }
+                  />
                 </div>
               </MetaPanel>
+            </motion.div>
+          )}
+
+          {/* ── Watchdog override notice ──────────────────────────────── */}
+          {/* The Connection Watchdog can set a Custom probe interval that wins
+              over the profile. Surface it honestly so the profile choice above
+              doesn't look like it's being ignored. */}
+          {intervalOverride != null && (
+            <motion.div variants={staggerItem}>
+              <Alert>
+                <RotateCcwIcon className="size-4" />
+                <AlertDescription>
+                  A custom probe interval set in the Connection Watchdog is
+                  currently active (
+                  <span className="tabular-nums font-medium">
+                    {effectiveInterval ?? intervalOverride}s
+                  </span>
+                  ). Your profile choice here sets the fallback interval used when
+                  that override is cleared.
+                </AlertDescription>
+              </Alert>
             </motion.div>
           )}
 

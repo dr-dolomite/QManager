@@ -226,21 +226,24 @@ detect_data_connection_events() {
     # so a partially-initialized poller never compares against an empty value.
     local _lat_threshold="${QUALITY_LAT_THRESHOLD:-250}"
     local _lat_debounce="${QUALITY_LAT_DEBOUNCE:-3}"
-    # Skip when ping daemon is stale (conn_latency="null") — don't touch streaks
-    if [ "$conn_latency" != "null" ] && [ -n "$conn_latency" ]; then
+    # Basis = WINDOWED AVERAGE (conn_avg_latency), the same field the watchdog
+    # compares — not the single last RTT, which spikes on one slow probe. Skip
+    # when the windowed average is unavailable (ping daemon stale / too few
+    # samples → conn_avg_latency="null") so we don't touch streaks on no-signal.
+    if [ "$conn_avg_latency" != "null" ] && [ -n "$conn_avg_latency" ]; then
         # Use awk for decimal comparison (POSIX shell has no float math)
-        if echo "$conn_latency" | awk -v t="$_lat_threshold" '{exit !($1 > t)}'; then
+        if echo "$conn_avg_latency" | awk -v t="$_lat_threshold" '{exit !($1 > t)}'; then
             ev_high_lat_streak=$((ev_high_lat_streak + 1))
             if [ "$ev_high_lat_streak" -ge "$_lat_debounce" ] && [ "$ev_lat_alerted" = "false" ]; then
                 append_event "high_latency" \
-                    "High latency detected (${conn_latency}ms, avg ${conn_avg_latency}ms)" "warning"
+                    "High latency detected (avg ${conn_avg_latency}ms, last ${conn_latency}ms)" "warning"
                 ev_lat_alerted=true
             fi
         else
             # Latency below threshold — recover if previously alerted
             if [ "$ev_lat_alerted" = "true" ]; then
                 append_event "latency_recovered" \
-                    "Latency recovered (${conn_latency}ms)" "info"
+                    "Latency recovered (avg ${conn_avg_latency}ms)" "info"
             fi
             ev_high_lat_streak=0
             ev_lat_alerted=false

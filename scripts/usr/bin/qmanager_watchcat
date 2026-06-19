@@ -65,7 +65,7 @@ CRASH_LOG="/etc/qmanager/crash.log"
 # --- Configuration (defaults, overridden by UCI) -----------------------------
 CFG_ENABLED=1
 CFG_CHECK_INTERVAL=10
-CFG_MAX_FAILURES=5
+CFG_FAIL_THRESHOLD=5          # consecutive failed PROBES (raw ping streak_fail) before recovery
 CFG_COOLDOWN=60
 CFG_TIER1_ENABLED=1
 CFG_TIER2_ENABLED=1
@@ -74,8 +74,11 @@ CFG_TIER4_ENABLED=1
 CFG_BACKUP_SIM_SLOT=""
 CFG_MAX_REBOOTS_PER_HOUR=3
 CFG_QUALITY_ENABLED=0
-CFG_LATENCY_CEILING_MS=800
-CFG_LOSS_CEILING_PCT=20
+# Shared degraded thresholds resolved from quecmanager.quality_thresholds.*
+# (NOT watchcat.* — the retired latency_ceiling_ms/loss_ceiling_pct keys). These
+# are recomputed by resolve_quality_thresholds() on each config load/reload.
+CFG_LATENCY_THRESHOLD_MS=250
+CFG_LOSS_THRESHOLD_PCT=30
 CFG_QUALITY_CONSECUTIVE=5
 CFG_SSR_AWARE=1
 CFG_SSR_GRACE=45
@@ -101,6 +104,7 @@ reboots_this_hour=0
 cooldown_stale_retries=0
 quality_breach_counter=0
 recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
+_recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
 ssr_hold="false"          # JSON bool literal for write_state
 last_ssr_detected="null"  # JSON null literal or monotonic-seconds integer
 ssr_hold_started=0        # monotonic seconds-since-boot when hold began; 0 = not holding
@@ -117,8 +121,11 @@ read_config() {
     val=$(uci -q get quecmanager.watchcat.check_interval 2>/dev/null)
     [ -n "$val" ] && CFG_CHECK_INTERVAL="$val"
 
-    val=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null)
-    [ -n "$val" ] && CFG_MAX_FAILURES="$val"
+    # fail_threshold = consecutive failed PROBES (raw ping streak_fail). Renamed
+    # from the retired max_failures (which counted watchcat's own loop cycles).
+    # Default 5 if absent so an un-migrated install still works immediately.
+    val=$(uci -q get quecmanager.watchcat.fail_threshold 2>/dev/null)
+    case "$val" in ''|*[!0-9]*) CFG_FAIL_THRESHOLD=5 ;; *) CFG_FAIL_THRESHOLD="$val" ;; esac
 
     val=$(uci -q get quecmanager.watchcat.cooldown 2>/dev/null)
     [ -n "$val" ] && CFG_COOLDOWN="$val"
@@ -144,11 +151,10 @@ read_config() {
     CFG_QUALITY_ENABLED=$(uci -q get quecmanager.watchcat.quality_enabled 2>/dev/null)
     [ -z "$CFG_QUALITY_ENABLED" ] && CFG_QUALITY_ENABLED=0
 
-    val=$(uci -q get quecmanager.watchcat.latency_ceiling_ms 2>/dev/null)
-    [ -n "$val" ] && CFG_LATENCY_CEILING_MS="$val"
-
-    val=$(uci -q get quecmanager.watchcat.loss_ceiling_pct 2>/dev/null)
-    [ -n "$val" ] && CFG_LOSS_CEILING_PCT="$val"
+    # Degraded thresholds are now SHARED with the poller: read from
+    # quecmanager.quality_thresholds.* (latency_ceiling_ms / loss_ceiling_pct on
+    # watchcat.* are retired and intentionally NOT read here).
+    resolve_quality_thresholds
 
     val=$(uci -q get quecmanager.watchcat.quality_consecutive 2>/dev/null)
     [ -n "$val" ] && CFG_QUALITY_CONSECUTIVE="$val"
@@ -159,10 +165,54 @@ read_config() {
     val=$(uci -q get quecmanager.watchcat.ssr_grace 2>/dev/null)
     [ -n "$val" ] && CFG_SSR_GRACE="$val"
 
-    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s max_fail=${CFG_MAX_FAILURES} cooldown=${CFG_COOLDOWN}s"
+    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s fail_threshold=${CFG_FAIL_THRESHOLD} probes cooldown=${CFG_COOLDOWN}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
-    qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency_ceiling=${CFG_LATENCY_CEILING_MS}ms loss_ceiling=${CFG_LOSS_CEILING_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE}"
+    qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE} (shared thresholds)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
+}
+
+# Resolve the SHARED degraded thresholds from quecmanager.quality_thresholds.*
+# into CFG_LATENCY_THRESHOLD_MS / CFG_LOSS_THRESHOLD_PCT. This is the watchdog's
+# local mirror of the poller's resolver (kept in-daemon rather than a new lib —
+# only two consumers, and the watchdog must not depend on poller globals). The
+# section's ABSENCE means "default" -> tolerant/tolerant (250ms / 30%), matching
+# the poller. `custom` reads the latency_custom_ms / loss_custom_pct keys; a
+# non-numeric/empty custom value falls back to the tolerant default so a
+# half-written UCI never yields an empty comparison value.
+resolve_quality_thresholds() {
+    local _lat_preset
+    local _loss_preset
+    local _lat_custom
+    local _loss_custom
+
+    _lat_preset=$(uci -q get quecmanager.quality_thresholds.latency_preset 2>/dev/null)
+    _loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
+
+    case "$_lat_preset" in
+        standard)      CFG_LATENCY_THRESHOLD_MS=150 ;;
+        very-tolerant) CFG_LATENCY_THRESHOLD_MS=500 ;;
+        custom)
+            _lat_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
+            case "$_lat_custom" in
+                ''|*[!0-9]*) CFG_LATENCY_THRESHOLD_MS=250 ;;
+                *)           CFG_LATENCY_THRESHOLD_MS="$_lat_custom" ;;
+            esac
+            ;;
+        tolerant|*)    CFG_LATENCY_THRESHOLD_MS=250 ;;
+    esac
+
+    case "$_loss_preset" in
+        standard)      CFG_LOSS_THRESHOLD_PCT=15 ;;
+        very-tolerant) CFG_LOSS_THRESHOLD_PCT=50 ;;
+        custom)
+            _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
+            case "$_loss_custom" in
+                ''|*[!0-9]*) CFG_LOSS_THRESHOLD_PCT=30 ;;
+                *)           CFG_LOSS_THRESHOLD_PCT="$_loss_custom" ;;
+            esac
+            ;;
+        tolerant|*)    CFG_LOSS_THRESHOLD_PCT=30 ;;
+    esac
 }
 
 # =============================================================================
@@ -332,17 +382,17 @@ read_quality() {
 # avg_latency_ms is a FLOAT — comparison MUST use awk (BusyBox [ -gt ] errors
 # on decimals). Returns 0 if breached, 1 if not.
 quality_breached() {
-    # latency: only if ceiling > 0 AND we have a numeric latency
-    if [ "$CFG_LATENCY_CEILING_MS" -gt 0 ] 2>/dev/null && [ "$q_avg_latency" != "null" ]; then
-        if awk -v a="$q_avg_latency" -v c="$CFG_LATENCY_CEILING_MS" 'BEGIN{ exit !((a+0) > (c+0)) }'; then
-            qlog_warn "QUALITY breach: latency ${q_avg_latency}ms > ${CFG_LATENCY_CEILING_MS}ms"
+    # latency: only if threshold > 0 AND we have a numeric windowed average
+    if [ "$CFG_LATENCY_THRESHOLD_MS" -gt 0 ] 2>/dev/null && [ "$q_avg_latency" != "null" ]; then
+        if awk -v a="$q_avg_latency" -v c="$CFG_LATENCY_THRESHOLD_MS" 'BEGIN{ exit !((a+0) > (c+0)) }'; then
+            qlog_warn "QUALITY breach: avg latency ${q_avg_latency}ms > ${CFG_LATENCY_THRESHOLD_MS}ms (shared)"
             return 0
         fi
     fi
-    # loss: only if ceiling > 0
-    if [ "$CFG_LOSS_CEILING_PCT" -gt 0 ] 2>/dev/null; then
-        if [ "$q_packet_loss" -ge "$CFG_LOSS_CEILING_PCT" ] 2>/dev/null; then
-            qlog_warn "QUALITY breach: loss ${q_packet_loss}% >= ${CFG_LOSS_CEILING_PCT}%"
+    # loss: only if threshold > 0
+    if [ "$CFG_LOSS_THRESHOLD_PCT" -gt 0 ] 2>/dev/null; then
+        if [ "$q_packet_loss" -ge "$CFG_LOSS_THRESHOLD_PCT" ] 2>/dev/null; then
+            qlog_warn "QUALITY breach: loss ${q_packet_loss}% >= ${CFG_LOSS_THRESHOLD_PCT}% (shared)"
             return 0
         fi
     fi
@@ -361,9 +411,9 @@ evaluate_quality() {
     fi
     if quality_breached; then
         quality_breach_counter=$((quality_breach_counter + 1))
-        qlog_info "QUALITY: breach ${quality_breach_counter}/${CFG_QUALITY_CONSECUTIVE}"
+        qlog_info "QUALITY: breach ${quality_breach_counter}/${CFG_QUALITY_CONSECUTIVE} (avg ${q_avg_latency}ms vs ${CFG_LATENCY_THRESHOLD_MS}ms, loss ${q_packet_loss}% vs ${CFG_LOSS_THRESHOLD_PCT}%)"
         if [ "$quality_breach_counter" -ge "$CFG_QUALITY_CONSECUTIVE" ]; then
-            qlog_warn "QUALITY threshold reached — entering recovery"
+            qlog_warn "QUALITY → RECOVERY: ${CFG_QUALITY_CONSECUTIVE} consecutive breaches (avg ${q_avg_latency}ms / loss ${q_packet_loss}% vs ${CFG_LATENCY_THRESHOLD_MS}ms / ${CFG_LOSS_THRESHOLD_PCT}%)"
             append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning"
             quality_breach_counter=0
             recovery_reason="quality"
@@ -769,8 +819,22 @@ find_next_tier() {
 do_recovery() {
     local action_result=0
 
-    qlog_info "RECOVERY: Executing Tier $current_tier"
+    qlog_info "RECOVERY: Executing Tier $current_tier (reason=$recovery_reason)"
     touch "$RECOVERY_FLAG"
+
+    # Emit a single reason-tagged recovery-start marker before the per-tier
+    # action events. The per-tier execute_* functions log their own tier-specific
+    # detail; this one carries the TRIGGER REASON (unreachable vs quality) so the
+    # activity feed can distinguish a reachability recovery from a quality one.
+    # Suppressed on the recursive skip-to-next-tier path (only fires at entry).
+    if [ "$_recovery_marker_emitted" != "$current_tier-$recovery_reason" ]; then
+        _recovery_marker_emitted="$current_tier-$recovery_reason"
+        if [ "$recovery_reason" = "quality" ]; then
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning"
+        else
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning"
+        fi
+    fi
 
     case "$current_tier" in
         1) execute_tier1; action_result=$? ;;
@@ -790,6 +854,7 @@ do_recovery() {
             state="monitor"
             current_tier=0
             failure_counter=0
+            _recovery_marker_emitted=""
         fi
         return
     fi
@@ -818,16 +883,27 @@ _cooldown_handle_failure() {
         sim_failover_fallback
     fi
 
-    # Escalate to next enabled tier
+    # Escalate to the next enabled tier. Cooldown already verified the prior tier
+    # did NOT restore the link/quality, so recovery must continue immediately.
+    # current_tier is now the next tier; run it directly via do_recovery rather
+    # than bouncing through suspect. The reachability path used to prime an
+    # accumulator (failure_counter=CFG_MAX_FAILURES) to force the next suspect
+    # cycle to re-breach; with the raw-streak model that prime is gone, and for
+    # the quality path a suspect bounce would wrongly fall through to natural
+    # recovery (link is reachable during quality degradation). Direct do_recovery
+    # is correct and reason-agnostic.
     if find_next_tier $((current_tier + 1)); then
-        state="suspect"
-        failure_counter="$CFG_MAX_FAILURES"
-        qlog_info "Escalating to Tier $current_tier"
+        qlog_info "Escalating to Tier $current_tier (reason=$recovery_reason)"
+        append_event "watchcat_recovery" "Watchcat: recovery escalating to Tier $current_tier — previous tier did not restore the connection" "warning"
+        state="recovery"
+        do_recovery
     else
         qlog_error "All recovery tiers exhausted — returning to monitor"
+        append_event "watchcat_recovery" "Watchcat: recovery exhausted — all enabled tiers tried, connection not restored" "error"
         state="monitor"
         current_tier=0
         failure_counter=0
+        _recovery_marker_emitted=""
     fi
 }
 
@@ -857,12 +933,14 @@ finish_cooldown() {
 
         if ! quality_breached; then
             qlog_info "COOLDOWN(quality) complete: quality RESTORED after Tier $current_tier"
+            append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info"
             # Quality path never engages the Tier-3 SIM-failover finalization
             # block — that is only meaningful for the reachability path.
             state="monitor"
             current_tier=0
             failure_counter=0
             quality_breach_counter=0
+            _recovery_marker_emitted=""
             return
         fi
 
@@ -890,6 +968,7 @@ finish_cooldown() {
 
     if [ "$ping_reachable" = "true" ]; then
         qlog_info "COOLDOWN complete: connectivity RESTORED after Tier $current_tier"
+        append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info"
 
         # If this was Tier 3 SIM failover, finalize the failover state
         if [ "$current_tier" -eq 3 ] && [ "$current_sim_slot" != "$original_sim_slot" ] && [ "$original_sim_slot" != "null" ]; then
@@ -936,6 +1015,7 @@ finish_cooldown() {
         state="monitor"
         current_tier=0
         failure_counter=0
+        _recovery_marker_emitted=""
         return
     fi
 
@@ -1037,7 +1117,14 @@ main() {
 
     # --- Main monitoring loop ---
     while true; do
-        # Check for config reload request
+        # Check for config reload request. read_config re-resolves the SHARED
+        # quality thresholds (quecmanager.quality_thresholds.*) too, so a change
+        # to the shared degraded thresholds reaches the watchdog when the CGI
+        # drops $RELOAD_FLAG. NOTE for Pass B: quality_thresholds.sh must drop
+        # /tmp/qmanager_watchcat_reload (in addition to /tmp/qmanager_quality_reload
+        # for the poller) so a live shared-threshold edit reaches the watchdog
+        # without a full daemon restart. The watchdog deliberately does NOT consume
+        # /tmp/qmanager_quality_reload itself — the poller owns that flag's deletion.
         if [ -f "$RELOAD_FLAG" ]; then
             rm -f "$RELOAD_FLAG"
             qlog_info "Config reload requested"
@@ -1065,6 +1152,7 @@ main() {
                 failure_counter=0
                 cooldown_stale_retries=0
                 quality_breach_counter=0
+                _recovery_marker_emitted=""
                 ssr_hold_clear
             fi
             write_state
@@ -1080,6 +1168,7 @@ main() {
             failure_counter=0
             cooldown_stale_retries=0
             quality_breach_counter=0
+            _recovery_marker_emitted=""
             ssr_hold_clear
         fi
 
@@ -1103,14 +1192,22 @@ main() {
             continue
         fi
 
+        # --- Sanitize the raw probe-failure streak from the ping daemon ---
+        # A stale/garbage value must never crash the loop arithmetic; treat a
+        # non-numeric streak as 0 (no failures observed this cycle).
+        case "$ping_streak_fail" in ''|*[!0-9]*) ping_streak_fail=0 ;; esac
+        # Mirror the raw streak into failure_counter purely for the state-file
+        # readout (quality_breach_count stays separate). The recovery DECISION no
+        # longer uses an accumulator — it compares the raw streak directly.
+        failure_counter="$ping_streak_fail"
+
         # --- State machine ---
         case "$state" in
             monitor)
                 if [ "$ping_streak_fail" -gt 0 ]; then
                     prev_state="$state"
                     state="suspect"
-                    failure_counter=1
-                    qlog_info "MONITOR → SUSPECT: streak_fail=$ping_streak_fail"
+                    qlog_info "MONITOR → SUSPECT: streak_fail=$ping_streak_fail (threshold=$CFG_FAIL_THRESHOLD)"
                 fi
                 ;;
 
@@ -1121,13 +1218,16 @@ main() {
                     state="monitor"
                     failure_counter=0
                     quality_breach_counter=0
+                    _recovery_marker_emitted=""
                     ssr_hold_clear
                 else
-                    failure_counter=$((failure_counter + 1))
-                    qlog_debug "SUSPECT: failure_counter=$failure_counter/$CFG_MAX_FAILURES"
+                    qlog_debug "SUSPECT: streak_fail=$ping_streak_fail/$CFG_FAIL_THRESHOLD"
 
-                    if [ "$failure_counter" -ge "$CFG_MAX_FAILURES" ]; then
-                        qlog_warn "SUSPECT → RECOVERY: threshold breached ($failure_counter >= $CFG_MAX_FAILURES)"
+                    # Breach is purely the RAW consecutive-probe streak crossing
+                    # the threshold — no per-cycle accumulation (the ping daemon
+                    # already debounces; double-counting here was the re-count bug).
+                    if [ "$ping_streak_fail" -ge "$CFG_FAIL_THRESHOLD" ]; then
+                        qlog_info "SUSPECT → RECOVERY: streak_fail=$ping_streak_fail >= $CFG_FAIL_THRESHOLD"
                         state="recovery"
                         recovery_reason="unreachable"
 

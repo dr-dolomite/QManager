@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
+import type { PingProfile } from "@/types/modem-status";
 
 const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/watchdog.sh";
 
@@ -11,7 +12,12 @@ const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/watchdog.sh";
 
 export interface WatchdogSettings {
   enabled: boolean;
-  max_failures: number;
+  // Reachability: number of consecutive FAILED PROBES (raw streak_fail from the
+  // ping daemon) before recovery. Renamed from the old `max_failures`, whose
+  // unit was watchdog loop cycles — the daemon now reads the raw probe streak.
+  fail_threshold: number;
+  // Watchdog loop / quality-sampling cadence. No longer the reachability knob;
+  // kept here as pass-through (not user-edited in the new UI).
   check_interval: number;
   cooldown: number;
   tier1_enabled: boolean;
@@ -20,20 +26,40 @@ export interface WatchdogSettings {
   tier4_enabled: boolean;
   backup_sim_slot: number | null;
   max_reboots_per_hour: number;
-  // Connection-quality triggering (opt-in, default off)
+  // Connection-quality RECOVERY (opt-in, default off). The thresholds it acts on
+  // are the SHARED quality_thresholds owned by the Connection Quality page; the
+  // watchdog owns only whether to recover (`quality_enabled`) and how sustained a
+  // breach must be (`quality_consecutive`).
   quality_enabled: boolean;
-  latency_ceiling_ms: number;
-  loss_ceiling_pct: number;
   quality_consecutive: number;
   // SSR-aware hold: let a recoverable baseband restart self-heal before the
   // recovery ladder may act. Default on (the daemon defaults to 1/45 too).
   ssr_aware: boolean;
   ssr_grace: number;
+  // Probe interval ownership. The Watchdog page mirrors the Connection Quality
+  // sensitivity Select and can override the interval with a custom value. These
+  // map to UCI `quecmanager.ping_profile.{profile,interval_override}`; the GET
+  // returns them top-level, the hook folds them in here, and they ride the same
+  // atomic save back out (CGI routes them to the ping_profile section).
+  probe_profile: PingProfile;
+  interval_override: number | null;
 }
 
 export type WatchdogSavePayload = WatchdogSettings & {
   action: "save_settings";
 };
+
+/**
+ * Read-only resolved view of the SHARED quality thresholds, surfaced on the
+ * Watchdog quality tab so the user can see what recovery acts on. Editing lives
+ * on the Connection Quality page (single writer).
+ */
+export interface WatchdogQualityThresholds {
+  latency_ms: number;
+  loss_pct: number;
+  latency_preset: string;
+  loss_preset: string;
+}
 
 export interface WatchdogLiveStatus {
   timestamp: number;
@@ -74,6 +100,10 @@ export interface SimSwapInfo {
 
 export interface UseWatchdogSettingsReturn {
   settings: WatchdogSettings | null;
+  /** Effective probe interval in seconds (override if set, else profile). */
+  effectiveInterval: number | null;
+  /** Read-only resolved view of the shared quality thresholds. */
+  qualityThresholds: WatchdogQualityThresholds | null;
   status: WatchdogLiveStatus | null;
   simFailover: SimFailoverInfo | null;
   simSwap: SimSwapInfo | null;
@@ -92,6 +122,11 @@ export interface UseWatchdogSettingsReturn {
 export function useWatchdogSettings(): UseWatchdogSettingsReturn {
   const { t } = useTranslation("errors");
   const [settings, setSettings] = useState<WatchdogSettings | null>(null);
+  const [effectiveInterval, setEffectiveInterval] = useState<number | null>(
+    null,
+  );
+  const [qualityThresholds, setQualityThresholds] =
+    useState<WatchdogQualityThresholds | null>(null);
   const [status, setStatus] = useState<WatchdogLiveStatus | null>(null);
   const [simFailover, setSimFailover] = useState<SimFailoverInfo | null>(null);
   const [simSwap, setSimSwap] = useState<SimSwapInfo | null>(null);
@@ -129,7 +164,19 @@ export function useWatchdogSettings(): UseWatchdogSettingsReturn {
         return;
       }
 
-      setSettings(json.settings);
+      // Fold the top-level probe-interval fields into settings so the form and
+      // the atomic save treat them as part of one settings object.
+      setSettings({
+        ...json.settings,
+        probe_profile: json.probe_profile,
+        interval_override: json.interval_override ?? null,
+      });
+      setEffectiveInterval(
+        typeof json.effective_interval === "number"
+          ? json.effective_interval
+          : null,
+      );
+      setQualityThresholds(json.quality_thresholds ?? null);
       setStatus(json.status && json.status.timestamp ? json.status : null);
       setSimFailover(json.sim_failover || null);
       setSimSwap(json.sim_swap || null);
@@ -251,6 +298,8 @@ export function useWatchdogSettings(): UseWatchdogSettingsReturn {
 
   return {
     settings,
+    effectiveInterval,
+    qualityThresholds,
     status,
     simFailover,
     simSwap,

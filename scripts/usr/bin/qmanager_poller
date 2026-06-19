@@ -885,6 +885,8 @@ PING_STALE_THRESHOLD=10  # seconds before ping data is considered stale
 resolve_quality_thresholds() {
     local _lat_preset
     local _loss_preset
+    local _lat_custom
+    local _loss_custom
 
     _lat_preset=$(uci -q get quecmanager.quality_thresholds.latency_preset 2>/dev/null)
     _loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
@@ -892,12 +894,31 @@ resolve_quality_thresholds() {
     case "$_lat_preset" in
         standard)      QUALITY_LAT_THRESHOLD=150; QUALITY_LAT_DEBOUNCE=3 ;;
         very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_DEBOUNCE=2 ;;
+        custom)
+            # latency_custom_ms drives the threshold; debounce mirrors tolerant.
+            # Non-numeric/empty custom value falls back to the tolerant default
+            # so a half-written UCI never yields an empty comparison value.
+            _lat_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
+            case "$_lat_custom" in
+                ''|*[!0-9]*) QUALITY_LAT_THRESHOLD=250 ;;
+                *)           QUALITY_LAT_THRESHOLD="$_lat_custom" ;;
+            esac
+            QUALITY_LAT_DEBOUNCE=3
+            ;;
         tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_DEBOUNCE=3 ;;
     esac
 
     case "$_loss_preset" in
         standard)      QUALITY_LOSS_THRESHOLD=15; QUALITY_LOSS_DEBOUNCE=3 ;;
         very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_DEBOUNCE=2 ;;
+        custom)
+            _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
+            case "$_loss_custom" in
+                ''|*[!0-9]*) QUALITY_LOSS_THRESHOLD=30 ;;
+                *)           QUALITY_LOSS_THRESHOLD="$_loss_custom" ;;
+            esac
+            QUALITY_LOSS_DEBOUNCE=3
+            ;;
         tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_DEBOUNCE=3 ;;
     esac
 }

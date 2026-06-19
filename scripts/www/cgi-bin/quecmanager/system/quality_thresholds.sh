@@ -24,6 +24,21 @@ cgi_headers
 cgi_handle_options
 
 RELOAD_FLAG="/tmp/qmanager_quality_reload"
+# The watchdog now shares these thresholds for its quality-based recovery, but
+# does NOT consume qmanager_quality_reload — it reads qmanager_watchcat_reload.
+# A threshold edit must touch BOTH or recovery never sees the new values.
+WATCHCAT_RELOAD_FLAG="/tmp/qmanager_watchcat_reload"
+
+# Validate numeric field: returns 0 if valid int in [min,max], else 1.
+validate_int() {
+    local val="$1"
+    local min="$2"
+    local max="$3"
+    case "$val" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "$val" -ge "$min" ] 2>/dev/null && [ "$val" -le "$max" ] 2>/dev/null
+}
 
 # =============================================================================
 # GET — Fetch quality thresholds (presence-aware)
@@ -36,17 +51,40 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         [ -z "$latency_preset" ] && latency_preset="tolerant"
         loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
         [ -z "$loss_preset" ] && loss_preset="tolerant"
+        latency_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
+        loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
+
+        # custom_ms/custom_pct are JSON null for named presets, the stored int
+        # for custom. (Decision: named presets carry null, not a resolved value.)
+        latency_custom_json="null"
+        case "$latency_custom" in
+            ''|*[!0-9]*) latency_custom_json="null" ;;
+            *) latency_custom_json="$latency_custom" ;;
+        esac
+        loss_custom_json="null"
+        case "$loss_custom" in
+            ''|*[!0-9]*) loss_custom_json="null" ;;
+            *) loss_custom_json="$loss_custom" ;;
+        esac
 
         jq -n \
             --arg lat "$latency_preset" \
             --arg loss "$loss_preset" \
+            --argjson lat_custom "$latency_custom_json" \
+            --argjson loss_custom "$loss_custom_json" \
             '{success: true,
-              thresholds: {latency: {preset: $lat}, loss: {preset: $loss}},
+              thresholds: {
+                latency: {preset: $lat, custom_ms: $lat_custom},
+                loss: {preset: $loss, custom_pct: $loss_custom}
+              },
               isDefault: false}'
     else
         # Section absent — report the default with isDefault=true.
         jq -n '{success: true,
-                thresholds: {latency: {preset: "tolerant"}, loss: {preset: "tolerant"}},
+                thresholds: {
+                  latency: {preset: "tolerant", custom_ms: null},
+                  loss: {preset: "tolerant", custom_pct: null}
+                },
                 isDefault: true}'
     fi
     exit 0
@@ -71,32 +109,65 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
     LATENCY_PRESET=$(printf '%s' "$POST_DATA" | jq -r '.latency_preset // empty')
     LOSS_PRESET=$(printf '%s' "$POST_DATA" | jq -r '.loss_preset // empty')
+    LATENCY_CUSTOM=$(printf '%s' "$POST_DATA" | jq -r '.latency_custom_ms | if . == null then empty else tostring end')
+    LOSS_CUSTOM=$(printf '%s' "$POST_DATA" | jq -r '.loss_custom_pct | if . == null then empty else tostring end')
 
-    # --- Validate both against the 3-value allowlist ---
+    # --- Validate both against the 4-value allowlist (custom added in Pass A) ---
     case "$LATENCY_PRESET" in
-        standard|tolerant|very-tolerant) ;;
+        standard|tolerant|very-tolerant|custom) ;;
         *)
-            cgi_error "invalid_preset" "latency_preset must be one of: standard, tolerant, very-tolerant"
+            cgi_error "invalid_preset" "latency_preset must be one of: standard, tolerant, very-tolerant, custom"
             exit 0
             ;;
     esac
     case "$LOSS_PRESET" in
-        standard|tolerant|very-tolerant) ;;
+        standard|tolerant|very-tolerant|custom) ;;
         *)
-            cgi_error "invalid_preset" "loss_preset must be one of: standard, tolerant, very-tolerant"
+            cgi_error "invalid_preset" "loss_preset must be one of: standard, tolerant, very-tolerant, custom"
             exit 0
             ;;
     esac
 
-    # --- Persist (create section if absent) + signal the poller ---
+    # --- When a preset is custom, REQUIRE + validate its numeric companion ---
+    if [ "$LATENCY_PRESET" = "custom" ]; then
+        if ! validate_int "$LATENCY_CUSTOM" 1 10000; then
+            cgi_error "invalid_custom_latency" "latency_custom_ms must be an integer 1-10000 when latency_preset is custom"
+            exit 0
+        fi
+    fi
+    if [ "$LOSS_PRESET" = "custom" ]; then
+        if ! validate_int "$LOSS_CUSTOM" 0 100; then
+            cgi_error "invalid_custom_loss" "loss_custom_pct must be an integer 0-100 when loss_preset is custom"
+            exit 0
+        fi
+    fi
+
+    # --- Persist (create section if absent) + signal poller AND watchdog ---
     if ! uci -q get quecmanager.quality_thresholds >/dev/null 2>&1; then
         uci set quecmanager.quality_thresholds=quality_thresholds
     fi
     uci set quecmanager.quality_thresholds.latency_preset="$LATENCY_PRESET"
     uci set quecmanager.quality_thresholds.loss_preset="$LOSS_PRESET"
+
+    # Persist or clear the custom companion. Named presets clear the stale
+    # custom value (cleaner — the resolved number always comes from the table).
+    if [ "$LATENCY_PRESET" = "custom" ]; then
+        uci set quecmanager.quality_thresholds.latency_custom_ms="$LATENCY_CUSTOM"
+    else
+        uci -q delete quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null
+    fi
+    if [ "$LOSS_PRESET" = "custom" ]; then
+        uci set quecmanager.quality_thresholds.loss_custom_pct="$LOSS_CUSTOM"
+    else
+        uci -q delete quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null
+    fi
+
     uci commit quecmanager
 
+    # Poller (events) AND watchdog (recovery) both consume these thresholds via
+    # SEPARATE reload flags — touch both or one consumer goes stale.
     touch "$RELOAD_FLAG"
+    touch "$WATCHCAT_RELOAD_FLAG"
 
     qlog_info "Quality thresholds saved: latency=$LATENCY_PRESET loss=$LOSS_PRESET"
     echo '{"success":true}'

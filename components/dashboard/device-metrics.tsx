@@ -127,7 +127,9 @@ function StatusDot({
 
 function LiveTrafficRow() {
   const { t } = useTranslation("dashboard");
-  const reduceMotion = useReducedMotion();
+  // useReducedMotion() is boolean | null until hydrated; StatusDot wants a
+  // hard boolean, so settle the null to false at the source.
+  const reduceMotion = useReducedMotion() ?? false;
 
   // Settings: tells us whether the feature is on and whether the dependency is present.
   const {
