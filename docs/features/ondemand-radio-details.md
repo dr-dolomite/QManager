@@ -162,6 +162,8 @@ The cache is **not cleared on reboot** (lives in `/tmp/`, which is RAM — clear
 
 > ⚠️ WARNING: Do not add any of the relocated AT commands back to the poller's Tier-2 block or the boot block. Doing so reintroduces recurring L1-adjacent reads on a background timer, which is the pattern associated with RM551E baseband restarts. See [`docs/features/adaptive-polling.md`](adaptive-polling.md) Invariant 6 for the full SSR root-cause analysis.
 
+> ⚠️ WARNING: `ondemand_radio.sh` must be co-deployed with any poller or CGI version that sources it. On devices that upgraded from an old install without running the new `install.sh`, the library may be absent. Any script that dot-sources it without an `[ -f ]` existence guard will silently kill the shell when the file is missing (BusyBox `ash` dot-source behaviour — see "BusyBox `ash`: dot-sourcing a missing file kills the shell" in [`docs/BACKEND.md`](../BACKEND.md)). The `install.sh` `install_dir_flat "usr/lib/qmanager"` step must remain in place and run on every upgrade.
+
 ---
 
 ## Frontend Hook — `useRadioDetails`

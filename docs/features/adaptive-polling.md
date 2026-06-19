@@ -33,7 +33,7 @@ The poller reads `heartbeat_age = now − contents_of(/tmp/qmanager_ui_active)` 
 
 **Full-refresh on re-entry:** when an idle or deep AT touch fires, the poller runs Tier 1 + Tier 1.5 + Tier 2 unconditionally (ignoring their individual per-tier modulo counters). This guarantees that the first data a returning user sees is a complete, current snapshot rather than a partial one.
 
-**Measured impact:** at the 2 s baseline, deep tier produces ~9 AT calls/min vs ~270 AT/min at full rate — a ~97% reduction in unattended AT traffic.
+**Measured impact:** at the 2 s baseline, active tier runs ~270 AT commands/min (full rate). Idle tier runs 4 `qcmd` invocations per `idle_interval` — QENG, QCAINFO, CFUN?, and the compound QRSRP;QRSRQ;QSINR (6 AT commands total) — roughly 24 AT commands/min at the 15 s default. Deep tier runs exactly **1 `qcmd` invocation per `deep_idle_interval`** (`AT+QENG="servingcell"` only) — ~1 AT command/min at the 60 s default — a ~99.6% reduction from active rate.
 
 ---
 
@@ -124,12 +124,14 @@ This invariant has two layers, applied across two releases:
 
 **Layer B (post-v0.1.28 full removal):** The data-plane/L1 group that previously lived inside `poll_tier2()` has been **removed from the poller entirely** — not merely gated. `poll_tier2()` now contains only the identity reads. The removed commands are fetched on demand by `cellular/radio_details.sh` only while the page displaying them is open. See [`docs/features/ondemand-radio-details.md`](ondemand-radio-details.md) for the full on-demand contract.
 
-**When the poller is Idle or Deep, the only AT commands that run are the Tier-1 signal set:**
+**When the poller is Idle, the Tier-1 signal set runs in full:**
 
 - `AT+QENG="servingcell"` — serving-cell signal metrics
 - `AT+QCAINFO` — carrier-aggregation info
 - `AT+CFUN?` — radio function state
 - `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
+
+**When the poller is Deep, only `AT+QENG="servingcell"` runs.** QCAINFO, CFUN?, and the per-antenna reads (`QRSRP`/`QRSRQ`/`QSINR`) are wrapped in an `if [ "$ap_tier" != "deep" ]; then ... fi` guard and do not execute. This is the minimum needed to keep `qmanager_tower_failover` operational (see Invariant 7 below); everything else holds last-known values via `write_cache`.
 
 **When the poller is Active, Tier 2 adds only the identity group:**
 
@@ -147,7 +149,17 @@ This invariant has two layers, applied across two releases:
 
 **Human verification note:** confirmation that the fix holds is a debug report captured after an extended unattended session showing the clock-regular `remoteproc-mss: fatal error` SSR cadence stretching out or stopping entirely.
 
-> ⚠️ WARNING: Do not add any of the removed data-plane/L1 commands (`CGCONTRDP`, `QMAP="WWAN"`, `*_time_advance`, `*_mimo_layers`) back to `poll_tier2()` or the boot block. Doing so reintroduces the exact pattern associated with RM551E baseband restarts. Also do not remove the `[ "$ap_tier" = "active" ] || return 0` guard from `poll_tier2()` — the identity reads it protects are still Active-only.
+### 7. Deep tier runs serving-cell only; CA fields are intentionally retained
+
+**Why `AT+QENG="servingcell"` must stay in deep:** `parse_serving_cell()` is the sole source of the `.lte.rsrp` and `.nr.rsrp` scalars in `status.json`. `qmanager_tower_failover` reads those fields (`jq -r '.lte.rsrp // empty'`, fallback `.nr.rsrp`) every 20 s to decide whether to release the tower lock. Removing QENG from deep would leave `qmanager_tower_failover` reading stale RSRP indefinitely and break automatic tower-lock release for users who leave the dashboard closed.
+
+**RSRP staleness in deep:** tower-lock failover may act on RSRP up to one `deep_idle_interval` (default 60 s) old while the UI is idle. This is unchanged from before this guard — the staleness window did not widen.
+
+**Why QCAINFO/CFUN?/per-antenna are dropped in deep:** the per-antenna `QRSRP`/`QRSRQ`/`QSINR` read populates the `sig_*` array fields in `status.json`, which `qmanager_tower_failover` does NOT read — only the scalar `.lte.rsrp`/`.nr.rsrp` from QENG. QCAINFO and CFUN? similarly have no consumer that requires sub-minute freshness when no browser is open.
+
+**CA fields hold last-known, never zero in deep:** the QCAINFO else-branch that zeroes `t2_ca_active`, `t2_ca_count`, `t2_nr_ca_active`, `t2_nr_ca_count`, `t2_total_bandwidth_mhz`, `t2_bandwidth_details`, and `t2_carrier_components` is entirely inside the `if [ "$ap_tier" != "deep" ]; then ... fi` guard. Deep-tier touches leave the CA global vars unchanged; `write_cache` then emits last-known values. Verified on-device: CA fields held `total_bandwidth_mhz:95` across multiple deep-tier cycles.
+
+> ⚠️ WARNING: Do not add any of the removed data-plane/L1 commands (`CGCONTRDP`, `QMAP="WWAN"`, `*_time_advance`, `*_mimo_layers`) back to `poll_tier2()` or the boot block. Doing so reintroduces the exact pattern associated with RM551E baseband restarts. Also do not remove the `[ "$ap_tier" = "active" ] || return 0` guard from `poll_tier2()` — the identity reads it protects are still Active-only. Additionally, do not move the QCAINFO else-branch (CA-field zeroing) outside the `[ "$ap_tier" != "deep" ]` guard — doing so would cause deep-tier cycles to publish zeroed CA data instead of last-known values.
 
 ---
 
@@ -234,7 +246,7 @@ The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"dee
 
 ## Known Gotchas
 
-- **Tower lock follows the UI heartbeat, not a fixed pin.** A tower lock no longer forces the poller to stay in Active. When the dashboard is idle, the poller graduates to Idle then Deep even with a tower lock active. `qmanager_tower_failover` (which loops every 20 s and reads `.lte.rsrp` / `.nr.rsrp` from `status.json`) may therefore act on RSRP up to one deep interval (default 60 s) stale while the UI is idle. This is acceptable for slow signal-degradation failover; when the dashboard is open, RSRP is fresh at the 2 s cadence. Band failover (`qmanager_band_failover`) is unaffected — it is a one-shot actor that issues its own live `AT+QCAINFO` query and never relied on the poller's cadence.
+- **Tower lock follows the UI heartbeat, not a fixed pin.** A tower lock no longer forces the poller to stay in Active. When the dashboard is idle, the poller graduates to Idle then Deep even with a tower lock active. In deep tier, `AT+QENG="servingcell"` still runs at the deep cadence (default 60 s), so `qmanager_tower_failover` (which loops every 20 s and reads `.lte.rsrp` / `.nr.rsrp` from `status.json`) may act on RSRP up to one `deep_idle_interval` stale while the UI is idle. This is acceptable for slow signal-degradation failover; when the dashboard is open, RSRP is fresh at the 2 s cadence. Band failover (`qmanager_band_failover`) is unaffected — it is a one-shot actor that issues its own live `AT+QCAINFO` query and never relied on the poller's cadence.
 - **`write_cache` skipped = watchdog quality trigger dies silently.** Any future modification to the poller loop must preserve the invariant that `write_cache` and `read_ping_data` run every base cycle. The AT-block gating should wrap only the AT reads.
 - **Removing or relocating the `ap_tier` gate in `poll_tier2()` re-introduces the RM551E-GL SSR (for the identity group).** The `[ "$ap_tier" = "active" ] || return 0` guard is the first statement in `poll_tier2()`. The data-plane/L1 group is already gone from the poller entirely (see Invariant 6); the guard now protects only the identity reads (`COPS?`, `QUIMSLOT?`, `CNUM`, `CPIN?`). Removing the guard makes those identity reads run at every tier, which is not the RM551E trigger but is wasteful and changes the documented contract.
 - **Idle tier at non-2s baseline collapses to Active.** If `POLL_INTERVAL` is ever raised for diagnostic purposes, `idle_interval=15` (default) at a 15 s base becomes `15 / 15 = 1` — every cycle fires. The feature must be re-tuned if the base interval changes.

@@ -1556,35 +1556,43 @@ poll_cycle() {
         poll_serving_cell
         sleep "$SIP_DELAY"
 
-        # Carrier Aggregation — QCAINFO reporting enabled at boot (Group B).
-        local ca_result
-        ca_result=$(qcmd_exec 'AT+QCAINFO')
-        if [ $? -eq 0 ] && [ -n "$ca_result" ]; then
-            parse_ca_info "$ca_result"
-        else
-            t2_ca_active=false
-            t2_ca_count=0
-            t2_nr_ca_active=false
-            t2_nr_ca_count=0
-            t2_total_bandwidth_mhz=0
-            t2_bandwidth_details=""
-            t2_carrier_components="[]"
-        fi
-        sleep "$SIP_DELAY"
+        # Deep tier runs serving-cell only (its RSRP is the sole input to
+        # tower-lock failover). QCAINFO / CFUN / per-antenna are active/idle-only
+        # to minimize AT load while the device is long-unattended. In deep we
+        # must NOT run the QCAINFO else-branch — the CA fields keep their
+        # last-known values so write_cache emits them unchanged.
+        if [ "$ap_tier" != "deep" ]; then
+            # Carrier Aggregation — QCAINFO reporting enabled at boot (Group B).
+            local ca_result
+            ca_result=$(qcmd_exec 'AT+QCAINFO')
+            if [ $? -eq 0 ] && [ -n "$ca_result" ]; then
+                parse_ca_info "$ca_result"
+            else
+                t2_ca_active=false
+                t2_ca_count=0
+                t2_nr_ca_active=false
+                t2_nr_ca_count=0
+                t2_total_bandwidth_mhz=0
+                t2_bandwidth_details=""
+                t2_carrier_components="[]"
+            fi
+            sleep "$SIP_DELAY"
 
-        # CFUN — standalone query every cycle (compound commands timeout in CFUN=0)
-        local cfun_result
-        cfun_result=$(qcmd 'AT+CFUN?' 2>/dev/null)
-        if [ -n "$cfun_result" ]; then
-            local cfun_val
-            cfun_val=$(printf '%s\n' "$cfun_result" | grep '+CFUN:' | head -1 | tr -d '\r' | awk -F': ' '{print $2}' | tr -d ' ')
-            [ -n "$cfun_val" ] && t1_cfun="$cfun_val"
-        fi
-        sleep "$SIP_DELAY"
+            # CFUN — standalone query (compound commands timeout in CFUN=0).
+            # Active/idle only; deep tier skips this read.
+            local cfun_result
+            cfun_result=$(qcmd 'AT+CFUN?' 2>/dev/null)
+            if [ -n "$cfun_result" ]; then
+                local cfun_val
+                cfun_val=$(printf '%s\n' "$cfun_result" | grep '+CFUN:' | head -1 | tr -d '\r' | awk -F': ' '{print $2}' | tr -d ' ')
+                [ -n "$cfun_val" ] && t1_cfun="$cfun_val"
+            fi
+            sleep "$SIP_DELAY"
 
-        # Tier 1 (per-antenna signal)
-        poll_per_antenna_signal
-        sleep "$SIP_DELAY"
+            # Tier 1 (per-antenna signal)
+            poll_per_antenna_signal
+            sleep "$SIP_DELAY"
+        fi
 
         # Tier 1.5 (watchcat state + SoC temperature via sysfs — every 10s in
         # Active; on every full-refresh touch when idle/deep).

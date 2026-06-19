@@ -77,6 +77,26 @@ BusyBox doesn't have `setsid`. Use the double-fork pattern for background daemon
 ( "$DAEMON" </dev/null >/dev/null 2>&1 & )
 ```
 
+### BusyBox `ash`: dot-sourcing a missing file kills the shell
+
+In BusyBox `ash`, `. /path/to/file.sh 2>/dev/null || { stub; }` does **not** execute the `||` clause when the file is absent — it exits the entire shell with rc=2. The `2>/dev/null` silences the error but cannot prevent the shell from dying.
+
+Safe pattern: guard with an existence check first.
+
+```sh
+# WRONG — the || clause never fires if the file is absent
+. /usr/lib/qmanager/ondemand_radio.sh 2>/dev/null || true
+
+# CORRECT
+if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
+    . /usr/lib/qmanager/ondemand_radio.sh
+fi
+```
+
+**Why:** POSIX says a shell may exit when a sourced file cannot be found; BusyBox `ash` does. `bash` and `dash` do not. This difference is invisible in development but fatal on the device.
+
+**Practical consequence:** if a library is absent (e.g. introduced in a new release but not yet on the device because the installer was not re-run), any script that dot-sources it without an existence guard will silently die mid-execution. The only symptom is an abrupt empty response from the CGI or a silent poller crash. See the installer section below for the co-deployment requirement.
+
 ### jq `//` Gotcha
 
 **Never use `jq "$filter // empty"` when the value can be `false`**. jq's `//` (alternative operator) treats both `false` and `null` as empty:
@@ -787,6 +807,14 @@ Both `install_file` and `install_tree` verify that each copied file is byte-for-
 **Log location:** `/tmp/qmanager_install.log`. Both signatures — `SIZE MISMATCH` and `copy truncated` — appear here and can be grepped after a failed install to identify which files were affected.
 
 > ℹ️ NOTE: The integrity check runs on byte counts, not checksums, to stay within BusyBox's toolset without requiring `md5sum` or `stat`. `wc -c` is a BusyBox core applet. `tr -d ' '` normalizes the leading whitespace that some `wc` builds emit.
+
+### Library co-deployment invariant
+
+Any script that sources a library under `/usr/lib/qmanager/` **must ship the library in the same release** as the script that depends on it. Devices on an older install that upgrade only via `install.sh` may not have the library yet. If the library is absent and the sourcing script lacks an `[ -f ]` guard (see BusyBox dot-sourcing gotcha above), the script silently dies.
+
+**Concrete case:** `ondemand_radio.sh` was introduced in a release after the initial install. Devices that ran the old installer had no `/usr/lib/qmanager/ondemand_radio.sh`. `qmanager_poller` sourced it unconditionally at start-up; on those devices the poller exited on the first cycle with no logged error. Fix: add `[ -f ]` guard around the source call AND ensure `install.sh` always copies the library via `install_dir_flat "usr/lib/qmanager" "/usr/lib/qmanager" 644`.
+
+**Rule:** when adding a new library, add its `install_dir_flat` (or `install_file`) call to `install.sh` in the same commit. Never rely on the library being present from a prior install.
 
 ---
 
