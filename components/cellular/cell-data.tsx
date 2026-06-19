@@ -186,6 +186,59 @@ function compressIPv6(ip: string): string {
 }
 
 // =============================================================================
+// Address row
+// =============================================================================
+
+/** Shared entrance variant so address rows match the stagger of the others. */
+const ROW_VARIANTS = {
+  hidden: { opacity: 0, x: -8 },
+  visible: { opacity: 1, x: 0 },
+};
+
+/**
+ * A label/value row for network addresses (WAN IP, DNS). The value is
+ * RFC 5952-compressed, then rendered so it can wrap onto its own line on a
+ * narrow card: label-over-value when stacked, inline + right-aligned once the
+ * card is wide enough (`@sm/card`). Wraps preferentially at colon boundaries
+ * via <wbr>, with `overflow-wrap:anywhere` as the min-content escape hatch so
+ * a full IPv6 address can never overshoot the card.
+ */
+function AddressRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
+  const display = value ? compressIPv6(value) : "-";
+  const groups = display.split(":");
+
+  return (
+    <motion.div
+      className="flex flex-col gap-0.5 @sm/card:flex-row @sm/card:items-center @sm/card:justify-between @sm/card:gap-3"
+      variants={ROW_VARIANTS}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+    >
+      <p className="text-sm font-semibold text-muted-foreground @sm/card:shrink-0">
+        {label}
+      </p>
+      <p className="min-w-0 font-mono text-sm font-semibold tabular-nums leading-snug [overflow-wrap:anywhere] @sm/card:text-right">
+        {groups.map((g, i) => (
+          <React.Fragment key={i}>
+            {g}
+            {i < groups.length - 1 ? (
+              <>
+                :<wbr />
+              </>
+            ) : null}
+          </React.Fragment>
+        ))}
+      </p>
+    </motion.div>
+  );
+}
+
+// =============================================================================
 // Loading Skeleton
 // =============================================================================
 
@@ -474,193 +527,59 @@ const CellDataComponent = ({
 
           {/* WAN IPv4 */}
           <Separator />
-          <motion.div
-            className="flex items-center justify-between"
-            variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <p className="text-sm font-semibold text-muted-foreground">
-              {t("core_settings.info.cell_data.rows.wan_ipv4")}
-            </p>
-            <p className="text-sm font-semibold font-mono">
-              {network?.wan_ipv4 || "-"}
-            </p>
-          </motion.div>
+          <AddressRow
+            label={t("core_settings.info.cell_data.rows.wan_ipv4")}
+            value={network?.wan_ipv4}
+          />
 
           {/* WAN IPv6 */}
           <Separator />
-          <motion.div
-            className="flex items-center justify-between"
-            variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <p className="text-sm font-semibold text-muted-foreground">
-              {t("core_settings.info.cell_data.rows.wan_ipv6")}
-            </p>
-            <div className="flex items-center gap-1.5">
-              {network?.wan_ipv6 && compressIPv6(network.wan_ipv6) !== network.wan_ipv6 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex"
-                      aria-label={t("core_settings.info.cell_data.info_aria")}
-                    >
-                      <TbInfoCircleFilled className="size-5 text-info" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{network.wan_ipv6}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-              <p className="text-sm font-semibold font-mono">
-                {network?.wan_ipv6 ? compressIPv6(network.wan_ipv6) : "-"}
-              </p>
-            </div>
-          </motion.div>
+          <AddressRow
+            label={t("core_settings.info.cell_data.rows.wan_ipv6")}
+            value={network?.wan_ipv6}
+          />
 
           {/* Primary DNS (IPv4) */}
           <Separator />
-          <motion.div
-            className="flex items-center justify-between"
-            variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <p className="text-sm font-semibold text-muted-foreground">
-              {hasIpv6Dns
+          <AddressRow
+            label={
+              hasIpv6Dns
                 ? t("core_settings.info.cell_data.rows.primary_dns_ipv4")
-                : t("core_settings.info.cell_data.rows.primary_dns")}
-            </p>
-            <div className="flex items-center gap-1.5">
-              {network?.primary_dns_v4 && compressIPv6(network.primary_dns_v4) !== network.primary_dns_v4 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex"
-                      aria-label={t("core_settings.info.cell_data.info_aria")}
-                    >
-                      <TbInfoCircleFilled className="size-5 text-info" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="font-mono">{network.primary_dns_v4}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-              <p className="text-sm font-semibold font-mono">
-                {network?.primary_dns_v4 ? compressIPv6(network.primary_dns_v4) : "-"}
-              </p>
-            </div>
-          </motion.div>
+                : t("core_settings.info.cell_data.rows.primary_dns")
+            }
+            value={network?.primary_dns_v4}
+          />
 
           {/* Primary DNS (IPv6) — hidden when carrier provides no IPv6 DNS */}
           {hasIpv6Dns && (
             <>
               <Separator />
-              <motion.div
-                className="flex items-center justify-between"
-                variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-              >
-                <p className="text-sm font-semibold text-muted-foreground">
-                  {t("core_settings.info.cell_data.rows.primary_dns_ipv6")}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  {network?.primary_dns_v6 && compressIPv6(network.primary_dns_v6) !== network.primary_dns_v6 ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex"
-                          aria-label={t("core_settings.info.cell_data.info_aria")}
-                        >
-                          <TbInfoCircleFilled className="size-5 text-info" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="font-mono">{network.primary_dns_v6}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                  <p className="text-sm font-semibold font-mono">
-                    {network?.primary_dns_v6 ? compressIPv6(network.primary_dns_v6) : "-"}
-                  </p>
-                </div>
-              </motion.div>
+              <AddressRow
+                label={t("core_settings.info.cell_data.rows.primary_dns_ipv6")}
+                value={network?.primary_dns_v6}
+              />
             </>
           )}
 
           {/* Secondary DNS (IPv4) */}
           <Separator />
-          <motion.div
-            className="flex items-center justify-between"
-            variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <p className="text-sm font-semibold text-muted-foreground">
-              {hasIpv6Dns
+          <AddressRow
+            label={
+              hasIpv6Dns
                 ? t("core_settings.info.cell_data.rows.secondary_dns_ipv4")
-                : t("core_settings.info.cell_data.rows.secondary_dns")}
-            </p>
-            <div className="flex items-center gap-1.5">
-              {network?.secondary_dns_v4 && compressIPv6(network.secondary_dns_v4) !== network.secondary_dns_v4 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex"
-                      aria-label={t("core_settings.info.cell_data.info_aria")}
-                    >
-                      <TbInfoCircleFilled className="size-5 text-info" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="font-mono">{network.secondary_dns_v4}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-              <p className="text-sm font-semibold font-mono">
-                {network?.secondary_dns_v4 ? compressIPv6(network.secondary_dns_v4) : "-"}
-              </p>
-            </div>
-          </motion.div>
+                : t("core_settings.info.cell_data.rows.secondary_dns")
+            }
+            value={network?.secondary_dns_v4}
+          />
 
           {/* Secondary DNS (IPv6) — hidden when carrier provides no IPv6 DNS */}
           {hasIpv6Dns && (
             <>
               <Separator />
-              <motion.div
-                className="flex items-center justify-between"
-                variants={{ hidden: { opacity: 0, x: -8 }, visible: { opacity: 1, x: 0 } }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-              >
-                <p className="text-sm font-semibold text-muted-foreground">
-                  {t("core_settings.info.cell_data.rows.secondary_dns_ipv6")}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  {network?.secondary_dns_v6 && compressIPv6(network.secondary_dns_v6) !== network.secondary_dns_v6 ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex"
-                          aria-label={t("core_settings.info.cell_data.info_aria")}
-                        >
-                          <TbInfoCircleFilled className="size-5 text-info" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="font-mono">{network.secondary_dns_v6}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                  <p className="text-sm font-semibold font-mono">
-                    {network?.secondary_dns_v6 ? compressIPv6(network.secondary_dns_v6) : "-"}
-                  </p>
-                </div>
-              </motion.div>
+              <AddressRow
+                label={t("core_settings.info.cell_data.rows.secondary_dns_ipv6")}
+                value={network?.secondary_dns_v6}
+              />
             </>
           )}
           <Separator />

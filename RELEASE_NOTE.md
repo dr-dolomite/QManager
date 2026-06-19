@@ -10,6 +10,8 @@ None in this release.
 
 - **Overview card now respects your temperature unit preference.** The pre-login Overview page was always showing temperatures in °C even when Fahrenheit was selected in System Settings. It now reads your preference and converts correctly.
 
+- **IPv6 addresses no longer overflow the Cellular Information card on mobile.** A full IPv6 WAN or DNS address was running off the right edge of the card on narrow screens. The value now wraps neatly onto its own line beneath its label on small screens, and stays inline on wider layouts — so the full address is always readable.
+
 - **Connection Watchdog no longer amplifies RM551E self-healing outages.** When the cellular modem briefly restarts its own radio firmware — a known RM551E behaviour that self-heals within seconds — the Connection Watchdog now waits it out instead of forcing a re-registration on top. Interrupting a modem mid-self-heal was turning a 30–60 second blip into a multi-minute thrash loop; the watchdog now holds off and only escalates if the connection has not returned after the grace window. On by default; the grace window is tunable under the Watchdog's Recovery settings.
 
 ## 📥 Installation
