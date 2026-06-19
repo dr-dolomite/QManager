@@ -13,16 +13,20 @@
 | CGI script | `scripts/www/cgi-bin/quecmanager/monitoring/watchdog.sh` |
 | UCI section | `quecmanager.watchcat` |
 | Daemon state file | `/tmp/qmanager_watchcat.json` |
-| Reachability input | `/tmp/qmanager_ping.json` (written by `qmanager_ping`) |
-| Quality input | `/tmp/qmanager_status.json` `.connectivity` (written by `qmanager_poller`) |
+| Reachability input | `/tmp/qmanager_ping.json` `.ping_streak_fail` (raw probe count; written by `qmanager_ping`) |
+| Quality input | `/tmp/qmanager_status.json` `.connectivity.avg_latency_ms` + `.packet_loss_pct` (windowed averages; written by `qmanager_poller`) |
+| Quality thresholds | `quecmanager.quality_thresholds.*` (shared with Connection Quality Network Events) |
+| Ping reload flag | `/tmp/qmanager_ping_reload` (touched by watchdog save when interval changes) |
 | Recovery active flag | `/tmp/qmanager_recovery_active` |
 | Maintenance lock | `/tmp/qmanager_watchcat.lock` |
 | Config reload flag | `/tmp/qmanager_watchcat_reload` |
+| SIM revert flag | `/tmp/qmanager_watchcat_revert_sim` (written by CGI `revert_sim` POST; consumed by daemon in `check_revert_request`) |
+| SIM failover state | `/tmp/qmanager_sim_failover` (written when failover is finalized in cooldown) |
 | Reboot log | `/etc/qmanager/crash.log` |
+| Tier-3 settle floor | `SIM_SETTLE_SECS=90` s (hard-coded constant — not a UCI key); applies to both forward Tier-3 swap and user-requested revert |
 | Reboot? | Tier 4 only (deferred via `sleep 1 && reboot` after state write) |
 | Frontend hook | `hooks/use-watchdog-settings.ts` |
 | Frontend card | `components/monitoring/watchdog/watchdog-settings-card.tsx` |
-| Audit reference | `docs/2026-05-12-watchdog-sim-failover-audit-fixes.md` |
 
 ---
 
@@ -46,7 +50,7 @@ The watchdog has **two independent ways to decide "the connection is bad," and b
    │   (always on)                    (opt-in — green tab dot)  │
    │   reads qmanager_ping.json       reads status.json         │
    │   "can I reach anything?"        ".connectivity"           │
-   │   fail × max_failures            "is it good enough?"      │
+   │   ping_streak_fail >= fail_threshold "is it good enough?"  │
    │        │                         latency OR loss breach    │
    │        │                         × quality_consecutive     │
    │        │                              │                    │
@@ -73,6 +77,8 @@ The watchdog has **two independent ways to decide "the connection is bad," and b
 
 The only thing that stops a quality breach from rebooting is therefore **not** the trigger — it is (1) the Tier 4 **enable flag** (uncheck it and *neither* trigger can reboot) and (2) the **`max_reboots_per_hour` token bucket**, which auto-disables the daemon when exhausted (§8). "Can quality reboot?" reduces to "is Tier 4 enabled and is the token bucket unexhausted?", never to which sensor fired.
 
+The thresholds that the quality trigger compares against come from the **shared `quecmanager.quality_thresholds.*` UCI section** — the same keys read by the Connection Quality Network Events. The watchdog resolves them via a local `resolve_quality_thresholds()` that handles the `custom` preset arm identical to the poller's resolver. There are no watchdog-private ceiling keys.
+
 The trigger source changes only two things, both at cooldown time, never the ladder:
 
 | Aspect | Reachability (`"unreachable"`) | Quality (`"quality"`) |
@@ -90,9 +96,13 @@ See §5 (Reason-aware cooldown) for *why* the success test must differ: a degrad
 
 The watchdog has two independent paths into the recovery ladder.
 
-**Reachability trigger (always active when watchdog is enabled):** The daemon reads `qmanager_ping.json` every cycle. If `streak_fail` rises above `max_failures` consecutive cycles, the reachability path fires, sets `recovery_reason="unreachable"`, and runs `do_recovery`.
+**Reachability trigger (always active when watchdog is enabled):** The daemon reads `qmanager_ping.json` every cycle and inspects the RAW `ping_streak_fail` integer — NOT the debounced `.reachable` boolean. If `ping_streak_fail` rises above `fail_threshold` consecutive failed probes, the reachability path fires, sets `recovery_reason="unreachable"`, and runs `do_recovery`.
 
-**Quality trigger (opt-in, `quality_enabled=0` by default):** On every cycle while in `monitor` or `suspect` state, the daemon also calls `evaluate_quality`. If either `avg_latency_ms` or `packet_loss_pct` exceeds its ceiling for `quality_consecutive` consecutive cycles, the quality path fires, sets `recovery_reason="quality"`, and runs the same `do_recovery` engine. `avg_latency_ms` reflects TCP-connect RTT (ICMP-comparable, not HTTP transaction time) — see the [probe mechanics note in connection-quality.md](connection-quality.md#probe-mechanics).
+**Why raw streak, not debounced reachable:** Before this change the watchdog read the debounced `.reachable` boolean and maintained its own `failure_counter` on top. Under a slow profile (e.g. `quiet` at 10 s interval), a single probe failure that already caused the ping daemon to flip `.reachable=false` was then counted AGAIN by the watchdog's counter — a double-debounce / re-count bug. Reading `ping_streak_fail` directly means the watchdog counts individual failed probes regardless of profile interval, and `fail_threshold` has a single canonical meaning: N consecutive failed probes, not N poller-cycle runs where `.reachable=false` happened to be sampled.
+
+**Quality trigger (opt-in, `quality_enabled=0` by default):** On every cycle while in `monitor` or `suspect` state, the daemon also calls `evaluate_quality`. It compares `avg_latency_ms` and `packet_loss_pct` from `status.json` against the shared `quecmanager.quality_thresholds.*` UCI thresholds (the same thresholds that drive the Connection Quality Network Events). If either metric exceeds its resolved threshold for `quality_consecutive` consecutive cycles, the quality path fires, sets `recovery_reason="quality"`, and runs the same `do_recovery` engine. `avg_latency_ms` is the windowed average TCP-connect RTT (ICMP-comparable, not HTTP transaction time) — see the [probe mechanics note in connection-quality.md](connection-quality.md#probe-mechanics).
+
+**Why shared thresholds:** The watchdog previously kept its own `latency_ceiling_ms` and `loss_ceiling_pct` keys in the watchcat UCI section. This meant two separate threshold stores that could silently diverge — the quality event would fire at one level and the watchdog would trigger at a different level on the same link. Unifying them onto `quecmanager.quality_thresholds.*` means one save in the Connection Quality UI adjusts both the event log and the recovery trigger simultaneously. Each side still maintains its own separate debounce counter (`quality_consecutive` for the watchdog; the poller's per-events consecutive gate for Network Events), so they can respond at different cadences without interfering.
 
 The two paths are independent. Each has its own counter. A quality breach does not advance the reachability `failure_counter`, and vice versa.
 
@@ -103,7 +113,7 @@ The two paths are independent. Each has its own counter. A quality breach does n
 ```
 MONITOR ──── streak_fail > 0 ─────────────────→ SUSPECT
    ↑                                                │
-   │           quality breach × consecutive         │ failure_counter >= max_failures
+   │           quality breach × consecutive         │ ping_streak_fail >= fail_threshold
    │         ↗ (evaluate_quality)                   │   (or quality threshold)
    │ (restored)                                     ▼
    │                                         SSR_HOLD ── grace expired? ──→ RECOVERY
@@ -130,7 +140,7 @@ DISABLED ← Tier 4 auto-disabled after max_reboots_per_hour exhausted
 |---|---|---|---|
 | 1 | Network re-registration | `AT+COPS=2` → 2 s → `AT+COPS=0` | None — always runs if enabled |
 | 2 | Radio toggle | `AT+CFUN=0` → 3 s → `AT+CFUN=1` | Tower lock active; long-running AT flag |
-| 3 | SIM failover | `AT+CFUN=0` → `AT+QUIMSLOT=N` → `AT+CFUN=1` (Golden Rule) | No backup slot; already on backup slot |
+| 3 | SIM failover | `AT+CFUN=0` → `AT+QUIMSLOT=N` → `AT+CFUN=1` (Golden Rule); enforces ≥90 s cooldown settle floor | No backup slot; already on backup slot |
 | 4 | System reboot | `sleep 1 && reboot` | Token bucket: `max_reboots_per_hour`; auto-disables on breach |
 
 **Why Tier 1 uses AT+COPS, not ifdown/ifup:** `ifdown wan; ifup wan` bounces only the host-side network interface. It has no effect on a stalled modem attach — the modem's radio connection to the cell tower is independent of the host interface state. `AT+COPS=2` (forced manual mode, deregisters) followed by `AT+COPS=0` (auto mode, re-registers) tells the modem to drop and re-initiate the network registration procedure, which is the correct action for a stalled attach.
@@ -139,19 +149,21 @@ DISABLED ← Tier 4 auto-disabled after max_reboots_per_hour exhausted
 
 **Why Tier 3 is off by default (`tier3_enabled=0`):** SIM failover requires a backup SIM to be configured and present. Enabling it without a backup slot results in the tier being skipped silently every cycle. The frontend requires a backup slot to be selected before Tier 3 can be saved as enabled.
 
+**Tier-3 settle floor (`SIM_SETTLE_SECS=90`):** A physical SIM swap on the RM551E takes ~90 seconds to reach stable connectivity. After any Tier-3 recovery action, the effective cooldown before the first success ping is `max(CFG_COOLDOWN, 90)`. This prevents `finish_cooldown` from firing the reachability check while the modem is still mid-attach — which would declare a false failure and escalate toward Tier 4 (reboot) on a swap that was actually fine. `cooldown_remaining` in the state file reflects the longer value so the UI countdown is honest. The 90 s is a hard-coded constant (`SIM_SETTLE_SECS=90` in the daemon) — it is NOT a UCI key and cannot be changed from the settings page.
+
 ---
 
 ## UCI Configuration Schema
 
 ### Full watchcat section
 
-Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `install.sh`'s `seed_uci_defaults()` for the quality keys specifically.
+Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `install.sh`'s `seed_uci_defaults()` for the quality and probe-interval keys specifically.
 
 | UCI Key | Range | Default | Meaning |
 |---|---|---|---|
 | `enabled` | 0/1 | 0 | Master on/off for the daemon |
-| `max_failures` | int 1–20 | 5 | Consecutive failed ping cycles before recovery |
-| `check_interval` | int 5–60 | 10 | Seconds between cycles |
+| `fail_threshold` | int 1–20 | 5 | Consecutive failed **probes** before reachability recovery fires. Counts raw `ping_streak_fail`, not poller cycles. Renamed from `max_failures` (migration in `install.sh`). |
+| `check_interval` | int 5–60 | 10 | Seconds between watchdog evaluation cycles |
 | `cooldown` | int 10–300 | 60 | Seconds to wait after a recovery action before evaluating success |
 | `tier1_enabled` | 0/1 | 1 | Enable Tier 1 (re-registration) |
 | `tier2_enabled` | 0/1 | 1 | Enable Tier 2 (radio toggle) |
@@ -160,14 +172,40 @@ Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `
 | `backup_sim_slot` | 1/2 | (empty) | SIM slot for Tier 3 failover |
 | `max_reboots_per_hour` | int 1–10 | 3 | Tier 4 token bucket; auto-disables at limit |
 
+### Probe-interval ownership keys
+
+The watchdog is the **sole writer** of `ping_profile.interval_override`. When an override is active, the Connection Sensitivity card in Connection Quality shows an informational Alert explaining that the watchdog is enforcing a custom interval. The profile Tabs in that card are NOT disabled — the selection becomes the fallback once the override is cleared.
+
+| UCI Key | Section | Range | Default | Meaning |
+|---|---|---|---|---|
+| `probe_profile` | `watchcat` | `sensitive`/`regular`/`relaxed`/`quiet` | (unset) | Named profile the watchdog UI has selected; written to `ping_profile.profile` when saved |
+| `interval_override` | `ping_profile` | int 1–60, or unset | unset | When set, overrides the profile-derived interval for `qmanager_ping`. Cleared by writing JSON `null` via the watchdog POST (which tests `has("interval_override")` to distinguish null-clear from absent). |
+
+**Effective interval resolution** (in `qmanager_ping`): `interval_override` if set, else the profile→seconds map: `sensitive=1`, `regular=2`, `relaxed=5`, `quiet=10`. The GET response from `watchdog.sh` exposes both `interval_override` (raw) and `effective_interval` (resolved). The GET response from `ping_profile.sh` also surfaces both.
+
+> ⚠️ WARNING: Only the watchdog writes `interval_override`. `ping_profile.sh` POST never touches this key — it writes only `profile`/targets and touches the ping reload flag. Hand-editing UCI or calling `ping_profile.sh` POST cannot override the interval; only a watchdog save can.
+
 ### Quality trigger keys
 
 | UCI Key | Range | Default | Meaning |
 |---|---|---|---|
 | `quality_enabled` | 0/1 | 0 | Master opt-in for quality triggering |
-| `latency_ceiling_ms` | int 0–10000 | 800 | `avg_latency_ms` ceiling (TCP-connect RTT, ICMP-comparable); **0 = ignore latency** |
-| `loss_ceiling_pct` | int 0–100 | 20 | `packet_loss_pct` ceiling; **0 = ignore loss** |
 | `quality_consecutive` | int 1–60 | 5 | Consecutive breach cycles before recovery fires |
+
+> ℹ️ NOTE: The old `latency_ceiling_ms` and `loss_ceiling_pct` keys in the `watchcat` section are **retired**. Thresholds now come from the shared `quecmanager.quality_thresholds.*` section described below. The migration in `install.sh`'s `seed_uci_defaults()` seeds any old ceiling values into `quality_thresholds` as the `custom` preset (800 ms latency / 20 % loss) so that users who had non-default values don't silently lose them.
+
+### Shared quality threshold keys (owned by `quality_thresholds.sh`)
+
+These live in `quecmanager.quality_thresholds` and are shared by both the watchdog and the Connection Quality Network Events. The watchdog resolves them at runtime via `resolve_quality_thresholds()`.
+
+| UCI Key | Values | Default (absent) | Meaning |
+|---|---|---|---|
+| `latency_preset` | `standard`/`tolerant`/`very-tolerant`/`custom` | `tolerant` | Named latency threshold preset |
+| `latency_custom_ms` | int 1–10000 | — | Custom latency ceiling in ms; present only when `latency_preset=custom` |
+| `loss_preset` | `standard`/`tolerant`/`very-tolerant`/`custom` | `tolerant` | Named loss threshold preset |
+| `loss_custom_pct` | int 0–100 | — | Custom loss ceiling in %; present only when `loss_preset=custom` |
+
+The `quecmanager.quality_thresholds` section is never seeded by the installer and never lazily created on GET. Its absence signals "factory default / unmodified" (`isDefault=true`). The `custom` preset is new — it was not present in the old schema; existing devices that stored ceiling overrides in the retired `watchcat` keys receive a seeded `custom` preset during migration.
 
 ### SSR-aware hold keys
 
@@ -210,7 +248,9 @@ The function runs `dmesg` once and greps for the shared crash prefix:
 4080000.remoteproc-mss: fatal error received
 ```
 
-This prefix is chosen deliberately to be firmware-variant-agnostic — it does NOT match the per-build `.c:line` suffix that varies across RM520N/RM551E builds. It takes the last matching line (`tail -n 1`), extracts the leading integer seconds from the BusyBox dmesg timestamp format (`[ 12345.678901]`) via awk field-splitting on `[][. ]+`, and compares to `/proc/uptime` (integer seconds since boot). If the crash line exists and its timestamp is within `CFG_SSR_GRACE` seconds of now, the function returns true.
+This prefix is chosen deliberately to be firmware-variant-agnostic — it does NOT match the per-build `.c:line` suffix that varies across RM520N/RM551E builds. It takes the last matching line (`tail -n 1`), extracts the leading integer seconds from the dmesg timestamp, and compares to `/proc/uptime` (integer seconds since boot). If the crash line exists and its timestamp is within `CFG_SSR_GRACE` seconds of now, the function returns true.
+
+Timestamp extraction uses `sed 's/^\[[ ]*\([0-9]*\)\..*/\1/'`, **not** `awk -F`. On this kernel (Linux 5.15, `CONFIG_PRINTK_CALLER`) real dmesg lines are *double-bracketed* — `[ 30585.353287][T23188] msg` — not the single-bracket `[ 12345.678901] msg` form. The `sed` expression matches the leading bracket and the seconds before the first dot, so it handles both layouts. An earlier `awk -F'[][. ]+'` implementation was replaced after on-device testing: **BusyBox awk 1.36.1 rejects a bracket-class field separator with `bad regex '[][. ]+': Unknown collating element`** (it parses the `[. ]` fragment as a POSIX collating-element reference it does not implement), so the awk form silently returned empty and the feature was inert. See Known Gotchas. The corrected `sed` form was verified live on an RM551E: a synthetic `/dev/kmsg` crash line was parsed to its integer seconds correctly.
 
 Graceful-degradation rule: **if dmesg yields nothing, the crash line was evicted from the ring buffer, or the timestamp fails to parse, `ssr_in_progress()` returns false and the daemon behaves exactly as before this feature existed.** The hold is best-effort; it is never a correctness dependency.
 
@@ -238,13 +278,15 @@ While holding, each cycle re-evaluates. The merged `suspect|ssr_hold` case in th
 
 ## Quality Trigger Invariants
 
-### 1. Ceiling 0 means ignore that metric
+### 1. Custom preset and threshold resolution
 
-Setting `latency_ceiling_ms=0` skips the latency check entirely. Setting `loss_ceiling_pct=0` skips the loss check. If both are 0 while `quality_enabled=1`, the trigger can never fire. The frontend blocks saving this combination when quality is enabled — at least one ceiling must be greater than 0.
+The quality trigger resolves thresholds via `resolve_quality_thresholds()`. For named presets (`standard`/`tolerant`/`very-tolerant`) the function returns the hard-coded preset value. For `custom` it reads `latency_custom_ms` / `loss_custom_pct`. If the `quality_thresholds` UCI section is absent the resolver returns the `tolerant` defaults (250 ms / 30 %).
+
+The old `latency_ceiling_ms=0`/`loss_ceiling_pct=0` "disable that metric" escape hatch is retired. Under the preset model, choosing `very-tolerant` (500 ms / 50 %) or a high custom value effectively disables triggering. The frontend requires at least one threshold to be actively configured when quality is enabled.
 
 ### 2. Data source and staleness guard
 
-Latency and loss come from `status.json` `.connectivity.avg_latency_ms` and `.connectivity.packet_loss_pct`, which are written by the poller. `avg_latency_ms` is TCP-connect RTT (milliseconds), not HTTP transaction time — values are ICMP-comparable (typically 35–65 ms on a healthy cellular link). The default `latency_ceiling_ms` of 800 ms is therefore very generous headroom (~10–20× normal RTT). The `.connectivity` object has no timestamp of its own, so freshness is judged from the root `.timestamp` field against `STATUS_STALE_THRESHOLD=30` seconds.
+Latency and loss come from `status.json` `.connectivity.avg_latency_ms` and `.connectivity.packet_loss_pct`, which are written by the poller. `avg_latency_ms` is the **windowed average** TCP-connect RTT (milliseconds) — the poller computes a rolling average over approximately 60 samples, not the last single RTT. Values are ICMP-comparable (typically 35–65 ms on a healthy cellular link). The `tolerant` default threshold of 250 ms provides ~4–7× normal RTT headroom. The `.connectivity` object has no timestamp of its own, so freshness is judged from the root `.timestamp` field against `STATUS_STALE_THRESHOLD=30` seconds.
 
 A stale or missing `status.json` is treated as NO-SIGNAL: the `evaluate_quality` function returns early, and the breach counter is left unchanged. A stale poller is never treated as a healthy 0% loss reading.
 
@@ -255,11 +297,11 @@ A stale or missing `status.json` is treated as NO-SIGNAL: the `evaluate_quality`
 `avg_latency_ms` in `status.json` is a decimal string (e.g. `"1241.4"`). BusyBox `[ "1241.4" -gt 800 ]` returns exit code 2 — it does not evaluate the comparison, it errors. Latency comparison therefore uses awk:
 
 ```sh
-awk -v a="$q_avg_latency" -v c="$CFG_LATENCY_CEILING_MS" \
+awk -v a="$q_avg_latency" -v c="$resolved_latency_threshold" \
     'BEGIN{ exit !((a+0) > (c+0)) }'
 ```
 
-`packet_loss_pct` is an integer in the source; it is safe to use `[ -ge ]` after null/empty → 0 sanitisation.
+The resolved threshold value comes from `resolve_quality_thresholds()` — a plain integer regardless of whether a preset or custom value was stored. `packet_loss_pct` is an integer in the source; it is safe to use `[ -ge ]` after null/empty → 0 sanitisation.
 
 > ⚠️ WARNING: This is a reusable BusyBox gotcha. Any shell script that compares a value sourced from the poller's `avg_latency_ms` with `[ -gt ]` will silently misbehave. Always use awk for float comparisons.
 
@@ -272,7 +314,7 @@ The quality path maintains `quality_breach_counter` independently of the reachab
 `finish_cooldown()` branches on `recovery_reason` to choose its success criterion.
 
 - **`recovery_reason="unreachable"`:** Success = `ping_reachable=true` from a fresh `qmanager_ping.json` read. If this was Tier 3, finalize SIM failover state.
-- **`recovery_reason="quality"`:** A degraded-but-reachable link reports `reachable=true` throughout, so the reachability check would always declare success. Instead, success is a fresh `read_quality` call that does NOT breach the configured ceilings (`!quality_breached`). Tier-3 SIM failover finalization is NOT run from the quality path — that finalization is only meaningful for connectivity failures, not latency/loss scenarios.
+- **`recovery_reason="quality"`:** A degraded-but-reachable link reports `reachable=true` throughout, so the reachability check would always declare success. Instead, success is a fresh `read_quality` call that does NOT breach the resolved thresholds from `resolve_quality_thresholds()` (`!quality_breached`). Tier-3 SIM failover finalization is NOT run from the quality path — that finalization is only meaningful for connectivity failures, not latency/loss scenarios.
 
 **Why:** Without this branch, a quality-triggered recovery on a link that is reachable but slow would always be declared "restored" at cooldown, even if the link is still slow. The daemon would cycle through all tiers in quick succession.
 
@@ -319,6 +361,8 @@ Written atomically via `STATE_TMP` → `mv`. The CGI GET passes the full file co
 | `ssr_hold` | bool | Whether the daemon is currently holding the recovery ladder for an in-progress SSR self-heal |
 | `last_ssr_detected` | int or null | Monotonic seconds since boot when the most recent MPSS crash line was detected; null if no SSR has been seen this session |
 
+> ℹ️ NOTE: `revert_settle_active` is an in-process shell variable only — it is NOT written to the state file. The UI sees the settle as a normal `cooldown` state with `cooldown_remaining` set to `SIM_SETTLE_SECS` (90 s); there is no separate field to distinguish a post-revert settle from a post-recovery cooldown in the state file.
+
 > ℹ️ NOTE: The poller re-emits a `watchcat` object into `status.json`, but it does NOT yet carry `quality_breach_count`, `quality_enabled`, `last_recovery_reason`, `ssr_hold`, or `last_ssr_detected`. The overview card reads `state` from the poller's re-emit (the poller passes `.state` verbatim, so `"ssr_hold"` flows from daemon → state file → poller → `modemStatus.watchcat.state` → the overview card without any poller change). The breach counter and SSR timestamp are available only via the CGI GET passthrough of the full state file. A live breach-counter readout in the watchdog status card is a deliberate follow-up feature, out of scope for this change.
 
 ---
@@ -336,7 +380,7 @@ Returns current UCI settings, live daemon state, SIM failover state, SIM swap de
   "success": true,
   "settings": {
     "enabled": false,
-    "max_failures": 5,
+    "fail_threshold": 5,
     "check_interval": 10,
     "cooldown": 60,
     "tier1_enabled": true,
@@ -346,11 +390,16 @@ Returns current UCI settings, live daemon state, SIM failover state, SIM swap de
     "backup_sim_slot": null,
     "max_reboots_per_hour": 3,
     "quality_enabled": false,
-    "latency_ceiling_ms": 800,
-    "loss_ceiling_pct": 20,
     "quality_consecutive": 5,
     "ssr_aware": true,
-    "ssr_grace": 45
+    "ssr_grace": 45,
+    "probe_profile": "relaxed",
+    "interval_override": null,
+    "effective_interval": 5,
+    "quality_thresholds": {
+      "latency": { "preset": "tolerant", "custom_ms": null },
+      "loss": { "preset": "tolerant", "custom_pct": null }
+    }
   },
   "status": { ... },
   "sim_failover": { "active": false },
@@ -359,19 +408,19 @@ Returns current UCI settings, live daemon state, SIM failover state, SIM swap de
 }
 ```
 
-`status` is the raw contents of `/tmp/qmanager_watchcat.json`; it is `{}` if the file is absent (daemon not yet started). `settings.backup_sim_slot` is `null` if the UCI value is empty.
+`status` is the raw contents of `/tmp/qmanager_watchcat.json`; it is `{}` if the file is absent (daemon not yet started). `settings.backup_sim_slot` is `null` if the UCI value is empty. `settings.interval_override` is `null` when not set. `settings.quality_thresholds` is a read-only passthrough of the shared `quecmanager.quality_thresholds.*` keys — it is included for display purposes; changes to it must be saved via `quality_thresholds.sh`, not via the watchdog POST.
 
 ### POST `/cgi-bin/quecmanager/monitoring/watchdog.sh`
 
 Three actions are supported.
 
-**`save_settings`** — validate and write all settings fields to UCI, touch the reload flag, and restart or stop the daemon as appropriate.
+**`save_settings`** — validate and write all settings fields to UCI, touch the reload flag, and restart or stop the daemon as appropriate. When the probe interval changed (i.e. `probe_profile` or `interval_override` differs from the current UCI value), the CGI also touches `/tmp/qmanager_ping_reload` so the running ping daemon picks up the new interval within one probe cycle.
 
 ```json
 {
   "action": "save_settings",
   "enabled": true,
-  "max_failures": 5,
+  "fail_threshold": 5,
   "check_interval": 10,
   "cooldown": 60,
   "tier1_enabled": true,
@@ -381,13 +430,15 @@ Three actions are supported.
   "backup_sim_slot": null,
   "max_reboots_per_hour": 3,
   "quality_enabled": true,
-  "latency_ceiling_ms": 800,
-  "loss_ceiling_pct": 20,
   "quality_consecutive": 5,
   "ssr_aware": true,
-  "ssr_grace": 45
+  "ssr_grace": 45,
+  "probe_profile": "relaxed",
+  "interval_override": null
 }
 ```
+
+Send `"interval_override": null` to clear a custom override and revert to the profile-derived interval. The CGI uses `has("interval_override")` to distinguish an explicit null-clear from a missing field — always include the key when you intend to modify the override.
 
 **`dismiss_sim_swap`** — sets `.dismissed = true` in `/tmp/qmanager_sim_swap_detected`.
 
@@ -402,21 +453,21 @@ Three actions are supported.
 **POST validation errors:**
 
 ```json
-{ "success": false, "error": "invalid_field", "field": "latency_ceiling_ms", "reason": "must be integer 0-10000" }
+{ "success": false, "error": "invalid_field", "field": "fail_threshold", "reason": "must be integer 1-20" }
 ```
 
 | Field | Validation |
 |---|---|
-| `max_failures` | int 1–20 |
+| `fail_threshold` | int 1–20 |
 | `check_interval` | int 5–60 |
 | `cooldown` | int 10–300 |
 | `max_reboots_per_hour` | int 1–10 |
 | `backup_sim_slot` | 1 or 2, or null/absent to clear |
-| `latency_ceiling_ms` | int 0–10000 |
-| `loss_ceiling_pct` | int 0–100 |
 | `quality_consecutive` | int 1–60 |
 | `ssr_grace` | int 10–120 |
 | `ssr_aware` | boolean |
+| `probe_profile` | one of: `sensitive`, `regular`, `relaxed`, `quiet` |
+| `interval_override` | int 1–60 to set; JSON `null` to clear; field must be present if intent is to change |
 
 > ℹ️ NOTE: The CGI error envelope uses `reason` rather than `detail` for field validation errors (field-level errors need to name the field). The hook `useWatchdogSettings` passes `json.reason` as the `detail` argument to `resolveErrorMessage`.
 
@@ -431,6 +482,9 @@ Validate fields
 uci commit quecmanager
 touch /tmp/qmanager_watchcat_reload
   ↓
+if probe interval changed (probe_profile or interval_override):
+    touch /tmp/qmanager_ping_reload   ← qmanager_ping picks this up within one probe cycle
+  ↓
 if enabled:
     /etc/init.d/qmanager_watchcat enable
     /etc/init.d/qmanager_watchcat restart (fire-and-forget)
@@ -443,7 +497,82 @@ Running daemon: checks RELOAD_FLAG at top of each loop iteration,
 calls read_config(), removes flag.
 ```
 
-Config changes take effect within one `check_interval` cycle (5–60 s). No full daemon restart is needed for quality ceiling or consecutive changes when the daemon is already running.
+Config changes take effect within one `check_interval` cycle (5–60 s). No full daemon restart is needed for quality consecutive or probe-interval changes when the daemon is already running.
+
+> ⚠️ WARNING: **`quality_thresholds.sh` POST touches TWO reload flags.** Because the shared quality thresholds feed both the poller (Network Events) and the watchdog, `quality_thresholds.sh` must touch BOTH `/tmp/qmanager_quality_reload` AND `/tmp/qmanager_watchcat_reload` on every successful POST. Missing either flag means one of the two daemons continues running the old threshold until it is restarted. This is the dual reload-flag invariant — verify it is present in any future edit to `quality_thresholds.sh`.
+
+---
+
+## Recovery-Lifecycle Network Events
+
+The watchdog writes events to the Network Events log for the full recovery lifecycle. These events use the **existing** event-type strings — no new types were introduced:
+
+| Lifecycle point | Event type | Notes |
+|---|---|---|
+| Recovery started | `watchcat_recovery` | Written at the start of a recovery action; reason field carries `"unreachable"` or `"quality"` |
+| Step outcome (success/escalation) | `watchcat_recovery` | Written after each tier completes and cooldown evaluates |
+| SIM failover leg | `sim_failover` | Reuses the existing SIM failover event type for Tier 3 |
+| Recovery exhausted | `watchcat_recovery` | Written when the ladder reaches Tier 4 and auto-disables |
+
+> ℹ️ NOTE: The decision to reuse existing event-type strings rather than introduce new ones is intentional — the event log consumer (Network Events UI + any alerting) already knows how to render `watchcat_recovery` and `sim_failover`. Adding new strings would require a UI update and i18n additions before the events displayed correctly.
+
+---
+
+## SIM Failover Lifecycle
+
+Tier 3 handles both the forward swap (primary → backup SIM) and the user-requested revert (backup → primary). The two paths share the same Golden Rule AT sequence (`AT+CFUN=0` → `AT+QUIMSLOT=N` → `AT+CFUN=1`) and the same 90 s settle floor.
+
+### Known-SIM tracking (`sim_db_add`)
+
+Every SIM that the watchdog lands on — whether via a successful forward swap, an inline fallback, or a revert — is recorded in the known-SIM database via `sim_db_add` from `sim_db.sh`. This tells the poller's boot-time SIM-swap detector that the ICCID is expected, so it does not fire a spurious "New SIM card detected" alert after a revert or a reboot.
+
+> ℹ️ NOTE: The retired `last_iccid` write (from earlier versions) has been replaced by `sim_db_add`. The `known_iccids` persistent set is the canonical source of truth. If you see references to `last_iccid` in older notes, they are superseded.
+
+### ICCID read — 3×retry pattern
+
+After any SIM transition, reading the ICCID is attempted up to three times with 1 s sleeps between attempts (`for _try in 1 2 3`). A slow-to-respond modem may not expose the new SIM at `AT+QCCID` immediately after `AT+CFUN=1`. If all three attempts fail, the daemon logs a warning and continues — a missing ICCID never blocks recovery or a revert.
+
+### Forward swap (`execute_tier3` + cooldown finalization)
+
+1. Read current slot via `AT+QUIMSLOT?`.
+2. Stop the tower-failover daemon (its lock state is meaningless on the backup SIM).
+3. Golden Rule sequence: `AT+CFUN=0` → 2 s → `AT+QUIMSLOT=N` → 2 s → `AT+CFUN=1`.
+4. `wait_for_modem` (up to 60 s). On failure, call `sim_failover_fallback` and enter cooldown.
+5. `AT+CPIN?` SIM-presence guard — if the backup slot returns an error, call `sim_failover_fallback` and enter cooldown.
+6. Enter cooldown with `cooldown_remaining = max(CFG_COOLDOWN, SIM_SETTLE_SECS)`.
+7. **Finalization in `finish_cooldown`** (only when `recovery_reason="unreachable"` and `ping_reachable=true`): write `/tmp/qmanager_sim_failover`, call `sim_db_add` on the backup SIM's ICCID (3×retry), auto-apply a matching custom profile (`auto_apply_profile … "watchdog"`), and set `sim_failover_active="true"`.
+
+The state is NOT finalized during `execute_tier3` itself — finalization waits for the cooldown success test so a false-positive connectivity return does not prematurely lock in the failover state.
+
+### Fallback (`sim_failover_fallback`)
+
+Called when the backup SIM is unreachable or `wait_for_modem` times out during the forward swap. Performs the Golden Rule sequence back to the original slot, then:
+
+- **Normal modem path** (`wait_for_modem` succeeds): 3×retry ICCID read → `sim_db_add` → `auto_apply_profile … "watchdog_revert"` → restart tower-failover daemon.
+- **Slow-modem path** (`wait_for_modem` times out): 3×retry ICCID read → `sim_db_add` (best-effort) → log warning → continue. Auto-apply and tower-failover restart are skipped; the slot command was already sent. This path still calls `sim_db_add` so the next boot does not false-fire "New SIM detected".
+
+> ℹ️ NOTE: Without the slow-modem `sim_db_add`, the poller's boot-time swap detector would fire "New SIM card detected" after a reboot following a slow revert — a regression that was introduced by an earlier refactor and has been restored. The ICCID read on the slow path is best-effort: if genuinely unreadable after 3 retries, only a warning is logged; the revert never blocks.
+
+### Revert semantics (`check_revert_request`)
+
+A user-requested revert (`POST action=revert_sim`) writes `/tmp/qmanager_watchcat_revert_sim`. The daemon checks this flag each loop iteration via `check_revert_request`, which has three branches:
+
+| Branch | Condition | Action |
+|---|---|---|
+| Safe to revert now | `sim_failover_active="true"` AND state is NOT `recovery` or `cooldown` | Delete flag, call `sim_failover_fallback`, enter cooldown as `revert_settle_active=true` for `SIM_SETTLE_SECS` |
+| Defer | `sim_failover_active="true"` AND state is `recovery` or `cooldown` | Keep flag; logged as "deferring to next cycle" |
+| Swap mid-flight | `original_sim_slot != "null"` AND `current_sim_slot != original_sim_slot` (slot moved but cooldown hasn't finalized yet) | Keep flag pending — consumed after finalization |
+| Nothing to revert | Neither of the above | Delete flag silently |
+
+**Why defer instead of silently drop:** A `revert_sim` POST that arrives during the post-swap cooldown window was previously deleted unconditionally, and the user's request was silently lost. The current logic keeps the flag pending until the daemon is in a quiescent state. The defer guard (`state = "recovery"` or `"cooldown"`) prevents the revert from racing an in-flight AT sequence.
+
+### Post-revert settle floor (`revert_settle_active`)
+
+After `sim_failover_fallback` completes during a user revert, the daemon enters the `cooldown` state with `cooldown_remaining=SIM_SETTLE_SECS` and `revert_settle_active="true"`. The `finish_cooldown` function has a top guard: when `revert_settle_active="true"`, it clears the flag, resets counters, and returns to `monitor` WITHOUT running the reason-aware success/escalation logic. This is correct — a revert has no tier to validate and must not escalate.
+
+`revert_settle_active` is also cleared on LOCKED-state entry (along with the rest of the recovery state) so a maintenance window cannot strand the daemon in a phantom settle.
+
+The `cooldown_remaining` value in the state file reflects `SIM_SETTLE_SECS` (90 s) during a revert settle, so the UI countdown is honest.
 
 ---
 
@@ -468,11 +597,21 @@ that card's tab).
 | `components/monitoring/watchdog/watchdog-recovery-ladder.tsx` | Numbered Tier 1→4 escalation stepper; backup-SIM picker nested in Tier 3, reboot cap in Tier 4. The SSR-aware gate control ("step zero") sits above the numbered ladder on a muted surface. |
 | `components/monitoring/watchdog/sim-swap-banner.tsx` | SIM swap / SIM failover toast (rendered globally in `app-layout.tsx`) |
 
-**`WatchdogSettings`** added `ssr_aware: boolean` and `ssr_grace: number`.
+**`WatchdogSettings`** (in `hooks/use-watchdog-settings.ts`):
+- `max_failures` renamed to `fail_threshold` (int, 1–20).
+- `latency_ceiling_ms` and `loss_ceiling_pct` **removed** — thresholds now come from the shared `quality_thresholds` object surfaced from the GET.
+- Added `probe_profile: PingProfile`, `interval_override: number | null`, `effectiveInterval: number` (derived client-side from `interval_override` ?? profile→seconds map), and `qualityThresholds: QualityThresholdsSettings` (read from the GET's `quality_thresholds` passthrough; changes to it are saved via `useQualityThresholds`, not the watchdog save).
+- `ssr_aware: boolean` and `ssr_grace: number` remain unchanged.
 
 **`WatchdogLiveStatus`** added optional `ssr_hold?: boolean` and `last_ssr_detected?: number | null`. These are typed optional because older daemon versions will not emit them. The existing optional fields `quality_breach_count`, `quality_enabled`, and `last_recovery_reason` follow the same rule — consumers must handle their absence.
 
 **`WatchcatState`** in `types/modem-status.ts` has `"ssr_hold"` as a union member. The poller passes the daemon's `.state` field verbatim, so `"ssr_hold"` reaches `modemStatus.watchcat.state` without any poller-side change.
+
+**Probe-interval Select (Triggers card):** The Reachability tab gained a probe-interval Select showing the 4 named profiles plus a "Custom" option that reveals a numeric Input (1–60 s). Choosing a profile writes `probe_profile`; choosing Custom writes `interval_override`. A derived live preview ("Declares the connection down after about Ns") is displayed below the threshold controls, where N = `effectiveInterval × fail_threshold`.
+
+**Connection Sensitivity alert:** `connectivity-sensitivity-card.tsx` shows an informational Alert when `interval_override` is set, explaining that the watchdog is enforcing a custom probe interval and that the profile choice becomes the fallback once the override is cleared. The profile Tabs are NOT disabled — they remain interactive so the user can pre-select a profile to fall back to. The daemon ignores the profile while an override is active.
+
+**`use-quality-thresholds.ts`** was updated to flatten `latency.custom_ms` / `loss.custom_pct` onto the POST body when `preset=custom`.
 
 **SSR-aware gate control (Recovery Ladder card):** The gate control lives at the top of `WatchdogRecoveryLadder` on a `bg-muted/20` surface, above the numbered `<ol>`. It renders a Switch (`ssr_aware`) with a `TbInfoCircleFilled` tooltip, and when the Switch is on, an animated-in grace-seconds `Input` field (range 10–120). This surface is disabled when the master watchdog switch is off (`masterOff`).
 
@@ -486,17 +625,21 @@ that card's tab).
 
 - **Float comparison is a hard requirement.** `avg_latency_ms` is decimal. BusyBox `[ "1241.4" -gt 800 ]` exits 2 (error), not false. Any future code path that reads this field and compares it with `[ -gt ]` or `[ -ge ]` will silently fail to compare. Use awk as shown in the `quality_breached` function.
 
-- **Ceiling 0 is a disable, not a zero threshold.** `latency_ceiling_ms=0` does not mean "trigger if any latency is above 0 ms." It means ignore the latency metric entirely. This is intentional to allow users to watch only loss, or only latency, but it is counterintuitive.
+- **`fail_threshold` counts raw probe failures, not poller cycles.** The watchdog reads `ping_streak_fail` directly from `qmanager_ping.json`. Under a slow profile (`quiet`, 10 s interval), a `fail_threshold=5` means the connection must fail 5 consecutive probes — approximately 50 seconds — before recovery fires. This is intentional: the threshold is independent of profile speed.
 
-- **Detection is not instantaneous.** The status.json latency/loss values are windowed averages over ~60 poller samples. A brief spike will be absorbed by the window. Only a sustained degradation lasting across `quality_consecutive × check_interval` seconds (on top of the poller's window) will trigger recovery.
+- **Detection is not instantaneous.** The status.json `avg_latency_ms` and `packet_loss_pct` values are windowed averages over ~60 poller samples. A brief spike will be absorbed by the window. Only a sustained degradation lasting across `quality_consecutive × check_interval` seconds (on top of the poller's averaging window) will trigger quality recovery.
 
-- **Quality breach counter in the status card is a follow-up.** The status card currently reads from the poller's `watchcat` re-emit in `status.json`, which does not yet carry `quality_breach_count`. The actual counter is in `/tmp/qmanager_watchcat.json` and available via the CGI GET, but no status-card widget displays it yet. This is a known gap.
+- **`custom` preset requires explicit save to take effect.** If you change `latency_custom_ms` or `loss_custom_pct` in UCI directly without also writing `latency_preset=custom`, `resolve_quality_thresholds()` will use the named preset and ignore the custom value. Always save via `quality_thresholds.sh` POST to keep the preset and custom value in sync.
 
-- **Stale poller = NO-SIGNAL, not healthy.** If `qmanager_poller` is dead or crashed, `status.json` goes stale. The quality trigger treats this as no-signal and freezes the breach counter. This is correct behavior, but it means a dead poller silently disables quality triggering. Check `/tmp/qmanager_status.json` root `.timestamp` if the quality trigger appears to not be evaluating.
+- **Quality breach counter in the status card is a follow-up.** The status card currently reads from the poller's `watchcat` re-emit in `status.json`, which does not yet carry `quality_breach_count`. The actual counter is in `/tmp/qmanager_watchcat.json` (field `failure_counter` mirrors `ping_streak_fail`; `quality_breach_count` mirrors the quality breach counter) and available via the CGI GET passthrough. No status-card widget displays either counter directly yet. This is a known gap.
+
+- **Stale poller = NO-SIGNAL, not healthy.** If `qmanager_poller` is dead or crashed, `status.json` goes stale. The quality trigger treats this as no-signal and freezes the breach counter. This is correct behavior, but it means a dead poller silently disables quality triggering. Check `/tmp/qmanager_status.json` root `.timestamp` if the quality trigger appears to not be evaluating. Note: the poller's Adaptive Polling deep tier (see [`docs/features/adaptive-polling.md`](../adaptive-polling.md)) does not affect the watchdog — `write_cache` and `read_ping_data` run at the 2 s base cadence in all tiers regardless of AT-read gating, so `.timestamp` and `.connectivity` stay fresh even while the device is deep-idle.
 
 - **Auto-disable persists across reboots (UCI).** When Tier 4 exhausts `max_reboots_per_hour`, it writes `quecmanager.watchcat.enabled=0` to UCI. This survives a reboot — the daemon won't restart even though procd is configured to do so (the init.d script checks `enabled` in UCI). Re-enabling via the settings page clears the disabled flag and restarts the daemon.
 
 - **SSR hold is best-effort: dmesg ring-buffer eviction.** The kernel ring buffer is fixed-size. On a busy modem (e.g. a QCMAP bringup storm filling dmesg with interface events), the `4080000.remoteproc-mss: fatal error received` line can be evicted before `ssr_in_progress()` reads it. In that case `ssr_in_progress()` returns false and the daemon behaves exactly as if the feature did not exist — it falls straight through to the ladder. The hold is a de-amplifier, not a correctness requirement. The existing `max_reboots_per_hour` token bucket is the backstop.
+
+- **BusyBox awk rejects a bracket-class field separator (reusable gotcha).** Parsing the dmesg timestamp with `awk -F'[][. ]+'` looks correct and is valid POSIX, but BusyBox awk 1.36.1 (on the RM551E) errors with `bad regex '[][. ]+': Unknown collating element` — it reads the `[. ]` fragment as a POSIX collating-element reference (`[.ch.]` syntax) it does not implement. The failure is to *stderr* with empty *stdout*, so the extraction silently yields nothing and the consuming feature goes inert with no error. `ssr_in_progress()` therefore uses `sed 's/^\[[ ]*\([0-9]*\)\..*/\1/'` instead, verified on-device. Avoid bracket-class `-F` separators in any BusyBox awk; prefer `sed`, `cut`, or a single-char `-F`. Also note dmesg lines here are double-bracketed (`[ secs.usec][ Tthread]`, `CONFIG_PRINTK_CALLER`), so a parser must anchor on the *first* bracket only.
 
 - **Quality-triggered hold clears via the reachability path.** When a quality breach triggers an SSR hold, the hold resolves via the `suspect|ssr_hold` reachability check on subsequent cycles. If the modem self-heals and `ping_reachable=true && ping_streak_fail=0`, the hold clears and state returns to `monitor` — even though the recovery was quality-triggered, not reachability-triggered. This is intentional: the dominant amplification risk is the forced detach that happens during SSR self-heal, and the modem returning to a reachable state means the SSR self-heal succeeded. Do not be surprised if a quality-path hold shows a `suspect→monitor` transition in the log instead of a `ssr_hold→monitor` state label.
 

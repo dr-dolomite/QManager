@@ -87,6 +87,12 @@ STATUS_STALE_THRESHOLD=30
 BOOT_SETTLE=30
 PING_STALE_THRESHOLD=15
 MODEM_WAIT_TIMEOUT=60
+# A physical SIM swap on the RM551E needs ~90s to reach stable connectivity.
+# Any Tier-3 (SIM-failover) recovery — and the reverse revert swap — must hold
+# this floor before the first success/connectivity evaluation, otherwise the
+# generic cooldown fires the success ping while the modem is still attaching and
+# false-fails a swap that was actually fine. FIXED floor by design (not UCI).
+SIM_SETTLE_SECS=90
 
 # --- State Variables ---------------------------------------------------------
 state="monitor"
@@ -104,6 +110,7 @@ reboots_this_hour=0
 cooldown_stale_retries=0
 quality_breach_counter=0
 recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
+revert_settle_active="false"    # "true" while holding the post-revert SIM settle floor
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
 ssr_hold="false"          # JSON bool literal for write_state
 last_ssr_detected="null"  # JSON null literal or monotonic-seconds integer
@@ -701,9 +708,30 @@ sim_failover_fallback() {
     sleep 2
     qcmd 'AT+CFUN=1' >/dev/null 2>&1
 
+    local _rv_iccid_raw
+    local _rv_iccid
+    local _try
+
     if ! wait_for_modem; then
         qlog_error "SIM revert: modem unresponsive after CFUN=1, skipping profile auto-apply"
         append_event "sim_failover" "Watchcat: SIM reverted but modem unresponsive — manual check needed" "error"
+        # Even on the slow-modem path the reverted-to SIM MUST be recorded in the
+        # known set, or the poller's boot swap-detector false-fires "New SIM card
+        # detected" next reboot (regression guard for the 2026-05-12 audit fix).
+        # Best-effort 3×retry read so a slow modem still yields an ICCID; if it
+        # genuinely can't be read, log and continue — never block the revert.
+        _rv_iccid=""
+        for _try in 1 2 3; do
+            _rv_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
+            _rv_iccid=$(printf '%s' "$_rv_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+            [ -n "$_rv_iccid" ] && break
+            sleep 1
+        done
+        if [ -n "$_rv_iccid" ]; then
+            sim_db_add "$_rv_iccid"
+        else
+            qlog_warn "SIM revert: ICCID unreadable on slow-modem path, skipping known-SIM record"
+        fi
         # Slot command was sent; record the intended state. Tower failover daemon
         # will be (re)started by the next normal recovery cycle if modem recovers.
         current_sim_slot="$original_sim_slot"
@@ -713,9 +741,6 @@ sim_failover_fallback() {
     fi
 
     # Auto-apply profile matching reverted SIM (watchdog_revert)
-    local _rv_iccid_raw
-    local _rv_iccid
-    local _try
     _rv_iccid=""
     for _try in 1 2 3; do
         _rv_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
@@ -865,9 +890,17 @@ do_recovery() {
     last_recovery_time="$ts"
     last_recovery_tier="$current_tier"
     total_recoveries=$((total_recoveries + 1))
-    cooldown_remaining="$CFG_COOLDOWN"
+    # Tier-3 (SIM failover) needs a longer settle floor: a physical swap is still
+    # attaching well past the generic cooldown, so enforce max(CFG_COOLDOWN, 90)
+    # before finish_cooldown reads the first success ping. cooldown_remaining
+    # carries the longer value so the UI countdown stays honest.
+    if [ "$current_tier" -eq 3 ] && [ "$CFG_COOLDOWN" -lt "$SIM_SETTLE_SECS" ]; then
+        cooldown_remaining="$SIM_SETTLE_SECS"
+    else
+        cooldown_remaining="$CFG_COOLDOWN"
+    fi
     state="cooldown"
-    qlog_info "Entering COOLDOWN for ${CFG_COOLDOWN}s (after Tier $current_tier)"
+    qlog_info "Entering COOLDOWN for ${cooldown_remaining}s (after Tier $current_tier)"
 }
 
 # =============================================================================
@@ -909,6 +942,22 @@ _cooldown_handle_failure() {
 
 finish_cooldown() {
     rm -f "$RECOVERY_FLAG"
+
+    # --- Post-revert SIM settle ---
+    # A user revert reuses the cooldown state purely as a settle timer. There is
+    # no tier action to validate and nothing to escalate: just return to monitor
+    # once the floor elapses. Bypass the reason-aware success/escalation logic.
+    if [ "$revert_settle_active" = "true" ]; then
+        revert_settle_active="false"
+        qlog_info "Post-revert SIM settle complete — resuming monitoring"
+        state="monitor"
+        current_tier=0
+        failure_counter=0
+        cooldown_stale_retries=0
+        quality_breach_counter=0
+        _recovery_marker_emitted=""
+        return
+    fi
 
     # --- Reason-aware success criteria ---
     # A quality-triggered recovery cannot use reachability as the success
@@ -1028,7 +1077,18 @@ finish_cooldown() {
 # =============================================================================
 
 check_revert_request() {
-    if [ -f "$REVERT_FLAG" ] && [ "$sim_failover_active" = "true" ]; then
+    [ -f "$REVERT_FLAG" ] || return 1
+
+    # Finalized failover — safe to revert now.
+    if [ "$sim_failover_active" = "true" ]; then
+        # Never revert concurrently with an in-flight recovery/cooldown cycle;
+        # the recovery path owns the modem. Leave the flag pending for a later
+        # cycle once we are back in a quiescent state.
+        if [ "$state" = "recovery" ] || [ "$state" = "cooldown" ]; then
+            qlog_info "SIM revert requested but $state in progress — deferring to next cycle"
+            return 1
+        fi
+
         qlog_info "User requested SIM revert to slot $original_sim_slot"
         rm -f "$REVERT_FLAG"
         append_event "sim_failover" "Watchcat: reverting to original SIM slot $original_sim_slot (user request)" "info"
@@ -1038,12 +1098,33 @@ check_revert_request() {
         rm -f "$RECOVERY_FLAG" "$SIM_FAILOVER_FILE"
 
         sim_failover_active="false"
-        state="monitor"
-        current_tier=0
         failure_counter=0
+        current_tier=0
+
+        # Enforce the SIM settle floor after the reverse Golden-Rule swap: hold
+        # ~90s before the daemon resumes normal connectivity evaluation, just as
+        # a forward Tier-3 swap does. Reuse the cooldown state so the UI gets an
+        # honest countdown; revert_settle_active marks this as a benign hold so
+        # finish_cooldown returns to monitor without recovery escalation.
+        revert_settle_active="true"
+        recovery_reason="unreachable"
+        cooldown_remaining="$SIM_SETTLE_SECS"
+        state="cooldown"
+        qlog_info "Entering post-revert SIM settle for ${SIM_SETTLE_SECS}s"
         return 0
     fi
-    rm -f "$REVERT_FLAG"  # clean up stale flag
+
+    # No finalized failover. If a Tier-3 swap is mid-flight (slot already moved to
+    # the backup but cooldown hasn't finalized sim_failover_active yet), KEEP the
+    # request pending so it is consumed on a later cycle after finalization —
+    # do NOT silently delete it.
+    if [ "$original_sim_slot" != "null" ] && [ "$current_sim_slot" != "$original_sim_slot" ]; then
+        qlog_info "SIM revert requested while a swap is mid-flight — keeping request pending"
+        return 1
+    fi
+
+    # Genuinely nothing to revert (no failover active, no swap in progress).
+    rm -f "$REVERT_FLAG"
     return 1
 }
 
@@ -1148,6 +1229,7 @@ main() {
                 # If we were mid-recovery, clear the suppression flag so events resume.
                 # Any active recovery is abandoned; the lock holder owns the modem.
                 rm -f "$RECOVERY_FLAG"
+                revert_settle_active="false"
                 current_tier=0
                 failure_counter=0
                 cooldown_stale_retries=0

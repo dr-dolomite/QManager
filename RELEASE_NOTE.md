@@ -24,6 +24,12 @@ None in this release.
 
 - **Tidier Watchdog status readouts on mobile.** The status tiles now use a compact "Step N" for the current and last recovery step, so the "Last Recovery" value no longer gets clipped on narrow screens. The Watchdog's probe-interval picker also shows each option's timing in parentheses — for example "Sensitive (1s)".
 
+- **Connection Watchdog waits for the SIM to fully settle after a SIM swap before checking the connection.** A physical SIM swap on the RM551E needs about 90 seconds to reach stable connectivity. The Watchdog now enforces this floor automatically — regardless of your cooldown setting — so a swap that is genuinely working does not get false-declared a failure and push the Watchdog toward rebooting. The same settle period applies when you use the "Revert to original SIM" button.
+
+- **Requesting a SIM revert during an active swap no longer silently disappears.** If you tapped "Revert SIM" while the Watchdog was still in the middle of confirming a SIM swap, the request was previously dropped without any visible indication. The Watchdog now queues the request and processes it as soon as the swap finishes.
+
+- **Reverting a SIM failover no longer causes a spurious "New SIM detected" alert after the next reboot.** When reverting to the original SIM on a slow-responding modem, the Watchdog now records the reverted SIM as known even if it takes extra time to identify. Without this, the first reboot after a slow revert would incorrectly report a new SIM being inserted.
+
 ## 📥 Installation
 
 ### Fresh Install
