@@ -160,8 +160,8 @@ export function WatchdogTriggersCard({
                       <SelectContent>
                         {PING_PROFILES.map((p) => (
                           <SelectItem key={p} value={p}>
-                            {t(`watchdog.profile_${p}`)} · {PROFILE_INTERVAL_SEC[p]}
-                            s
+                            {t(`watchdog.profile_${p}`)} ({PROFILE_INTERVAL_SEC[p]}
+                            s)
                           </SelectItem>
                         ))}
                         <SelectItem value="custom">

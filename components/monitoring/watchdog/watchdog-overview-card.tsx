@@ -95,14 +95,15 @@ export function WatchdogOverviewCard({
   const { data: modemStatus, isLoading } = useModemStatus({ pollInterval: 5000 });
   const [isReverting, setIsReverting] = useState(false);
 
-  const tierLabels = useMemo<Record<number, string>>(
-    () => ({
-      0: t("watchdog.tier_label_none"),
-      1: t("watchdog.tier_label_1"),
-      2: t("watchdog.tier_label_2"),
-      3: t("watchdog.tier_label_3"),
-      4: t("watchdog.tier_label_4"),
-    }),
+  // Compact "Step N" form for the status tiles. The tile labels already read
+  // "Current Step" / "Last Recovery", so the value drops the redundant
+  // "Recovery" word — and the shorter string keeps the Last Recovery tile from
+  // clipping in the 2-col mobile grid. Tier 0 / unknown renders an em dash.
+  const stepLabel = useCallback(
+    (tier: number | null | undefined) =>
+      tier
+        ? t("watchdog.tier_label_short", { n: tier })
+        : t("watchdog.tier_label_none"),
     [t],
   );
 
@@ -227,7 +228,7 @@ export function WatchdogOverviewCard({
     {
       key: "step",
       label: t("watchdog.status_row_current_step"),
-      value: tierLabels[watchcat!.current_tier] || tierLabels[0],
+      value: stepLabel(watchcat!.current_tier),
     },
     {
       key: "failed",
@@ -265,13 +266,18 @@ export function WatchdogOverviewCard({
       label: t("watchdog.status_row_last_recovery"),
       value:
         watchcat!.last_recovery_time != null ? (
-          <span className="truncate">
-            {tierLabels[watchcat!.last_recovery_tier ?? 0]}
-            <span className="text-muted-foreground">
-              {" · "}
+          watchcat!.last_recovery_tier ? (
+            <span className="truncate">
+              {stepLabel(watchcat!.last_recovery_tier)}
+              <span className="text-muted-foreground">
+                {" "}({formatTimeAgo(watchcat!.last_recovery_time)})
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground truncate">
               {formatTimeAgo(watchcat!.last_recovery_time)}
             </span>
-          </span>
+          )
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
