@@ -22,6 +22,8 @@ None in this release.
 
 - **Clearer Watchdog activity in Network Events.** Recovery attempts now log more legibly — when a recovery starts, which step ran, whether it worked, and when the Watchdog escalates or gives up — so you can see what the Watchdog actually did during an outage.
 
+- **Tidier Watchdog status readouts on mobile.** The status tiles now use a compact "Step N" for the current and last recovery step, so the "Last Recovery" value no longer gets clipped on narrow screens. The Watchdog's probe-interval picker also shows each option's timing in parentheses — for example "Sensitive (1s)".
+
 ## 📥 Installation
 
 ### Fresh Install
