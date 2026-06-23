@@ -53,6 +53,20 @@ All agents are defined in `.claude/agents/`. Models are pinned per agent — the
 
 User can short-circuit by saying "just do it" / "skip the plan" / "tier 0 it" — Opus drops to direct execution. Otherwise the flow is the default.
 
+### Orchestration Mode ("orchestrate")
+
+When the user says **"orchestrate"** (e.g. "orchestrate this", "orchestrate a team for…"), run the 6-phase flow above as a **multi-agent team**, not a solo pass. This is the default team-execution mode of the same flow — tiers, gates, and the user approval gate all still apply. Default shape:
+
+- **Opus is the head architect, not a worker.** Opus plans, briefs teammates, synthesizes their evidence, holds the approval gate, and makes the calls. The legwork (recon, builds, validation, docs) goes to teammates. Opus still does its own targeted reads to *judge* teammate reports rather than rubber-stamp them.
+- **Teammates are Sonnet, spawned liberally and in parallel.** Each gets a **self-contained brief** (file paths, schemas, the live evidence, the relevant CLAUDE.md/DESIGN.md sections inlined) — they don't see the orchestrator's conversation. Set `model: sonnet` on the Agent call. Use the project agents (`modem-investigator`, `backend-writer`, `ui-builder`, `validator`, `docs-writer`) plus `Explore`/`general-purpose` for recon.
+- **One teammate is always a dedicated devil's advocate.** Its job is to attack the leading hypotheses, surface what the team is underweighting, and stop the team from "fixing" accurate telemetry or chasing a phantom. Mandatory for any investigation.
+- **Phase 1 recon fans out.** Run several read-only agents at once on different leads (live `modem-investigator` probing, static `Explore`, a delta/compare angle, the devil's advocate). When new evidence lands mid-flight, **redirect a running teammate with `SendMessage`** instead of re-spawning. If a backgrounded teammate goes idle without delivering its written report, ping it for the report.
+- **Synthesize, then gate.** Fold all reports into ONE plan and use **`AskUserQuestion`** at the Phase 3 approval gate and for any real scoping decision (which fixes, build order, live-confirm-first). Don't start Phase 4 builders until the user approves.
+- **Execute → validate → docs, with a task board.** Builders run bottom-up (parallel where files are independent), `validator` gates every backend/shell change on-device, `docs-writer` closes. Track the whole thing with `TaskCreate`/`TaskUpdate` (owners + blockers) so the user can follow progress.
+- **Respect standing prefs inside the team.** UI craft is done by Opus via the Impeccable skill, not dispatched to `ui-builder` for the build (`ui-builder`/`Explore` may still recon the surfaces). Sonnet teammates do the rest.
+
+The same Skip Phrases still apply — "just do it" drops orchestration back to a solo direct pass.
+
 ## Design Context
 
 See **`PRODUCT.md`** (strategic: register, users, brand personality, anti-references, the six design principles including the safety principle, accessibility) and **`DESIGN.md`** (visual: OKLCH tokens incl. Signal Indigo as the single action accent and a lighter shade of it as the quiet secondary control, Manrope UI typography + scoped JetBrains Mono, status-badge pattern, hybrid elevation, mosaic dashboard composition, signature components — Topology Map / Circular Signal Meter / Live Data Tile, Apple-class motion contracts, full Do's and Don'ts).

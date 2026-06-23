@@ -2,7 +2,7 @@
 
 ## ✨ New Features
 
-None in this release.
+- **Automatic failback to your primary SIM once it is healthy again.** An opt-in setting under the Watchdog's recovery configuration lets the Watchdog periodically test whether the primary SIM has recovered. If the primary passes the health check, the Watchdog transparently switches back — no manual intervention needed. The check interval (default 30 minutes, minimum 5 minutes) is configurable. Because testing the inactive SIM requires a brief real connection swap, this feature is off by default.
 
 ## ✅ Improvements
 
@@ -39,8 +39,6 @@ None in this release.
 - **The Watchdog's status now correctly shows when it is running on the backup SIM.** A type-mismatch bug in the status file writer meant the "on backup SIM" indicator was always reported as false, even during an active SIM failover. The recovery logic itself was unaffected — only the displayed status was wrong. This is now fixed.
 
 - **Quality-based SIM failovers now track correctly and can be reverted.** When the Watchdog switched to the backup SIM because of poor connection quality (high latency or packet loss), the failover state was not finalized — leaving no record of which slot was the original, and making the "Revert to original SIM" button ineffective. Quality-triggered switches now finalize identically to connectivity-triggered ones.
-
-- **New: automatically switch back to your primary SIM once it is healthy again.** An opt-in setting under the Watchdog's recovery configuration lets the Watchdog periodically test whether the primary SIM has recovered. If the primary passes the health check, the Watchdog transparently switches back — no manual intervention needed. The check interval (default 30 minutes, minimum 5 minutes) is configurable. Because testing the inactive SIM requires a brief real connection swap, this feature is off by default.
 
 ## 📥 Installation
 
