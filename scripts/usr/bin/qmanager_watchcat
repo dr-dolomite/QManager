@@ -82,6 +82,12 @@ CFG_LOSS_THRESHOLD_PCT=30
 CFG_QUALITY_CONSECUTIVE=5
 CFG_SSR_AWARE=1
 CFG_SSR_GRACE=45
+# Auto-failback to the primary SIM after a Tier-3 failover. The inactive primary
+# slot CANNOT be passively health-checked (single hard SIM mux), so failback is a
+# BLIND periodic swap-back-to-primary + retest — each attempt is a real outage.
+# OPT-IN, default OFF. Interval is in MINUTES (a seconds cadence would be ruinous).
+CFG_PRIMARY_RECHECK_ENABLED=0
+CFG_PRIMARY_RECHECK_INTERVAL=30
 STATUS_CACHE="/tmp/qmanager_status.json"
 STATUS_STALE_THRESHOLD=30
 BOOT_SETTLE=30
@@ -105,12 +111,16 @@ total_recoveries=0
 cooldown_remaining=0
 sim_failover_active="false"
 original_sim_slot="null"
+original_sim_iccid=""           # ICCID of the original (pre-swap) SIM; "" = unknown
 current_sim_slot="null"
 reboots_this_hour=0
 cooldown_stale_retries=0
 quality_breach_counter=0
 recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
 revert_settle_active="false"    # "true" while holding the post-revert SIM settle floor
+primary_recheck_active="false"  # "true" while holding the blind primary-recheck settle floor
+recheck_return_slot="null"      # backup slot to return to if a primary recheck fails
+last_recheck_time=0             # epoch of the last failover finalize / recheck; auto-failback clock
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
 ssr_hold="false"          # JSON bool literal for write_state
 last_ssr_detected="null"  # JSON null literal or monotonic-seconds integer
@@ -172,10 +182,18 @@ read_config() {
     val=$(uci -q get quecmanager.watchcat.ssr_grace 2>/dev/null)
     [ -n "$val" ] && CFG_SSR_GRACE="$val"
 
+    CFG_PRIMARY_RECHECK_ENABLED=$(uci -q get quecmanager.watchcat.primary_recheck_enabled 2>/dev/null)
+    [ -z "$CFG_PRIMARY_RECHECK_ENABLED" ] && CFG_PRIMARY_RECHECK_ENABLED=0
+
+    # interval is in MINUTES; non-numeric/empty falls back to 30.
+    val=$(uci -q get quecmanager.watchcat.primary_recheck_interval 2>/dev/null)
+    case "$val" in ''|*[!0-9]*) CFG_PRIMARY_RECHECK_INTERVAL=30 ;; *) CFG_PRIMARY_RECHECK_INTERVAL="$val" ;; esac
+
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s fail_threshold=${CFG_FAIL_THRESHOLD} probes cooldown=${CFG_COOLDOWN}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE} (shared thresholds)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
+    qlog_info "  Primary-recheck (auto-failback): enabled=${CFG_PRIMARY_RECHECK_ENABLED} interval=${CFG_PRIMARY_RECHECK_INTERVAL}min"
 }
 
 # Resolve the SHARED degraded thresholds from quecmanager.quality_thresholds.*
@@ -240,7 +258,7 @@ write_state() {
         --argjson last_tier "${last_recovery_tier:-null}" \
         --argjson total "$total_recoveries" \
         --argjson cooldown "$cooldown_remaining" \
-        --argjson sf_active "$sim_failover_active" \
+        --arg sf_active "$sim_failover_active" \
         --argjson sf_orig "${original_sim_slot:-null}" \
         --argjson sf_curr "${current_sim_slot:-null}" \
         --argjson reboots "$reboots_this_hour" \
@@ -338,15 +356,31 @@ read_ping() {
     ping_reachable=$(printf '%s' "$_pdata" | cut -f3)
     ping_during_recovery=$(printf '%s' "$_pdata" | cut -f4)
 
-    # Staleness check
-    local now
-    local age
-    now=$(date +%s)
-    age=$((now - ping_ts))
-    if [ "$age" -gt "$PING_STALE_THRESHOLD" ]; then
-        qlog_warn "Ping data stale (age=${age}s), skipping cycle"
-        return 1
-    fi
+    # Staleness check — prefer monotonic /proc/uptime; wall-clock fallback when .mono absent
+    local ping_mono
+    local _stale=0
+    ping_mono=$(jq -r '.mono | if . == null then "" else tostring end' "$PING_CACHE" 2>/dev/null)
+    case "$ping_mono" in
+        ''|0|*[!0-9]*)
+            local now
+            local age
+            now=$(date +%s)
+            age=$((now - ping_ts))
+            if [ "$age" -gt "$PING_STALE_THRESHOLD" ]; then
+                qlog_warn "Ping data stale/wc (age=${age}s), skipping cycle"
+                _stale=1
+            fi
+            ;;
+        *)
+            local age_mono
+            age_mono=$(( $(mono_now) - ping_mono ))
+            if [ "$age_mono" -gt "$PING_STALE_THRESHOLD" ]; then
+                qlog_warn "Ping data stale (age_mono=${age_mono}s), skipping cycle"
+                _stale=1
+            fi
+            ;;
+    esac
+    [ "$_stale" -eq 1 ] && return 1
 
     return 0
 }
@@ -373,14 +407,29 @@ read_quality() {
     q_packet_loss=$(printf '%s' "$_qdata" | cut -f3)
     # sanitize loss to a clean integer (avg_latency may legitimately be "null")
     case "$q_packet_loss" in ''|*[!0-9]*) q_packet_loss=0 ;; esac
-    local _now
-    local _age
-    _now=$(date +%s)
-    _age=$((_now - _ts))
-    if [ "$_ts" -le 0 ] 2>/dev/null || [ "$_age" -gt "$STATUS_STALE_THRESHOLD" ]; then
-        qlog_warn "Quality data stale (age=${_age}s) — treating as no-signal"
-        return 1
-    fi
+    # Staleness check — prefer monotonic /proc/uptime; wall-clock fallback when .mono absent
+    local _mono
+    _mono=$(jq -r '.mono | if . == null then "" else tostring end' "$STATUS_CACHE" 2>/dev/null)
+    case "$_mono" in
+        ''|0|*[!0-9]*)
+            local _now
+            local _age
+            _now=$(date +%s)
+            _age=$((_now - _ts))
+            if [ "$_ts" -le 0 ] 2>/dev/null || [ "$_age" -gt "$STATUS_STALE_THRESHOLD" ]; then
+                qlog_warn "Quality data stale/wc (age=${_age}s) — treating as no-signal"
+                return 1
+            fi
+            ;;
+        *)
+            local _age_mono
+            _age_mono=$(( $(mono_now) - _mono ))
+            if [ "$_ts" -le 0 ] 2>/dev/null || [ "$_age_mono" -gt "$STATUS_STALE_THRESHOLD" ]; then
+                qlog_warn "Quality data stale (age_mono=${_age_mono}s) — treating as no-signal"
+                return 1
+            fi
+            ;;
+    esac
     return 0
 }
 
@@ -646,6 +695,19 @@ execute_tier3() {
     # Save original slot for potential fallback
     original_sim_slot="$current_slot"
 
+    # Capture the ORIGINAL slot's ICCID (3×1s retry) BEFORE detaching, so the
+    # failover file records an honest original_iccid. Best-effort: if it can't be
+    # read after 3 tries, leave it "" and continue — never block the swap.
+    local _orig_iccid_raw
+    local _orig_try
+    original_sim_iccid=""
+    for _orig_try in 1 2 3; do
+        _orig_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
+        original_sim_iccid=$(printf '%s' "$_orig_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+        [ -n "$original_sim_iccid" ] && break
+        sleep 1
+    done
+
     # Stop tower failover daemon (locks are meaningless on different SIM)
     /etc/init.d/qmanager_tower_failover stop 2>/dev/null
 
@@ -737,6 +799,7 @@ sim_failover_fallback() {
         current_sim_slot="$original_sim_slot"
         sim_failover_active="false"
         original_sim_slot="null"
+        original_sim_iccid=""
         return
     fi
 
@@ -766,6 +829,7 @@ sim_failover_fallback() {
     current_sim_slot="$original_sim_slot"
     sim_failover_active="false"
     original_sim_slot="null"
+    original_sim_iccid=""
 }
 
 execute_tier4() {
@@ -940,8 +1004,232 @@ _cooldown_handle_failure() {
     fi
 }
 
+# Finalize a Tier-3 SIM failover after a successful recovery cooldown. Shared by
+# BOTH the reachability and quality success arms so a quality-triggered swap is
+# finalized identically (writes $SIM_FAILOVER_FILE, marks sim_failover_active,
+# records the SIM, auto-applies the profile, starts the auto-failback clock).
+# GUARDED: a no-op unless this episode was a real Tier-3 swap, so either arm may
+# call it unconditionally.
+finalize_sim_failover() {
+    [ "$current_tier" -eq 3 ] || return 0
+    [ "$current_sim_slot" != "$original_sim_slot" ] || return 0
+    [ "$original_sim_slot" != "null" ] || return 0
+
+    sim_failover_active="true"
+
+    # Reason recorded in the failover file mirrors WHY recovery fired.
+    local _fail_reason
+    if [ "$recovery_reason" = "quality" ]; then
+        _fail_reason="quality_degradation"
+    else
+        _fail_reason="connectivity_failure"
+    fi
+
+    # Read backup ICCID with 3×1s retry — matches sim_failover_fallback pattern.
+    local curr_iccid_raw
+    local curr_iccid
+    local _try
+    curr_iccid=""
+    for _try in 1 2 3; do
+        curr_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
+        curr_iccid=$(printf '%s' "$curr_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+        [ -n "$curr_iccid" ] && break
+        sleep 1
+    done
+
+    local ts
+    ts=$(date +%s)
+    jq -n -c \
+        --argjson orig "$original_sim_slot" \
+        --argjson curr "$current_sim_slot" \
+        --argjson ts "$ts" \
+        --arg reason "$_fail_reason" \
+        --arg orig_iccid "$original_sim_iccid" \
+        --arg iccid "$curr_iccid" \
+        '{active:true, original_slot:$orig, current_slot:$curr, switched_at:$ts, reason:$reason, original_iccid:$orig_iccid, current_iccid:$iccid}' \
+        > "$SIM_FAILOVER_FILE"
+
+    # Mark this failover SIM as known so the poller's boot-time SIM swap detector
+    # treats it as expected (not a physical user swap).
+    if [ -n "$curr_iccid" ]; then
+        sim_db_add "$curr_iccid"
+    fi
+
+    qlog_info "SIM failover state saved: slot $original_sim_slot → $current_sim_slot (reason=$_fail_reason)"
+    append_event "sim_failover" "Watchcat: SIM failover confirmed — running on slot $current_sim_slot" "info"
+
+    # Auto-apply profile matching new SIM (watchdog)
+    if [ -n "$curr_iccid" ]; then
+        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$curr_iccid" "watchdog" )
+    fi
+
+    # Start the auto-failback clock from the moment failover is confirmed.
+    last_recheck_time=$(date +%s)
+}
+
+# Initiate a BLIND recheck of the primary SIM: temporarily swap back to the
+# original (primary) slot and let the post-settle health test decide whether to
+# stay (failback) or return to the backup. Each call is a real outage — only the
+# guarded main-loop call site fires it, and only when opted-in + due.
+initiate_primary_recheck() {
+    # Defensive precondition re-check (caller guards too).
+    [ "$sim_failover_active" = "true" ] || return 0
+    [ "$original_sim_slot" != "null" ] || return 0
+
+    # If primary is still bad, this is the slot we return to.
+    recheck_return_slot="$current_sim_slot"
+
+    touch "$RECOVERY_FLAG"
+    qlog_info "PRIMARY RECHECK: temporary swap-back to primary slot $original_sim_slot"
+    append_event "sim_failover" "Watchcat: rechecking primary SIM (slot $original_sim_slot) — temporary swap-back" "info"
+
+    # Golden Rule swap to PRIMARY: CFUN=0 → 2s → QUIMSLOT → 2s → CFUN=1
+    qcmd 'AT+CFUN=0' >/dev/null 2>&1
+    sleep 2
+    qcmd "AT+QUIMSLOT=$original_sim_slot" >/dev/null 2>&1
+    sleep 2
+    qcmd 'AT+CFUN=1' >/dev/null 2>&1
+    # Best-effort settle; the post-settle health test decides — don't hard-abort.
+    wait_for_modem
+
+    # Tentatively on primary now; the post-settle test confirms or reverts.
+    current_sim_slot="$original_sim_slot"
+
+    # Enter the settle cooldown. Leave recovery_reason AS-IS so the post-settle
+    # health test uses the quality criterion iff the failover was quality-driven.
+    # Do NOT clear sim_failover_active yet — finish_cooldown's recheck arm decides.
+    primary_recheck_active="true"
+    cooldown_remaining="$SIM_SETTLE_SECS"
+    state="cooldown"
+    qlog_info "Entering primary-recheck settle for ${SIM_SETTLE_SECS}s (reason=$recovery_reason)"
+}
+
 finish_cooldown() {
     rm -f "$RECOVERY_FLAG"
+
+    # --- Primary recheck settle (blind auto-failback test) ---
+    # We swapped back to primary and held the settle floor. Decide from a FRESH
+    # health read whether primary is good (failback) or still bad (return to
+    # backup). Must run BEFORE the revert/reason-aware arms.
+    if [ "$primary_recheck_active" = "true" ]; then
+        primary_recheck_active="false"
+
+        local _primary_healthy
+        _primary_healthy="no"
+        if read_ping && [ "$ping_reachable" = "true" ]; then
+            if [ "$recovery_reason" = "quality" ]; then
+                # Quality failover: primary must also pass the quality criterion.
+                if read_quality && ! quality_breached; then
+                    _primary_healthy="yes"
+                fi
+            else
+                _primary_healthy="yes"
+            fi
+        fi
+        # Stale ping data => read_ping returned 1 => stays "no" (conservative).
+
+        local _ph_iccid_raw
+        local _ph_iccid
+        local _ph_try
+
+        if [ "$_primary_healthy" = "yes" ]; then
+            qlog_info "PRIMARY RECHECK: primary SIM healthy — failing back to slot $current_sim_slot"
+            sim_failover_active="false"
+            rm -f "$SIM_FAILOVER_FILE"
+
+            _ph_iccid=""
+            for _ph_try in 1 2 3; do
+                _ph_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
+                _ph_iccid=$(printf '%s' "$_ph_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+                [ -n "$_ph_iccid" ] && break
+                sleep 1
+            done
+            if [ -n "$_ph_iccid" ]; then
+                sim_db_add "$_ph_iccid"
+                ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_ph_iccid" "watchdog_failback" )
+            fi
+
+            # Back on primary — its tower locks are valid again.
+            /etc/init.d/qmanager_tower_failover start 2>/dev/null
+
+            append_event "sim_failover" "Watchcat: primary SIM healthy again — failed back to slot $current_sim_slot" "info"
+
+            original_sim_slot="null"
+            original_sim_iccid=""
+            current_tier=0
+            failure_counter=0
+            quality_breach_counter=0
+            _recovery_marker_emitted=""
+            last_recheck_time=$(date +%s)
+            state="monitor"
+            rm -f "$RECOVERY_FLAG"
+            return
+        fi
+
+        # Primary still unhealthy — swap BACK to the backup slot.
+        qlog_warn "PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot $recheck_return_slot"
+        qcmd 'AT+CFUN=0' >/dev/null 2>&1
+        sleep 2
+        qcmd "AT+QUIMSLOT=$recheck_return_slot" >/dev/null 2>&1
+        sleep 2
+        qcmd 'AT+CFUN=1' >/dev/null 2>&1
+        wait_for_modem
+
+        current_sim_slot="$recheck_return_slot"
+        sim_failover_active="true"
+
+        local _bk_iccid_raw
+        local _bk_iccid
+        local _bk_try
+        _bk_iccid=""
+        for _bk_try in 1 2 3; do
+            _bk_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
+            _bk_iccid=$(printf '%s' "$_bk_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+            [ -n "$_bk_iccid" ] && break
+            sleep 1
+        done
+
+        local _rc_reason
+        if [ "$recovery_reason" = "quality" ]; then
+            _rc_reason="quality_degradation"
+        else
+            _rc_reason="connectivity_failure"
+        fi
+
+        local _rc_ts
+        _rc_ts=$(date +%s)
+        jq -n -c \
+            --argjson orig "$original_sim_slot" \
+            --argjson curr "$current_sim_slot" \
+            --argjson ts "$_rc_ts" \
+            --arg reason "$_rc_reason" \
+            --arg orig_iccid "$original_sim_iccid" \
+            --arg iccid "$_bk_iccid" \
+            '{active:true, original_slot:$orig, current_slot:$curr, switched_at:$ts, reason:$reason, original_iccid:$orig_iccid, current_iccid:$iccid}' \
+            > "$SIM_FAILOVER_FILE"
+        if [ -n "$_bk_iccid" ]; then
+            sim_db_add "$_bk_iccid"
+        fi
+
+        # On backup again — tower locks are meaningless, keep the daemon stopped.
+        /etc/init.d/qmanager_tower_failover stop 2>/dev/null
+
+        append_event "sim_failover" "Watchcat: primary SIM still unhealthy — staying on backup slot $recheck_return_slot" "info"
+
+        # Restart the interval clock so the next recheck is one full interval away.
+        last_recheck_time=$(date +%s)
+
+        # Benign post-swap settle: reuse the revert mechanism so the modem
+        # stabilizes on backup WITHOUT escalation. Keep suppression (RECOVERY_FLAG
+        # stays touched) during the settle, mirroring check_revert_request.
+        revert_settle_active="true"
+        recovery_reason="unreachable"
+        cooldown_remaining="$SIM_SETTLE_SECS"
+        state="cooldown"
+        touch "$RECOVERY_FLAG"
+        qlog_info "Entering post-recheck backup settle for ${SIM_SETTLE_SECS}s"
+        return
+    fi
 
     # --- Post-revert SIM settle ---
     # A user revert reuses the cooldown state purely as a settle timer. There is
@@ -983,8 +1271,10 @@ finish_cooldown() {
         if ! quality_breached; then
             qlog_info "COOLDOWN(quality) complete: quality RESTORED after Tier $current_tier"
             append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info"
-            # Quality path never engages the Tier-3 SIM-failover finalization
-            # block — that is only meaningful for the reachability path.
+            # A quality-triggered Tier-3 swap finalizes exactly like reachability —
+            # otherwise the modem strands on backup with no failover state / revert
+            # path. No-op for non-Tier-3 quality recoveries.
+            finalize_sim_failover
             state="monitor"
             current_tier=0
             failure_counter=0
@@ -1019,46 +1309,9 @@ finish_cooldown() {
         qlog_info "COOLDOWN complete: connectivity RESTORED after Tier $current_tier"
         append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info"
 
-        # If this was Tier 3 SIM failover, finalize the failover state
-        if [ "$current_tier" -eq 3 ] && [ "$current_sim_slot" != "$original_sim_slot" ] && [ "$original_sim_slot" != "null" ]; then
-            sim_failover_active="true"
-
-            # Read ICCID with 3×1s retry — matches sim_failover_fallback pattern
-            local curr_iccid_raw
-            local curr_iccid
-            local _try
-            curr_iccid=""
-            for _try in 1 2 3; do
-                curr_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
-                curr_iccid=$(printf '%s' "$curr_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
-                [ -n "$curr_iccid" ] && break
-                sleep 1
-            done
-
-            local ts
-            ts=$(date +%s)
-            jq -n -c \
-                --argjson orig "$original_sim_slot" \
-                --argjson curr "$current_sim_slot" \
-                --argjson ts "$ts" \
-                --arg iccid "$curr_iccid" \
-                '{active:true, original_slot:$orig, current_slot:$curr, switched_at:$ts, reason:"connectivity_failure", original_iccid:"", current_iccid:$iccid}' \
-                > "$SIM_FAILOVER_FILE"
-
-            # Mark this failover SIM as known so the poller's boot-time SIM
-            # swap detector treats it as expected (not a physical user swap).
-            if [ -n "$curr_iccid" ]; then
-                sim_db_add "$curr_iccid"
-            fi
-
-            qlog_info "SIM failover state saved: slot $original_sim_slot → $current_sim_slot"
-            append_event "sim_failover" "Watchcat: SIM failover confirmed — running on slot $current_sim_slot" "info"
-
-            # Auto-apply profile matching new SIM (watchdog)
-            if [ -n "$curr_iccid" ]; then
-                ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$curr_iccid" "watchdog" )
-            fi
-        fi
+        # If this was Tier 3 SIM failover, finalize the failover state (no-op
+        # otherwise). Shared with the quality success arm.
+        finalize_sim_failover
 
         # Reset — connectivity recovered
         state="monitor"
@@ -1183,6 +1436,12 @@ main() {
                 sim_failover_active="true"
                 original_sim_slot="$_sf_orig"
                 current_sim_slot="$_sf_curr"
+                # Restore the original ICCID so a later recheck/return-to-backup
+                # rewrites the failover file honestly.
+                original_sim_iccid=$(jq -r '(.original_iccid) | if . == null then "" else tostring end' "$SIM_FAILOVER_FILE" 2>/dev/null)
+                # Start the auto-failback clock from boot-resume so a recheck is at
+                # most one interval away (not immediately on boot).
+                last_recheck_time=$(date +%s)
                 qlog_info "Resumed SIM failover state: slot $original_sim_slot → $current_sim_slot (verified)"
             else
                 qlog_warn "SIM failover file recorded slot $_sf_curr but modem is on slot ${_live_slot:-unknown} — clearing stale state"
@@ -1230,6 +1489,7 @@ main() {
                 # Any active recovery is abandoned; the lock holder owns the modem.
                 rm -f "$RECOVERY_FLAG"
                 revert_settle_active="false"
+                primary_recheck_active="false"
                 current_tier=0
                 failure_counter=0
                 cooldown_stale_retries=0
@@ -1250,6 +1510,7 @@ main() {
             failure_counter=0
             cooldown_stale_retries=0
             quality_breach_counter=0
+            primary_recheck_active="false"
             _recovery_marker_emitted=""
             ssr_hold_clear
         fi
@@ -1300,6 +1561,7 @@ main() {
                     state="monitor"
                     failure_counter=0
                     quality_breach_counter=0
+                    primary_recheck_active="false"
                     _recovery_marker_emitted=""
                     ssr_hold_clear
                 else
@@ -1353,6 +1615,20 @@ main() {
         # NOT add it to this include-set, or quality would fire during a hold.
         if [ "$state" = "monitor" ] || [ "$state" = "suspect" ]; then
             evaluate_quality
+        fi
+
+        # --- Auto-failback: blind periodic primary-SIM recheck ---
+        # Opt-in (default off). Only when an active failover exists, we are idle
+        # in monitor, no recheck is already settling, and no user revert is
+        # pending (revert takes precedence). Each attempt is a real outage, so it
+        # is gated to once every CFG_PRIMARY_RECHECK_INTERVAL minutes. A real
+        # recovery this cycle already moved state away from monitor, so it wins.
+        if [ "$CFG_PRIMARY_RECHECK_ENABLED" = "1" ] && [ "$sim_failover_active" = "true" ] && [ "$state" = "monitor" ] && [ "$primary_recheck_active" = "false" ] && [ ! -f "$REVERT_FLAG" ]; then
+            _pr_now=$(date +%s)
+            _pr_due=$((last_recheck_time + CFG_PRIMARY_RECHECK_INTERVAL * 60))
+            if [ "$_pr_now" -ge "$_pr_due" ]; then
+                initiate_primary_recheck
+            fi
         fi
 
         write_state

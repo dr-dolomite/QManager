@@ -292,7 +292,15 @@
     "ssr_grace_label": "Grace Window (seconds)",
     "ssr_grace_placeholder": "45",
     "ssr_grace_description": "How long to let the modem self-recover before the recovery steps may act.",
-    "ssr_grace_error": "Must be a number between 10 and 120."
+    "ssr_grace_error": "Must be a number between 10 and 120.",
+    "primary_recheck_label": "Auto Fail-Back to Primary SIM",
+    "primary_recheck_description": "Periodically switch back to the primary SIM to check whether it's healthy again, and return to it automatically when it is.",
+    "primary_recheck_tooltip": "The modem can only use one SIM at a time, so the only way to know if your primary SIM is working again is to switch back and test it. Each check briefly interrupts the connection — if the primary is still down, the watchdog returns to the backup SIM. Leave this off if you'd rather switch back manually.",
+    "primary_recheck_more_info_aria": "More information about auto fail-back to the primary SIM",
+    "primary_recheck_interval_label": "Recheck Every (minutes)",
+    "primary_recheck_interval_placeholder": "30",
+    "primary_recheck_interval_description": "How often to test the primary SIM while running on the backup. Each check briefly interrupts the connection.",
+    "primary_recheck_interval_error": "Must be a number between 5 and 1440."
   },
   "latency": {
     "page_title": "Latency Monitoring",

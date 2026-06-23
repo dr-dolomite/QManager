@@ -865,6 +865,18 @@ seed_uci_defaults() {
     else
         info "quecmanager.watchcat.ssr_grace already set — preserving user choice"
     fi
+    if ! uci -q get quecmanager.watchcat.primary_recheck_enabled >/dev/null 2>&1; then
+        uci set quecmanager.watchcat.primary_recheck_enabled=0
+        info "Seeded quecmanager.watchcat.primary_recheck_enabled=0 (auto-failback off by default)"
+    else
+        info "quecmanager.watchcat.primary_recheck_enabled already set — preserving user choice"
+    fi
+    if ! uci -q get quecmanager.watchcat.primary_recheck_interval >/dev/null 2>&1; then
+        uci set quecmanager.watchcat.primary_recheck_interval=30
+        info "Seeded quecmanager.watchcat.primary_recheck_interval=30"
+    else
+        info "quecmanager.watchcat.primary_recheck_interval already set — preserving user choice"
+    fi
 
     # ---------------------------------------------------------------------------
     # Watchdog/Quality unification migration (idempotent, exact-match guarded)

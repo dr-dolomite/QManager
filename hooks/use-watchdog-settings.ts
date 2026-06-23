@@ -36,6 +36,13 @@ export interface WatchdogSettings {
   // recovery ladder may act. Default on (the daemon defaults to 1/45 too).
   ssr_aware: boolean;
   ssr_grace: number;
+  // Auto fail-back to the primary SIM after a Tier-3 failover. Because the
+  // inactive SIM slot cannot be health-checked passively, this is a BLIND
+  // periodic swap-back-and-retest — each attempt is a real outage — so it is
+  // opt-in (default off). The interval is in MINUTES (5–1440). UCI:
+  // quecmanager.watchcat.{primary_recheck_enabled,primary_recheck_interval}.
+  primary_recheck_enabled: boolean;
+  primary_recheck_interval: number;
   // Probe interval ownership. The Watchdog page mirrors the Connection Quality
   // sensitivity Select and can override the interval with a custom value. These
   // map to UCI `quecmanager.ping_profile.{profile,interval_override}`; the GET

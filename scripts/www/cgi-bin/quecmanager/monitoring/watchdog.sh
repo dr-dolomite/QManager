@@ -51,6 +51,8 @@ ensure_watchcat_config() {
     uci set quecmanager.watchcat.quality_consecutive=5
     uci set quecmanager.watchcat.ssr_aware=1
     uci set quecmanager.watchcat.ssr_grace=45
+    uci set quecmanager.watchcat.primary_recheck_enabled=0
+    uci set quecmanager.watchcat.primary_recheck_interval=30
     uci commit quecmanager
 }
 
@@ -166,6 +168,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     tier1="" tier2="" tier3="" tier4="" backup_sim="" max_reboots=""
     quality_enabled="" quality_consecutive=""
     ssr_aware="" ssr_grace=""
+    primary_recheck_enabled="" primary_recheck_interval=""
 
     enabled=$(uci_get enabled 0)
     fail_threshold=$(uci_get fail_threshold 5)
@@ -181,6 +184,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     quality_consecutive=$(uci_get quality_consecutive 5)
     ssr_aware=$(uci_get ssr_aware 1)
     ssr_grace=$(uci_get ssr_grace 45)
+    primary_recheck_enabled=$(uci_get primary_recheck_enabled 0)
+    primary_recheck_interval=$(uci_get primary_recheck_interval 30)
 
     # --- Probe interval reflection (ping_profile section, read-only mirror) ---
     probe_profile=""
@@ -255,6 +260,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --argjson quality_consecutive "$quality_consecutive" \
         --argjson ssr_aware "$ssr_aware" \
         --argjson ssr_grace "$ssr_grace" \
+        --argjson primary_recheck_enabled "$primary_recheck_enabled" \
+        --argjson primary_recheck_interval "$primary_recheck_interval" \
         --arg probe_profile "$probe_profile" \
         --argjson interval_override "$interval_override_json" \
         --argjson effective_interval "$effective_interval" \
@@ -282,7 +289,9 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 quality_enabled: ($quality_enabled == 1),
                 quality_consecutive: $quality_consecutive,
                 ssr_aware: ($ssr_aware == 1),
-                ssr_grace: $ssr_grace
+                ssr_grace: $ssr_grace,
+                primary_recheck_enabled: ($primary_recheck_enabled == 1),
+                primary_recheck_interval: $primary_recheck_interval
             },
             probe_profile: $probe_profile,
             interval_override: $interval_override,
@@ -407,6 +416,17 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         val=$(printf '%s' "$POST_DATA" | jq -r '.ssr_aware | if . == null then empty else tostring end')
         if [ -n "$val" ]; then
             case "$val" in true) uci set quecmanager.watchcat.ssr_aware=1 ;; false) uci set quecmanager.watchcat.ssr_aware=0 ;; esac
+        fi
+
+        val=$(printf '%s' "$POST_DATA" | jq -r '.primary_recheck_enabled | if . == null then empty else tostring end')
+        if [ -n "$val" ]; then
+            case "$val" in true) uci set quecmanager.watchcat.primary_recheck_enabled=1 ;; false) uci set quecmanager.watchcat.primary_recheck_enabled=0 ;; esac
+        fi
+
+        val=$(printf '%s' "$POST_DATA" | jq -r '.primary_recheck_interval | if . == null then empty else tostring end')
+        if [ -n "$val" ]; then
+            validate_int "$val" 5 1440 || reject_field "primary_recheck_interval" "must be integer 5-1440"
+            uci set quecmanager.watchcat.primary_recheck_interval="$val"
         fi
 
         # ---------------------------------------------------------------------

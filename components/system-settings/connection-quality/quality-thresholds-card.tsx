@@ -212,11 +212,20 @@ export default function QualityThresholdsCard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3">
-            <Skeleton className="h-10 w-full rounded-md" />
-            <Skeleton className="h-20 w-full rounded-md" />
-            <Skeleton className="h-10 w-full rounded-md" />
-            <Skeleton className="h-20 w-full rounded-md" />
+          <div className="grid gap-5">
+            {/* Latency: label → segmented control → preview panel */}
+            <div className="grid gap-3">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-[4.5rem] w-full rounded-lg" />
+            </div>
+            <Separator />
+            {/* Packet loss: same shape */}
+            <div className="grid gap-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-[4.5rem] w-full rounded-lg" />
+            </div>
             <div className="flex justify-end">
               <Skeleton className="h-9 w-32" />
             </div>

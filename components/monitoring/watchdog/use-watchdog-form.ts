@@ -53,6 +53,7 @@ export interface WatchdogFormErrors {
   backupSim: string | null;
   consecutive: string | null;
   ssrGrace: string | null;
+  primaryRecheckInterval: string | null;
 }
 
 export interface WatchdogForm {
@@ -87,6 +88,12 @@ export interface WatchdogForm {
   setBackupSimSlot: (v: string) => void;
   maxRebootsPerHour: string;
   setMaxRebootsPerHour: (v: string) => void;
+
+  // Auto fail-back to primary SIM (nested in Tier 3). Opt-in; interval in minutes.
+  primaryRecheckEnabled: boolean;
+  setPrimaryRecheckEnabled: (v: boolean) => void;
+  primaryRecheckInterval: string;
+  setPrimaryRecheckInterval: (v: string) => void;
 
   // Connection-quality recovery (acts on the shared thresholds)
   qualityEnabled: boolean;
@@ -174,6 +181,12 @@ export function useWatchdogForm({
   );
   const [ssrAware, setSsrAware] = useState(settings.ssr_aware);
   const [ssrGrace, setSsrGrace] = useState(String(settings.ssr_grace));
+  const [primaryRecheckEnabled, setPrimaryRecheckEnabled] = useState(
+    settings.primary_recheck_enabled,
+  );
+  const [primaryRecheckInterval, setPrimaryRecheckInterval] = useState(
+    String(settings.primary_recheck_interval),
+  );
 
   // --- Interval choice as one control value ---
   const intervalChoice = useCustomInterval ? "custom" : probeProfile;
@@ -244,6 +257,15 @@ export function useWatchdogForm({
       ssrAware && ssrGrace && !isIntInRange(ssrGrace, 10, 120)
         ? t("watchdog.ssr_grace_error")
         : null;
+    // Auto fail-back interval is only meaningful when the toggle is on. An empty
+    // field while enabled is handled as a save-blocking "missing" below, not a
+    // range error (mirrors the customInterval pattern).
+    const primaryRecheckIntervalErr =
+      primaryRecheckEnabled &&
+      primaryRecheckInterval &&
+      !isIntInRange(primaryRecheckInterval, 5, 1440)
+        ? t("watchdog.primary_recheck_interval_error")
+        : null;
 
     return {
       failThreshold: failThresholdErr,
@@ -253,6 +275,7 @@ export function useWatchdogForm({
       backupSim: backupSimErr,
       consecutive: consecutiveErr,
       ssrGrace: ssrGraceErr,
+      primaryRecheckInterval: primaryRecheckIntervalErr,
     };
   }, [
     t,
@@ -267,6 +290,8 @@ export function useWatchdogForm({
     qualityConsecutive,
     ssrAware,
     ssrGrace,
+    primaryRecheckEnabled,
+    primaryRecheckInterval,
   ]);
 
   const hasValidationErrors = useMemo(
@@ -278,6 +303,11 @@ export function useWatchdogForm({
   // can't be saved.
   const customIntervalMissing =
     useCustomInterval && customInterval.trim() === "";
+
+  // Same rule for the auto fail-back interval: empty while the toggle is on
+  // blocks the save without being a range error.
+  const primaryRecheckIntervalMissing =
+    primaryRecheckEnabled && primaryRecheckInterval.trim() === "";
 
   const isDirty = useMemo(
     () =>
@@ -302,7 +332,9 @@ export function useWatchdogForm({
       qualityEnabled !== settings.quality_enabled ||
       qualityConsecutive !== String(settings.quality_consecutive) ||
       ssrAware !== settings.ssr_aware ||
-      ssrGrace !== String(settings.ssr_grace),
+      ssrGrace !== String(settings.ssr_grace) ||
+      primaryRecheckEnabled !== settings.primary_recheck_enabled ||
+      primaryRecheckInterval !== String(settings.primary_recheck_interval),
     [
       settings,
       seedProfile,
@@ -322,14 +354,26 @@ export function useWatchdogForm({
       qualityConsecutive,
       ssrAware,
       ssrGrace,
+      primaryRecheckEnabled,
+      primaryRecheckInterval,
     ],
   );
 
   const canSave =
-    !hasValidationErrors && !customIntervalMissing && isDirty && !isSaving;
+    !hasValidationErrors &&
+    !customIntervalMissing &&
+    !primaryRecheckIntervalMissing &&
+    isDirty &&
+    !isSaving;
 
   const submit = useCallback(async () => {
-    if (hasValidationErrors || customIntervalMissing || !isDirty || isSaving)
+    if (
+      hasValidationErrors ||
+      customIntervalMissing ||
+      primaryRecheckIntervalMissing ||
+      !isDirty ||
+      isSaving
+    )
       return;
 
     const payload: WatchdogSavePayload = {
@@ -348,6 +392,8 @@ export function useWatchdogForm({
       quality_consecutive: parseInt(qualityConsecutive || "5", 10),
       ssr_aware: ssrAware,
       ssr_grace: parseInt(ssrGrace || "45", 10),
+      primary_recheck_enabled: primaryRecheckEnabled,
+      primary_recheck_interval: parseInt(primaryRecheckInterval || "30", 10),
       probe_profile: probeProfile,
       interval_override: useCustomInterval
         ? parseInt(customInterval, 10)
@@ -364,6 +410,7 @@ export function useWatchdogForm({
   }, [
     hasValidationErrors,
     customIntervalMissing,
+    primaryRecheckIntervalMissing,
     isDirty,
     isSaving,
     isEnabled,
@@ -380,6 +427,8 @@ export function useWatchdogForm({
     qualityConsecutive,
     ssrAware,
     ssrGrace,
+    primaryRecheckEnabled,
+    primaryRecheckInterval,
     probeProfile,
     useCustomInterval,
     customInterval,
@@ -413,6 +462,8 @@ export function useWatchdogForm({
     setQualityConsecutive(String(settings.quality_consecutive));
     setSsrAware(settings.ssr_aware);
     setSsrGrace(String(settings.ssr_grace));
+    setPrimaryRecheckEnabled(settings.primary_recheck_enabled);
+    setPrimaryRecheckInterval(String(settings.primary_recheck_interval));
   }, [settings, seedProfile]);
 
   return {
@@ -448,6 +499,10 @@ export function useWatchdogForm({
     setSsrAware,
     ssrGrace,
     setSsrGrace,
+    primaryRecheckEnabled,
+    setPrimaryRecheckEnabled,
+    primaryRecheckInterval,
+    setPrimaryRecheckInterval,
     errors,
     hasValidationErrors,
     isDirty,

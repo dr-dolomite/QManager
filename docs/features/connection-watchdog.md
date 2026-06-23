@@ -85,7 +85,7 @@ The trigger source changes only two things, both at cooldown time, never the lad
 |---|---|---|
 | Ladder range | Tier 1 → 4 | **Tier 1 → 4 (identical)** |
 | Cooldown success test | fresh ping `reachable = true` | fresh `read_quality` not breaching ceilings |
-| Tier 3 SIM-failover finalization | runs | **skipped** (meaningless for latency/loss) |
+| Tier 3 SIM-failover finalization | runs (via `finalize_sim_failover`) | **runs identically** (shared `finalize_sim_failover` call) |
 | Tier 4 token bucket | applies | **applies identically** |
 
 See §5 (Reason-aware cooldown) for *why* the success test must differ: a degraded link reports `reachable = true` the whole time, so judging a quality recovery by reachability would always declare false success and the daemon would burn through every tier in seconds.
@@ -171,6 +171,10 @@ Seeded by `ensure_watchcat_config()` in `watchdog.sh` on first CGI GET, and by `
 | `tier4_enabled` | 0/1 | 1 | Enable Tier 4 (reboot) |
 | `backup_sim_slot` | 1/2 | (empty) | SIM slot for Tier 3 failover |
 | `max_reboots_per_hour` | int 1–10 | 3 | Tier 4 token bucket; auto-disables at limit |
+| `primary_recheck_enabled` | 0/1 | **0 (OFF)** | Enable automatic blind recheck of the primary SIM while running on the backup. Opt-in because each recheck is a real (brief) outage — the inactive primary slot cannot be passively health-checked. |
+| `primary_recheck_interval` | int 5–1440 | 30 | Minutes between primary-SIM rechecks. Not seconds — a seconds cadence would cause a continuous outage loop. |
+
+> ⚠️ WARNING: The RM551E uses a hard single-slot SIM mux (`AT+QUIMSLOT=?` → `(1,2)`). The inactive primary slot receives no radio signal and cannot be tested passively. Auto-failback is therefore a BLIND periodic swap-back-to-primary + retest. Every recheck attempt causes a brief connectivity interruption. This is why the feature is opt-in with a minutes-granularity interval, not seconds.
 
 ### Probe-interval ownership keys
 
@@ -216,7 +220,7 @@ The `quecmanager.quality_thresholds` section is never seeded by the installer an
 
 Both SSR keys are seeded in `install.sh`'s `seed_uci_defaults()` (idempotent, preserves user choice on upgrade) **and** lazily seeded in `ensure_watchcat_config()` on the first CGI GET. Missing keys in `read_config()` in the daemon default to `CFG_SSR_AWARE=1` / `CFG_SSR_GRACE=45`, so existing installs that have not yet received the CGI GET benefit from the hold behaviour immediately after upgrade, even before any settings page visit.
 
-> ℹ️ NOTE: The installer seeds only the quality keys and SSR keys via `seed_uci_defaults()`, not the full watchcat section. The rest of the section is seeded lazily on the first CGI GET by `ensure_watchcat_config()`. This preserves existing user configuration on upgrade.
+> ℹ️ NOTE: The installer seeds the quality keys, SSR keys, and `primary_recheck_*` keys via `seed_uci_defaults()` (idempotent, preserves existing values). The full watchcat section is seeded lazily on the first CGI GET by `ensure_watchcat_config()` (which also sets `primary_recheck_*`). This two-layer seeding ensures the new keys are available both on fresh installs and on upgrades where the settings page may not have been visited yet.
 
 ---
 
@@ -314,9 +318,9 @@ The quality path maintains `quality_breach_counter` independently of the reachab
 `finish_cooldown()` branches on `recovery_reason` to choose its success criterion.
 
 - **`recovery_reason="unreachable"`:** Success = `ping_reachable=true` from a fresh `qmanager_ping.json` read. If this was Tier 3, finalize SIM failover state.
-- **`recovery_reason="quality"`:** A degraded-but-reachable link reports `reachable=true` throughout, so the reachability check would always declare success. Instead, success is a fresh `read_quality` call that does NOT breach the resolved thresholds from `resolve_quality_thresholds()` (`!quality_breached`). Tier-3 SIM failover finalization is NOT run from the quality path — that finalization is only meaningful for connectivity failures, not latency/loss scenarios.
+- **`recovery_reason="quality"`:** A degraded-but-reachable link reports `reachable=true` throughout, so the reachability check would always declare success. Instead, success is a fresh `read_quality` call that does NOT breach the resolved thresholds from `resolve_quality_thresholds()` (`!quality_breached`). On Tier-3 success, `finalize_sim_failover` is called — identical to the reachability arm. Without finalization, a quality-triggered swap strands the modem on the backup SIM with no failover state and no revert path.
 
-**Why:** Without this branch, a quality-triggered recovery on a link that is reachable but slow would always be declared "restored" at cooldown, even if the link is still slow. The daemon would cycle through all tiers in quick succession.
+**Why:** Without this branch, a quality-triggered recovery on a link that is reachable but slow would always be declared "restored" at cooldown, even if the link is still slow. The daemon would cycle through all tiers in quick succession. The quality path previously skipped Tier-3 finalization; that was reversed — finalization now runs on both success arms via the shared `finalize_sim_failover()` function.
 
 ### 6. States where evaluate_quality runs
 
@@ -351,7 +355,7 @@ Written atomically via `STATE_TMP` → `mv`. The CGI GET passes the full file co
 | `last_recovery_tier` | int or null | Tier of last recovery action |
 | `total_recoveries` | int | Total recovery actions since daemon start |
 | `cooldown_remaining` | int | Seconds remaining in cooldown |
-| `sim_failover_active` | bool | Whether modem is currently on the backup SIM |
+| `sim_failover_active` | bool | Whether modem is currently on the backup SIM. Written via `--arg sf_active "$sim_failover_active"` and compared `($sf_active == "true")` so the JSON output is a real boolean. |
 | `original_sim_slot` | int or null | SIM slot before Tier 3 |
 | `current_sim_slot` | int or null | Current SIM slot |
 | `reboots_this_hour` | int | Reboots from crash.log in last 3600s |
@@ -393,6 +397,8 @@ Returns current UCI settings, live daemon state, SIM failover state, SIM swap de
     "quality_consecutive": 5,
     "ssr_aware": true,
     "ssr_grace": 45,
+    "primary_recheck_enabled": false,
+    "primary_recheck_interval": 30,
     "probe_profile": "relaxed",
     "interval_override": null,
     "effective_interval": 5,
@@ -433,6 +439,8 @@ Three actions are supported.
   "quality_consecutive": 5,
   "ssr_aware": true,
   "ssr_grace": 45,
+  "primary_recheck_enabled": false,
+  "primary_recheck_interval": 30,
   "probe_profile": "relaxed",
   "interval_override": null
 }
@@ -466,6 +474,8 @@ Send `"interval_override": null` to clear a custom override and revert to the pr
 | `quality_consecutive` | int 1–60 |
 | `ssr_grace` | int 10–120 |
 | `ssr_aware` | boolean |
+| `primary_recheck_enabled` | boolean |
+| `primary_recheck_interval` | int 5–1440 (minutes) |
 | `probe_profile` | one of: `sensitive`, `regular`, `relaxed`, `quiet` |
 | `interval_override` | int 1–60 to set; JSON `null` to clear; field must be present if intent is to change |
 
@@ -535,14 +545,31 @@ After any SIM transition, reading the ICCID is attempted up to three times with 
 ### Forward swap (`execute_tier3` + cooldown finalization)
 
 1. Read current slot via `AT+QUIMSLOT?`.
-2. Stop the tower-failover daemon (its lock state is meaningless on the backup SIM).
-3. Golden Rule sequence: `AT+CFUN=0` → 2 s → `AT+QUIMSLOT=N` → 2 s → `AT+CFUN=1`.
-4. `wait_for_modem` (up to 60 s). On failure, call `sim_failover_fallback` and enter cooldown.
-5. `AT+CPIN?` SIM-presence guard — if the backup slot returns an error, call `sim_failover_fallback` and enter cooldown.
-6. Enter cooldown with `cooldown_remaining = max(CFG_COOLDOWN, SIM_SETTLE_SECS)`.
-7. **Finalization in `finish_cooldown`** (only when `recovery_reason="unreachable"` and `ping_reachable=true`): write `/tmp/qmanager_sim_failover`, call `sim_db_add` on the backup SIM's ICCID (3×retry), auto-apply a matching custom profile (`auto_apply_profile … "watchdog"`), and set `sim_failover_active="true"`.
+2. Capture the original slot's ICCID via 3×1s-retry `AT+QCCID` read (into `original_sim_iccid`) BEFORE detaching. Best-effort: if unreadable after 3 tries, `original_sim_iccid` remains `""` and the swap continues.
+3. Stop the tower-failover daemon (its lock state is meaningless on the backup SIM).
+4. Golden Rule sequence: `AT+CFUN=0` → 2 s → `AT+QUIMSLOT=N` → 2 s → `AT+CFUN=1`.
+5. `wait_for_modem` (up to 60 s). On failure, call `sim_failover_fallback` and enter cooldown.
+6. `AT+CPIN?` SIM-presence guard — if the backup slot returns an error, call `sim_failover_fallback` and enter cooldown.
+7. Enter cooldown with `cooldown_remaining = max(CFG_COOLDOWN, SIM_SETTLE_SECS)`.
+8. **Finalization via `finalize_sim_failover()`** — called from the success arm of BOTH `recovery_reason="unreachable"` and `recovery_reason="quality"` paths in `finish_cooldown`. The function is self-guarded (no-op unless `current_tier==3` && slot moved && `original_sim_slot != "null"`), so both arms may call it unconditionally. It: sets `sim_failover_active="true"`, writes `/tmp/qmanager_sim_failover` (including `original_iccid` and `reason` field — `"connectivity_failure"` or `"quality_degradation"`), calls `sim_db_add` on the backup ICCID (3×retry), auto-applies a matching custom profile (`auto_apply_profile … "watchdog"`), and records `last_recheck_time` to start the auto-failback clock.
 
 The state is NOT finalized during `execute_tier3` itself — finalization waits for the cooldown success test so a false-positive connectivity return does not prematurely lock in the failover state.
+
+**`/tmp/qmanager_sim_failover` shape:**
+
+```json
+{
+  "active": true,
+  "original_slot": 1,
+  "current_slot": 2,
+  "switched_at": 1718900000,
+  "reason": "connectivity_failure",
+  "original_iccid": "89014103211118510720",
+  "current_iccid": "89012303211118510720"
+}
+```
+
+`reason` is `"connectivity_failure"` for reachability-triggered swaps, `"quality_degradation"` for quality-triggered swaps. `original_iccid` is the ICCID of the primary SIM read before the swap; it is `""` only if the 3×retry `AT+QCCID` read failed entirely.
 
 ### Fallback (`sim_failover_fallback`)
 
@@ -568,11 +595,33 @@ A user-requested revert (`POST action=revert_sim`) writes `/tmp/qmanager_watchca
 
 ### Post-revert settle floor (`revert_settle_active`)
 
-After `sim_failover_fallback` completes during a user revert, the daemon enters the `cooldown` state with `cooldown_remaining=SIM_SETTLE_SECS` and `revert_settle_active="true"`. The `finish_cooldown` function has a top guard: when `revert_settle_active="true"`, it clears the flag, resets counters, and returns to `monitor` WITHOUT running the reason-aware success/escalation logic. This is correct — a revert has no tier to validate and must not escalate.
+After `sim_failover_fallback` completes during a user revert, the daemon enters the `cooldown` state with `cooldown_remaining=SIM_SETTLE_SECS` and `revert_settle_active="true"`. The `finish_cooldown` function has a top guard (arm 2, after the primary-recheck arm): when `revert_settle_active="true"`, it clears the flag, resets counters, and returns to `monitor` WITHOUT running the reason-aware success/escalation logic. This is correct — a revert has no tier to validate and must not escalate.
 
 `revert_settle_active` is also cleared on LOCKED-state entry (along with the rest of the recovery state) so a maintenance window cannot strand the daemon in a phantom settle.
 
 The `cooldown_remaining` value in the state file reflects `SIM_SETTLE_SECS` (90 s) during a revert settle, so the UI countdown is honest.
+
+### Auto-failback: blind primary-SIM recheck
+
+When `primary_recheck_enabled=1` and the daemon is in an active failover (`sim_failover_active="true"`), the main loop accrues time since `last_recheck_time` (epoch). On reaching `primary_recheck_interval` minutes, `initiate_primary_recheck()` fires — provided: state is `monitor`, no `primary_recheck_active` settle is already in progress, and no user-revert flag is pending (user revert takes precedence).
+
+**`initiate_primary_recheck()` sequence:**
+
+1. Record `recheck_return_slot = current_sim_slot` (backup slot to return to if primary fails).
+2. Golden Rule swap to the primary slot: `AT+CFUN=0` → 2 s → `AT+QUIMSLOT=$original_sim_slot` → 2 s → `AT+CFUN=1`.
+3. `wait_for_modem` (best-effort; failure continues to the settle rather than hard-aborting).
+4. Set `primary_recheck_active="true"`, `cooldown_remaining=SIM_SETTLE_SECS`, `state="cooldown"`.
+5. `recovery_reason` is left unchanged so the health test uses quality criteria if the failover was quality-driven.
+
+**`finish_cooldown` primary-recheck arm** (runs before the `revert_settle_active` and reason-aware arms):
+
+- Reads fresh ping data. If reachable AND (if quality failover: also `!quality_breached`; stale data = unhealthy):
+  - **Primary healthy:** clear failover state, `rm $SIM_FAILOVER_FILE`, 3×retry ICCID read → `sim_db_add`, `auto_apply_profile "$iccid" "watchdog_failback"`, restart tower-failover daemon, reset counters, return to `monitor`. Record `last_recheck_time` to start the next interval.
+  - **Primary still unhealthy:** Golden Rule swap BACK to `recheck_return_slot`, rewrite `$SIM_FAILOVER_FILE`, `sim_db_add`, stop tower-failover daemon, reset `last_recheck_time`, set `revert_settle_active="true"` for a benign 90 s settle.
+
+> ℹ️ NOTE: `primary_recheck_active` is an in-process shell variable only — it is NOT written to the state file (same pattern as `revert_settle_active`). The UI sees a recheck settle as a normal `cooldown` countdown. There is no separate state-file field to distinguish a primary-recheck settle from a post-recovery cooldown.
+
+**Why opt-in and minutes-only:** The inactive SIM slot is hard-muxed off — it receives no radio signal and cannot be tested without physically switching the modem's SIM selection. Every recheck is a real connectivity interruption. A seconds-granularity interval would loop the modem in and out of brief outages. The minimum 5-minute interval is enforced by both the UCI validation range (5–1440) and the daemon's fallback default (30 minutes).
 
 ---
 
@@ -602,6 +651,7 @@ that card's tab).
 - `latency_ceiling_ms` and `loss_ceiling_pct` **removed** — thresholds now come from the shared `quality_thresholds` object surfaced from the GET.
 - Added `probe_profile: PingProfile`, `interval_override: number | null`, `effectiveInterval: number` (derived client-side from `interval_override` ?? profile→seconds map), and `qualityThresholds: QualityThresholdsSettings` (read from the GET's `quality_thresholds` passthrough; changes to it are saved via `useQualityThresholds`, not the watchdog save).
 - `ssr_aware: boolean` and `ssr_grace: number` remain unchanged.
+- Added `primary_recheck_enabled: boolean` and `primary_recheck_interval: number` (int, 5–1440 minutes). The form validates the interval range and blocks save when `primary_recheck_enabled=true` but no valid interval is entered.
 
 **`WatchdogLiveStatus`** added optional `ssr_hold?: boolean` and `last_ssr_detected?: number | null`. These are typed optional because older daemon versions will not emit them. The existing optional fields `quality_breach_count`, `quality_enabled`, and `last_recovery_reason` follow the same rule — consumers must handle their absence.
 
@@ -617,11 +667,13 @@ that card's tab).
 
 **SSR hold hero state (Overview card):** `STATE_META["ssr_hold"]` uses `tone: "info"`, `ActivityIcon`, and `pulse: true`. The badge reads "Letting Modem Self-Recover" and the blurb explains the modem is restarting its radio firmware. Info tone is deliberate — this is calm, expected behaviour, not a destructive state.
 
-**i18n:** English keys in `public/locales/en/monitoring.json`: `status_badge_ssr_hold`, `state_blurb_ssr_hold`, `ssr_aware_label`, `ssr_aware_description`, `ssr_aware_tooltip`, `ssr_aware_more_info_aria`, `ssr_grace_label`, `ssr_grace_placeholder`, `ssr_grace_description`, `ssr_grace_error`. The `id`, `it`, `zh-CN`, and `zh-TW` locales are not yet translated; 40 i18n warnings appear at build time (fallback to `en` is configured via `fallbackLng: "en"`). A translation sweep for these locales is a tracked follow-up — not a bug.
+**i18n:** English keys in `public/locales/en/monitoring.json` include: `status_badge_ssr_hold`, `state_blurb_ssr_hold`, `ssr_aware_label`, `ssr_aware_description`, `ssr_aware_tooltip`, `ssr_aware_more_info_aria`, `ssr_grace_label`, `ssr_grace_placeholder`, `ssr_grace_description`, `ssr_grace_error`; and (from the auto-failback feature) `watchdog.primary_recheck_enabled` and `watchdog.primary_recheck_interval` family keys. The `id`, `it`, `zh-CN`, and `zh-TW` locales are not yet translated for either the SSR or auto-failback keys; build-time i18n warnings fall back to `en` via `fallbackLng: "en"`. A translation sweep for these locales is a tracked follow-up — not a bug.
 
 ---
 
 ## Known Gotchas
+
+- **`jq --argjson` parses shell `"true"`/`"false"` strings into JSON booleans; never compare them with `== "true"`.** The `sim_failover_active` state-file field was previously written via `--argjson sf_active "$sim_failover_active"` then tested with `($sf_active == "true")`. Because `--argjson` parses the value as JSON, `"true"` becomes the JSON boolean `true`, and `(true == "true")` is always false in jq — a type mismatch. The fix is `--arg sf_active "$sim_failover_active"` (emits a JSON string) so `($sf_active == "true")` works. The sibling fields `ssr_hold` and `last_ssr_detected` use `--argjson` correctly — they emit the value directly into the output without a string comparison: `ssr_hold: $ssr_hold`. `enabled` and `quality_enabled` compare against a numeric `== 1`, not a string, so they are also safe. Pattern rule: use `--arg` when you need to string-compare in jq; use `--argjson` only when you want the parsed JSON value emitted directly.
 
 - **Float comparison is a hard requirement.** `avg_latency_ms` is decimal. BusyBox `[ "1241.4" -gt 800 ]` exits 2 (error), not false. Any future code path that reads this field and compares it with `[ -gt ]` or `[ -ge ]` will silently fail to compare. Use awk as shown in the `quality_breached` function.
 
@@ -635,6 +687,12 @@ that card's tab).
 
 - **Stale poller = NO-SIGNAL, not healthy.** If `qmanager_poller` is dead or crashed, `status.json` goes stale. The quality trigger treats this as no-signal and freezes the breach counter. This is correct behavior, but it means a dead poller silently disables quality triggering. Check `/tmp/qmanager_status.json` root `.timestamp` if the quality trigger appears to not be evaluating. Note: the poller's Adaptive Polling deep tier (see [`docs/features/adaptive-polling.md`](../adaptive-polling.md)) does not affect the watchdog — `write_cache` and `read_ping_data` run at the 2 s base cadence in all tiers regardless of AT-read gating, so `.timestamp` and `.connectivity` stay fresh even while the device is deep-idle.
 
+- **Wall-clock staleness checks are corrupted by NITZ/NTP clock steps.** When the modem's data path is restored after an MPSS SSR, the NITZ `time_daemon` and BusyBox `ntpd` both issue a STEP (abrupt jump) of the system wall clock — typically ~90 s forward. Any staleness check that computes `age = date+%s − cached_timestamp` across that step produces a corrupted age (it shows ~90 s of extra staleness). Before the monotonic fix this caused `read_ping_data` in the poller and `read_ping` / `read_quality` in the watchdog to log "Ping data stale (age=90s), marking unknown" or "skipping cycle" and reset connectivity state to unknown — on a connection that had just recovered cleanly.
+
+  The fix: `mono_now()` in `scripts/usr/lib/qmanager/qlog.sh` reads `/proc/uptime` (kernel monotonic counter, immune to NTP/NITZ steps) and returns the integer seconds since boot. Writers (`qmanager_ping` `write_cache`, `qmanager_poller` `write_cache`) emit an **additive integer `mono` field** in `/tmp/qmanager_ping.json` and `/tmp/qmanager_status.json` alongside the existing wall-clock `timestamp`. The three reader sites — `read_ping_data` in `qmanager_poller` and `read_ping` / `read_quality` in `qmanager_watchcat` — compute `age_mono = mono_now() − .mono` and use that instead. A wall-clock fallback runs whenever `.mono` is absent, zero, or non-numeric (safe partial deploy — old writer, new reader). Staleness thresholds are unchanged: `PING_STALE_THRESHOLD=10` in the poller, `PING_STALE_THRESHOLD=15` in the watchdog's `read_ping`, `STATUS_STALE_THRESHOLD=30` in the watchdog's `read_quality`.
+
+  > ⚠️ WARNING: `read_ping` in `qmanager_watchcat` extracts the 4 core ping fields via a single batched `jq -r ... @tsv` call into `_pdata` (cuts off columns 1–4), then reads `.mono` with a **separate** `jq -r '.mono ...'` call. The separate call is intentional — inserting `.mono` into the `@tsv` batch would shift the `cut -f` column indices for `ping_ts`, `ping_streak_fail`, `ping_reachable`, and `ping_during_recovery`, breaking the parse. Any future edit to that `jq` block must keep the `.mono` read separate.
+
 - **Auto-disable persists across reboots (UCI).** When Tier 4 exhausts `max_reboots_per_hour`, it writes `quecmanager.watchcat.enabled=0` to UCI. This survives a reboot — the daemon won't restart even though procd is configured to do so (the init.d script checks `enabled` in UCI). Re-enabling via the settings page clears the disabled flag and restarts the daemon.
 
 - **SSR hold is best-effort: dmesg ring-buffer eviction.** The kernel ring buffer is fixed-size. On a busy modem (e.g. a QCMAP bringup storm filling dmesg with interface events), the `4080000.remoteproc-mss: fatal error received` line can be evicted before `ssr_in_progress()` reads it. In that case `ssr_in_progress()` returns false and the daemon behaves exactly as if the feature did not exist — it falls straight through to the ladder. The hold is a de-amplifier, not a correctness requirement. The existing `max_reboots_per_hour` token bucket is the backstop.
@@ -647,7 +705,7 @@ that card's tab).
 
 ## On-Device Test Plan (Pending Live Modem)
 
-The static audit passed. On-device verification was skipped in this round due to no SSH access. The following scenarios must be run on a real device when available.
+The static audit passed. On-device verification was skipped for some scenarios in this round (Globe backup SIM returned `ERROR` on `AT+CPIN?` during testing). The following scenarios require a live environment with both SIM slots registered.
 
 **Scenario 1 — SSR detected, hold engaged:**
 Trigger a real MPSS SSR (or wait for one on an affected RM551E). Within one `check_interval` after the SSR log line appears, check `/tmp/qmanager_watchcat.json` for `"state":"ssr_hold"` and `"ssr_hold":true`. Confirm the watchdog log (`/tmp/qmanager.log`) shows "Recoverable baseband SSR detected; holding recovery ladder" and that NO `AT+COPS` or `AT+CFUN` commands appear in the `qcmd` log during the grace window.
@@ -662,3 +720,12 @@ Extend the outage artificially past `ssr_grace` seconds (e.g. set `ssr_grace=10`
 While in `ssr_hold`, trigger a maintenance lock (create `/tmp/qmanager_watchcat.lock`). Confirm the log shows LOCKED state entered, `ssr_hold` cleared, and that removing the lock brings the daemon back to `monitor` with `ssr_hold=false` (no stale hold carried through).
 
 **UI verification:** Save `ssr_aware=false` and confirm the CGI GET round-trips it correctly. Save `ssr_grace=30` and confirm it persists in UCI. Trigger the `ssr_hold` state (on a real SSR or by injecting state) and confirm the "Letting Modem Self-Recover" hero appears with the info tone and pulse.
+
+**Scenario 5 — `sim_failover_active` state-field correctness (verified):**
+Trigger a Tier-3 forward swap and let it finalize. Read `/tmp/qmanager_watchcat.json` via `curl http://127.0.0.1/cgi-bin/quecmanager/monitoring/watchdog.sh`. Confirm `"sim_failover_active": true` (JSON boolean, not the string `"true"`). Also confirm `original_iccid` in `/tmp/qmanager_sim_failover` is populated (non-empty string) when the original SIM was readable before the swap. This scenario was live-validated on the RM551E (`--arg sf_active` fix confirmed).
+
+**Scenario 6 — Quality-triggered Tier-3 finalization (PENDING live environment):**
+Configure quality thresholds to trigger on the current link, let a quality-path recovery escalate to Tier 3 and succeed, and confirm `/tmp/qmanager_sim_failover` is written with `"reason": "quality_degradation"` and `"active": true`. Confirm `"sim_failover_active": true` in the watchcat state file. This path was structurally validated but NOT live-exercised (backup SIM unresponsive during test session).
+
+**Scenario 7 — Auto-failback full loop (PENDING live environment):**
+Enable `primary_recheck_enabled=1` with `primary_recheck_interval=5` (minimum). After a verified Tier-3 failover, wait 5 minutes. Confirm the daemon initiates a primary recheck: the log should show "PRIMARY RECHECK: temporary swap-back" and a `cooldown` state for 90 s. If primary is healthy, confirm `sim_failover_active` clears, the failover file is deleted, and the daemon returns to `monitor`. If primary is still unhealthy, confirm the daemon swaps back to the backup and rewrites the failover file. This loop was NOT live-exercised this session.

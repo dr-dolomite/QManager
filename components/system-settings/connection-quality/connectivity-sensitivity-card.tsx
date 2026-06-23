@@ -17,9 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangleIcon, RotateCcwIcon } from "lucide-react";
-import { TbAlertTriangleFilled } from "react-icons/tb";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
 import { MetaPanel, MetaPair } from "@/components/ui/meta-panel";
 
@@ -223,7 +222,7 @@ export default function ConnectivitySensitivityCard() {
             {/* Profile tabs */}
             <Skeleton className="h-10 w-full rounded-md" />
             {/* Active-profile meta panel */}
-            <Skeleton className="h-20 w-full rounded-md" />
+            <Skeleton className="h-[4.5rem] w-full rounded-lg" />
             {/* Separator */}
             <Separator className="my-2" />
             {/* Probe targets header + reset icon */}
@@ -358,14 +357,16 @@ export default function ConnectivitySensitivityCard() {
             <motion.div variants={staggerItem}>
               <Alert>
                 <RotateCcwIcon className="size-4" />
+                <AlertTitle>Watchdog override active</AlertTitle>
                 <AlertDescription>
-                  A custom probe interval set in the Connection Watchdog is
-                  currently active (
-                  <span className="tabular-nums font-medium">
-                    {effectiveInterval ?? intervalOverride}s
-                  </span>
-                  ). Your profile choice here sets the fallback interval used when
-                  that override is cleared.
+                  <p>
+                    The Connection Watchdog is enforcing a custom{" "}
+                    <span className="tabular-nums font-medium text-foreground">
+                      {effectiveInterval ?? intervalOverride}s
+                    </span>{" "}
+                    probe interval. Your profile choice here becomes the fallback
+                    once that override is cleared.
+                  </p>
                 </AlertDescription>
               </Alert>
             </motion.div>
@@ -457,16 +458,19 @@ export default function ConnectivitySensitivityCard() {
           </motion.div>
 
           {/* ── Daemon-stuck warning banner ──────────────────────────── */}
+          {/* Appears after the card has already settled, so it runs its own
+              entrance rather than inheriting the parent's finished stagger. */}
           {stuckHint && (
-            <motion.div variants={staggerItem}>
-              <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 border border-warning/30 text-warning text-sm">
-                <TbAlertTriangleFilled className="size-5 mt-0.5 shrink-0" />
-                <p className="font-semibold">
-                  Settings saved, but the probe is still on the old preset. Try
-                  refreshing in a moment; if this persists, restart the
-                  qmanager-ping service.
-                </p>
-              </div>
+            <motion.div variants={staggerItem} initial="hidden" animate="visible">
+              <Alert variant="warning">
+                <AlertTriangleIcon className="size-4" />
+                <AlertTitle>Saved, but not applied yet</AlertTitle>
+                <AlertDescription>
+                  The probe is still running the previous preset. Give it a
+                  moment and refresh; if it sticks, restart the qmanager-ping
+                  service.
+                </AlertDescription>
+              </Alert>
             </motion.div>
           )}
 

@@ -169,45 +169,130 @@ export function WatchdogRecoveryLadder({ form }: { form: WatchdogForm }) {
             masterOff={masterOff}
           >
             {form.tier3Enabled && (
-              <Field className="@sm/card:max-w-[16rem]">
-                <FieldLabel htmlFor="backup-sim-slot">
-                  {t("watchdog.backup_sim_label")}
-                </FieldLabel>
-                <Select
-                  value={form.backupSimSlot}
-                  onValueChange={form.setBackupSimSlot}
-                  disabled={masterOff}
-                >
-                  <SelectTrigger
-                    id="backup-sim-slot"
-                    aria-invalid={!!form.errors.backupSim}
-                    aria-describedby={
-                      form.errors.backupSim ? "backup-sim-error" : undefined
-                    }
+              <div className="grid gap-4">
+                <Field className="@sm/card:max-w-[16rem]">
+                  <FieldLabel htmlFor="backup-sim-slot">
+                    {t("watchdog.backup_sim_label")}
+                  </FieldLabel>
+                  <Select
+                    value={form.backupSimSlot}
+                    onValueChange={form.setBackupSimSlot}
+                    disabled={masterOff}
                   >
-                    <SelectValue
-                      placeholder={t("watchdog.backup_sim_placeholder")}
+                    <SelectTrigger
+                      id="backup-sim-slot"
+                      aria-invalid={!!form.errors.backupSim}
+                      aria-describedby={
+                        form.errors.backupSim ? "backup-sim-error" : undefined
+                      }
+                    >
+                      <SelectValue
+                        placeholder={t("watchdog.backup_sim_placeholder")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">
+                        {t("watchdog.backup_sim_slot_1")}
+                      </SelectItem>
+                      <SelectItem value="2">
+                        {t("watchdog.backup_sim_slot_2")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {form.errors.backupSim ? (
+                    <FieldError id="backup-sim-error">
+                      {form.errors.backupSim}
+                    </FieldError>
+                  ) : (
+                    <FieldDescription>
+                      {t("watchdog.backup_sim_description")}
+                    </FieldDescription>
+                  )}
+                </Field>
+
+                {/* Auto fail-back to primary — a periodic, blind swap-back to
+                    the primary SIM to test whether it is healthy again. Each
+                    recheck is a real (brief) outage, so it is opt-in. Sits on a
+                    muted sub-surface inside Tier 3, the failover it reverses. */}
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <Field orientation="horizontal" className="justify-between">
+                    <div className="grid min-w-0 gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <FieldLabel htmlFor="primary-recheck" className="m-0">
+                          {t("watchdog.primary_recheck_label")}
+                        </FieldLabel>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-info inline-flex shrink-0"
+                              aria-label={t(
+                                "watchdog.primary_recheck_more_info_aria",
+                              )}
+                            >
+                              <TbInfoCircleFilled className="size-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>{t("watchdog.primary_recheck_tooltip")}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <FieldDescription>
+                        {t("watchdog.primary_recheck_description")}
+                      </FieldDescription>
+                    </div>
+                    <Switch
+                      id="primary-recheck"
+                      checked={form.primaryRecheckEnabled}
+                      onCheckedChange={form.setPrimaryRecheckEnabled}
+                      disabled={masterOff}
+                      aria-label={t("watchdog.primary_recheck_label")}
                     />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">
-                      {t("watchdog.backup_sim_slot_1")}
-                    </SelectItem>
-                    <SelectItem value="2">
-                      {t("watchdog.backup_sim_slot_2")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.errors.backupSim ? (
-                  <FieldError id="backup-sim-error">
-                    {form.errors.backupSim}
-                  </FieldError>
-                ) : (
-                  <FieldDescription>
-                    {t("watchdog.backup_sim_description")}
-                  </FieldDescription>
-                )}
-              </Field>
+                  </Field>
+
+                  {form.primaryRecheckEnabled && (
+                    <div className="mt-3 animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none">
+                      <Field className="@sm/card:max-w-[16rem]">
+                        <FieldLabel htmlFor="primary-recheck-interval">
+                          {t("watchdog.primary_recheck_interval_label")}
+                        </FieldLabel>
+                        <Input
+                          id="primary-recheck-interval"
+                          type="number"
+                          inputMode="numeric"
+                          min="5"
+                          max="1440"
+                          placeholder={t(
+                            "watchdog.primary_recheck_interval_placeholder",
+                          )}
+                          className="tabular-nums"
+                          value={form.primaryRecheckInterval}
+                          onChange={(e) =>
+                            form.setPrimaryRecheckInterval(e.target.value)
+                          }
+                          disabled={masterOff}
+                          aria-invalid={!!form.errors.primaryRecheckInterval}
+                          aria-describedby={
+                            form.errors.primaryRecheckInterval
+                              ? "primary-recheck-interval-error"
+                              : "primary-recheck-interval-desc"
+                          }
+                        />
+                        {form.errors.primaryRecheckInterval ? (
+                          <FieldError id="primary-recheck-interval-error">
+                            {form.errors.primaryRecheckInterval}
+                          </FieldError>
+                        ) : (
+                          <FieldDescription id="primary-recheck-interval-desc">
+                            {t("watchdog.primary_recheck_interval_description")}
+                          </FieldDescription>
+                        )}
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </Step>
 
