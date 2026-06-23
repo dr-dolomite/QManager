@@ -234,12 +234,15 @@ write_cache() {
 
     local timestamp
     timestamp=$(date +%s)
+    local mono
+    mono=$(mono_now)
 
     local during_recovery="false"
     [ -f "$RECOVERY_FLAG" ] && during_recovery="true"
 
     jq -n \
         --argjson timestamp "$timestamp" \
+        --argjson mono "$mono" \
         --arg profile "$PING_PROFILE" \
         --arg target1 "$PING_TARGET_1" \
         --arg target2 "$PING_TARGET_2" \
@@ -251,6 +254,7 @@ write_cache() {
         --argjson during_rec "$during_recovery" \
         '{
             timestamp: $timestamp,
+            mono: $mono,
             profile: $profile,
             targets: [$target1, $target2],
             interval_sec: $interval,

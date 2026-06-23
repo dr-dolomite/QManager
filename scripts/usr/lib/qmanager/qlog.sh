@@ -247,3 +247,18 @@ qlog_state_change() {
         qlog_info "STATE: ${field}: ${old_val} → ${new_val}"
     fi
 }
+
+# --- Utility: Monotonic clock (boot-relative seconds) -----------------------
+# Reads /proc/uptime and returns the integer part (whole seconds since boot).
+# /proc/uptime is the kernel monotonic counter — unaffected by NTP/NITZ steps.
+# Returns 0 on any parse failure; callers MUST treat 0 as "unknown" and fall
+# back to wall-clock age rather than treating it as genuinely fresh.
+# =============================================================================
+mono_now() {
+    local _up
+    _up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null | cut -d. -f1)
+    case "$_up" in
+        ''|*[!0-9]*) echo 0 ;;
+        *)           echo "$_up" ;;
+    esac
+}

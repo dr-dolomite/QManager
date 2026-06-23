@@ -981,16 +981,36 @@ read_ping_data() {
     fi
 
     # Check staleness (ping daemon may have crashed)
+    # Prefer monotonic /proc/uptime age; fall back to wall-clock when .mono absent.
     local ping_ts
-    local now
-    local age
+    local ping_mono
+    local _stale=0
     ping_ts=$(jq -r '.timestamp | if . == null then empty else tostring end' "$PING_CACHE" 2>/dev/null)
-    now=$(date +%s)
 
     if [ -n "$ping_ts" ]; then
-        age=$((now - ping_ts))
-        if [ "$age" -gt "$PING_STALE_THRESHOLD" ]; then
-            qlog_warn "Ping data stale (age=${age}s), marking unknown"
+        ping_mono=$(jq -r '.mono | if . == null then "" else tostring end' "$PING_CACHE" 2>/dev/null)
+        case "$ping_mono" in
+            ''|0|*[!0-9]*)
+                # Back-compat fallback: .mono absent/invalid -> wall-clock age
+                local now
+                local age
+                now=$(date +%s)
+                age=$((now - ping_ts))
+                if [ "$age" -gt "$PING_STALE_THRESHOLD" ]; then
+                    qlog_warn "Ping data stale/wc (age=${age}s), marking unknown"
+                    _stale=1
+                fi
+                ;;
+            *)
+                local age_mono
+                age_mono=$(( $(mono_now) - ping_mono ))
+                if [ "$age_mono" -gt "$PING_STALE_THRESHOLD" ]; then
+                    qlog_warn "Ping data stale (age_mono=${age_mono}s), marking unknown"
+                    _stale=1
+                fi
+                ;;
+        esac
+        if [ "$_stale" -eq 1 ]; then
             conn_internet_available="null"
             conn_status="unknown"
             conn_latency="null"
@@ -1193,6 +1213,8 @@ read_sim_state() {
 write_cache() {
     local timestamp
     timestamp=$(date +%s)
+    local mono
+    mono=$(mono_now)
 
     # Refresh last-known on-demand radio values (mimo / TA / APN / WAN / DNS)
     # from /tmp/qmanager_ondemand.json. The poller no longer FETCHES these
@@ -1213,6 +1235,7 @@ write_cache() {
 
     jq -n \
         --argjson timestamp "$timestamp" \
+        --argjson mono "$mono" \
         --arg system_state "$system_state" \
         --argjson modem_reachable "$modem_reachable" \
         --argjson errors "$errors_json" \
@@ -1332,6 +1355,7 @@ write_cache() {
         --arg ss_profile_name "$sim_swap_profile_name" \
         '{
             timestamp: $timestamp,
+            mono: $mono,
             system_state: $system_state,
             modem_reachable: $modem_reachable,
             last_successful_poll: $timestamp,
