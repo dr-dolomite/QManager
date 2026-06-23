@@ -1,5 +1,7 @@
 # 🚀 QManager BETA v0.1.29
 
+v0.1.29 is focused on Connection Watchdog reliability and RM551E stability. The headline addition is automatic SIM failback, and the bulk of this release is fixes and polish — quieter background polling, a rewritten quality-detection pipeline, and a sweep of Watchdog edge cases that surfaced during live testing.
+
 ## ✨ New Features
 
 - **Automatic failback to your primary SIM once it is healthy again.** An opt-in setting under the Watchdog's recovery configuration lets the Watchdog periodically test whether the primary SIM has recovered. If the primary passes the health check, the Watchdog transparently switches back — no manual intervention needed. The check interval (default 30 minutes, minimum 5 minutes) is configurable. Because testing the inactive SIM requires a brief real connection swap, this feature is off by default.
