@@ -125,20 +125,32 @@ check_stale_lock() {
 # BusyBox flock does NOT support -w (wait with timeout).
 # We implement it: try -n (non-blocking), retry with sleep until deadline.
 #
+# Retry grain is 100ms (sleep 0.1), NOT 1s. The total wait budget is preserved
+# by looping wait_secs*10 times -- e.g. wait_secs=5 -> 50 iters -> ~5s window.
+# This matters because the poller holds qmanager.lock only ~40ms per AT call;
+# a 1s retry grain made every contended qcmd pay a full second. 100ms grain
+# cuts worst-case contention latency from ~1050ms to ~110ms while keeping the
+# LOCK_WAIT_SHORT/LONG windows intact for SSR-storm resilience.
+# Requires BusyBox built with FEATURE_FANCY_SLEEP (fractional sleep) -- verified
+# present on RM551E (BusyBox v1.36.1). Fallback if ever absent: usleep 100000.
+#
 # Usage: flock_wait <fd> <timeout_seconds>
 # Returns: 0 = lock acquired, 1 = timed out
 # -----------------------------------------------------------------------------
 flock_wait() {
     local fd="$1"
     local wait_secs="$2"
-    local elapsed=0
+    local iters
+    local i
+    iters=$((wait_secs * 10))
+    i=0
 
-    while [ "$elapsed" -lt "$wait_secs" ]; do
+    while [ "$i" -lt "$iters" ]; do
         if flock -x -n "$fd" 2>/dev/null; then
             return 0
         fi
-        sleep 1
-        elapsed=$((elapsed + 1))
+        sleep 0.1
+        i=$((i + 1))
     done
 
     # One final try

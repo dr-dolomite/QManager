@@ -6,6 +6,8 @@
 
 ## ✅ Improvements
 
+- **Snappier response from every screen that reads the modem.** Settings pages, the AT terminal, and on-demand radio reads were often taking a full extra second or two to respond whenever the background poller happened to be mid-query. The shared AT-command gateway now retries for the modem in 100-millisecond steps instead of 1-second steps, so commands that previously waited out a whole second now return almost immediately — while the safety timeouts that protect against a stuck modem are unchanged.
+
 - **Reduced background radio queries on RM551E devices.** QManager no longer queries MIMO layers, timing advance, APN details, and WAN IP on a recurring background timer. These are now read only while you are viewing the page that displays them, and stop as soon as you navigate away. This matches the lighter-touch behaviour of the predecessor app and removes a class of background radio commands suspected of contributing to the random baseband restarts seen on some RM551E modems.
 
 - **Even quieter background polling when the dashboard is left idle.** When no one has the QManager dashboard open for a while, the background poller now also pauses its carrier-aggregation, radio-state, and per-antenna signal reads — keeping only the single serving-cell query that signal-based tower failover depends on. Everything resumes instantly the moment you reopen the dashboard, with no change to what you see while the app is open. This further trims the idle background radio activity linked to the RM551E baseband restarts.
