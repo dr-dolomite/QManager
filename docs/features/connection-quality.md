@@ -281,6 +281,8 @@ All daemons check for their respective flag at the **top of their main loop**, b
 
 The poller merges `connectivity.profile` into `status.json` from `/tmp/qmanager_ping.json`. Consumers should treat it as optional — it is absent on older poller output and on the first write before the ping daemon has run. The `connectivity` object in the response holds both the live profile name and all latency/loss stats.
 
+Both `/tmp/qmanager_ping.json` (written by `qmanager_ping`) and `/tmp/qmanager_status.json` (written by `qmanager_poller`) carry a root-level **`mono`** integer field alongside the existing wall-clock `timestamp`. The value is `mono_now()` from `scripts/usr/lib/qmanager/qlog.sh` — integer seconds since boot read from `/proc/uptime` (kernel monotonic counter, immune to NTP/NITZ steps). The poller's `read_ping_data` and the watchdog's `read_ping` / `read_quality` compute staleness from this field when it is valid, falling back to wall-clock age only when `.mono` is absent, zero, or non-numeric. This guards against the ~90 s false-stale event caused by the NITZ `time_daemon` + `ntpd` stepping the system clock after MPSS SSR `rmnet` re-registration.
+
 ---
 
 ## Frontend

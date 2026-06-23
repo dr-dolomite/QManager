@@ -242,6 +242,10 @@ Sidebar entry key: `adaptive_polling`. Available in all 5 shipped locales.
 
 The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"deep"` on every `write_cache` call. Consumers (the frontend tier badge, the CGI GET fallback) should treat the field as optional — it is absent on older builds and on the first write if the poller starts before the cache is populated.
 
+The poller also writes a root-level **`mono`** integer field on every `write_cache` call. Its value is the output of `mono_now()` (from `qlog.sh`) — the integer seconds since boot read from `/proc/uptime`. This is the kernel monotonic counter and is unaffected by NTP or NITZ wall-clock steps. The watchdog's `read_quality` function reads `.mono` from `status.json` to compute staleness via `age_mono = mono_now() − .mono`, falling back to the wall-clock `timestamp` field when `.mono` is absent, zero, or non-numeric. Staleness threshold for `status.json` is `STATUS_STALE_THRESHOLD=30` seconds (monotonic).
+
+`qmanager_ping` writes the same `mono` field into `/tmp/qmanager_ping.json` on every probe cycle. Both cache files therefore carry both a wall-clock `timestamp` (epoch seconds, `date +%s`) and a monotonic `mono` (uptime seconds) as companion fields.
+
 ---
 
 ## Known Gotchas
