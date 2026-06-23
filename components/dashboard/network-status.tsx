@@ -200,6 +200,21 @@ const NetworkStatusComponent = ({
   // true = reachable, false = unreachable, null = ping daemon not running / unknown
   const internetAvailable = connectivity?.internet_available ?? null;
 
+  // Brief-drop detection. internet_available is debounced (it only flips false
+  // after several consecutive misses), so a ~1s SSR blip keeps it true — yet the
+  // Live Latency card plots a packet-loss spike from the very same per-probe
+  // history. That made the badge and the chart contradict each other. We read the
+  // SAME ring buffer here: a null in the last few samples is a missed probe that
+  // didn't cross the offline threshold. While one is in the window the badge goes
+  // amber ("Unstable"), reconciling with the chart, then settles back to green as
+  // the miss ages out — honest about a blip without ever claiming offline.
+  const RECENT_DROP_WINDOW = 3;
+  const latencyHistory = connectivity?.latency_history;
+  const recentBriefDrop =
+    internetAvailable === true &&
+    Array.isArray(latencyHistory) &&
+    latencyHistory.slice(-RECENT_DROP_WINDOW).some((v) => v === null);
+
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -254,22 +269,32 @@ const NetworkStatusComponent = ({
                     : t("network.radio_off")}
               </Badge>
 
-              {/* Internet status — green/red/gray based on ping daemon */}
+              {/* Internet status — green online / amber recent-blip / red offline / gray unknown */}
               <Badge
                 variant="outline"
                 className={
                   internetAvailable === true
-                    ? "bg-success/15 text-success hover:bg-success/20 border-success/30"
+                    ? recentBriefDrop
+                      ? "bg-warning/15 text-warning hover:bg-warning/20 border-warning/30"
+                      : "bg-success/15 text-success hover:bg-success/20 border-success/30"
                     : internetAvailable === false
                       ? "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/30"
                       : "bg-muted/50 text-muted-foreground hover:bg-muted/70 border-muted-foreground/30"
                 }
               >
-                {/* Sonar ping — only when online */}
+                {/* Sonar ping — only when online; amber while a recent blip is in the window */}
                 {internetAvailable === true ? (
                   <span className="relative flex size-2 shrink-0">
-                    <span className="absolute inline-flex size-full rounded-full bg-success opacity-75 animate-ping" />
-                    <span className="relative inline-flex size-2 rounded-full bg-success" />
+                    <span
+                      className={`absolute inline-flex size-full rounded-full opacity-75 animate-ping ${
+                        recentBriefDrop ? "bg-warning" : "bg-success"
+                      }`}
+                    />
+                    <span
+                      className={`relative inline-flex size-2 rounded-full ${
+                        recentBriefDrop ? "bg-warning" : "bg-success"
+                      }`}
+                    />
                   </span>
                 ) : (
                   <span
@@ -279,7 +304,9 @@ const NetworkStatusComponent = ({
                   />
                 )}
                 {internetAvailable === true
-                  ? t("network.internet_online")
+                  ? recentBriefDrop
+                    ? t("network.internet_unstable")
+                    : t("network.internet_online")
                   : internetAvailable === false
                     ? t("network.internet_offline")
                     : t("network.internet_label")}

@@ -32,6 +32,7 @@
     "internet_label": "互联网",
     "internet_online": "在线",
     "internet_offline": "离线",
+    "internet_unstable": "不稳定",
     "sim_label": "SIM {{slot}}",
     "no_carrier": "无运营商"
   },
@@ -109,8 +110,8 @@
     "fluctuation_note": "数值可能因环境因素和网络状况而波动。"
   },
   "latency": {
-    "title": "实时延迟与速度测试",
-    "chart_latency": "延迟",
+    "title": "互联网延迟与速度测试",
+    "chart_latency": "互联网 RTT",
     "chart_packetloss": "丢包率"
   },
   "speedtest": {

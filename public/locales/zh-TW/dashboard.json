@@ -32,6 +32,7 @@
     "internet_label": "網際網路",
     "internet_online": "線上",
     "internet_offline": "離線",
+    "internet_unstable": "不穩定",
     "sim_label": "SIM {{slot}}",
     "no_carrier": "無運營商"
   },
@@ -109,8 +110,8 @@
     "fluctuation_note": "數值可能因環境因素和網路狀況而波動。"
   },
   "latency": {
-    "title": "實時延遲與速度測試",
-    "chart_latency": "延遲",
+    "title": "網際網路延遲與速度測試",
+    "chart_latency": "網際網路 RTT",
     "chart_packetloss": "丟包率"
   },
   "speedtest": {

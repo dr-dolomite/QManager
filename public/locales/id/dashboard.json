@@ -32,6 +32,7 @@
     "internet_label": "Internet",
     "internet_online": "Online",
     "internet_offline": "Offline",
+    "internet_unstable": "Tidak stabil",
     "sim_label": "SIM {{slot}}",
     "no_carrier": "Tidak Ada Operator"
   },
@@ -109,8 +110,8 @@
     "fluctuation_note": "Nilai mungkin berfluktuasi karena faktor lingkungan dan kondisi jaringan."
   },
   "latency": {
-    "title": "Latensi Langsung dan Tes Kecepatan",
-    "chart_latency": "Latensi",
+    "title": "Latensi Internet dan Tes Kecepatan",
+    "chart_latency": "RTT Internet",
     "chart_packetloss": "Packet Loss"
   },
   "speedtest": {

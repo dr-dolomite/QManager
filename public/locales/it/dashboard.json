@@ -32,6 +32,7 @@
     "internet_label": "Internet",
     "internet_online": "In linea",
     "internet_offline": "Non in linea",
+    "internet_unstable": "Instabile",
     "sim_label": "SIM {{slot}}",
     "no_carrier": "Nessun corriere"
   },
@@ -109,8 +110,8 @@
     "fluctuation_note": "I valori possono variare a causa di fattori ambientali e condizioni della rete."
   },
   "latency": {
-    "title": "Test di latenza e velocità in tempo reale",
-    "chart_latency": "Latenza",
+    "title": "Latenza Internet e test di velocità",
+    "chart_latency": "RTT Internet",
     "chart_packetloss": "Perdita di pacchetti"
   },
   "speedtest": {
