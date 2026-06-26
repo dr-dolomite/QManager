@@ -292,7 +292,15 @@
     "ssr_grace_label": "Jendela Masa Tenggang (detik)",
     "ssr_grace_placeholder": "45",
     "ssr_grace_description": "Berapa lama membiarkan modem memulihkan sendiri sebelum langkah pemulihan dapat bertindak.",
-    "ssr_grace_error": "Harus berupa angka antara 10 dan 120."
+    "ssr_grace_error": "Harus berupa angka antara 10 dan 120.",
+    "primary_recheck_label": "Kembali Otomatis ke SIM Utama",
+    "primary_recheck_description": "Secara berkala beralih kembali ke SIM utama untuk memeriksa apakah SIM sudah berfungsi kembali, dan kembali ke sana secara otomatis jika sudah.",
+    "primary_recheck_tooltip": "Modem hanya dapat menggunakan satu SIM pada satu waktu, sehingga satu-satunya cara untuk mengetahui apakah SIM utama Anda berfungsi kembali adalah dengan beralih kembali dan mengujinya. Setiap pemeriksaan sempat memutus koneksi sebentar — jika SIM utama masih mati, watchdog kembali ke SIM cadangan. Nonaktifkan ini jika Anda lebih suka beralih kembali secara manual.",
+    "primary_recheck_more_info_aria": "Informasi lebih lanjut tentang kembali otomatis ke SIM utama",
+    "primary_recheck_interval_label": "Periksa Ulang Setiap (menit)",
+    "primary_recheck_interval_placeholder": "30",
+    "primary_recheck_interval_description": "Seberapa sering menguji SIM utama saat menggunakan cadangan. Setiap pemeriksaan sempat memutus koneksi sebentar.",
+    "primary_recheck_interval_error": "Harus berupa angka antara 5 dan 1440."
   },
   "latency": {
     "page_title": "Pemantauan Latensi",

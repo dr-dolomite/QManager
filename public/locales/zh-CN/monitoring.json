@@ -292,7 +292,15 @@
     "ssr_grace_label": "宽限窗口（秒）",
     "ssr_grace_placeholder": "45",
     "ssr_grace_description": "在恢复步骤介入之前，允许调制解调器自行恢复的时长。",
-    "ssr_grace_error": "必须是介于 10 到 120 之间的数字。"
+    "ssr_grace_error": "必须是介于 10 到 120 之间的数字。",
+    "primary_recheck_label": "自动回退到主 SIM",
+    "primary_recheck_description": "定期切回主 SIM，检查其是否已恢复正常，若已恢复则自动回归。",
+    "primary_recheck_tooltip": "调制解调器每次只能使用一张 SIM，因此确认主 SIM 是否恢复正常的唯一方法是切回去测试。每次检测都会短暂中断连接——如果主 SIM 仍然不通，看门狗将切回备用 SIM。如果您希望手动切回，请将此功能关闭。",
+    "primary_recheck_more_info_aria": "关于自动回退到主 SIM 的更多信息",
+    "primary_recheck_interval_label": "重新检测间隔（分钟）",
+    "primary_recheck_interval_placeholder": "30",
+    "primary_recheck_interval_description": "在使用备用 SIM 期间检测主 SIM 的频率。每次检测都会短暂中断连接。",
+    "primary_recheck_interval_error": "必须是介于 5 到 1440 之间的数字。"
   },
   "latency": {
     "page_title": "延迟监测",

@@ -437,16 +437,16 @@
       "retry_button": "Riprova"
     },
     "toast": {
-      "install_started": "Installazione di {{name}}…",
-      "install_success": "{{name}} installato",
-      "install_failed": "Impossibile installare {{name}}",
+      "install_started": "Installazione di {{name}} ({{code}})…",
+      "install_success": "{{name}} ({{code}}) installato",
+      "install_failed": "Impossibile installare {{name}} ({{code}})",
       "install_failed_generic": "Impossibile installare il pacchetto lingua",
       "install_cancelled": "Installazione annullata",
       "install_in_progress": "Un'altra installazione è già in corso",
-      "remove_success": "{{name}} rimosso",
-      "remove_failed": "Impossibile rimuovere {{name}}",
-      "remove_active_switched": "{{name}} rimosso: passato all'inglese",
-      "switched": "Passato a {{name}}",
+      "remove_success": "{{name}} ({{code}}) rimosso",
+      "remove_failed": "Impossibile rimuovere {{name}} ({{code}})",
+      "remove_active_switched": "{{name}} ({{code}}) rimosso: passato all'inglese",
+      "switched": "Passato a {{name}} ({{code}})",
       "manifest_refreshed": "Catalogo aggiornato"
     },
     "install_failure_fallback": {

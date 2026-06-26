@@ -143,7 +143,7 @@
         "expand_rule_aria": "Edit jendela",
         "active_now_line": "Sekarang → {{scenario}}",
         "active_now_line_with_next": "Sekarang → {{scenario}} · berikutnya {{time}}",
-        "overnight_hint": "Ends next day",
+        "overnight_hint": "Berakhir keesokan harinya",
         "otherwise_label": "Selain itu",
         "entries_cap_hint": "Maksimal {{max}} jendela waktu. Hapus satu untuk menambah yang lain.",
         "create_new": "Buat skenario baru"
@@ -717,7 +717,7 @@
       "card_badges": {
         "scenario_controlled": "Dikontrol oleh Skenario",
         "all_unlocked": "Semua Tidak Dikunci",
-        "bands_locked": "{{locked}} / {{total}} Bands",
+        "bands_locked": "{{locked}} / {{total}} Band",
         "view_only": "Hanya lihat"
       },
       "card_empty": "Tidak ada band yang didukung dilaporkan oleh modem untuk kategori ini.",
@@ -744,7 +744,7 @@
         "select_one_band": "Pilih setidaknya satu band untuk dikunci",
         "locked_success": "{{category_label}} band berhasil dikunci",
         "lock_error": "Gagal menerapkan penguncian band",
-        "unlocked_success": "{{category_label}} bands unlocked",
+        "unlocked_success": "{{category_label}} band berhasil dibuka kuncinya",
         "unlock_error": "Unlock band gagal"
       }
     },
@@ -1680,13 +1680,13 @@
         "info_aria": "Info lebih lanjut",
         "rows": {
           "isp": "ISP",
-          "apn": "Access Point Name (APN)",
+          "apn": "Nama Access Point (APN)",
           "apn_edit": "Edit",
           "network_type": "Jenis Jaringan",
           "cell_id": "ID Sel",
           "cell_id_tooltip_row": "ID {{label}}:",
           "sector_tooltip": "Sektor:",
-          "tac": "Tracking Area Code",
+          "tac": "Kode Area Pelacakan",
           "tac_hex_tooltip": "Hex:",
           "total_bandwidth": "Total Bandwidth yang Digunakan",
           "carrier_aggregation": "Carrier Aggregation",

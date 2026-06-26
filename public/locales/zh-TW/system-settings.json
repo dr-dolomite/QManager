@@ -437,16 +437,16 @@
       "retry_button": "重試"
     },
     "toast": {
-      "install_started": "正在安裝 {{name}}…",
-      "install_success": "已安裝 {{name}}",
-      "install_failed": "安裝 {{name}} 失敗",
+      "install_started": "正在安裝 {{name}}（{{code}}）…",
+      "install_success": "已安裝 {{name}}（{{code}}）",
+      "install_failed": "安裝 {{name}}（{{code}}）失敗",
       "install_failed_generic": "安裝語言包失敗",
       "install_cancelled": "安裝已取消",
       "install_in_progress": "已有另一個安裝正在進行中",
-      "remove_success": "已刪除 {{name}}",
-      "remove_failed": "刪除 {{name}} 失敗",
-      "remove_active_switched": "已刪除 {{name}} — 已切換到英語",
-      "switched": "已切換到 {{name}}",
+      "remove_success": "已刪除 {{name}}（{{code}}）",
+      "remove_failed": "刪除 {{name}}（{{code}}）失敗",
+      "remove_active_switched": "已刪除 {{name}}（{{code}}） — 已切換到英語",
+      "switched": "已切換到 {{name}}（{{code}}）",
       "manifest_refreshed": "清單已重新整理"
     },
     "install_failure_fallback": {

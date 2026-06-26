@@ -437,16 +437,16 @@
       "retry_button": "Coba Lagi"
     },
     "toast": {
-      "install_started": "Menginstal {{name}}…",
-      "install_success": "{{name}} terinstal",
-      "install_failed": "Gagal menginstal {{name}}",
+      "install_started": "Menginstal {{name}} ({{code}})…",
+      "install_success": "{{name}} ({{code}}) terinstal",
+      "install_failed": "Gagal menginstal {{name}} ({{code}})",
       "install_failed_generic": "Gagal menginstal paket bahasa",
       "install_cancelled": "Instalasi dibatalkan",
       "install_in_progress": "Instalasi lain sedang berlangsung",
-      "remove_success": "{{name}} dihapus",
-      "remove_failed": "Gagal menghapus {{name}}",
-      "remove_active_switched": "{{name}} dihapus — beralih ke Bahasa Inggris",
-      "switched": "Beralih ke {{name}}",
+      "remove_success": "{{name}} ({{code}}) dihapus",
+      "remove_failed": "Gagal menghapus {{name}} ({{code}})",
+      "remove_active_switched": "{{name}} ({{code}}) dihapus — beralih ke Bahasa Inggris",
+      "switched": "Beralih ke {{name}} ({{code}})",
       "manifest_refreshed": "Katalog diperbarui"
     },
     "install_failure_fallback": {

@@ -292,7 +292,15 @@
     "ssr_grace_label": "Finestra di tolleranza (secondi)",
     "ssr_grace_placeholder": "45",
     "ssr_grace_description": "Per quanto tempo lasciare che il modem si ripristini da solo prima che i passaggi di ripristino possano intervenire.",
-    "ssr_grace_error": "Deve essere un numero compreso tra 10 e 120."
+    "ssr_grace_error": "Deve essere un numero compreso tra 10 e 120.",
+    "primary_recheck_label": "Ritorno automatico alla SIM primaria",
+    "primary_recheck_description": "Passa periodicamente alla SIM primaria per verificare se funziona di nuovo, e torna ad essa automaticamente quando lo fa.",
+    "primary_recheck_tooltip": "Il modem può usare una sola SIM alla volta, quindi l'unico modo per sapere se la SIM primaria funziona di nuovo è tornare ad essa e testarla. Ogni verifica interrompe brevemente la connessione — se la primaria è ancora inattiva, il watchdog torna alla SIM di backup. Lascia questa opzione disattivata se preferisci tornare manualmente.",
+    "primary_recheck_more_info_aria": "Ulteriori informazioni sul ritorno automatico alla SIM primaria",
+    "primary_recheck_interval_label": "Ricontrolla ogni (minuti)",
+    "primary_recheck_interval_placeholder": "30",
+    "primary_recheck_interval_description": "Con quale frequenza testare la SIM primaria mentre si utilizza il backup. Ogni verifica interrompe brevemente la connessione.",
+    "primary_recheck_interval_error": "Deve essere un numero compreso tra 5 e 1440."
   },
   "latency": {
     "page_title": "Monitoraggio della latenza",
