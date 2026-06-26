@@ -20,16 +20,22 @@ const CGI_ENDPOINT = "/cgi-bin/quecmanager/network/dns.sh";
 export interface DnsSettingsData {
   /** Current mode: "enabled" = custom DNS active, "disabled" = carrier DNS */
   mode: "enabled" | "disabled";
-  /** Raw comma-separated DNS string from backend e.g. "8.8.8.8,1.1.1.1" */
+  /** Raw comma-separated IPv4 DNS string from backend e.g. "8.8.8.8,1.1.1.1" */
   currentDNS: string;
+  /** Raw comma-separated IPv6 DNS string from backend e.g. "2606:4700:4700::1111" */
+  currentDNS6: string;
   /** Active NIC determined by IP passthrough state: "lan" or "lan_bind4" */
   nic: "lan" | "lan_bind4";
-  /** Primary DNS server (parsed from currentDNS[0]) */
+  /** Primary IPv4 DNS server (parsed from currentDNS[0]) */
   dns1: string;
-  /** Secondary DNS server (parsed from currentDNS[1]) */
+  /** Secondary IPv4 DNS server (parsed from currentDNS[1]) */
   dns2: string;
-  /** Tertiary DNS server (parsed from currentDNS[2]) */
+  /** Tertiary IPv4 DNS server (parsed from currentDNS[2]) */
   dns3: string;
+  /** Primary IPv6 DNS server (parsed from currentDNS6[0]) */
+  dns1v6: string;
+  /** Secondary IPv6 DNS server (parsed from currentDNS6[1]) */
+  dns2v6: string;
 }
 
 export interface SaveDnsParams {
@@ -38,6 +44,8 @@ export interface SaveDnsParams {
   dns1: string;
   dns2: string;
   dns3: string;
+  dns1v6: string;
+  dns2v6: string;
 }
 
 export interface UseDnsSettingsReturn {
@@ -92,16 +100,28 @@ export function useDnsSettings(): UseDnsSettingsReturn {
         return;
       }
 
-      // Parse the comma-separated DNS string into individual fields
-      const parts = (json.currentDNS || "").split(",").map((s: string) => s.trim());
+      // Parse the comma-separated DNS strings into individual fields. The
+      // backend joins the IPv6 odhcpd list with commas too, so both families
+      // share the same split/trim/filter logic.
+      const parts = (json.currentDNS || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      const parts6 = (json.currentDNS6 || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
 
       setData({
         mode: json.mode === "enabled" ? "enabled" : "disabled",
         currentDNS: json.currentDNS || "",
+        currentDNS6: json.currentDNS6 || "",
         nic: json.nic === "lan_bind4" ? "lan_bind4" : "lan",
         dns1: parts[0] || "",
         dns2: parts[1] || "",
         dns3: parts[2] || "",
+        dns1v6: parts6[0] || "",
+        dns2v6: parts6[1] || "",
       });
     } catch (err) {
       if (!mountedRef.current) return;
