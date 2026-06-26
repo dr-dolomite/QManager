@@ -873,6 +873,11 @@ determine_service_status() {
 PING_CACHE="/tmp/qmanager_ping.json"
 PING_HISTORY_RAW="/tmp/qmanager_ping_history"   # flat-file ring buffer from ping daemon
 PING_STALE_THRESHOLD=10  # seconds before ping data is considered stale
+# Window-maturity floor: packet_loss_pct = int(lost*100/n) is meaningless on a
+# tiny history (e.g. just after a reboot truncates it) — 2 transient boot-attach
+# nulls in a 4-sample window reads as 50% loss and can falsely trip the watchdog
+# quality trigger. Suppress loss% to 0 until at least this many samples exist.
+PING_MIN_SAMPLES=10
 
 # =============================================================================
 # CONNECTION-QUALITY THRESHOLDS (UCI presets -> event thresholds)
@@ -1055,7 +1060,7 @@ read_ping_data() {
 
         local _ha=""
         if [ -s "$PING_HISTORY_RAW" ]; then
-            _ha=$(awk '
+            _ha=$(awk -v min_samples="$PING_MIN_SAMPLES" '
             BEGIN { n=0; lost=0; nv=0; have=0; sum=0; jsum=0 }
             {
                 n++; arr[n]=$0
@@ -1070,10 +1075,16 @@ read_ping_data() {
                 }
             }
             END {
+                # Maturity guard: only trust loss% once the window has filled to
+                # min_samples. Below that, a couple of transient nulls dominate a
+                # tiny denominator and read as huge loss. Genuine sustained outages
+                # are still caught by the reachability/streak_fail path (independent
+                # of this stat), so suppressing immature loss% loses no real signal.
+                mloss = (n >= min_samples) ? int(lost*100/n) : 0
                 if (nv>0)
-                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nv>1?jsum/(nv-1):0),int(lost*100/n)
+                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nv>1?jsum/(nv-1):0),mloss
                 else
-                    printf "null|null|null|null|%d|", (n>0?100:0)
+                    printf "null|null|null|null|%d|", (n>0 && n>=min_samples ? 100 : 0)
                 printf "["
                 for(i=1;i<=n;i++) { if(i>1) printf ","; printf "%s",arr[i] }
                 printf "]\n"
