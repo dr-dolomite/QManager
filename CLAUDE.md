@@ -147,6 +147,7 @@ Detailed per-feature notes (apply pipelines, lock layering, contracts, gotchas, 
 | Adaptive Polling, `qmanager_poller`, `system/adaptive_polling.sh`, `quecmanager.poller.*`, `.device.poller_tier` (active/idle/deep), `/tmp/qmanager_force_tier2`, `write_cache` always-run invariant, deep=QENG-only | [`docs/features/adaptive-polling.md`](docs/features/adaptive-polling.md) |
 | IP Passthrough (IPPT), `network/ip_passthrough.sh`, `/etc/qmanager/ippt_config.json`, `parse_ippt_*` in `parse_at.sh`, Verizon profile lock, apply-then-reboot one-shot, `.device.ippt_*` | [`docs/features/ip-passthrough.md`](docs/features/ip-passthrough.md) |
 | On-Demand Radio Details, `cellular/radio_details.sh`, `ondemand_radio.sh` lib, `/tmp/qmanager_ondemand.json`, RAT-gate hardening, `useRadioDetails`, `stale:true` fallback | [`docs/features/ondemand-radio-details.md`](docs/features/ondemand-radio-details.md) |
+| Custom DNS, `network/dns.sh`, `dhcp.lan.dns`, odhcpd RA RDNSS, `use-dns-settings.ts`, provider presets (`dns-providers.ts`, `matchProvider`), `/etc/qmanager/dns_mode`, IPv6 two-stage BusyBox gate | [`docs/features/custom-dns.md`](docs/features/custom-dns.md) |
 
 Quick CGI / hook / type / reboot table for all extracted features lives in [`docs/features/README.md`](docs/features/README.md).
 

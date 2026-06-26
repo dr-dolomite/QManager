@@ -727,7 +727,69 @@ Values: `"auto"`, `"10"`, `"100"`, `"1000"`
 
 ### GET/POST `/network/dns.sh`
 
-Custom DNS override settings.
+Custom DNS override settings. Auth-gated. See [`docs/features/custom-dns.md`](features/custom-dns.md) for the dual-stack delivery model, odhcpd invariants, and MPDN fragility note.
+
+**GET Response:**
+
+```json
+{
+  "success": true,
+  "mode": "enabled",
+  "currentDNS": "1.1.1.1,1.0.0.1",
+  "currentDNS6": "2606:4700:4700::1111,2606:4700:4700::1001",
+  "nic": "lan"
+}
+```
+
+- `mode` — `"enabled"` or `"disabled"`, read from `/etc/qmanager/dns_mode`.
+- `currentDNS` — comma-joined IPv4 addresses from `dhcp.<nic>.dhcp_option` (the `6,` prefix is stripped). Empty string when no option is set.
+- `currentDNS6` — comma-joined IPv6 addresses from `dhcp.lan.dns` (UCI list, space-joined then comma-converted). Empty string when the list is absent.
+- `nic` — `"lan"` when no MPDN rule is enabled; `"lan_bind4"` when an MPDN rule with `enabled=1` is present.
+
+**POST Request:**
+
+```json
+{
+  "mode": "enabled",
+  "nic": "lan",
+  "dns1": "1.1.1.1",
+  "dns2": "1.0.0.1",
+  "dns3": "",
+  "dns1v6": "2606:4700:4700::1111",
+  "dns2v6": "2606:4700:4700::1001"
+}
+```
+
+- `mode` — required; `"enabled"` or `"disabled"`.
+- `nic` — required; `"lan"` or `"lan_bind4"`.
+- `dns1`/`dns2`/`dns3` — IPv4 addresses (optional individually, but at least one address across all six fields is required when enabling).
+- `dns1v6`/`dns2v6` — IPv6 addresses (optional individually).
+
+**POST Enable Response:**
+
+```json
+{ "success": true, "interface": "lan", "dns": "1.1.1.1,1.0.0.1", "dns6": "2606:4700:4700::1111,2606:4700:4700::1001" }
+```
+
+- `dns` — comma-joined IPv4 addresses actually applied; empty string if none.
+- `dns6` — comma-joined IPv6 addresses actually applied; empty string if none.
+
+**POST Disable Response:**
+
+```json
+{ "success": true, "interface": "lan", "dns": "203.0.113.1,203.0.113.2", "dns6": "" }
+```
+
+- `dns` — carrier IPv4 addresses read from `/tmp/resolv.conf.d/resolv.conf.auto` (what was restored).
+- `dns6` — always `""` on disable; carrier IPv6 is not captured.
+
+**Error Codes:**
+
+| Code | Meaning |
+|---|---|
+| `invalid_value` | `mode` or `nic` has an unrecognised value |
+| `missing_field` | Enabling with no addresses at all |
+| `invalid_dns` | IPv4 address fails the dotted-decimal check, or IPv6 address fails the `:` presence + `[0-9a-fA-F:]`-only check |
 
 ### GET/POST `/network/ip_passthrough.sh`
 
