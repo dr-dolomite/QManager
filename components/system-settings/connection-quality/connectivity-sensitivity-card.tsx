@@ -29,9 +29,9 @@ import { staggerContainer, staggerItem } from "@/lib/motion-presets";
 
 // ─── Profile metadata (UI labels and per-preset blurbs) ────────────────────
 
-// Mirrors ping-daemon/src/config.rs::ProfileConfig::for_profile.
-// Keep these in sync — the daemon is the source of truth, this table is
-// purely for previewing values in the UI before the user saves.
+// Mirrors the qmanager_ping daemon's resolve_profile() table. Keep these in
+// sync — the daemon is the source of truth, this table is purely for previewing
+// values in the UI before the user saves.
 const PROFILE_META: Record<
   PingProfile,
   {
@@ -77,15 +77,39 @@ const PROFILE_META: Record<
 // "daemon hasn't picked up the change yet" footnote.
 const STUCK_THRESHOLD_MS = 30_000;
 
-const DEFAULT_TARGET_1 = "http://cp.cloudflare.com/";
-const DEFAULT_TARGET_2 = "http://www.gstatic.com/generate_204";
+// Cloudflare anycast DNS — fast, reliable ICMP responders for both families.
+const DEFAULT_TARGET_IPV4 = "1.1.1.1";
+const DEFAULT_TARGET_IPV6 = "2606:4700:4700::1111";
 
-function validateTargetClient(value: string): string | null {
+// Common host rules shared by both families: trimmed, non-empty, length-bounded,
+// no whitespace, no shell/HTML metacharacters. Mirrors the CGI's validate_target
+// so the user sees the same verdict inline that the backend would return.
+function checkCommonHostRules(trimmed: string): string | null {
+  if (!trimmed) return "Address cannot be empty";
+  if (trimmed.length > 128) return "Address too long (max 128 characters)";
+  if (/\s/.test(trimmed)) return "Address cannot contain spaces";
+  if (/[`$();|<>"\\]/.test(trimmed))
+    return "Address contains disallowed characters";
+  return null;
+}
+
+// IPv4 literal or hostname — charset [0-9A-Za-z.-].
+function validateIpv4Target(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return "URL cannot be empty";
-  if (trimmed.length > 256) return "URL too long (max 256 characters)";
-  if (/\s/.test(trimmed)) return "URL cannot contain spaces";
-  if (/[`$();|<>"\\]/.test(trimmed)) return "URL contains disallowed characters";
+  const common = checkCommonHostRules(trimmed);
+  if (common) return common;
+  if (/[^0-9A-Za-z.-]/.test(trimmed))
+    return "Enter an IPv4 address or hostname";
+  return null;
+}
+
+// IPv6 literal — charset [0-9A-Fa-f:.%], and must contain a colon.
+function validateIpv6Target(value: string): string | null {
+  const trimmed = value.trim();
+  const common = checkCommonHostRules(trimmed);
+  if (common) return common;
+  if (/[^0-9A-Fa-f:.%]/.test(trimmed)) return "Enter a valid IPv6 address";
+  if (!trimmed.includes(":")) return "An IPv6 address must contain ':'";
   return null;
 }
 
@@ -101,8 +125,8 @@ function formatSecs(value: number | null | undefined): string {
 export default function ConnectivitySensitivityCard() {
   const {
     profile,
-    target1,
-    target2,
+    targetIpv4,
+    targetIpv6,
     intervalOverride,
     effectiveInterval,
     isLoading,
@@ -115,10 +139,10 @@ export default function ConnectivitySensitivityCard() {
   const { saved, markSaved } = useSaveFlash();
 
   const [selected, setSelected] = useState<PingProfile | undefined>(profile);
-  const [target1Input, setTarget1Input] = useState<string>("");
-  const [target2Input, setTarget2Input] = useState<string>("");
-  const [target1Err, setTarget1Err] = useState<string | null>(null);
-  const [target2Err, setTarget2Err] = useState<string | null>(null);
+  const [ipv4Input, setIpv4Input] = useState<string>("");
+  const [ipv6Input, setIpv6Input] = useState<string>("");
+  const [ipv4Err, setIpv4Err] = useState<string | null>(null);
+  const [ipv6Err, setIpv6Err] = useState<string | null>(null);
 
   // Sync local form state when the saved settings arrive (or change after a
   // save). "Store previous value in state" pattern per React docs — no refs,
@@ -127,15 +151,15 @@ export default function ConnectivitySensitivityCard() {
   const [prevSavedKey, setPrevSavedKey] = useState<string | null>(null);
   if (
     profile !== undefined &&
-    target1 !== undefined &&
-    target2 !== undefined
+    targetIpv4 !== undefined &&
+    targetIpv6 !== undefined
   ) {
-    const savedKey = [profile, target1, target2].join("|");
+    const savedKey = [profile, targetIpv4, targetIpv6].join("|");
     if (prevSavedKey !== savedKey) {
       setPrevSavedKey(savedKey);
       setSelected(profile);
-      setTarget1Input(target1);
-      setTarget2Input(target2);
+      setIpv4Input(targetIpv4);
+      setIpv6Input(targetIpv6);
     }
   }
 
@@ -148,13 +172,18 @@ export default function ConnectivitySensitivityCard() {
   const isDirty = useMemo(() => {
     if (!profile || selected === undefined) return false;
     if (selected !== profile) return true;
-    if (target1 !== undefined && target1Input !== target1) return true;
-    if (target2 !== undefined && target2Input !== target2) return true;
+    if (targetIpv4 !== undefined && ipv4Input !== targetIpv4) return true;
+    if (targetIpv6 !== undefined && ipv6Input !== targetIpv6) return true;
     return false;
-  }, [profile, selected, target1, target1Input, target2, target2Input]);
+  }, [profile, selected, targetIpv4, ipv4Input, targetIpv6, ipv6Input]);
 
-  const hasValidationErrors = target1Err !== null || target2Err !== null;
+  const hasValidationErrors = ipv4Err !== null || ipv6Err !== null;
   const canSave = isDirty && !isSaving && !hasValidationErrors;
+
+  // Live family indicator: which address family the daemon's last successful
+  // probe used. "ipv6" means the IPv4 leg failed and the fallback carried the
+  // connection — the exact case this card's IPv6 target exists to cover.
+  const lastFamily = modemStatus?.connectivity?.last_family;
 
   // Daemon-stuck detection: after a save, if the daemon's runtime profile
   // doesn't match within STUCK_THRESHOLD_MS, surface a footnote.
@@ -183,17 +212,17 @@ export default function ConnectivitySensitivityCard() {
   const handleSave = async () => {
     if (!canSave || !selected) return;
     // Re-validate at submit time
-    const e1 = validateTargetClient(target1Input);
-    const e2 = validateTargetClient(target2Input);
-    setTarget1Err(e1);
-    setTarget2Err(e2);
-    if (e1 || e2) return;
+    const e4 = validateIpv4Target(ipv4Input);
+    const e6 = validateIpv6Target(ipv6Input);
+    setIpv4Err(e4);
+    setIpv6Err(e6);
+    if (e4 || e6) return;
 
     try {
       await save({
         profile: selected,
-        target_1: target1Input.trim(),
-        target_2: target2Input.trim(),
+        target_ipv4: ipv4Input.trim(),
+        target_ipv6: ipv6Input.trim(),
       });
       markSaved();
       lastSavedAtRef.current = Date.now();
@@ -233,14 +262,14 @@ export default function ConnectivitySensitivityCard() {
               </div>
               <Skeleton className="h-9 w-9 rounded-md shrink-0" />
             </div>
-            {/* Primary URL */}
+            {/* IPv4 target */}
             <div className="grid gap-1.5">
-              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-28" />
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
-            {/* Secondary URL */}
+            {/* IPv6 target */}
             <div className="grid gap-1.5">
-              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-40" />
               <Skeleton className="h-9 w-full rounded-md" />
             </div>
             {/* Save button */}
@@ -378,8 +407,13 @@ export default function ConnectivitySensitivityCard() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h4 className="text-sm font-medium">Probe Targets</h4>
-                <p id="probe-targets-help" className="text-xs text-muted-foreground mt-0.5">
-                  Primary is checked first. Secondary is only used if primary fails. URLs without a scheme default to https.
+                <p
+                  id="probe-targets-help"
+                  className="text-xs text-muted-foreground mt-0.5"
+                >
+                  DNS servers the modem pings to check the internet. IPv4 is
+                  tried first; IPv6 is the fallback, so an IPv6-only connection
+                  is never reported as down.
                 </p>
               </div>
               <Button
@@ -388,10 +422,10 @@ export default function ConnectivitySensitivityCard() {
                 size="icon"
                 className="shrink-0"
                 onClick={() => {
-                  setTarget1Input(DEFAULT_TARGET_1);
-                  setTarget2Input(DEFAULT_TARGET_2);
-                  setTarget1Err(null);
-                  setTarget2Err(null);
+                  setIpv4Input(DEFAULT_TARGET_IPV4);
+                  setIpv6Input(DEFAULT_TARGET_IPV6);
+                  setIpv4Err(null);
+                  setIpv6Err(null);
                 }}
                 aria-label="Reset probe targets to defaults"
                 title="Reset to defaults"
@@ -400,58 +434,79 @@ export default function ConnectivitySensitivityCard() {
               </Button>
             </div>
 
+            {/* IPv4 DNS server — pinged first */}
             <div className="grid gap-1.5">
-              <Label htmlFor="target-primary">Primary URL</Label>
+              <Label htmlFor="target-ipv4">IPv4 DNS Server</Label>
               <Input
-                id="target-primary"
-                value={target1Input}
+                id="target-ipv4"
+                value={ipv4Input}
                 onChange={(e) => {
-                  setTarget1Input(e.target.value);
-                  setTarget1Err(validateTargetClient(e.target.value));
+                  setIpv4Input(e.target.value);
+                  setIpv4Err(validateIpv4Target(e.target.value));
                 }}
-                placeholder="youtube.com or https://example.com/"
-                aria-invalid={target1Err !== null}
+                placeholder="1.1.1.1"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={ipv4Err !== null}
                 aria-describedby={
-                  target1Err
-                    ? "probe-targets-help target-primary-err"
+                  ipv4Err
+                    ? "probe-targets-help target-ipv4-err"
                     : "probe-targets-help"
                 }
               />
-              {target1Err && (
+              {ipv4Err && (
                 <p
-                  id="target-primary-err"
+                  id="target-ipv4-err"
                   role="alert"
                   className="text-xs text-destructive"
                 >
-                  {target1Err}
+                  {ipv4Err}
                 </p>
               )}
             </div>
 
+            {/* IPv6 DNS server — fallback for IPv6-only bearers */}
             <div className="grid gap-1.5">
-              <Label htmlFor="target-secondary">Secondary URL (fallback)</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="target-ipv6">IPv6 DNS Server</Label>
+                {lastFamily === "ipv6" && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    Currently reachable via IPv6
+                  </span>
+                )}
+              </div>
               <Input
-                id="target-secondary"
-                value={target2Input}
+                id="target-ipv6"
+                value={ipv6Input}
                 onChange={(e) => {
-                  setTarget2Input(e.target.value);
-                  setTarget2Err(validateTargetClient(e.target.value));
+                  setIpv6Input(e.target.value);
+                  setIpv6Err(validateIpv6Target(e.target.value));
                 }}
-                placeholder="cloudflare.com or http://example.com/generate_204"
-                aria-invalid={target2Err !== null}
+                placeholder="2606:4700:4700::1111"
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={ipv6Err !== null}
                 aria-describedby={
-                  target2Err
-                    ? "probe-targets-help target-secondary-err"
-                    : "probe-targets-help"
+                  ipv6Err
+                    ? "target-ipv6-help target-ipv6-err"
+                    : "target-ipv6-help"
                 }
               />
-              {target2Err && (
+              <p
+                id="target-ipv6-help"
+                className="text-xs text-muted-foreground"
+              >
+                Only used when the IPv4 ping fails. On an IPv6-only connection
+                this keeps the modem from reporting a false outage.
+              </p>
+              {ipv6Err && (
                 <p
-                  id="target-secondary-err"
+                  id="target-ipv6-err"
                   role="alert"
                   className="text-xs text-destructive"
                 >
-                  {target2Err}
+                  {ipv6Err}
                 </p>
               )}
             </div>
@@ -488,4 +543,3 @@ export default function ConnectivitySensitivityCard() {
     </Card>
   );
 }
-

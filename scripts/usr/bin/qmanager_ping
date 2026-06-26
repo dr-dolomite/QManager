@@ -6,11 +6,16 @@
 # All consumers (poller, watchcat, frontend) read from this daemon's output.
 # This daemon NEVER touches the modem serial port.
 #
-# Probing is HTTP (curl) — NOT ICMP. A probe succeeds when curl exits 0 AND the
-# HTTP status is 2xx/204/3xx. latency_ms is the TCP-connect RTT
-# (time_connect − time_namelookup), i.e. one round-trip of the TCP handshake —
-# comparable to ICMP ping. time_total is NOT reported: it folds in DNS + server
-# TTFB and ran ~3.3× real RTT.
+# Probing is ICMP (BusyBox ping) — NOT HTTP. Each cycle probes IPv4 first
+# (target_ipv4, default 1.1.1.1) and, only if that fails, falls back to IPv6
+# (target_ipv6, default 2606:4700:4700::1111). A probe succeeds when a numeric
+# round-trip time > 0 is parsed from the ping output ("round-trip
+# min/avg/max = a/b/c", or a per-packet "time=" field). 100% packet loss yields
+# no round-trip line, hence no rtt, hence a probe failure — the fail-safe.
+#
+# The v4-primary / v6-fallback ordering is the false-positive fix: on an
+# IPv6-only bearer the v4 probe fails fast and the v6 probe succeeds, so
+# `reachable` stays true. This replaces the previous curl/round-robin engine.
 #
 # Output: /tmp/qmanager_ping.json (atomic writes, slim — no stats/history)
 # History: /tmp/qmanager_ping_history (flat-file ring buffer, read by poller)
@@ -24,7 +29,7 @@
 #   - Frontend: reads via status.json (merged by poller)
 #
 # Install location: /usr/bin/qmanager_ping
-# Dependencies: curl (full build, 8.7.1+), jq, date, tail, mv
+# Dependencies: busybox ping, jq, awk, grep, cut, date, tail, mv
 # =============================================================================
 
 # --- Logging -----------------------------------------------------------------
@@ -43,17 +48,22 @@ qlog_init "ping"
 # These are fallbacks only; load_config() below re-reads UCI at startup and on
 # every reload-flag trip. The active profile name drives interval + thresholds
 # via resolve_profile(); the daemon holds the profile->params table as the
-# single source of truth (UCI stores only the profile name + 2 targets).
+# single source of truth (UCI stores only the profile name + 2 ICMP targets).
 PING_PROFILE="${PING_PROFILE:-relaxed}"
-PING_TARGET_1="${PING_TARGET_1:-http://cp.cloudflare.com/}"
-PING_TARGET_2="${PING_TARGET_2:-http://www.gstatic.com/generate_204}"
+PING_TARGET_IPV4="${PING_TARGET_IPV4:-1.1.1.1}"
+PING_TARGET_IPV6="${PING_TARGET_IPV6:-2606:4700:4700::1111}"
 PING_INTERVAL="${PING_INTERVAL:-5}"
 PING_INTERVAL_OVERRIDE=""    # quecmanager.ping_profile.interval_override (1–60); empty = unused
 FAIL_THRESHOLD="${FAIL_THRESHOLD:-3}"
 RECOVER_THRESHOLD="${RECOVER_THRESHOLD:-2}"
 HISTORY_SIZE="${HISTORY_SIZE:-60}"
-PROBE_CONNECT_TIMEOUT=2    # curl --connect-timeout seconds
-PROBE_MAX_TIME=3           # curl --max-time seconds
+PROBE_COUNT=1              # ping -c : ICMP echo requests per probe
+PROBE_TIMEOUT=2            # ping -W : per-probe wait (BusyBox: seconds)
+
+# IPv6 ping invocation, detected once at startup via detect_ping6().
+# Empty string = IPv6 probing unavailable on this build (v4-only fallback off).
+PING6_CMD=""
+PING6_WARNED=0             # warn-once guard for "IPv6 unavailable"
 
 # --- File Paths --------------------------------------------------------------
 CACHE_FILE="/tmp/qmanager_ping.json"
@@ -68,9 +78,8 @@ streak_success=0
 streak_fail=0
 reachable="true"
 prev_reachable="true"
-target_index=0
-target_count=2
-history_count=0     # tracked in shell — avoids wc -l fork every cycle
+last_family="none"     # ipv4 | ipv6 | none — which family answered last cycle
+history_count=0        # tracked in shell — avoids wc -l fork every cycle
 
 # =============================================================================
 # HELPERS
@@ -118,34 +127,51 @@ resolve_profile() {
     fi
 }
 
-# --- Normalize a target to an absolute URL -----------------------------------
-# A scheme-less target ("google.com") gets "https://" prepended. The CGI also
-# normalizes on save, but the daemon defends against legacy/hand-edited UCI.
-normalize_target() {
-    case "$1" in
-        *://*) printf '%s' "$1" ;;
-        *)     printf 'https://%s' "$1" ;;
-    esac
+# --- Detect a working IPv6 ping invocation (called once at startup) ----------
+# Prefer `ping -6` (modern BusyBox), then the `ping6` applet. Probe ::1 (loopback,
+# always answerable when the kernel has IPv6) so detection never depends on the
+# upstream bearer. Sets PING6_CMD; empty means IPv6 probing is unavailable.
+detect_ping6() {
+    if ping -6 -c 1 -W 1 ::1 >/dev/null 2>&1; then
+        PING6_CMD="ping -6"
+        return 0
+    fi
+    if command -v ping6 >/dev/null 2>&1 && ping6 -c 1 -W 1 ::1 >/dev/null 2>&1; then
+        PING6_CMD="ping6"
+        return 0
+    fi
+    PING6_CMD=""
+    if [ "$PING6_WARNED" = "0" ]; then
+        qlog_warn "IPv6 probing unavailable (no working ping -6 or ping6) — IPv4-only reachability"
+        PING6_WARNED=1
+    fi
+    return 1
 }
 
 # --- Load configuration from UCI and re-resolve the profile ------------------
-# Reads the profile name + 2 targets from quecmanager.ping_profile, falling
-# back to the relaxed/https defaults when a key is unset. Then resolves the
-# profile to interval + thresholds. Safe to call at startup and on reload.
+# Reads the profile name + the IPv4/IPv6 ICMP targets from quecmanager.ping_profile,
+# falling back to the relaxed/Cloudflare defaults when a key is unset. The legacy
+# target_1/target_2 keys (old HTTP URLs) are deliberately NOT read. Then resolves
+# the profile to interval + thresholds. Safe to call at startup and on reload.
 load_config() {
     local _profile
-    local _t1
-    local _t2
+    local _t4
+    local _t6
     local _override
 
     _profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
-    _t1=$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)
-    _t2=$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)
+    _t4=$(uci -q get quecmanager.ping_profile.target_ipv4 2>/dev/null)
+    _t6=$(uci -q get quecmanager.ping_profile.target_ipv6 2>/dev/null)
     _override=$(uci -q get quecmanager.ping_profile.interval_override 2>/dev/null)
 
     [ -n "$_profile" ] && PING_PROFILE="$_profile"
-    [ -n "$_t1" ] && PING_TARGET_1="$_t1"
-    [ -n "$_t2" ] && PING_TARGET_2="$_t2"
+
+    # Reset to the Cloudflare defaults first so a cleared UCI key reverts cleanly
+    # on reload rather than sticking from a prior load.
+    PING_TARGET_IPV4="1.1.1.1"
+    PING_TARGET_IPV6="2606:4700:4700::1111"
+    [ -n "$_t4" ] && PING_TARGET_IPV4="$_t4"
+    [ -n "$_t6" ] && PING_TARGET_IPV6="$_t6"
 
     # interval_override: integer seconds 1–60, else treated as unused (empty).
     # Reset first so a cleared/invalid value reverts to the profile interval
@@ -156,58 +182,49 @@ load_config() {
         *) [ "$_override" -ge 1 ] && [ "$_override" -le 60 ] && PING_INTERVAL_OVERRIDE="$_override" ;;
     esac
 
-    PING_TARGET_1=$(normalize_target "$PING_TARGET_1")
-    PING_TARGET_2=$(normalize_target "$PING_TARGET_2")
-
     resolve_profile
 }
 
-# --- Execute a single HTTP probe against a target URL ------------------------
-# curl exit 0 AND http_code in 2xx/204/3xx == success. On success the latency
-# in ms is written to stdout: the TCP-connect RTT
-# (time_connect − time_namelookup) * 1000, 1 decimal — one round-trip of the
-# TCP handshake, comparable to ICMP ping. DNS lookup and server TTFB are
-# excluded by construction (time_total used to fold them in and ran ~3.3× high).
-# Returns: 0 = success (latency_ms on stdout), 1 = failure
-do_ping() {
-    local target
-    target=$(normalize_target "$1")
-
-    local result
-    result=$(curl -s -o /dev/null \
-        -w '%{http_code} %{time_namelookup} %{time_connect} %{time_total}' \
-        --connect-timeout "$PROBE_CONNECT_TIMEOUT" --max-time "$PROBE_MAX_TIME" \
-        "$target" 2>/dev/null)
-    [ $? -ne 0 ] && return 1
-
-    # result == "200 0.012 0.031 0.123" — 4 space-separated fields.
-    # shellcheck disable=SC2086 — intentional word-split on known curl format.
-    set -- $result
-    local code="$1"
-    local dns="$2"
-    local connect="$3"
-
-    # HTTP success: 2xx, 204, or 3xx redirect.
-    case "$code" in
-        2[0-9][0-9]|3[0-9][0-9]) ;;
-        *) return 1 ;;
-    esac
-
-    # time_namelookup + time_connect must both be numeric (digits + dot).
-    case "$dns" in
-        ''|*[!0-9.]*) return 1 ;;
-    esac
-    case "$connect" in
-        ''|*[!0-9.]*) return 1 ;;
-    esac
-
-    # latency_ms = (time_connect − time_namelookup) * 1000, 1 decimal. awk
-    # avoids float-less sh. On a successful HTTP response time_connect is always
-    # > time_namelookup ≥ 0, so a ≤ 0 / non-numeric delta means parsing went
-    # wrong — treat it as a probe failure (same fail-safe as the field guards).
+# --- Execute a single ICMP probe against a target ----------------------------
+# $1 = target host/literal, $2 = ping invocation ("ping", "ping -6", "ping6").
+# Runs `$cmd -c 1 -W 2 <target>`. Parses the average RTT from the BusyBox
+# summary line ("round-trip min/avg/max = X/Y/Z", avg = field 2), falling back
+# to a per-packet "time=<n>" field. The rtt is formatted to 1 decimal via awk.
+# SUCCESS only when a numeric rtt > 0 is extracted — 100% loss produces no
+# round-trip line, so no rtt, so failure (the fail-safe). On success the rtt is
+# echoed to stdout and 0 returned; otherwise 1.
+do_ping_icmp() {
+    local target="$1"
+    local cmd="$2"
+    local out
     local rtt
-    rtt=$(awk -v c="$connect" -v d="$dns" 'BEGIN { printf "%.1f", (c - d) * 1000 }')
 
+    # $cmd is an internal, fixed invocation token ("ping" / "ping -6" / "ping6")
+    # — intentional word-split, not user input.
+    # shellcheck disable=SC2086
+    out=$($cmd -c "$PROBE_COUNT" -W "$PROBE_TIMEOUT" "$target" 2>/dev/null)
+
+    # Preferred: average from the round-trip summary line (avg = 2nd of a/b/c).
+    rtt=$(printf '%s\n' "$out" \
+        | grep -oE 'min/avg/max[^=]*= [0-9.]+/[0-9.]+/[0-9.]+' \
+        | grep -oE '[0-9.]+/[0-9.]+/[0-9.]+' \
+        | cut -d'/' -f2)
+
+    # Fallback: a per-packet "time=<n>" reading when no summary line is present.
+    if [ -z "$rtt" ]; then
+        rtt=$(printf '%s\n' "$out" \
+            | grep -oE 'time=[0-9.]+' \
+            | head -n1 \
+            | cut -d'=' -f2)
+    fi
+
+    # Must be numeric (digits + optional dot).
+    case "$rtt" in
+        ''|*[!0-9.]*) return 1 ;;
+    esac
+
+    # Normalize to 1 decimal place; reject a non-positive / unparseable delta.
+    rtt=$(awk -v r="$rtt" 'BEGIN { printf "%.1f", r }')
     case "$rtt" in
         ''|*[!0-9.]*) return 1 ;;
     esac
@@ -216,19 +233,43 @@ do_ping() {
     echo "$rtt"
 }
 
-# --- Select next ping target (alternates between targets) --------------------
-get_target() {
-    if [ "$target_index" -eq 0 ]; then
-        echo "$PING_TARGET_1"
-    else
-        echo "$PING_TARGET_2"
+# --- Probe one cycle: IPv4 first, IPv6 fallback ------------------------------
+# Publishes the winning rtt into the PROBE_RTT global and sets last_family
+# ("ipv4"|"ipv6") on success, returning 0. On total failure clears PROBE_RTT,
+# sets last_family="none", and returns 1. Results travel via globals (not
+# stdout) so last_family persists into the main loop — a command-substitution
+# subshell would discard it. IPv6 is attempted only when PING6_CMD is available
+# and a v6 target is set; this either-family-up reachability is the fix for
+# v6-only false positives.
+PROBE_RTT=""
+probe_cycle() {
+    local rtt
+
+    rtt=$(do_ping_icmp "$PING_TARGET_IPV4" "ping")
+    if [ -n "$rtt" ]; then
+        last_family="ipv4"
+        PROBE_RTT="$rtt"
+        return 0
     fi
-    target_index=$(( (target_index + 1) % target_count ))
+
+    if [ -n "$PING6_CMD" ] && [ -n "$PING_TARGET_IPV6" ]; then
+        rtt=$(do_ping_icmp "$PING_TARGET_IPV6" "$PING6_CMD")
+        if [ -n "$rtt" ]; then
+            last_family="ipv6"
+            PROBE_RTT="$rtt"
+            return 0
+        fi
+    fi
+
+    last_family="none"
+    PROBE_RTT=""
+    return 1
 }
 
 # --- Write slim JSON cache atomically ----------------------------------------
-# Only writes: timestamp, targets, interval, last_rtt, reachability, streaks.
-# Stats (avg/min/max/jitter/loss) and history array are computed by the poller.
+# Keys: timestamp, mono, profile, targets, interval_sec, last_rtt_ms, reachable,
+# streak_success, streak_fail, during_recovery, last_family. Stats (avg/min/max/
+# jitter/loss) and the history array are computed by the poller, not here.
 write_cache() {
     local rtt="$1"      # "34.2" or "null"
 
@@ -244,25 +285,27 @@ write_cache() {
         --argjson timestamp "$timestamp" \
         --argjson mono "$mono" \
         --arg profile "$PING_PROFILE" \
-        --arg target1 "$PING_TARGET_1" \
-        --arg target2 "$PING_TARGET_2" \
+        --arg target4 "$PING_TARGET_IPV4" \
+        --arg target6 "$PING_TARGET_IPV6" \
         --argjson interval "$PING_INTERVAL" \
         --argjson last_rtt "$rtt" \
         --argjson reachable "$reachable" \
         --argjson streak_s "$streak_success" \
         --argjson streak_f "$streak_fail" \
         --argjson during_rec "$during_recovery" \
+        --arg last_family "$last_family" \
         '{
             timestamp: $timestamp,
             mono: $mono,
             profile: $profile,
-            targets: [$target1, $target2],
+            targets: [$target4, $target6],
             interval_sec: $interval,
             last_rtt_ms: $last_rtt,
             reachable: $reachable,
             streak_success: $streak_s,
             streak_fail: $streak_f,
-            during_recovery: $during_rec
+            during_recovery: $during_rec,
+            last_family: $last_family
         }' > "$CACHE_TMP"
 
     mv "$CACHE_TMP" "$CACHE_FILE"
@@ -285,18 +328,27 @@ main() {
     fi
     echo $$ > "$PID_FILE"
 
-    # Remove PID file on exit
-    trap 'rm -f "$PID_FILE" "$CACHE_TMP"' EXIT INT TERM
+    # Remove PID file on exit. BusyBox ash runs an INT/TERM trap handler but does
+    # NOT exit afterward — without the explicit `exit`, a SIGTERM'd daemon deletes
+    # its PID file via the trap yet keeps looping and writing stale JSON, so a
+    # restart leaves a zombie until procd's SIGKILL fallback. The EXIT trap covers
+    # the cleanup on every path; INT/TERM additionally force the exit.
+    # (confirmed on RM551E 2026-06-26 — see docs/development/busybox-quirks.md)
+    trap 'rm -f "$PID_FILE" "$CACHE_TMP"' EXIT
+    trap 'rm -f "$PID_FILE" "$CACHE_TMP"; exit' INT TERM
 
-    # Load profile + targets from UCI (resolves interval/thresholds).
+    # Load profile + targets from UCI (resolves interval/thresholds), then detect
+    # the IPv6 ping invocation once (cheap loopback probe).
     load_config
+    detect_ping6
 
     qlog_info "========================================"
     qlog_info "QManager Ping Daemon starting (PID $$)"
     qlog_info "Profile: ${PING_PROFILE}"
-    qlog_info "Targets: ${PING_TARGET_1}, ${PING_TARGET_2}"
+    qlog_info "Targets: v4=${PING_TARGET_IPV4} v6=${PING_TARGET_IPV6}"
+    qlog_info "IPv6 probe: ${PING6_CMD:-unavailable}"
     qlog_info "Interval: ${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)}, Fail threshold: ${FAIL_THRESHOLD}, Recover threshold: ${RECOVER_THRESHOLD}"
-    qlog_info "History size: ${HISTORY_SIZE}, Connect timeout: ${PROBE_CONNECT_TIMEOUT}s, Max time: ${PROBE_MAX_TIME}s"
+    qlog_info "History size: ${HISTORY_SIZE}, Probe count: ${PROBE_COUNT}, Probe timeout: ${PROBE_TIMEOUT}s"
     qlog_info "========================================"
 
     # Clean up stale files from previous run
@@ -309,22 +361,24 @@ main() {
         # cycle when the CGI drops the flag, then clear it. No procd restart.
         if [ -f "$RELOAD_FLAG" ]; then
             load_config
+            detect_ping6
             rm -f "$RELOAD_FLAG"
-            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${FAIL_THRESHOLD} recover=${RECOVER_THRESHOLD} targets=${PING_TARGET_1},${PING_TARGET_2}"
+            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${FAIL_THRESHOLD} recover=${RECOVER_THRESHOLD} v4=${PING_TARGET_IPV4} v6=${PING_TARGET_IPV6} ping6=${PING6_CMD:-none}"
         fi
 
-        local target
-        target=$(get_target)
-
         local rtt
-        rtt=$(do_ping "$target")
+        if probe_cycle; then
+            rtt="$PROBE_RTT"
+        else
+            rtt=""
+        fi
 
-        if [ $? -eq 0 ] && [ -n "$rtt" ]; then
+        if [ -n "$rtt" ]; then
             # --- Ping succeeded ---
             streak_success=$((streak_success + 1))
             streak_fail=0
 
-            qlog_debug "PING OK: ${target} rtt=${rtt}ms (streak_success=${streak_success})"
+            qlog_debug "PING OK: family=${last_family} rtt=${rtt}ms (streak_success=${streak_success})"
 
             # Flip reachable back to true after sustained success
             if [ "$reachable" = "false" ] && [ "$streak_success" -ge "$RECOVER_THRESHOLD" ]; then
@@ -336,12 +390,12 @@ main() {
             # Append to history ring buffer
             echo "$rtt" >> "$HISTORY_FILE"
         else
-            # --- Ping failed ---
+            # --- Ping failed (both families) ---
             rtt="null"
             streak_fail=$((streak_fail + 1))
             streak_success=0
 
-            qlog_debug "PING FAIL: ${target} (streak_fail=${streak_fail})"
+            qlog_debug "PING FAIL: both families unreachable (streak_fail=${streak_fail})"
 
             # Only mark unreachable after sustained failure
             if [ "$reachable" = "true" ] && [ "$streak_fail" -ge "$FAIL_THRESHOLD" ]; then

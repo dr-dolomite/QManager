@@ -192,7 +192,8 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
     "latency_history": [34.2, 36.1, 38.0, ...],
     "history_interval_sec": 5,
     "history_size": 60,
-    "during_recovery": false
+    "during_recovery": false,
+    "last_family": "ipv4"
   },
   "signal_per_antenna": {
     "lte_rsrp": [-95, -97, -102, null],
@@ -1150,7 +1151,7 @@ Resets the set to contain only the currently-inserted SIM (read live via `AT+QCC
 
 ### GET/POST `/system/ping_profile.sh`
 
-Read or write the ping-daemon sensitivity profile and probe targets. See [`docs/features/connection-quality.md`](../features/connection-quality.md) for the full apply pipeline and reload semantics.
+Read or write the ping-daemon sensitivity profile and ICMP probe targets. See [`docs/features/connection-quality.md`](../features/connection-quality.md) for the full apply pipeline, probe mechanics, and reload semantics.
 
 **GET Response:**
 
@@ -1158,12 +1159,14 @@ Read or write the ping-daemon sensitivity profile and probe targets. See [`docs/
 {
   "success": true,
   "profile": "relaxed",
-  "target1": "http://cp.cloudflare.com/",
-  "target2": "http://www.gstatic.com/generate_204"
+  "target_ipv4": "1.1.1.1",
+  "target_ipv6": "2606:4700:4700::1111",
+  "interval_override": null,
+  "effective_interval": 5
 }
 ```
 
-`profile` is one of: `sensitive`, `regular`, `relaxed`, `quiet`. GET keys are `target1`/`target2` (no underscore).
+`profile` is one of: `sensitive`, `regular`, `relaxed`, `quiet`. Both GET and POST use the same `target_ipv4`/`target_ipv6` keys — there is no GET/POST asymmetry in this endpoint. `interval_override` is `null` when not set (sole writer: Connection Watchdog). `effective_interval` is the resolved probe interval in seconds.
 
 **POST Request (`action: "save"`):**
 
@@ -1171,21 +1174,23 @@ Read or write the ping-daemon sensitivity profile and probe targets. See [`docs/
 {
   "action": "save",
   "profile": "sensitive",
-  "target_1": "http://cp.cloudflare.com/",
-  "target_2": "http://www.gstatic.com/generate_204"
+  "target_ipv4": "1.1.1.1",
+  "target_ipv6": "2606:4700:4700::1111"
 }
 ```
 
-POST body keys are `target_1`/`target_2` (with underscore, matching UCI field names).
+Targets are bare IPv4/IPv6 literals or hostnames — no URL scheme. The POST does NOT write `interval_override`; that key is owned exclusively by the Connection Watchdog.
 
 **POST Success:**
 ```json
 { "success": true }
 ```
 
-Drops `/tmp/qmanager_ping_reload`; the ping daemon re-reads UCI within one probe cycle (≤10 s on `quiet`, ≤1 s on `sensitive`). No reboot.
+Drops `/tmp/qmanager_ping_reload`; the ping daemon re-reads UCI and re-detects IPv6 capability within one probe cycle (≤10 s on `quiet`, ≤1 s on `sensitive`). No reboot.
 
 **Error codes:** `invalid_profile`, `invalid_target`, `missing_action`, `unknown_action`
+
+`invalid_target` is returned when `target_ipv4` or `target_ipv6` fails per-family host validation: empty, >128 chars, interior whitespace, shell/HTML metacharacters, or characters outside the family charset (`[0-9A-Za-z.-]` for IPv4; `[0-9A-Fa-f:.%]` for IPv6).
 
 ---
 

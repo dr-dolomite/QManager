@@ -438,6 +438,13 @@ export interface ConnectivityStatus {
    * undefined for older poller output.
    */
   profile?: PingProfile;
+  /**
+   * Address family of the last successful ICMP probe: "ipv4" when the primary
+   * IPv4 target answered, "ipv6" when the IPv4 leg failed and the IPv6 fallback
+   * carried the connection, "none" when both failed. Empty string / undefined
+   * on older poller output before the field was emitted.
+   */
+  last_family?: "ipv4" | "ipv6" | "none" | "";
 }
 
 // --- Connection Quality Settings ---------------------------------------------

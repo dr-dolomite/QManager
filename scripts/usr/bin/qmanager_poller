@@ -221,6 +221,7 @@ conn_history_interval=5
 conn_history_size=60
 conn_during_recovery="false"
 conn_profile=""          # active ping profile name from ping.json (.profile)
+conn_last_family=""      # address family of the last successful probe (.last_family)
 _last_ping_ts=0          # tracks last processed ping.json timestamp (awk gate)
 
 # History size constant (must match ping daemon)
@@ -977,6 +978,7 @@ read_ping_data() {
         conn_history="[]"
         conn_during_recovery="false"
         conn_profile=""
+        conn_last_family=""
         return
     fi
 
@@ -1034,7 +1036,8 @@ read_ping_data() {
         ((.during_recovery) | if . == null then "false" else tostring end),
         ((.interval_sec) | if . == null then "5" else tostring end),
         ((.targets[0]) | if . == null then "" else . end),
-        ((.profile) | if . == null then "" else . end)
+        ((.profile) | if . == null then "" else . end),
+        ((.last_family) | if . == null then "" else . end)
     ] | @tsv' "$PING_CACHE" 2>/dev/null)
 
     conn_internet_available=$(printf '%s' "$_pdata" | cut -f1)
@@ -1043,6 +1046,7 @@ read_ping_data() {
     conn_history_interval=$(printf '%s' "$_pdata" | cut -f4)
     conn_ping_target=$(printf '%s' "$_pdata" | cut -f5)
     conn_profile=$(printf '%s' "$_pdata" | cut -f6)
+    conn_last_family=$(printf '%s' "$_pdata" | cut -f7)
 
     # Step B: Single awk pass — only when ping timestamp changed (saves awk fork every 2s)
     # With ping daemon at 5s, awk runs ~every 5s instead of every cycle.
@@ -1333,6 +1337,7 @@ write_cache() {
         --argjson pkt_loss "${conn_packet_loss:-0}" \
         --arg ping_tgt "$conn_ping_target" \
         --arg conn_profile "$conn_profile" \
+        --arg conn_last_family "$conn_last_family" \
         --argjson lat_hist "${conn_history:-[]}" \
         --argjson hist_int "${conn_history_interval:-2}" \
         --argjson hist_size "${CONN_HISTORY_SIZE:-60}" \
@@ -1434,7 +1439,8 @@ write_cache() {
                 jitter_ms: $jit, packet_loss_pct: $pkt_loss,
                 ping_target: $ping_tgt, latency_history: $lat_hist,
                 history_interval_sec: $hist_int, history_size: $hist_size,
-                during_recovery: $during_rec, profile: $conn_profile
+                during_recovery: $during_rec, profile: $conn_profile,
+                last_family: $conn_last_family
             },
             watchcat: {
                 enabled: $wc_enabled, state: $wc_state,

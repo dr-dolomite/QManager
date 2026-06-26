@@ -3,16 +3,17 @@
 # =============================================================================
 # ping_profile.sh — CGI Endpoint: Connection Quality / Ping Profile (GET + POST)
 # =============================================================================
-# GET:  Returns the active ping profile name + 2 probe targets.
+# GET:  Returns the active ping profile name + the IPv4/IPv6 ICMP probe targets.
 # POST: action=save — validates + persists profile + targets, then drops the
 #       /tmp/qmanager_ping_reload flag so qmanager_ping re-reads within one cycle.
 #
-# Config: UCI quecmanager.ping_profile.{profile,target_1,target_2}
-#   profile  ∈ sensitive | regular | relaxed | quiet  (daemon owns the params)
-#   target_1/target_2 — HTTP(S) URLs the daemon curl-probes
+# Config: UCI quecmanager.ping_profile.{profile,target_ipv4,target_ipv6}
+#   profile      ∈ sensitive | regular | relaxed | quiet  (daemon owns params)
+#   target_ipv4  — IPv4 literal or hostname the daemon ICMP-probes first
+#   target_ipv6  — IPv6 literal or hostname used as the fallback probe
 #
-# Note: GET response keys are target1/target2 (no underscore); POST body keys
-# are target_1/target_2 (matching the UCI keys).
+# Targets are ICMP hosts (NOT HTTP URLs) — no scheme is prepended. Both GET and
+# POST use the snake_case keys target_ipv4 / target_ipv6.
 #
 # Endpoint: GET/POST /cgi-bin/quecmanager/system/ping_profile.sh
 # Install location: /www/cgi-bin/quecmanager/system/ping_profile.sh
@@ -23,6 +24,8 @@ cgi_headers
 cgi_handle_options
 
 RELOAD_FLAG="/tmp/qmanager_ping_reload"
+DEFAULT_TARGET_IPV4="1.1.1.1"
+DEFAULT_TARGET_IPV6="2606:4700:4700::1111"
 
 # Map a ping profile name to its probe interval in seconds. Mirrors the
 # qmanager_ping daemon's profile->interval table. Unknown => relaxed (5 s).
@@ -41,45 +44,58 @@ ensure_ping_profile_config() {
     uci -q get quecmanager.ping_profile >/dev/null 2>&1 && return
     uci set quecmanager.ping_profile=ping_profile
     uci set quecmanager.ping_profile.profile='relaxed'
-    uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
-    uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
+    uci set quecmanager.ping_profile.target_ipv4="$DEFAULT_TARGET_IPV4"
+    uci set quecmanager.ping_profile.target_ipv6="$DEFAULT_TARGET_IPV6"
     uci commit quecmanager
 }
 
-# Validate a probe target URL server-side (mirrors the client rules):
-# trimmed, non-empty, length <= 256, no whitespace, and free of shell/HTML
-# metacharacters. Returns 0 = valid, 1 = invalid. Echoes the normalized URL
-# (https:// prepended when scheme-less) on success.
+# Validate an ICMP probe host server-side (IPv4 literal / IPv6 literal / hostname).
+# Common rules: trimmed, non-empty, length <= 128, no interior whitespace, free of
+# shell/HTML metacharacters. The per-family charset is passed as $2:
+#   ipv4 -> [0-9A-Za-z.-]   (IPv4 literal or hostname)
+#   ipv6 -> [0-9A-Fa-f:.%]  (IPv6 literal incl. zone id)
+# No scheme is prepended. Returns 0 = valid (echoes trimmed host), 1 = invalid.
 validate_target() {
-    local url
+    local host
+    local family="$2"
+
     # Trim leading/trailing whitespace.
-    url=$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    host=$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 
     # Non-empty.
-    [ -n "$url" ] || return 1
+    [ -n "$host" ] || return 1
 
-    # Length <= 256 (BusyBox-safe length count).
-    if [ "${#url}" -gt 256 ]; then
+    # Length <= 128 (BusyBox-safe length count).
+    if [ "${#host}" -gt 128 ]; then
         return 1
     fi
 
     # No interior whitespace (space or tab).
-    case "$url" in
+    case "$host" in
         *" "*|*"	"*) return 1 ;;
     esac
 
     # Reject shell/HTML metacharacters: ` $ ( ) ; | < > " \
-    case "$url" in
+    case "$host" in
         *'`'*|*'$'*|*'('*|*')'*|*';'*|*'|'*|*'<'*|*'>'*|*'"'*|*'\'*) return 1 ;;
     esac
 
-    # Normalize: prepend https:// when scheme-less.
-    case "$url" in
-        *://*) ;;
-        *) url="https://$url" ;;
+    # Per-family charset whitelist. Reject any character outside the allowed set.
+    case "$family" in
+        ipv4)
+            case "$host" in
+                *[!0-9A-Za-z.-]*) return 1 ;;
+            esac
+            ;;
+        ipv6)
+            case "$host" in
+                *[!0-9A-Fa-f:.%]*) return 1 ;;
+            esac
+            ;;
+        *) return 1 ;;
     esac
 
-    printf '%s' "$url"
+    printf '%s' "$host"
     return 0
 }
 
@@ -92,10 +108,10 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
 
     profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
     [ -z "$profile" ] && profile="relaxed"
-    target1=$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)
-    [ -z "$target1" ] && target1="http://cp.cloudflare.com/"
-    target2=$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)
-    [ -z "$target2" ] && target2="http://www.gstatic.com/generate_204"
+    target_ipv4=$(uci -q get quecmanager.ping_profile.target_ipv4 2>/dev/null)
+    [ -z "$target_ipv4" ] && target_ipv4="$DEFAULT_TARGET_IPV4"
+    target_ipv6=$(uci -q get quecmanager.ping_profile.target_ipv6 2>/dev/null)
+    [ -z "$target_ipv6" ] && target_ipv6="$DEFAULT_TARGET_IPV6"
 
     # interval_override is written exclusively by the Watchdog page; reflected
     # here read-only so the Sensitivity card can show "overridden by Watchdog".
@@ -113,11 +129,11 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
 
     jq -n \
         --arg profile "$profile" \
-        --arg target1 "$target1" \
-        --arg target2 "$target2" \
+        --arg target_ipv4 "$target_ipv4" \
+        --arg target_ipv6 "$target_ipv6" \
         --argjson interval_override "$interval_override_json" \
         --argjson effective_interval "$effective_interval" \
-        '{success: true, profile: $profile, target1: $target1, target2: $target2,
+        '{success: true, profile: $profile, target_ipv4: $target_ipv4, target_ipv6: $target_ipv6,
           interval_override: $interval_override, effective_interval: $effective_interval}'
     exit 0
 fi
@@ -142,8 +158,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     ensure_ping_profile_config
 
     PROFILE=$(printf '%s' "$POST_DATA" | jq -r '.profile // empty')
-    RAW_T1=$(printf '%s' "$POST_DATA" | jq -r '.target_1 // empty')
-    RAW_T2=$(printf '%s' "$POST_DATA" | jq -r '.target_2 // empty')
+    RAW_T4=$(printf '%s' "$POST_DATA" | jq -r '.target_ipv4 // empty')
+    RAW_T6=$(printf '%s' "$POST_DATA" | jq -r '.target_ipv6 // empty')
 
     # --- Validate profile against the 4-value allowlist ---
     case "$PROFILE" in
@@ -154,25 +170,25 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             ;;
     esac
 
-    # --- Validate + normalize each target ---
-    T1=$(validate_target "$RAW_T1") || {
-        cgi_error "invalid_target" "target_1 is not a valid URL"
+    # --- Validate each target against its family charset ---
+    T4=$(validate_target "$RAW_T4" "ipv4") || {
+        cgi_error "invalid_target" "target_ipv4 is not a valid IPv4 address or hostname"
         exit 0
     }
-    T2=$(validate_target "$RAW_T2") || {
-        cgi_error "invalid_target" "target_2 is not a valid URL"
+    T6=$(validate_target "$RAW_T6" "ipv6") || {
+        cgi_error "invalid_target" "target_ipv6 is not a valid IPv6 address"
         exit 0
     }
 
     # --- Persist + signal the daemon ---
     uci set quecmanager.ping_profile.profile="$PROFILE"
-    uci set quecmanager.ping_profile.target_1="$T1"
-    uci set quecmanager.ping_profile.target_2="$T2"
+    uci set quecmanager.ping_profile.target_ipv4="$T4"
+    uci set quecmanager.ping_profile.target_ipv6="$T6"
     uci commit quecmanager
 
     touch "$RELOAD_FLAG"
 
-    qlog_info "Ping profile saved: profile=$PROFILE targets=$T1,$T2"
+    qlog_info "Ping profile saved: profile=$PROFILE v4=$T4 v6=$T6"
     echo '{"success":true}'
     exit 0
 fi

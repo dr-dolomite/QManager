@@ -808,6 +808,34 @@ Both `install_file` and `install_tree` verify that each copied file is byte-for-
 
 > ℹ️ NOTE: The integrity check runs on byte counts, not checksums, to stay within BusyBox's toolset without requiring `md5sum` or `stat`. `wc -c` is a BusyBox core applet. `tr -d ' '` normalizes the leading whitespace that some `wc` builds emit.
 
+### `set -e` and `uci -q get` invariant
+
+`install.sh` and `uninstall.sh` both run under `set -e`. Inside a `set -e` shell, a bare command-substitution assignment such as:
+
+```sh
+val=$(uci -q get quecmanager.watchcat.fail_threshold)
+```
+
+inherits the exit status of the subshell command. When `uci -q get` finds no matching key it exits 1, which propagates to the parent shell and kills the script **silently** — there is no error message and the exit looks like a clean exit to the caller (including the OTA update daemon).
+
+**`2>/dev/null` does not help.** It suppresses stderr but has no effect on the exit status that kills the shell.
+
+**Conditions are exempt.** Commands on the right side of `||` / `&&`, inside `if`/`while`/`until` tests, and after `!` are not subject to `set -e` termination. Only bare statements and the right-hand side of a pipeline are affected.
+
+**Safe pattern:** append `|| true` to every optional `uci -q get` assignment, and `|| warn "..."` to any migration-helper call that might legitimately return non-zero:
+
+```sh
+# WRONG — silent kill when the key is absent (e.g. a retired key or a fresh install)
+val=$(uci -q get quecmanager.watchcat.fail_threshold)
+
+# CORRECT
+val=$(uci -q get quecmanager.watchcat.fail_threshold) || true
+```
+
+**Why this matters (v0.1.29 regression):** Commit 7f0a5a8 (2026-06-19, "split probe interval from fail threshold, unify quality thresholds") retired the `latency_ceiling_ms` and `loss_ceiling_pct` UCI keys and added six unguarded reads of the new keys plus two unguarded migration-function calls. On fresh installs the new keys did not exist yet; on upgrades the retired keys were already gone. Both paths caused `install.sh` to silently die mid-execution at Step 11/16 "Seeding UCI defaults", leaving Steps 12–16 unrun: `qmanager_sms_forward` and `quality_thresholds` UCI sections were never seeded, and no services were enabled or started. The OTA update daemon (`qmanager_update`) calls `install.sh` directly, so Software Update was equally broken. Fix: append `|| true` / `|| warn` to all six assignments and both migration calls.
+
+> ⚠️ WARNING: When retiring a UCI key or adding a new optional one in `install.sh`, always audit every line in the Seed UCI defaults and migration blocks for bare command-substitution assignments. A single unguarded `$(uci -q get <gone-key>)` will silently abort the entire installer on any device that has already had that key removed or never had it seeded.
+
 ### Library co-deployment invariant
 
 Any script that sources a library under `/usr/lib/qmanager/` **must ship the library in the same release** as the script that depends on it. Devices on an older install that upgrade only via `install.sh` may not have the library yet. If the library is absent and the sourcing script lacks an `[ -f ]` guard (see BusyBox dot-sourcing gotcha above), the script silently dies.

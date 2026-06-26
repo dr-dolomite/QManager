@@ -1,12 +1,50 @@
+# 🚀 QManager BETA v0.1.30-draft
+
+v0.1.30 reworks how QManager decides whether your internet is up. The background connectivity probe moves from an HTTP request to a simple ICMP ping — the lighter approach the predecessor app used — and gains a configurable IPv6 DNS target so IPv6-only cellular connections are no longer falsely reported offline. This is a focused reliability release: one new capability and one engine change, both aimed at eliminating false "offline" readings.
+
+## ✨ New Features
+
+- **Custom DNS now supports IPv6 resolvers and one-tap provider presets.** You can now set IPv6 DNS servers alongside your IPv4 ones — useful for IPv6-only or dual-stack connections where an IPv4-only resolver would be skipped. A built-in preset picker (Cloudflare, Google, Quad9, AdGuard, ControlD) fills all four addresses at once; choosing "Custom" lets you enter your own. Settings are under Local Network → Custom DNS.
+
+- **IPv6-only connections no longer trigger false outages.** The connectivity probe now pings IPv4 first and falls back to IPv6 automatically. If your cellular bearer hands you an IPv6-only address, the modem stays correctly marked as online instead of declaring itself offline — and the Connection Quality page shows a "Currently reachable via IPv6" note when the fallback is carrying your connection. You can set your preferred IPv4 and IPv6 probe targets (defaults: Cloudflare `1.1.1.1` and `2606:4700:4700::1111`) under System Settings → Connection Quality → Probe Targets.
+
+## ✅ Improvements
+
+- **Connectivity check switched from HTTP to a lightweight ICMP ping.** The background probe that drives the "Internet" badge, dashboard latency chart, and Connection Watchdog now uses a simple ICMP ping of a DNS server instead of an HTTP request. ICMP is faster, produces less noise, and matches what the predecessor app did — removing the most significant behavioral difference between the two while we track down the random-disconnect behavior seen on some setups.
+
+## 📥 Installation
+
+### Fresh Install
+
+```sh
+curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
+```
+
+### Upgrading from v0.1.29
+
+**System Settings → Software Update.** No migration steps needed. Your sensitivity profile is preserved; the old HTTP probe targets are replaced with the new IPv4/IPv6 DNS defaults automatically.
+
+## 💙 Thank You
+
+Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
+
+Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
+
+**License:** MIT + Commons Clause — **Happy connecting!**
+
+---
+
 # 🚀 QManager BETA v0.1.29
 
-v0.1.29 is focused on Connection Watchdog reliability and RM551E stability. The headline addition is automatic SIM failback, and the bulk of this release is fixes and polish — quieter background polling, a rewritten quality-detection pipeline, and a sweep of Watchdog edge cases that surfaced during live testing.
+v0.1.29 is focused on Connection Watchdog reliability and RM551E stability. The headline addition is automatic SIM failback, and the bulk of this release is fixes and polish — quieter background polling, a rewritten quality-detection pipeline, and a sweep of Watchdog edge cases that surfaced during live testing. This patch also fixes a regression that caused the installer and Software Update to stop partway through on some devices, leaving services not started; installs and updates now complete reliably.
 
 ## ✨ New Features
 
 - **Automatic failback to your primary SIM once it is healthy again.** An opt-in setting under the Watchdog's recovery configuration lets the Watchdog periodically test whether the primary SIM has recovered. If the primary passes the health check, the Watchdog transparently switches back — no manual intervention needed. The check interval (default 30 minutes, minimum 5 minutes) is configurable. Because testing the inactive SIM requires a brief real connection swap, this feature is off by default.
 
 ## ✅ Improvements
+
+- **Fixed a regression that could cause the installer and Software Update to stop partway through ("Seeding UCI defaults") without finishing, leaving services not started on some devices.** Installs and Software Updates now complete all steps and exit cleanly.
 
 - **Snappier response from every screen that reads the modem.** Settings pages, the AT terminal, and on-demand radio reads were often taking a full extra second or two to respond whenever the background poller happened to be mid-query. The shared AT-command gateway now retries for the modem in 100-millisecond steps instead of 1-second steps, so commands that previously waited out a whole second now return almost immediately — while the safety timeouts that protect against a stuck modem are unchanged.
 

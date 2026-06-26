@@ -792,41 +792,39 @@ seed_uci_defaults() {
     else
         info "quecmanager.ping_profile.profile already set — preserving user choice"
     fi
-    if ! uci -q get quecmanager.ping_profile.target_1 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
-        info "Seeded quecmanager.ping_profile.target_1=http://cp.cloudflare.com/"
+    if ! uci -q get quecmanager.ping_profile.target_ipv4 >/dev/null 2>&1; then
+        uci set quecmanager.ping_profile.target_ipv4='1.1.1.1'
+        info "Seeded quecmanager.ping_profile.target_ipv4=1.1.1.1"
     else
-        info "quecmanager.ping_profile.target_1 already set — preserving user choice"
+        info "quecmanager.ping_profile.target_ipv4 already set — preserving user choice"
     fi
-    if ! uci -q get quecmanager.ping_profile.target_2 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
-        info "Seeded quecmanager.ping_profile.target_2=http://www.gstatic.com/generate_204"
+    if ! uci -q get quecmanager.ping_profile.target_ipv6 >/dev/null 2>&1; then
+        uci set quecmanager.ping_profile.target_ipv6='2606:4700:4700::1111'
+        info "Seeded quecmanager.ping_profile.target_ipv6=2606:4700:4700::1111"
     else
-        info "quecmanager.ping_profile.target_2 already set — preserving user choice"
+        info "quecmanager.ping_profile.target_ipv6 already set — preserving user choice"
     fi
 
-    # Upgrade migration — the seeded probe targets were the old heavy HTTPS root
-    # pages (https://cloudflare.com / https://google.com). Those fold DNS + TCP
-    # + server TTFB into the reported latency (~3.3× real RTT) and hard-fail
-    # (curl 000) on weak signal, registering phantom packet loss. Migrate ONLY
-    # the exact old seeded values to the lightweight HTTP probe pages the daemon
-    # now reports TCP-connect RTT against. A user-customized target (any other
-    # value) is sacred and never touched. uci commit happens once at the end of
-    # this function; touch the reload flag so a running daemon re-reads.
+    # Upgrade migration — the ping probe is now ICMP (BusyBox ping), not curl/HTTP.
+    # The legacy target_1/target_2 keys held HTTP(S) URLs and are useless as ICMP
+    # targets, so delete them outright if present. The new target_ipv4/target_ipv6
+    # keys are seeded above. The profile NAME is sacred and never touched here.
+    # uci commit happens once at the end of this function; touch the reload flag
+    # so a running daemon re-reads the new ICMP targets.
     _ping_migrated=0
-    if [ "$(uci -q get quecmanager.ping_profile.target_1 2>/dev/null)" = "https://cloudflare.com" ]; then
-        uci set quecmanager.ping_profile.target_1='http://cp.cloudflare.com/'
-        info "Migrated ping target_1: https://cloudflare.com -> http://cp.cloudflare.com/"
+    if uci -q get quecmanager.ping_profile.target_1 >/dev/null 2>&1; then
+        uci -q delete quecmanager.ping_profile.target_1
+        info "Removed obsolete quecmanager.ping_profile.target_1 (HTTP probe retired for ICMP)"
         _ping_migrated=1
     fi
-    if [ "$(uci -q get quecmanager.ping_profile.target_2 2>/dev/null)" = "https://google.com" ]; then
-        uci set quecmanager.ping_profile.target_2='http://www.gstatic.com/generate_204'
-        info "Migrated ping target_2: https://google.com -> http://www.gstatic.com/generate_204"
+    if uci -q get quecmanager.ping_profile.target_2 >/dev/null 2>&1; then
+        uci -q delete quecmanager.ping_profile.target_2
+        info "Removed obsolete quecmanager.ping_profile.target_2 (HTTP probe retired for ICMP)"
         _ping_migrated=1
     fi
     if [ "$_ping_migrated" = "1" ]; then
         touch /tmp/qmanager_ping_reload
-        info "Dropped /tmp/qmanager_ping_reload — running ping daemon will pick up migrated targets"
+        info "Dropped /tmp/qmanager_ping_reload — running ping daemon will pick up ICMP targets"
     fi
 
     # Connection Watchdog (watchcat) — connection-quality trigger keys. The
@@ -889,7 +887,7 @@ seed_uci_defaults() {
     #     loop cycles. Copy the old value across once and delete the old key. If
     #     neither key exists (fresh install), seed fail_threshold=5.
     if ! uci -q get quecmanager.watchcat.fail_threshold >/dev/null 2>&1; then
-        _old_max_fail=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null)
+        _old_max_fail=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null) || true
         if [ -n "$_old_max_fail" ]; then
             uci set quecmanager.watchcat.fail_threshold="$_old_max_fail"
             uci -q delete quecmanager.watchcat.max_failures 2>/dev/null
@@ -916,8 +914,8 @@ seed_uci_defaults() {
     #     fires exactly once (the delete makes re-runs no-ops). We overwrite the
     #     shared keys to `custom` here because the user's explicit watchdog
     #     ceiling is the authoritative degraded threshold post-unification.
-    _old_lat_ceiling=$(uci -q get quecmanager.watchcat.latency_ceiling_ms 2>/dev/null)
-    _old_loss_ceiling=$(uci -q get quecmanager.watchcat.loss_ceiling_pct 2>/dev/null)
+    _old_lat_ceiling=$(uci -q get quecmanager.watchcat.latency_ceiling_ms 2>/dev/null) || true
+    _old_loss_ceiling=$(uci -q get quecmanager.watchcat.loss_ceiling_pct 2>/dev/null) || true
     if [ -n "$_old_lat_ceiling" ] || [ -n "$_old_loss_ceiling" ]; then
         if ! uci -q get quecmanager.quality_thresholds >/dev/null 2>&1; then
             uci set quecmanager.quality_thresholds=quality_thresholds
@@ -1364,7 +1362,7 @@ migrate_tailscale_packages() {
     # Snapshot prior state.
     local was_boot_enabled
     local was_running
-    was_boot_enabled=$(uci -q get tailscale.@tailscale[0].enabled 2>/dev/null)
+    was_boot_enabled=$(uci -q get tailscale.@tailscale[0].enabled 2>/dev/null) || true
     [ "$was_boot_enabled" = "1" ] || was_boot_enabled="0"
     if pidof tailscaled >/dev/null 2>&1; then
         was_running=1
@@ -1790,8 +1788,8 @@ main() {
         install_bundled_binaries
         cleanup_legacy_scripts
         migrate_tailscale_firewall_zone
-        migrate_tailscale_packages
-        migrate_tailscale_initd_boot_fix
+        migrate_tailscale_packages || warn "Tailscale package migration returned non-zero; continuing install"
+        migrate_tailscale_initd_boot_fix || warn "Tailscale initd boot-fix returned non-zero; continuing install"
         seed_uci_defaults
 
         [ "$DO_ENABLE" = "1" ] && enable_services

@@ -7,10 +7,14 @@ import type { PingProfile } from "@/types/modem-status";
 // =============================================================================
 // usePingProfile — read/write the ping-daemon sensitivity profile + targets
 // =============================================================================
-// GET  → { success: true, profile, target1, target2 }
-// POST → { action: "save", profile, target_1, target_2 }
+// GET  → { success: true, profile, target_ipv4, target_ipv6 }
+// POST → { action: "save", profile, target_ipv4, target_ipv6 }
 //        success: { success: true, ... }
 //        failure: { success: false, error, detail }
+//
+// The daemon probes via ICMP: the IPv4 DNS target is pinged first; the IPv6
+// target is only used when the IPv4 probe fails, so an IPv6-only bearer never
+// reads as "down". Targets are bare hosts/IP literals (no URL scheme).
 //
 // Save rejects on failure so the calling card's try/catch can toast the error;
 // it also stores the message in `saveError` for the inline alert.
@@ -23,8 +27,8 @@ const ENDPOINT = "/cgi-bin/quecmanager/system/ping_profile.sh";
 interface PingProfileGetResponse {
   success: boolean;
   profile?: PingProfile;
-  target1?: string;
-  target2?: string;
+  target_ipv4?: string;
+  target_ipv6?: string;
   // Probe interval is owned jointly with the Watchdog: when the Watchdog sets a
   // Custom interval it writes `interval_override`, which wins over the profile's
   // derived interval. The Sensitivity card reflects this read-only.
@@ -42,14 +46,16 @@ interface PingProfileSaveResponse {
 
 export interface SavePingProfileArgs {
   profile: PingProfile;
-  target_1: string;
-  target_2: string;
+  target_ipv4: string;
+  target_ipv6: string;
 }
 
 export interface UsePingProfileReturn {
   profile: PingProfile | undefined;
-  target1: string | undefined;
-  target2: string | undefined;
+  /** IPv4 DNS server the daemon pings first. */
+  targetIpv4: string | undefined;
+  /** IPv6 DNS server, used as the fallback for IPv6-only connections. */
+  targetIpv6: string | undefined;
   /** Custom probe interval set by the Watchdog; null = none (use profile). */
   intervalOverride: number | null;
   /** Effective probe interval in seconds (override if set, else profile). */
@@ -63,8 +69,8 @@ export interface UsePingProfileReturn {
 
 export function usePingProfile(): UsePingProfileReturn {
   const [profile, setProfile] = useState<PingProfile | undefined>(undefined);
-  const [target1, setTarget1] = useState<string | undefined>(undefined);
-  const [target2, setTarget2] = useState<string | undefined>(undefined);
+  const [targetIpv4, setTargetIpv4] = useState<string | undefined>(undefined);
+  const [targetIpv6, setTargetIpv6] = useState<string | undefined>(undefined);
   const [intervalOverride, setIntervalOverride] = useState<number | null>(null);
   const [effectiveInterval, setEffectiveInterval] = useState<
     number | undefined
@@ -92,8 +98,8 @@ export function usePingProfile(): UsePingProfileReturn {
       }
 
       setProfile(json.profile);
-      setTarget1(json.target1);
-      setTarget2(json.target2);
+      setTargetIpv4(json.target_ipv4);
+      setTargetIpv6(json.target_ipv6);
       setIntervalOverride(json.interval_override ?? null);
       setEffectiveInterval(json.effective_interval);
       setError(null);
@@ -125,8 +131,8 @@ export function usePingProfile(): UsePingProfileReturn {
         body: JSON.stringify({
           action: "save",
           profile: args.profile,
-          target_1: args.target_1,
-          target_2: args.target_2,
+          target_ipv4: args.target_ipv4,
+          target_ipv6: args.target_ipv6,
         }),
       });
 
@@ -142,8 +148,8 @@ export function usePingProfile(): UsePingProfileReturn {
       if (mountedRef.current) {
         // Reflect the just-saved values so dirty detection settles.
         setProfile(args.profile);
-        setTarget1(args.target_1);
-        setTarget2(args.target_2);
+        setTargetIpv4(args.target_ipv4);
+        setTargetIpv6(args.target_ipv6);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save";
@@ -156,8 +162,8 @@ export function usePingProfile(): UsePingProfileReturn {
 
   return {
     profile,
-    target1,
-    target2,
+    targetIpv4,
+    targetIpv6,
     intervalOverride,
     effectiveInterval,
     isLoading,
