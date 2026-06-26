@@ -12,7 +12,7 @@ Custom DNS lets users override the carrier-assigned resolver addresses on both I
 | Component | `components/local-network/custom-dns/custom-dns-card.tsx` |
 | Mode state file | `/etc/qmanager/dns_mode` |
 | IPv6 UCI path | `dhcp.lan.dns` (list) |
-| IPv4 UCI path | `dhcp.<nic>.dhcp_option` (value `"6,addr1,addr2"`) |
+| IPv4 UCI path | `dhcp.lan.dhcp_option` (value `"6,addr1,addr2"`) |
 | Reboot required | No |
 
 ## Dual Delivery Paths
@@ -24,14 +24,25 @@ Two completely separate delivery mechanisms handle the two address families. The
 IPv4 DNS is delivered as DHCP option 6 via dnsmasq.
 
 On enable, the script writes:
+
 ```sh
-uci set dhcp."$nic".dhcp_option="6,$dns1,$dns2,$dns3"
+# DHCP option 6 — tells clients to use these DNS servers directly
+uci set dhcp.lan.dhcp_option="6,$dns1,$dns2,$dns3"
+
+# Upstream servers — dnsmasq itself resolves through these (UCI list 'server'
+# takes precedence over resolv-file).  Ensures clients that use the router as
+# their DNS resolver also get custom DNS instead of carrier upstream.
+uci -q delete dhcp.lan_dns.server
+for ip in $dns1 $dns2 $dns3; do uci add_list dhcp.lan_dns.server="$ip"; done
+for ip6 in $dns1v6 $dns2v6; do uci add_list dhcp.lan_dns.server="$ip6"; done
+
+uci commit dhcp
 /etc/init.d/dnsmasq restart
 ```
 
-On disable, it restores the carrier addresses read from `/tmp/resolv.conf.d/resolv.conf.auto` (IPv4-only file) and restarts dnsmasq.
+On disable, it restores the carrier addresses read from `/tmp/resolv.conf.d/resolv.conf.auto` (IPv4-only file), removes the UCI `server` list (so dnsmasq falls back to its `resolv-file`), and restarts dnsmasq.
 
-The `$nic` value is either `lan` or `lan_bind4`, determined at each request by querying `AT+QMAP="MPDN_RULE"`. If any rule has `enabled=1`, the NIC is `lan_bind4`; otherwise it is `lan`. This matters because IP Passthrough creates a separate `dhcp.lan_bind4` UCI section that dnsmasq serves.
+The `$nic` value is either `lan` or `lan_bind4`, determined at each request by querying `AT+QMAP="MPDN_RULE"`. If any rule has `enabled=1`, the NIC is `lan_bind4`; otherwise it is `lan`. This information is returned to the frontend for display purposes, but the IPv4 DNS configuration always targets `dhcp.lan` — dnsmasq serves DHCP option 6 from the `dhcp.lan` section regardless of whether IP Passthrough has created a `dhcp.lan_bind4` section.
 
 ### IPv6 — odhcpd RA RDNSS + DHCPv6
 
@@ -52,7 +63,7 @@ On disable, `uci -q delete dhcp.lan.dns` clears the list and `odhcpd reload` pic
 
 ## Why IPv6 Always Targets `dhcp.lan`
 
-The IPv6 list is hardcoded to `dhcp.lan`, never `dhcp.$nic`. odhcpd serves RA and DHCPv6 only from the `lan` section — it does not serve from `dhcp.lan_bind4` even when MPDN is active. Writing to `dhcp.lan_bind4.dns` would have no effect on RA/DHCPv6 delivery. IPv4 uses `dhcp.$nic` because dnsmasq reads it from whichever section is live.
+The IPv6 list is hardcoded to `dhcp.lan`, never `dhcp.$nic`. odhcpd serves RA and DHCPv6 only from the `lan` section — it does not serve from `dhcp.lan_bind4` even when MPDN is active. Writing to `dhcp.lan_bind4.dns` would have no effect on RA/DHCPv6 delivery.
 
 ## Why Disable Clears IPv6 But Does Not Restore Carrier IPv6
 
@@ -117,11 +128,13 @@ Selecting a provider in the card fills all four fields and shows a read-only add
 
 The file is created by the first POST; a fresh install with no prior POST will have no file. The GET handler defaults to `"disabled"` if the file is absent (`cat ... || echo "disabled"`).
 
-## Known Issue: IPv4 Is Fragile When MPDN Is Active
+## IPv4 NIC Targeting (Resolved 2026-06-26)
 
-When an MPDN rule is active, `get_nic()` returns `lan_bind4`. The IPv4 DNS is then written to `dhcp.lan_bind4.dhcp_option`. However, the `lan_dns` dnsmasq instance binds to `interface='lan'` — it does not automatically serve the `lan_bind4` section. If `dhcp.lan_bind4` does not exist in UCI, the `uci show` guard in the enable path creates it as a bare section, but dnsmasq may not pick up the option correctly depending on how the bind4 interface is bridged.
+**Prior behavior (bug):** When an MPDN rule was active, `get_nic()` returned `lan_bind4` and the enable path wrote IPv4 DNS to `dhcp.lan_bind4.dhcp_option`. However, dnsmasq only serves `dhcp.lan` — no dnsmasq instance exists for `lan_bind4`. Clients never received the custom IPv4 DNS via DHCP option 6, falling back to carrier DNS.
 
-This is a pre-existing limitation, not introduced by the IPv6 work. The IPv6 path sidesteps it entirely by hardcoding `dhcp.lan`. The IPv4 MPDN path is a latent bug — noticeable only when MPDN is active and custom IPv4 DNS is enabled simultaneously. Noted here for the next person who touches this script.
+**Fix:** All IPv4 DNS paths now hardcode `dhcp.lan`, matching the disable path and IPv6 path which already used `dhcp.lan` exclusively. The `get_nic()` function still runs and `$nic` is still returned to the frontend for display, but it no longer controls the UCI target for IPv4 DNS writes.
+
+**Verification:** `uci set dhcp.lan.dhcp_option` → dnsmasq serves `dhcp-option=lan,6,...` → clients receive custom DNS via DHCP. Confirmed on-device 2026-06-26 with Quad9 (9.9.9.9 / 149.112.112.112).
 
 ## Hook Contract
 

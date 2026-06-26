@@ -10,7 +10,13 @@ v0.1.30 reworks how QManager decides whether your internet is up. The background
 
 ## ✅ Improvements
 
+- **Fixed Custom DNS not applying IPv4 servers when IP Passthrough (MPDN) is active.** Custom DNS was writing IPv4 resolver addresses to the wrong UCI section (`dhcp.lan_bind4`) when an MPDN rule was enabled, but dnsmasq only serves the `dhcp.lan` section — so clients never received the custom DNS via DHCP and fell back to your carrier's resolvers. The DNS configuration now consistently targets `dhcp.lan` regardless of IP Passthrough state, matching the IPv6 path that already did this correctly.
+
+- **Fixed dnsmasq continuing to use carrier DNS as its upstream even after custom DNS was enabled.** Custom DNS was only advertised to clients via DHCP option 6, but when a client used the router itself as its DNS resolver (common on Windows and many devices), dnsmasq still forwarded queries to the carrier's resolvers. Dnsmasq now uses your chosen custom DNS provider as its own upstream as well, so every DNS path — direct or via the router — resolves through your selected provider. DNS leak tests now show your chosen provider.
+
 - **Connectivity check switched from HTTP to a lightweight ICMP ping.** The background probe that drives the "Internet" badge, dashboard latency chart, and Connection Watchdog now uses a simple ICMP ping of a DNS server instead of an HTTP request. ICMP is faster, produces less noise, and matches what the predecessor app did — removing the most significant behavioral difference between the two while we track down the random-disconnect behavior seen on some setups.
+
+- **Fixed a rare false "high packet loss" reboot right after the modem restarts.** In the first minute or so after a reboot, a handful of transient probe failures in a small window could report 50% packet loss when the real loss was 0%. That false reading was enough to trip the Connection Watchdog quality trigger and, in the worst case, cause a reboot loop. The poller now waits until it has collected enough probe samples before reporting a loss figure, so a freshly-started modem can't trigger a false alarm.
 
 ## 📥 Installation
 

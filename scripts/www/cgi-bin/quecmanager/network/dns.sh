@@ -8,7 +8,7 @@
 #
 # Data sources:
 #   AT+QMAP="MPDN_RULE"          -> determine active NIC (lan vs lan_bind4)
-#   dhcp.<nic>.dhcp_option       -> current custom IPv4 DNS servers
+#   dhcp.lan.dhcp_option         -> current custom IPv4 DNS servers (dnsmasq)
 #   dhcp.lan.dns                 -> current custom IPv6 DNS servers (odhcpd)
 #   /etc/qmanager/dns_mode       -> enabled/disabled state
 #
@@ -56,7 +56,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     qlog_debug "Determined NIC: $nic"
 
     # Read current IPv4 DNS from UCI dhcp_option (format: "6,dns1,dns2,...")
-    raw=$(uci get dhcp."$nic".dhcp_option 2>/dev/null)
+    raw=$(uci get dhcp.lan.dhcp_option 2>/dev/null)
     currentDNS=$(printf '%s' "$raw" | sed 's/^6,//')
 
     # Read current IPv6 DNS list from dhcp.lan (space-separated in UCI)
@@ -161,20 +161,31 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # Path A — Enable custom DNS
     # -------------------------------------------------------------------------
     if [ "$mode" = "enabled" ]; then
-        qlog_info "Enabling custom DNS on $nic: dns1=$dns1 dns2=$dns2 dns3=$dns3 dns1v6=$dns1v6 dns2v6=$dns2v6"
+        qlog_info "Enabling custom DNS on lan: dns1=$dns1 dns2=$dns2 dns3=$dns3 dns1v6=$dns1v6 dns2v6=$dns2v6"
 
         # Build comma-separated list of non-empty IPv4 DNS values
         dns_list=$(printf '%s' "$dns1,$dns2,$dns3" | tr ',' '\n' | grep -v '^$' | tr '\n' ',' | sed 's/,$//')
 
         # Ensure UCI section exists
-        uci show dhcp."$nic" >/dev/null 2>&1 || uci set dhcp."$nic"=dhcp
+        uci show dhcp.lan >/dev/null 2>&1 || uci set dhcp.lan=dhcp
 
-        # Apply IPv4: set if provided, otherwise clear so carrier DNS is used
+        # Apply IPv4: set DHCP option 6 if provided, otherwise clear
         if [ -n "$dns_list" ]; then
-            uci set dhcp."$nic".dhcp_option="6,$dns_list"
+            uci set dhcp.lan.dhcp_option="6,$dns_list"
         else
-            uci -q delete dhcp."$nic".dhcp_option
+            uci -q delete dhcp.lan.dhcp_option
         fi
+
+        # Set dnsmasq upstream servers so that clients which use the router as
+        # their DNS resolver (instead of the DHCP-advertised servers) also get
+        # custom DNS.  UCI list 'server' takes precedence over resolv-file.
+        uci -q delete dhcp.lan_dns.server
+        for _ip in $dns1 $dns2 $dns3; do
+            [ -n "$_ip" ] && uci add_list dhcp.lan_dns.server="$_ip"
+        done
+        for _ip6 in $dns1v6 $dns2v6; do
+            [ -n "$_ip6" ] && uci add_list dhcp.lan_dns.server="$_ip6"
+        done
 
         # Apply IPv6: clear any prior list, then rebuild from provided entries
         # Always targets dhcp.lan — odhcpd reads RA/DHCPv6 DNS from that section
@@ -199,7 +210,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         mkdir -p /etc/qmanager
         echo "enabled" > /etc/qmanager/dns_mode
 
-        qlog_info "Custom DNS enabled: IPv4=$dns_list on $nic"
+        qlog_info "Custom DNS enabled: IPv4=$dns_list on lan"
         qlog_info "IPv6 DNS list applied on lan: $v6_list"
 
         jq -n \
@@ -228,6 +239,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         else
             uci delete dhcp.lan.dhcp_option 2>/dev/null || true
         fi
+
+        # Remove custom dnsmasq upstream servers — dnsmasq falls back to
+        # resolv-file (/tmp/resolv.conf.d/resolv.conf.lan.auto, carrier DNS)
+        uci -q delete dhcp.lan_dns.server
 
         # Clear IPv6 DNS list — clients fall back to router-as-RDNSS (carrier default)
         # Carrier IPv6 is not captured from resolv.conf.auto (IPv4-only source)
