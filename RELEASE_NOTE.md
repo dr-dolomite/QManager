@@ -1,3 +1,39 @@
+# 🚀 QManager BETA v0.1.31
+
+v0.1.31 is a ground-up redesign of the Connection Watchdog page. The old three-card layout is replaced with a single-column, status-first anatomy: a live status hero up top, one tabbed settings panel with a sticky save bar, and a new recovery history log at the bottom — matching the calmer, more legible layout already used elsewhere in QManager.
+
+## ✨ New Features
+
+- **Connection Watchdog has a new status-first layout.** The page now opens with a Live Status card showing exactly what the watchdog is doing right now — its current state, failed checks, total recoveries, reboots this hour, and (new) a live count of connection-quality breaches, plus a read-only view of which recovery steps are armed. Below it, Detection, Quality, and Recovery settings live together in one tabbed card with a single sticky save bar, so you always know whether your changes are saved. A new Recovery Activity card lists the watchdog's recent recovery and SIM-failover actions in one place.
+
+## ✅ Improvements
+
+- **Screen readers now announce watchdog state changes** as they happen, so you don't have to be looking at the screen to know the watchdog just started detecting an issue or recovering.
+- **Saving a settings mistake now takes you straight to the problem.** If a field is invalid, Save jumps to the tab that needs attention and puts your cursor in the exact field to fix.
+- **Cooldown and SIM-settle countdowns are now honest.** The status card only shows a cooldown timer when one is actually counting down, including the full ~90 second settle window after a SIM swap.
+
+## 📥 Installation
+
+### Fresh Install
+
+```sh
+curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
+```
+
+### Upgrading from v0.1.30
+
+**System Settings → Software Update.** No migration steps needed. Your existing Watchdog settings carry over as-is.
+
+## 💙 Thank You
+
+Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
+
+Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
+
+**License:** MIT + Commons Clause — **Happy connecting!**
+
+---
+
 # 🚀 QManager BETA v0.1.30
 
 v0.1.30 delivers a lighter ICMP-based connectivity probe — matching the predecessor app — and a major Custom DNS expansion. The probe gains an automatic IPv6 fallback so IPv6-only cellular connections are no longer falsely reported offline. Custom DNS adds IPv6 resolver support, one-tap provider presets (Cloudflare, Google, Quad9, AdGuard, ControlD), and two fixes that close leaks where carrier DNS was still reaching clients. A false "high packet loss" reboot-loop after a modem restart is also squashed.
