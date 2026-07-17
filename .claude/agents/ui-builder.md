@@ -43,6 +43,7 @@ These are enforced by `DESIGN.md` — repeated here so you do not skip them:
 - **Save actions**: always use `SaveButton`. Never reinvent the save UX.
 - **Single typeface**: Manrope only. No Geist Mono, no second font. Live numeric readouts use `font-variant-numeric: tabular-nums`.
 - **Dashboards**: varied-size mosaic (one hero widget + smaller tiles). **Never a uniform card grid.**
+- **Daemon-backed feature pages** (watchdog, alerts, forwarding, failover): use the **status-first page anatomy** from `DESIGN.md` — single `max-w-[1100px]` column of page header → read-only Live Status hero card → one tabbed settings card with sticky save bar + tab error dots → optional paginated activity log card; one shared hook fans state to all cards. Honor the Named Rules: Saved-State Honesty (hero reflects saved settings, never form drafts), No-Dead-Toggle, Sticky-Save-Bar, Skeleton-Mirror. Pure parallel settings pages keep the uniform 2-col grid.
 - **Color**: semantic OKLCH tokens only. `text-foreground`, `text-muted-foreground`, `bg-card`, `text-destructive`, `text-primary`. **Never** `text-blue-500`, `bg-gray-100`, or any raw Tailwind color class.
 - **Navigation**: Next.js `<Link>` for internal navigation — never `<a>`.
 - **Package manager**: **`bun` and `bunx`**, never `npx`. (`npx` resolves the wrong `tsc` shim on this machine.)
@@ -97,19 +98,16 @@ See `docs/features/config-backup-restore.md` for the canonical example.
 
 - **`ANTENNA_PORTS`** in `types/modem-status.ts` is canonical metadata for the four antenna ports (Main/PRX, Diversity/DRX, MIMO 3/RX2, MIMO 4/RX3). Used by `antenna-statistics` and `antenna-alignment`. **Do not duplicate.**
 
-## When to Invoke Impeccable
+## How to Invoke Impeccable (Routing Rule)
 
-The Impeccable skill ships craft-level frontend work — visual hierarchy, motion, microinteractions, distinctive identity, anti-AI-generic polish. Invoke it via `Skill({ skill: "impeccable:impeccable" })` when:
+The Impeccable skill is your craft engine — visual hierarchy, motion, microinteractions, distinctive identity, anti-AI-generic polish. Route by the kind of work:
 
-- A surface should feel **delightful or distinctive**, not just correct — e.g., the login page, the dashboard hero, signature components, marketing surfaces.
-- Bland or generic-feeling UI needs to become bolder.
-- Loud or busy UI needs to become quieter.
-- A visual effect needs to feel technically extraordinary (signature meters, topology maps).
-- You're stuck choosing between three equally-OK layouts and you want a taste call.
+- **Fresh / new pages or surfaces (or a from-scratch redesign):** invoke `Skill({ skill: "impeccable:impeccable", args: "craft <brief>" })`. `craft` shapes the UX first, then builds end-to-end. This is the default path for any new feature page, any status-first daemon-backed page, and any redesign that replaces a page's structure rather than tweaking it.
+- **Improvements / polishing of existing surfaces:** invoke `Skill({ skill: "impeccable:impeccable", args: "<prompt>" })`, using the matching sub-command when the intent is clear — `polish <target>` for a final quality pass, `quieter` / `bolder` for tone, `layout` / `typeset` / `colorize` / `animate` for a specific axis, `audit` / `critique` for evaluation. A plain prompt (no sub-command) is fine when the improvement doesn't map to one.
 
-Do **not** invoke Impeccable for: routine settings cards, simple toggles, data tables, anything that is genuinely "just assemble per the spec." Restraint protects its signal.
+When you invoke it, brief it like a designer: the goal, the constraints (DESIGN.md tokens, Manrope, status-badge pattern, status-first anatomy where applicable), the data contract the surface consumes, and what already exists. Follow the skill's setup steps (context.mjs, register reference) — do not skip them.
 
-When you do invoke Impeccable, brief it like a designer: include the goal, the existing constraints (DESIGN.md tokens, Manrope, status-badge pattern), and what you've already tried. It returns design direction; you implement.
+Skip Impeccable only for trivial mechanical edits (a copy fix, a prop rename, wiring an existing component). Anything a user will *look at* goes through it.
 
 ## Accessibility (Required)
 
@@ -139,7 +137,8 @@ When you do invoke Impeccable, brief it like a designer: include the goal, the e
 - [ ] Dark mode verified (semantic tokens handle this; just confirm)
 - [ ] TypeScript types are concrete — no `any`
 - [ ] If the surface triggers a modem reboot, the deferred-reboot dialog + banner pattern is in place
-- [ ] If craft polish was needed, Impeccable was consulted (and its direction applied)
+- [ ] Impeccable routing honored: `craft` for new/redesigned surfaces, sub-command or plain prompt for improvements
+- [ ] If the feature is daemon-backed, the status-first page anatomy + its Named Rules are honored
 
 ## Behaviors to Avoid
 
@@ -151,7 +150,7 @@ When you do invoke Impeccable, brief it like a designer: include the goal, the e
 - Don't use `npx`. Use `bun`/`bunx`.
 - Don't add features beyond the request (no surrounding refactors of unrelated cards).
 - Don't ship a component without all five states (loading, error, empty, populated, action feedback).
-- Don't invoke Impeccable for routine work — it loses signal.
+- Don't build a visible surface without Impeccable — `craft` for new, sub-commands for polish; only trivial mechanical edits skip it.
 
 ## Update your agent memory
 
