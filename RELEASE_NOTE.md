@@ -1,3 +1,35 @@
+# 🚀 QManager BETA v0.1.31
+
+v0.1.31 fixes a reliability issue in Custom SIM Profiles where switching SIM slots could apply the wrong profile — or no profile at all.
+
+## ✅ Improvements
+
+- **SIM switching now verifies the slot change actually took effect before applying a profile.** Under certain timing conditions, the modem could report a slot switch as successful while silently staying on the old SIM. QManager now double-checks the switch really happened before matching and applying a Custom SIM Profile, fixing cases where the wrong profile — or no profile — was applied after switching SIMs.
+- **Rapid, back-to-back SIM switches now settle on the correct profile.** Switching SIMs twice in quick succession could previously leave the wrong profile active. The correct profile for whichever SIM is actually inserted now always wins.
+- **Profiles saved via "Load from SIM" now match reliably.** Some SIMs have an ICCID that QManager was reading slightly differently depending on where in the app it was read, which could prevent a saved profile from ever matching that SIM. ICCID reads are now consistent everywhere.
+
+## 📥 Installation
+
+### Fresh Install
+
+```sh
+curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
+```
+
+### Upgrading from v0.1.30
+
+**System Settings → Software Update.** No migration steps needed.
+
+## 💙 Thank You
+
+Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
+
+Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
+
+**License:** MIT + Commons Clause — **Happy connecting!**
+
+---
+
 # 🚀 QManager BETA v0.1.30
 
 v0.1.30 delivers a lighter ICMP-based connectivity probe — matching the predecessor app — and a major Custom DNS expansion. The probe gains an automatic IPv6 fallback so IPv6-only cellular connections are no longer falsely reported offline. Custom DNS adds IPv6 resolver support, one-tap provider presets (Cloudflare, Google, Quad9, AdGuard, ControlD), and two fixes that close leaks where carrier DNS was still reaching clients. A false "high packet loss" reboot-loop after a modem restart is also squashed.

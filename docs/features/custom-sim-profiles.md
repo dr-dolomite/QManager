@@ -23,6 +23,8 @@ Route: `/cellular/custom-profiles`. Stores named modem configuration bundles (AP
 | Active marker | `/etc/qmanager/active_profile` |
 | Spawn lock | `/tmp/qmanager_profile_spawn.lock` |
 | Worker PID | `/tmp/qmanager_profile_apply.pid` |
+| Pending re-apply marker | `/tmp/qmanager_profile_pending_apply` (ICCID + caller, tab-separated; latest-wins) |
+| SIM-switch quiesce flag | `/tmp/qmanager_sim_switch_active` (producer `cellular/settings.sh`, consumer `qmanager_poller`, mtime-bounded 60s) |
 
 ## Page Layout — 2-Column Card Surface
 
@@ -167,10 +169,55 @@ While the apply is in flight (not terminal) and `applyState.profile_id` matches 
 - Activate = runs full pipeline. Deactivate = clears marker + tears down scenario cron + resets `mode_pref` to AUTO + (non-Verizon only) calls `reapply_active_apn_slot`: reapplies the stored APN slot if `active != 0`, or is a no-op if `active == 0` (carrier-default preserved). Verizon deactivation sets `requires_reboot=true` and defers APN reapply to the poller's boot APN reconcile.
 - **SIM mismatch**: poller `collect_boot_data()` auto-clears marker + emits `profile_deactivated` when active profile's `sim_iccid` ≠ current SIM. Empty `sim_iccid` = SIM-agnostic, left alone.
 - TTL override: `ttl-settings-card.tsx` disables form when active profile has TTL/HL > 0.
-- **ICCID auto-apply**: `profile_mgr.sh::auto_apply_profile <iccid> <caller>` spawns worker detached. Called via `( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$iccid" "<tag>" )` from: poller boot (`boot`), `cellular/settings.sh` post-SIM-switch (`sim_switch`, 3×1s ICCID retry), watchcat Tier 3 success (`watchdog`), watchcat SIM failover fallback (`watchdog_revert`, 3×1s retry).
-- Auto-apply guards: `profile_check_lock` (no race with manual Activate) + `profile_count > 0`. Worker's per-step skip logic is the single source of truth for "only apply what differs" — `auto_apply_profile` does NOT pre-compare.
+- **ICCID auto-apply**: `profile_mgr.sh::auto_apply_profile <iccid> <caller>` spawns worker detached, passing `--auto` (see "Auto-Mode Worker" below). Called via `( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$iccid" "<tag>" )` from: poller boot (`boot`), `cellular/settings.sh` post-SIM-switch (`sim_switch`, now only after a **verified** slot change — see "Verified QUIMSLOT Read-Back" below — 5×1s ICCID retry that rejects the pre-switch ICCID), watchcat Tier 3 success (`watchdog`), watchcat SIM failover fallback (`watchdog_revert`, 3×1s retry).
+- Auto-apply guards: `profile_check_lock` (no unconditional race with manual Activate — but see "Stale-Worker Supersession" below, a busy lock is now queued rather than silently skipped) + `profile_count > 0`. Worker's per-step skip logic is the single source of truth for "only apply what differs" — `auto_apply_profile` does NOT pre-compare.
+- **ICCID matching is canonicalized at compare-time**: `auto_apply_profile`'s match loop and the mismatch-deactivate branch both run the live ICCID and each candidate's stored `sim_iccid` through `iccid_canonicalize()` (`sim_db.sh`) before comparing. See "ICCID Canonicalization" below for why.
 - **Known-SIMs acknowledgement on activation**: `qmanager_profile_apply` calls `mark_sim_acknowledged()` (defined in `profile_mgr.sh`) at each `set_active_profile` success site — line ~401 (pre-CFUN IMEI path) and line ~543 (FINALIZE complete/partial branch). The helper sources `sim_db.sh`, issues `AT+QCCID` with the canonical parse pipeline (`grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r '`), and calls `sim_db_add` to add the ICCID to the persistent known-SIMs set (`/etc/qmanager/known_iccids`). This ensures that activating a profile for a freshly-inserted SIM registers that SIM as seen, so the "New SIM detected" banner does not fire on the next reboot. The helper skips on an empty read and is called only on activation success; never on deactivate or failure. See [`docs/features/known-sims.md`](known-sims.md) for the full known-SIMs model, byte-parity requirement, and migration from the retired `last_iccid` scheme.
 - Events: `profile_applied`/`profile_failed`/`profile_deactivated` in `dataConnection` tab.
+
+## Verified QUIMSLOT Read-Back — Why "OK" Cannot Be Trusted
+
+`cellular/settings.sh` (SIM slot change branch) used to trust `AT+QUIMSLOT=N` returning `OK` as proof the switch happened, then immediately fed the "new" ICCID into `auto_apply_profile`. Under `qcmd` lock contention — most commonly a poller cycle racing the CFUN=0 → QUIMSLOT → CFUN=1 sequence — the modem can accept and acknowledge the write while silently staying on the old slot. The CGI would then auto-apply the OLD SIM's profile and report success, with no visible failure anywhere.
+
+**Fix — `verify_quimslot()`:** after the CFUN=1 restore, the CGI polls `AT+QUIMSLOT?` up to 10× (1 s apart) until the reported active slot equals the requested slot.
+
+- An **empty read** (qcmd lock timeout) counts as **not yet verified** — it is never treated as success. Only an active-slot value that literally matches the requested slot verifies the switch.
+- If all 10 polls fail to verify, the CGI runs **one full CFUN-discipline retry** of the write (`CFUN=0` → sleep 2 → `QUIMSLOT=N` → sleep 2 → `CFUN=1`) and re-polls. If that also fails to verify, the switch is reported as **`sim_slot_switch_unverified`** (see [error-codes.md](error-codes.md)) — never `success: true` — and auto-apply is skipped entirely.
+- Only a verified switch reaches the auto-apply block (`if [ -n "$sim_switch_verified" ]; then ...`).
+
+**Pre-switch ICCID capture + stale-read rejection:** the CGI reads `AT+QCCID` and stores it as `sim_pre_iccid` *before* starting the CFUN/QUIMSLOT sequence. The post-switch ICCID retry loop (widened from 3 to 5 attempts, 1 s apart) rejects any read that equals `sim_pre_iccid` — a genuine switch always resolves as an empty read (SIM re-registering) followed by the new ICCID, never a read that still echoes the old one. This closes a second, independent path to the same wrong-profile bug: a verified slot switch whose ICCID read raced the modem's own SIM re-init and briefly returned the outgoing SIM's ICCID.
+
+## Stale-Worker Supersession — `--auto` Mode, Pending Re-Apply Queue
+
+Rapid back-to-back SIM switches (or a switch immediately followed by a watchdog SIM-failover event) can spawn a second `auto_apply_profile` call while the first worker is still running the first SIM's pipeline. Before this fix, `profile_check_lock` failing on the second call caused a silent skip — the second (and now-authoritative) SIM's profile was never applied, and the first worker went on to finalize `set_active_profile` for the WRONG (stale) SIM.
+
+**Auto mode (`--auto`):** `auto_apply_profile` now spawns the worker as `qmanager_profile_apply <id> --auto`. The manual Activate path (`profiles/apply.sh` → same binary, no flag) is byte-identical to its prior behavior — it never sets `AUTO_MODE` and is exempt from every guard described below.
+
+**Best-effort stale-SIM guard (auto mode only), two checkpoints:**
+- **Pre-apply** (before Step 1 runs): if the profile is SIM-bound (`sim_iccid` non-empty) and a live `AT+QCCID` read (canonicalized, 3×1s retry) disagrees with the profile's `sim_iccid`, the worker aborts immediately as `apply_status: failed`, `apply_error: superseded_sim_changed`, WITHOUT touching the active marker.
+- **Pre-finalize** (after the last step, before the FINALIZE block writes the active marker): the same re-check runs again. This is the checkpoint that actually fixes the bug — a switch that lands *during* the apply (after the pre-apply check passed) is still caught before the marker commits to the wrong SIM.
+- **An empty live read never aborts** either checkpoint — a `qcmd` timeout is a "don't know," not evidence of a mismatch. This keeps the guard best-effort and prevents lock contention from turning into spurious apply failures.
+- `superseded_sim_changed` is an `apply_status`-internal string (state-file `apply_error` field only) — it is **not** an `errors.json` key and is never surfaced through the CGI error envelope.
+
+**Pending re-apply queue (busy-lock case):** when `auto_apply_profile` finds `profile_check_lock` busy, instead of skipping it now writes `/tmp/qmanager_profile_pending_apply` (`<iccid>\t<caller>`, atomic tmp-write + `mv`, so a second queued call simply overwrites — latest wins, no queue growth).
+
+**Consumption order is the whole fix — cleanup-order invariant:** the running worker's `EXIT` trap does `rm -f "$PROFILE_APPLY_PID_FILE"` **first**, then calls `_consume_pending_apply()`. Consuming the marker before releasing the PID file would make the re-spawned `auto_apply_profile` see the (about-to-exit) worker as still holding the lock and re-queue instead of running — an infinite same-cycle bounce. Releasing the lock first lets the fresh worker actually acquire it.
+
+`_consume_pending_apply()` does **not** blindly reuse the queued ICCID — it re-reads the live ICCID (3×1s retry) and uses that if non-empty, falling back to the ICCID stored in the pending marker only if the live read comes back empty. This means the very freshest SIM state wins even if a third switch happened while the second was queued.
+
+Manual Activate is completely exempt from this queue: `apply.sh`'s spawn path is unaffected, and `profile_acquire_spawn_lock`/`profile_check_lock` semantics for the manual path are unchanged.
+
+## ICCID Canonicalization — Compare-Time Only
+
+`iccid_canonicalize()` (`scripts/usr/lib/qmanager/sim_db.sh`) strips space/CR/LF like `sim_db_normalize`, then strips **one** trailing BCD pad nibble (`F`/`f`) if present. An ICCID whose final significant digit is odd is padded to 20 nibbles with a trailing `F` per the ISO/IEC 7812 BCD convention; different read paths in this codebase disagreed on whether they kept that pad character, which caused an odd-length-ICCID SIM to never match its own profile.
+
+> ⚠️ WARNING: This function is for **comparison only**. It must never be used to rewrite a value that gets *stored* — `sim_db_add` / the known-SIMs set continue to use `sim_db_normalize` and preserve full byte-parity (see [known-sims.md](known-sims.md)). Canonicalizing at storage time would break the `grep -qxF` whole-line membership test's byte-parity requirement.
+
+Used to normalize **both operands** in `auto_apply_profile`'s profile-match loop and in its active-profile mismatch-deactivate branch. Also used by `profiles/current_settings.sh`'s ICCID parse (see below) and by the auto-mode stale-SIM guard helpers in `qmanager_profile_apply`.
+
+**`current_settings.sh` fix**: the "Load from SIM" form action used to extract the ICCID with a digits-only `grep -o '[0-9]\{19,20\}'`, which silently dropped a trailing `F` pad. A profile saved from that form then stored a value that could never match the canonical apply-time `AT+QCCID` read for the same SIM — a latent bug that only manifested on F-padded (odd-length) ICCIDs. `current_settings.sh` now runs the same canonical pipeline (`grep '+QCCID:' | sed 's/+QCCID: //g'`) through `iccid_canonicalize()` before returning it, so the value the form saves matches what every apply-time comparison expects.
+
+**Rich no-match diagnostics**: when `auto_apply_profile` finds no profile matching the live ICCID (and at least one profile exists), it now logs the live ICCID's canonicalized form alongside every candidate's stored `sim_iccid` and byte length (`qlog_warn`, not `qlog_info` — this is now a warn-level event) — a format/pad mismatch is visible in a single log read instead of requiring a manual `sim_db.sh` dump.
 
 ### Frontend Idle-Race Invariant — DO NOT add `"idle"` to the terminal set
 
@@ -188,6 +235,7 @@ Two distinct concerns, two files.
 - `/tmp/qmanager_profile_apply.pid` — owned by the worker (`qmanager_profile_apply`). Singleton enforcement via `profile_acquire_lock`. Cleared by the worker's EXIT trap.
 - **Why two**: the worker's `profile_acquire_lock` does `kill -0` on whatever PID it finds. If the CGI pre-wrote `$$` into the worker's PID file, the worker would see its own (still-sleeping) parent CGI as a foreign holder and abort. v0.1.22 hit this bug — manual Activate failed with `start_failed` while boot auto-apply still worked (boot path only `profile_check_lock`s, never acquires). Helpers: `profile_acquire_spawn_lock` / `profile_release_spawn_lock` / `profile_check_lock` / `profile_acquire_lock` in `profile_mgr.sh`.
 - CGI must NEVER touch `$PROFILE_APPLY_PID_FILE`; worker must NEVER touch `$PROFILE_SPAWN_LOCK_FILE`.
+- **A third file, `/tmp/qmanager_profile_pending_apply`**, layers on top of the PID lock for the auto-mode stale-worker case — see "Stale-Worker Supersession" above for the full contract. In short: the worker's `EXIT` trap removes `$PROFILE_APPLY_PID_FILE` **before** consuming the pending marker, because consuming it first would make a re-spawned worker see the (exiting) old worker as still holding the lock.
 
 ## `start_failed` — Deployment-Integrity Cause
 
@@ -229,17 +277,28 @@ The installer now guards against this: `install_file()` compares `wc -c` of sour
 
 All components are fully internationalized. `custom-profile.tsx`, `profile-input.tsx`, `profile-view.tsx`, `apply-progress-dialog.tsx`, and `empty-profile.tsx` are all wired to the `cellular` namespace. 292 `custom_profiles.*` keys exist across en/id/it/zh-CN with full parity. Key subtrees added in the most recent pass: `custom_profiles.view.*`, `custom_profiles.form.*` (including `form.review.*`, `form.verizon_inline.*`, `form.pdp_inline.*`, and `form.fields.reuse_apn_{label,placeholder,custom}`), `custom_profiles.apply_dialog.*`, `custom_profiles.pills.*`, and `custom_profiles.card.*`.
 
+## Poller Quiesce During a SIM Switch — `/tmp/qmanager_sim_switch_active`
+
+`cellular/settings.sh` raises `/tmp/qmanager_sim_switch_active` (empty marker file, trap-guarded) for the entire duration of the CFUN/QUIMSLOT window — from immediately before `AT+CFUN=0` through the read-back verification. This exists because poller `qcmd` traffic racing that exact sequence is the root cause of the silent QUIMSLOT no-op (see "Verified QUIMSLOT Read-Back" above) — quiescing the poller removes the contention that caused it, on top of the read-back check that detects it if it still happens.
+
+- **Producer**: `cellular/settings.sh` — `trap 'rm -f /tmp/qmanager_sim_switch_active' EXIT INT TERM` is installed right before the flag is created, so any exit path (including an unexpected CGI termination) clears it.
+- **Consumer**: `qmanager_poller`'s `poll_cycle` — checked alongside `LONG_FLAG` in the same early-return block. When either is present, the poller reports `system_state: "scan_in_progress"` and skips its AT-bearing work for that cycle. This is a deliberate reuse of the existing scan-in-progress state rather than a new `system_state` value.
+- **mtime-bounded (60 s)**: the poller reads the flag file's mtime on every cycle; if its age is ≥ `SIM_SWITCH_MAX_AGE=60`, the poller removes it itself and logs a warning, then resumes polling. This exists so a SIGKILL'd CGI (whose `EXIT` trap never runs) cannot mute the poller indefinitely.
+- **Cleared before `/tmp/qmanager_force_tier2` is touched** — see below; this ordering is a hard invariant, not incidental.
+
 ## Force-Tier-2 Refresh After SIM Switch
 
-After a successful SIM slot switch, `settings.sh` sleeps 2 seconds (registration settle) and then touches `/tmp/qmanager_force_tier2`. The CGI is a write-only producer — it never reads or parses the file.
+After a **verified** SIM slot switch, `settings.sh` clears `/tmp/qmanager_sim_switch_active` (and disarms its trap), sleeps 2 seconds (registration settle), and only then touches `/tmp/qmanager_force_tier2`. The CGI is a write-only producer of both flags — it never reads or parses either.
 
-The poller's `poll_cycle` checks for the flag after the `LONG_FLAG` early-return block. When present it consumes the flag (`rm -f`) and immediately runs `poll_tier2` + `read_sim_state` + `refresh_sim_identity`. `refresh_sim_identity` issues `AT+CIMI;+QCCID` and updates the `boot_imsi`/`boot_iccid` globals — no swap logic, no profile side effects. The stale window for operator name, APN, DNS, WAN-IP, ICCID, and IMSI drops from ~30 seconds to ~4 seconds.
+> ⚠️ INVARIANT: The quiesce flag MUST be cleared **before** `/tmp/qmanager_force_tier2` is touched. If the order were reversed, the poller would still be in its quiesce early-return when the force-tier2 flag arrived, and the force-tier2 consume-and-refresh logic would never run on that cycle — the fast (~2–4 s) post-switch UI refresh this flag exists for would silently degrade to the next normal ~30 s Tier-2 boundary.
+
+The poller's `poll_cycle` checks for the force-tier2 flag after the `LONG_FLAG`/SIM-switch-quiesce early-return block. When present it consumes the flag (`rm -f`) and immediately runs `poll_tier2` + `read_sim_state` + `refresh_sim_identity`. `refresh_sim_identity` issues `AT+CIMI;+QCCID` and updates the `boot_imsi`/`boot_iccid` globals — no swap logic, no profile side effects. The stale window for operator name, APN, DNS, WAN-IP, ICCID, and IMSI drops from ~30 seconds to ~4 seconds.
 
 **Why:** Network-identity fields are Tier-2 (polled every `TIER2_EVERY=15` × `POLL_INTERVAL=2s` ≈ 30s). The flag forces an early execution of that tier without changing the global cadence.
 
 **Invariants to preserve:**
-- `settings.sh` MUST NOT write `/tmp/qmanager_status.json`. The poller is the sole atomic writer of that file (via `write_cache`). The CGI only touches the flag.
-- The flag check is placed AFTER the `LONG_FLAG` early-return in `poll_cycle` on purpose. A long-running cell scan returns early before reaching the Tier-2 block, so the flag is not consumed and discarded — it survives until the next normal cycle.
+- `settings.sh` MUST NOT write `/tmp/qmanager_status.json`. The poller is the sole atomic writer of that file (via `write_cache`). The CGI only touches the flags.
+- The force-tier2 flag check is placed AFTER the `LONG_FLAG`/SIM-switch-quiesce early-return in `poll_cycle` on purpose. A long-running cell scan or an in-progress SIM switch returns early before reaching the Tier-2 block, so the flag is not consumed and discarded — it survives until the next cycle where neither block is active.
 - `refresh_sim_identity` re-reads live modem state only; it does not trigger auto-apply, profile deactivation, or any other side effect.
 
-See also [`docs/features/band-locking.md`](band-locking.md) — `bands/lock.sh` is the other producer of the same flag, with the identical contract.
+See also [`docs/features/band-locking.md`](band-locking.md) — `bands/lock.sh` is the other producer of the same force-tier2 flag, with the identical contract.
