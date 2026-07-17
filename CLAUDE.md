@@ -49,6 +49,19 @@ All agents are defined in `.claude/agents/`. Models are pinned per agent — the
 - **Builders and validators don't see the orchestrator's conversation.** Each dispatch is a self-contained brief with file paths, schemas, the live evidence from `modem-investigator`, and the relevant `CLAUDE.md` / `DESIGN.md` / `PRODUCT.md` sections inlined.
 - **No in-flight reboot.** Any change that calls `reboot` / `AT+CFUN=1,1` mid-request must be deferred and surfaced via the deferred-reboot banner — `validator` rejects inline reboots in a CGI response path.
 
+### Worktree Discipline (Tier 2+)
+
+Parallel branches and parallel builders must never cross-contaminate commits. Two layers of isolation, both harness-native:
+
+1. **Run-level — every Tier 2+ run gets its own worktree.** Immediately after the Phase 3 approval gate (before any builder writes a file), call `EnterWorktree` to create an isolated checkout on a fresh branch named for the change (e.g. `wt/dns-presets`). The session CWD moves there and every subsequently spawned teammate inherits it, so all commits land on that branch regardless of what other sessions do to `development-home` or any other branch. Phases 1–3 (recon/plan) stay in the main checkout — they're read-only and should see the branch the user actually asked about. Tier 0/1 edits stay in-place, no worktree.
+2. **Agent-level — isolate builders only when file sets overlap.** If two builders would touch overlapping or uncertain file sets in parallel, spawn them with `isolation: "worktree"` on the Agent call and reconcile their results into the run worktree. When file sets are provably disjoint (the normal case — backend in `scripts/`, UI in `components/`), skip it; they share the run worktree.
+
+**On entry, fix the two things a fresh worktree is missing:**
+- **`.env` is gitignored** → copy it from the main checkout into the worktree or `modem-investigator`/`validator` silently lose SSH access to the live modem. Verify `git check-ignore .env` still holds in the worktree; never commit it.
+- **`node_modules` is absent** → run `bun install` in the worktree lazily, only if the change actually needs a frontend build/lint/tsc pass; backend-only changes skip it.
+
+**Close-out (Phase 6):** after `validator` passes and `docs-writer` closes, ask the user via `AskUserQuestion` — merge back into the originating branch, keep the branch for a PR, or discard — then `ExitWorktree`. Never auto-merge.
+
 ### Skip Phrases
 
 User can short-circuit by saying "just do it" / "skip the plan" / "tier 0 it" — Opus drops to direct execution. Otherwise the flow is the default.
@@ -62,6 +75,7 @@ When the user says **"orchestrate"** (e.g. "orchestrate this", "orchestrate a te
 - **One teammate is always a dedicated devil's advocate.** Its job is to attack the leading hypotheses, surface what the team is underweighting, and stop the team from "fixing" accurate telemetry or chasing a phantom. Mandatory for any investigation.
 - **Phase 1 recon fans out.** Run several read-only agents at once on different leads (live `modem-investigator` probing, static `Explore`, a delta/compare angle, the devil's advocate). When new evidence lands mid-flight, **redirect a running teammate with `SendMessage`** instead of re-spawning. If a backgrounded teammate goes idle without delivering its written report, ping it for the report.
 - **Synthesize, then gate.** Fold all reports into ONE plan and use **`AskUserQuestion`** at the Phase 3 approval gate and for any real scoping decision (which fixes, build order, live-confirm-first). Don't start Phase 4 builders until the user approves.
+- **Worktree Discipline applies (see above).** `EnterWorktree` right after the approval gate so the whole team commits onto the run's own branch; `isolation: "worktree"` per builder only when their file sets overlap; ask-at-close merge via `AskUserQuestion`, then `ExitWorktree`.
 - **Execute → validate → docs, with a task board.** Builders run bottom-up (parallel where files are independent), `validator` gates every backend/shell change on-device, `docs-writer` closes. Track the whole thing with `TaskCreate`/`TaskUpdate` (owners + blockers) so the user can follow progress.
 - **Respect standing prefs inside the team.** UI craft is done by Opus via the Impeccable skill, not dispatched to `ui-builder` for the build (`ui-builder`/`Explore` may still recon the surfaces). Sonnet teammates do the rest.
 

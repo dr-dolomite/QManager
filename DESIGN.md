@@ -430,6 +430,72 @@ Motion contract — this is where the Apple-silky direction lives most loudly:
 
 The whole system feels alive because dozens of tiles are doing this at once at low intensity. Never a single tile demanding attention; the system breathes.
 
+### Status-First Feature Page (Signature Page Anatomy, Watchdog / Alerts heritage)
+
+The canonical shape for any feature that pairs a **live daemon or service** with **user-tunable settings** (watchdog, alerts, SMS forwarding, band failover, connection quality). Learned from the QManager-RG520 sibling build's Watchdog and Alerts pages, which proved the shape twice: the Alerts page deliberately echoes the Watchdog page so a user who learns one has learned the other.
+
+The page is a single centered column (`max-w-[1100px]`, `@container/main`, `flex flex-col gap-6`) of, in order:
+
+1. **Page header**: `h1` + muted description, per the Consistent-Layout Rule.
+2. **Live Status hero card** (read-only): what the feature is doing *right now*. See the anatomy below.
+3. **Settings card** (the one write surface): a tabbed form with a sticky save bar. See the anatomy below.
+4. **Activity log card** (optional): a paginated table of recent events, newest first.
+
+One data hook instance lives in the page wrapper and fans state down to all three cards; children never fetch independently. The hero reflects **saved** settings (what is actually running), never in-progress form edits, so it cannot lie about live behavior while the user types.
+
+This anatomy composes with, not against, the Consistent-Layout Rule: each of the three units is a self-contained card the column arranges. It is the sanctioned shape when a feature's content is genuinely sequential (status, then configuration, then history) rather than a set of parallel settings groups; parallel groups still take the uniform 2-col grid.
+
+### Live Status Hero Card
+
+A plain `Card` titled "Live Status" with a one-line description ("What the watchdog is doing right now.", "Where your alerts go right now and whether each channel is ready."). The content is a state machine with distinct, purpose-built renderings:
+
+- **Loading**: a skeleton that mirrors the final layout geometry (tile + two text lines + counter strip), wrapped in `role="status"` + `aria-busy="true"` + an `aria-label`. Never a spinner in a void.
+- **Off**: a centered empty state, muted icon inside a soft rounded tile (`size-14 rounded-2xl` on a muted wash), plus one sentence that points at the enable control below ("Watchdog is off. Turn it on below and...").
+- **Settling** (enabled in settings but the daemon is not reporting yet): same centered shape with a spinner tile and a "starting up" sentence. An honest intermediate state instead of pretending to be live or off.
+- **Live**: the working anatomy below.
+
+Live anatomy, top to bottom:
+
+- **Headline row**: a tonal state tile (`size-12 rounded-2xl`, `grid place-items-center`, tone/15 wash carrying the state icon) animated on state change (`AnimatePresence mode="wait"` keyed by state, quick scale + fade), next to a state label (`text-xl font-semibold`) and a one-line blurb. An optional quiet "Active" affordance (a `size-1.5` pulsing dot + tiny label) sits beside the label; the pulse is `motion-safe:` gated. When the feature has a spatial summary (the recovery ladder, a channel pair), it sits at the right end of this row, stacking below at narrow card widths via `@2xl/card:` container queries.
+- **Hairline divider** (`h-px bg-border`).
+- **Counter strip**: a wrapping row (`flex flex-wrap gap-x-10 gap-y-5`) of small labelled stats: a `text-xs` muted label above a tabular-nums semibold value. Values tint with a functional color **only when noteworthy** (failures > 0 tints warning; zero stays neutral). Conditional stats (a cooldown countdown) appear only while relevant.
+- **Sub-tiles** (multi-channel features): when the feature has parallel channels rather than one daemon state, the hero body is a `grid-cols-1 @lg/card:grid-cols-2` of bordered sub-tiles, one per channel. Each tile: icon tile + channel name + optional Active pulse + one outline status badge, a hairline divider, then a `dl` of right-aligned label/value rows (masked recipient, mailer state, last send result as a badge + timestamp). The tile is the hero pattern recursed one level down.
+
+### Tabbed Settings Card with Sticky Save Bar
+
+The single write surface of a status-first page: one `Card` titled "Settings" wrapping one `<form>`, per the Card-Wrapped Surface Rule. Internal order:
+
+1. **Self-disable / fault alert** (conditional): if the backend disabled itself (reboot-loop guard tripped), a destructive `Alert` leads the form and says how to recover.
+2. **Master toggle row**: the one switch that governs the whole feature, rendered as a state-tinted row (see below). Everything under it gains `disabled` when the master is off; the structure never collapses or hides.
+3. **Tabs**: `TabsList` is `w-full @sm/card:w-fit`; tab labels are plain words (Detection / Recovery / Quality Alerts, Routing / SMS / Email). A tab whose fields currently fail validation shows a small **error dot** beside its label, so hidden-tab errors are visible from any tab.
+4. **Sticky save bar**: pinned to the card's bottom edge while the card is in view (`sticky bottom-0 -mx-6 -mb-6 border-t bg-card/95 backdrop-blur px-6 py-4`, rounded to match the card). Left side is a one-line **save status**: validation errors ("Fix errors in Detection and Quality Alerts before saving.", naming the tabs), else dirty ("You have unsaved changes." with a small warning dot), else just-saved ("All changes saved."), else idle ("Settings are up to date."). Right side is the `SaveButton`. Submitting while an error hides on another tab jumps the user to the first errored tab instead of failing silently.
+
+Form mechanics that are part of the pattern, not incidental:
+
+- **Key-based remount**: the form component takes a `key` derived from the saved settings, so `useState` defaults re-seed after every load and successful save. No effect-driven syncing.
+- **Validation mirrors the server** field by field; each field swaps `FieldDescription` for `FieldError` in place (same slot, no layout jump) and sets `aria-invalid` + `aria-describedby`.
+- **Dirty check against the resolved payload**, so `canSave = !errors && dirty && !saving` and the save bar can tell the truth.
+- **Test-action discipline**: "Send test" style actions run against the **saved** configuration only; they disable while the form is dirty, with a small hint ("Save your changes before sending a test.").
+
+**Supporting in-card patterns** (used inside the tabs):
+
+- **State-tinted toggle row**: a bordered rounded row (`rounded-lg border p-4`) holding a semibold label, a one-line description that *changes copy with state* ("Actively monitoring your connection for outages." vs "No monitoring or automatic recovery."), and a `Switch` on the right. The row tints toward the primary (`border-primary/30 bg-primary/5`) when on and rests on a muted wash when off. Reused for opt-in sub-features, whose configuration fields reveal *inside* the same bordered row when enabled, keeping cause and controls visually bound.
+- **Preset-with-custom-reveal**: a `Select` of named presets whose `FieldDescription` is a live sentence stating the effective values ("Probe every 2s: fail after 10s, recover after 6s."). Choosing Custom reveals an inset bordered field grid on a muted wash (`rounded-lg border bg-muted/20 p-4`), with derived hints ("Effective: 10s (rounded to interval).") computed as the user types. The preset sentence means the 90% case never opens the drawer.
+- **Capability matrix (event × channel routing)**: rows are events grouped under small uppercase group headings, columns are channels; a shared grid-template constant is used by the header row and every body row so the switches align under their column heads. Each cell is either a live `Switch` or, when the channel physically cannot serve that event, a **muted explanatory chip** (tiny icon + short tag) whose tooltip and sr-only text state the reason. Never a dead disabled toggle.
+- **Dual-render model (status + config views)**: when a feature has a central conceptual object (the recovery ladder), render it twice from the same constants: a compact **read-only horizontal stepper** in the hero (numbered mono nodes joined by hairline connectors; disabled rungs go dashed-border + reduced opacity + sub-label, never color alone; the running rung gets a pulse ring + sr-only "currently running") and an **interactive vertical ladder** in settings (numbered nodes on a vertical hairline rail; each rung a row of icon + label + description + `Switch`). The visual rhyme teaches the user that both surfaces describe the same machine.
+- **Missing-dependency empty state**: when a tab's feature needs an uninstalled package, the tab body becomes a centered empty state: muted icon, plain explanation, a primary install button with live progress text, a "Check again" outline button, then an "or install manually" hairline-flanked divider and a `CopyableCommand`. Automation first, escape hatch visible.
+
+### Activity Log Card
+
+The optional third card: a paginated table of recent events, newest first.
+
+- `CardHeader` holds title + description, with a single icon `Button` (refresh) in `CardAction`.
+- The table sits in a bordered `overflow-x-auto` wrapper. Timestamps are the one place tabular mono-style text appears in the row (`font-mono text-xs` per the machine-output allowance); status and channel render as outline badges per the Pill-Dense Table Rule.
+- **Empty state lives inside the table** (a full-colspan cell): icon, "No alerts sent yet", and a hint that points at the test buttons in Settings. The table chrome stays, so the page shape does not jump when the first row arrives.
+- **Responsive columns via container queries**: low-priority columns hide below `@md/card:`, and their data folds into an existing column as a second muted line, never lost.
+- New rows enter with a short staggered slide-fade whose per-row delay is capped (`Math.min(index * 0.04, 0.4)`), honoring reduced motion.
+- `CardFooter` is the pagination bar: "Showing X–Y of Z entries", a rows-per-page `Select`, "Page N of M" in tabular-nums, and first/prev/next/last icon buttons that enlarge on coarse pointers (`pointer-coarse:size-11`). First/last and rows-per-page hide at narrow card widths.
+
 ### Named Rules
 
 **The Outline-Badge Rule.** All status badges in feature surfaces use `variant="outline"` + semantic color classes + `size-3` icon. Solid badge variants are forbidden outside developer-only contexts (e.g. raw `Badge` demos in storybook). If a badge needs to feel louder, the answer is a banner or an alert, not a solid badge.
@@ -443,6 +509,16 @@ The whole system feels alive because dozens of tiles are doing this at once at l
 **The Card-Wrapped Surface Rule.** A settings or feature surface is wrapped in a single self-contained `Card` and authored as a component that owns its whole content: `CardHeader` (`CardTitle` + `CardDescription`) then `CardContent` holding every control, organized internally with `FieldSet` / `FieldGroup`, tabs, bordered opt-in rows, or sub-panels as the content needs. The card is the **unit of composition**: a page is built by dropping one or more of these card-components into the uniform responsive grid (`grid-cols-1 @container:grid-cols-2` or similar), exactly as the Custom Profiles page composes its `Add Profile`, `Active Profile`, and `Empty Profile` cards, and as the Traffic Engine composes its grouped settings-in-a-card. The page is never the layout canvas with cards demoted to loose visual fragments or spacers inside a bespoke full-bleed composition. If a feature spreads across the whole viewport and the cards inside it carry no clear settings-group boundary, the composition is inverted: pull the settings back into a self-contained card and let the page grid arrange it. This is the companion to the Consistent-Layout Rule above: that rule governs the page (header plus uniform card grid); this one governs the unit (each card wholly wraps one settings group).
 
 **The Live-Tile Rule (UniFi heritage, Apple-motion enforced).** Every tile that displays live-updating data follows the motion contract in the Live Data Tile section: tabular-nums for value swaps, color transitions over 200-400ms with `cubic-bezier(0.16, 1, 0.3, 1)`, sparklines redrawn via path-length animation, no fade-flashes, no layout shifts, no scale transforms. The Apple-instrument promise (silky, never bouncy, never snappy-corporate) is enforced at the tile level because that's where the user sees it most often. Reduced-motion users get instant value swaps with no transition; the layout never depends on a transition completing.
+
+**The Status-First Page Rule (Watchdog / Alerts heritage).** A feature backed by a live daemon or service composes as the status-first column: page header, read-only Live Status hero card, one tabbed settings card with a sticky save bar, optional activity log card, in one `max-w-[1100px]` column with a single shared data hook. The hero reflects saved settings and live daemon state, never in-progress form edits. Features that are pure parallel settings groups (no live service to report on) keep the uniform card grid instead; the status-first column is for status-then-config-then-history content, not a new default for everything.
+
+**The Saved-State Honesty Rule.** Surfaces that describe live behavior tell the truth about what is actually running. The status hero renders saved settings, not the form draft. Test-send actions run against the saved configuration only and disable while the form is dirty, with a hint to save first. An intermediate state (enabled but the daemon has not started reporting) gets its own honest "starting up" rendering instead of masquerading as live or off.
+
+**The No-Dead-Toggle Rule.** A control that cannot currently do anything is never rendered as a plain disabled control with no explanation. In a capability matrix, an incapable cell renders as a muted explanatory chip (icon + short tag, tooltip + sr-only text carrying the full reason). A missing dependency renders as an install empty state (icon, explanation, install button, manual-command fallback). Whole-form disabling under a master toggle is the one sanctioned plain `disabled` case, because the master toggle row itself is the explanation.
+
+**The Sticky-Save-Bar Rule.** A multi-tab settings form pins its save affordance to the card's bottom edge (`sticky bottom-0`, negative margins to reach the card walls, hairline top border, translucent card background with backdrop blur). The bar always carries two things: a one-line truthful save status (errors naming the offending tabs, unsaved-changes, saved, or up-to-date) and the `SaveButton`. Tabs with failing fields show a small error dot beside their label, and submitting jumps to the first errored tab. A save button that scrolls away from a long form, or a form that fails silently because the error lives on another tab, both violate this rule.
+
+**The Skeleton-Mirror Rule.** Loading skeletons reproduce the geometry of the loaded state (same tile sizes, same row counts, same strip layout), wrapped in `role="status"` + `aria-busy="true"` + a descriptive `aria-label`. The page must not reflow when real data arrives. A centered spinner where a card's content will be is a violation; so is a skeleton shaped like a different layout than the one that replaces it.
 
 **The Pill-Dense Table Rule (UniFi heritage).** Data tables (client lists, neighbor cells, profile registry, event log) lean on inline outline pills and tags rather than colored row backgrounds or icon-and-text columns. A row should carry its status, role, and quick-actions as a sequence of dense outline pills — small, monochrome-with-tint, in the same outline-plus-tint style as the status badges. This dense-pill density is the one thing QManager keeps from UniFi: it is the data-density heritage, applied inside the consistent grouped-card layout rather than as a license for a hero-mosaic page.
 
@@ -466,6 +542,13 @@ The whole system feels alive because dozens of tiles are doing this at once at l
 - **Do** live-update tile values with smooth color transitions and tabular-nums digit swaps, never with layout shifts or fade-flashes (per the Live-Tile Rule).
 - **Do** treat the circular signal meter as a hero pattern on signal-quality surfaces (Nokia FastMile influence). The arc *grows* to its value over 400ms; it does not snap.
 - **Do** leave generous editorial whitespace around and inside grouped cards (Askey iF-award influence). Calm spacing is what reads as premium; crowding is what cheapens it.
+- **Do** compose live-service features as the status-first column (header, Live Status hero, tabbed settings card with sticky save bar, optional activity log) per the Status-First Page Rule, with one shared data hook fanning state to all cards.
+- **Do** keep the status hero honest: it renders saved settings and live daemon state, never the form draft (the Saved-State Honesty Rule). Give the "enabled but still starting" window its own settling state.
+- **Do** replace controls that cannot work with self-explaining surfaces: a muted reason chip in a capability matrix, an install empty state for a missing dependency (the No-Dead-Toggle Rule).
+- **Do** pin the save bar to the bottom of a tabbed settings card, with a truthful one-line save status beside the `SaveButton` and error dots on tabs whose fields fail validation (the Sticky-Save-Bar Rule).
+- **Do** make skeletons mirror the loaded layout's geometry with `role="status"` + `aria-busy` (the Skeleton-Mirror Rule), and put a table's empty state inside the table so the card shape never jumps.
+- **Do** render a feature's central model twice when it appears on both status and settings surfaces: compact read-only stepper in the hero, interactive rail in the form, both built from the same constants (the ladder duality). Convey enabled vs disabled by opacity, dashed borders, and sub-labels, never color alone.
+- **Do** state a preset's effective values as a live sentence in its `FieldDescription`, and reveal custom numeric fields in an inset muted-wash panel only when Custom is chosen (preset-with-custom-reveal).
 - **Do** use `Muted` badge styling for deliberately inactive states (not-installed, disabled-by-config). Reserve `Destructive` for actual failures.
 - **Do** defer reboots via dialog + persistent banner pattern (`usePendingReboot`). Never `AT+CFUN=1,1` mid-request.
 - **Do** use JetBrains Mono (`font-mono`) for the AT terminal and raw AT / log output, and nowhere else (The Machine-Voice Rule).
