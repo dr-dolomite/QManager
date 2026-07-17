@@ -54,6 +54,9 @@ nr5g_unit_to_kbps() {
 # trusted until this read-back agrees. Empty reads (qcmd lock timeout) count as
 # not-yet-matched — never as success.
 verify_quimslot() {
+    local _vq_want
+    local _vq_i
+    local _vq_cur
     _vq_want="$1"
     _vq_i=1
     while [ "$_vq_i" -le 10 ]; do

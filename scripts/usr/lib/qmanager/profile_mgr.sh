@@ -35,6 +35,9 @@ PROFILE_DIR="/etc/qmanager/profiles"
 ACTIVE_PROFILE_FILE="/etc/qmanager/active_profile"
 PROFILE_APPLY_PID_FILE="/tmp/qmanager_profile_apply.pid"
 PROFILE_SPAWN_LOCK_FILE="/tmp/qmanager_profile_spawn.lock"
+# Written when auto_apply_profile finds a worker already running; the worker
+# consumes it on exit and re-runs auto_apply for the freshest SIM (latest wins).
+PROFILE_PENDING_APPLY_FILE="/tmp/qmanager_profile_pending_apply"
 MAX_PROFILES=10
 
 # Ensure profile directory exists
@@ -449,6 +452,10 @@ set_active_profile() {
     fi
     printf '%s' "$id" > "$ACTIVE_PROFILE_FILE"
     qlog_info "Active profile set: $id" 2>/dev/null
+    # Explicit success — do not let the function's exit status leak from
+    # qlog_info (which can be non-zero under log-level filtering); callers use
+    # `set_active_profile ... || return 1`.
+    return 0
 }
 
 # Clear the active profile.
@@ -558,15 +565,21 @@ auto_apply_profile() {
     # Canonical form of the live ICCID for comparison (strips the trailing BCD
     # pad F so a stored digits-only value still matches). Compare-time only.
     _ap_cur_canon=$(iccid_canonicalize "$current_iccid")
+    iccid_suffix=$(printf '%s' "$current_iccid" | tail -c 4)
 
-    # Don't race a manual "Activate" click — if a worker is already running,
-    # let it finish. It will finalize the active marker on its own.
+    # A worker is already running. Don't drop this request (it may be a newer,
+    # now-authoritative SIM) — queue it as pending. The running worker consumes
+    # the marker on exit, AFTER releasing its PID lock, and re-runs auto_apply
+    # for the freshest SIM. Atomic overwrite (tmp+mv) so latest wins with no torn
+    # read. The old behavior (pure skip) silently lost a rapid back-to-back
+    # switch when a stale worker was still applying the previous SIM's profile.
     if ! profile_check_lock; then
-        qlog_info "[$caller] Apply already running (PID $_profile_lock_pid), skipping" 2>/dev/null
+        printf '%s\t%s\n' "$current_iccid" "$caller" > "${PROFILE_PENDING_APPLY_FILE}.tmp" 2>/dev/null \
+            && mv "${PROFILE_PENDING_APPLY_FILE}.tmp" "$PROFILE_PENDING_APPLY_FILE" 2>/dev/null
+        qlog_info "[$caller] Apply already running (PID $_profile_lock_pid); queued pending re-apply for ICCID ...$iccid_suffix" 2>/dev/null
         return 0
     fi
 
-    iccid_suffix=$(printf '%s' "$current_iccid" | tail -c 4)
     match_id=""
     for pf in "$PROFILE_DIR"/p_*.json; do
         [ -f "$pf" ] || continue
@@ -620,7 +633,9 @@ auto_apply_profile() {
 
     set_active_profile "$match_id" || return 1
     qlog_info "[$caller] Auto-applying profile $match_id (ICCID ...$iccid_suffix)" 2>/dev/null
-    ( /usr/bin/qmanager_profile_apply "$match_id" </dev/null >/dev/null 2>&1 & )
+    # --auto enables the worker's stale-SIM guard so a switch that supersedes
+    # this apply mid-flight can't finalize the wrong SIM's profile.
+    ( /usr/bin/qmanager_profile_apply "$match_id" --auto </dev/null >/dev/null 2>&1 & )
     return 0
 }
 
