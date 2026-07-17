@@ -2,13 +2,13 @@
 
 CGI: `system/config-backup/{collect,apply,apply_status,apply_cancel}.sh` · Hooks: `use-config-backup.ts`, `use-config-restore.ts` · Types: `config-backup.ts` · Reboot: Deferred (dialog + banner for IMEI/profile)
 
-- Route: `/system-settings/config-backup`. 8 sections: Network Mode + APN, LTE/5G bands, Tower Lock, TTL/HL, IMEI, Custom SIM Profiles, SMS Alerts, Watchdog.
+- Route: `/system-settings/config-backup`. 9 sections: Network Mode + APN, LTE/5G bands, Tower Lock, TTL/HL, IMEI, Custom SIM Profiles, SMS Alerts, Alert Routing, Watchdog.
 - **Bands section** (`collect_bands`/`apply_bands`): captures/restores `lte_bands`, `nsa_bands`, `sa_bands` plus the failover flag. **NR-DC (`nrdc_nr5g_band`) is intentionally excluded** — the modem manages it and coerces manual writes, so it is neither backed up nor restored (see `docs/features/band-locking.md`).
 - **Overlap rule**: Custom SIM Profiles is mutex with APN/TTL/HL/IMEI — profile activation owns those.
 - **Encryption**: mandatory passphrase, AES-256-GCM via WebCrypto. PBKDF2-SHA256 200k iters, 16-byte salt, 12-byte IV. Header bound as AES-GCM AAD via `canonicalHeaderAad()`. Passphrase never leaves browser.
 - **File**: `.qmbackup` JSON envelope — plaintext header + base64 ciphertext (+ appended GCM tag). Filename: `qmanager-<model>-<YYYYMMDD-HHMMSS>.qmbackup` (UTC).
 - **Section library**: `/usr/lib/qmanager/config_backup_sections.sh` — one `collect_<key>`/`apply_<key>` pair per section + `cfg_backup_{collect,apply}` dispatcher. Sourced by `collect.sh` CGI + worker. **Caller owns `qlog_init`**.
-- **Apply order (fixed)**: `sms_alerts → watchdog → network_mode_apn → bands → tower_lock → ttl_hl → imei → profiles`. Safe first, reboot-queuing last.
+- **Apply order (fixed)**: `sms_alerts → alert_routing → watchdog → network_mode_apn → bands → tower_lock → ttl_hl → imei → profiles`. Safe first, reboot-queuing last. `alert_routing` sits next to `sms_alerts` (both trivial JSON writes) and re-clamps `connection_lost.email=false` on apply — see [`docs/features/alerts.md`](alerts.md).
 - **Async worker**: `/usr/bin/qmanager_config_restore` (double-fork via `apply.sh`). PID `/var/run/qmanager_config_restore.pid`; progress `/tmp/qmanager_config_restore.json`; input `/tmp/qmanager_config_restore_input.json`; cancel `/tmp/qmanager_config_restore.cancel`.
 - **Retry**: 3 retries, backoff 1s/2s/4s, only on rc=1. rc=2 (unsupported) / rc=3 (SIM mismatch) bypass retries. Cancel checked between sections.
 - **States**: `pending`, `running`, `retrying:N`, `success`, `failed`, `skipped:incompatible`, `skipped:not_in_backup`, `skipped:sim_mismatch`. Frontend `RestoreProgressList` uses `min-w-[7.5rem] justify-center` on all badges for width stability.

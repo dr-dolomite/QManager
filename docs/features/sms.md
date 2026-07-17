@@ -1,19 +1,16 @@
 # SMS
 
-The SMS feature exposes a read/send/delete inbox and automated downtime alert notifications over the modem's AT channel (`/dev/smd11`). All modem access is serialized through the shared `flock`-based lock so `sms_tool` calls never race against `qcmd` or `atcli_smd11`.
+The SMS feature exposes a read/send/delete inbox over the modem's AT channel (`/dev/smd11`). All modem access is serialized through the shared `flock`-based lock so `sms_tool` calls never race against `qcmd` or `atcli_smd11`.
+
+> ℹ️ NOTE: SMS **downtime alerts** (connection-lost/restored notifications sent over SMS) are documented separately in [`docs/features/alerts.md`](alerts.md) — they're one channel in the centralized Alerts feature, which also covers email and the shared routing/capability model. This doc covers the inbox (read/send/delete) and the `sms_tool` transport library only. `sms_alerts.sh` still exists as the SMS channel's transport lib (config I/O, `sms_tool` send, retry, logging) but no longer owns downtime *detection* — that lives in `alert_engine.sh`.
 
 ## Quick Reference
 
 | Item | Value |
 |---|---|
 | Inbox CGI | `GET/POST /cgi-bin/quecmanager/cellular/sms.sh` |
-| Alert config CGI | `GET/POST /cgi-bin/quecmanager/monitoring/sms_alerts.sh` |
-| Alert log CGI | `GET /cgi-bin/quecmanager/monitoring/sms_alert_log.sh` |
-| Alert library | `/usr/lib/qmanager/sms_alerts.sh` |
 | AT channel | `/dev/smd11` |
 | Shared lock | `/var/lock/qmanager.lock` |
-| Alert config | `/etc/qmanager/sms_alerts.json` |
-| Alert log | `/tmp/qmanager_sms_log.json` |
 | Binary | `/usr/bin/sms_tool` (patched static armhf build) |
 | Storage boot daemon | `/usr/bin/qmanager_sms_storage` (init.d: `/etc/init.d/qmanager_sms_storage`, START=99) |
 | Reboot | Never |
@@ -183,19 +180,12 @@ Response message object shape:
 
 On `send` failure the envelope is `{ "success": false, "error": "send_failed", "detail": "<stderr>" }` (HTTP 200 with the error in the JSON body, not a 4xx status).
 
-## Alert Library (`sms_alerts.sh`)
+## SMS Channel Transport (`sms_alerts.sh`)
 
-Sourced by `qmanager_poller`. Entry point is `check_sms_alert`, called on every poll cycle.
-
-**Downtime tracking state (in-process, not persisted):**
-
-- `_sa_was_down` — whether the previous poll saw the connection down.
-- `_sa_downtime_start` — epoch second when the outage began.
-- `_sa_downtime_sms_status` — `none` | `pending` | `sent` | `failed`. Controls whether a recovery SMS is sent and which template it uses.
+Sourced by `qmanager_poller`. Downtime *detection* (the outage timer, threshold debounce, recovery-guard suppression) lives in `alert_engine.sh` — see [`docs/features/alerts.md`](alerts.md). This lib owns the SMS channel's transport: config I/O, the actual `sms_tool` send with retry, and log writing. The engine calls in via `sms_alert_emit <event> <secs>`, which returns `0` (sent), `1` (failed, terminal), or `2` (not ready — modem not registered, retry next cycle).
 
 **Guards:**
 
-- `check_sms_alert` skips entirely while `/tmp/qmanager_recovery_active` is set (mirrors `events.sh` recovery guard); downtime tracking state persists across the guard.
 - `_sa_is_registered()` short-circuits on `conn_internet_available=true` so the recovery branch is never blocked by stale `lte_state`/`nr_state`.
 
 **Failure logging:** `qlog_error` receives full context — `modem_reachable`, `lte_state`, `nr_state`, `conn`, and the cleaned `sms_tool` stderr. No breadcrumb file.
@@ -203,7 +193,7 @@ Sourced by `qmanager_poller`. Entry point is `check_sms_alert`, called on every 
 ## Phone Number Handling
 
 - Inbox CGI (`send` action): strips a leading `+` exactly once; everything else passes verbatim to `sms_tool`. Users must supply the full international number.
-- Alert config CGI: strips a leading `+` exactly once before writing to `sms_alerts.json`. Storage and GET responses always return raw digits (no leading `+`). The send path passes the stored value verbatim to `sms_tool`.
+- Alerts CGI (`monitoring/alerts.sh`): strips a leading `+` exactly once before writing to `sms_alerts.json`. Storage and GET responses always return raw digits (no leading `+`). The send path passes the stored value verbatim to `sms_tool`.
 
 ## On-Device Smoke Test
 

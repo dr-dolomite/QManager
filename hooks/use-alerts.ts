@@ -5,73 +5,56 @@ import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import type { InstallResult } from "@/types/video-optimizer";
+import type {
+  AlertsState,
+  AlertsSavePayload,
+  AlertChannel,
+} from "@/types/alerts";
 
 // =============================================================================
-// useEmailAlerts — Fetch & Save Hook for Email Alert Settings
+// useAlerts — one hook for the whole centralized Alerts surface
 // =============================================================================
-// Fetches current email alert configuration on mount.
-// Provides saveSettings for persisting changes and sendTestEmail for testing.
+// Fetches the combined {channels, routing, capabilities} state, saves it in a
+// single atomic POST, sends per-channel tests against the real send path, and
+// drives the msmtp mailer install/uninstall lifecycle for the email channel.
 //
-// Backend: GET/POST /cgi-bin/quecmanager/monitoring/email_alerts.sh
+// Backend: GET/POST /cgi-bin/quecmanager/monitoring/alerts.sh
 // =============================================================================
 
-const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/email_alerts.sh";
+const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/alerts.sh";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-export interface EmailAlertsSettings {
-  enabled: boolean;
-  sender_email: string;
-  recipient_email: string;
-  /** Stored app password (empty string if not set) */
-  app_password: string;
-  threshold_minutes: number;
-}
-
-export interface EmailAlertsSavePayload {
-  action: "save_settings";
-  enabled: boolean;
-  sender_email: string;
-  recipient_email: string;
-  /** Only included when user has typed a new password */
-  app_password?: string;
-  threshold_minutes: number;
-}
-
-export interface UseEmailAlertsReturn {
-  settings: EmailAlertsSettings | null;
-  msmtpInstalled: boolean;
+export interface UseAlertsReturn {
+  state: AlertsState | null;
   isLoading: boolean;
   isSaving: boolean;
-  isSendingTest: boolean;
+  testingChannel: AlertChannel | null;
   isUninstalling: boolean;
   installResult: InstallResult;
   error: string | null;
-  saveSettings: (payload: EmailAlertsSavePayload) => Promise<boolean>;
-  sendTestEmail: () => Promise<boolean>;
-  uninstall: () => Promise<boolean>;
+  saveSettings: (payload: AlertsSavePayload) => Promise<boolean>;
+  sendTest: (channel: AlertChannel) => Promise<boolean>;
   runInstall: () => Promise<void>;
+  uninstall: () => Promise<boolean>;
   refresh: () => void;
 }
 
-// ─── Hook ──────────────────────────────────────────────────────────────────
-
-export function useEmailAlerts(): UseEmailAlertsReturn {
+export function useAlerts(): UseAlertsReturn {
   const { t } = useTranslation("errors");
-  const [settings, setSettings] = useState<EmailAlertsSettings | null>(null);
-  const [msmtpInstalled, setMsmtpInstalled] = useState(true);
+  const [state, setState] = useState<AlertsState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testingChannel, setTestingChannel] = useState<AlertChannel | null>(
+    null,
+  );
   const [isUninstalling, setIsUninstalling] = useState(false);
   const [installResult, setInstallResult] = useState<InstallResult>({
     success: true,
     status: "idle",
   });
-  const installPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const installPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -82,121 +65,139 @@ export function useEmailAlerts(): UseEmailAlertsReturn {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Fetch current settings
+  // Fetch combined state
   // ---------------------------------------------------------------------------
-  const fetchSettings = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    setError(null);
+  const fetchState = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsLoading(true);
+      setError(null);
 
-    try {
-      const resp = await authFetch(CGI_ENDPOINT);
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      try {
+        const resp = await authFetch(CGI_ENDPOINT);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+
+        const json = await resp.json();
+        if (!mountedRef.current) return;
+
+        if (!json.success) {
+          setError(
+            resolveErrorMessage(
+              t,
+              json.error,
+              undefined,
+              "Failed to load alert settings",
+            ),
+          );
+          return;
+        }
+
+        setState({
+          channels: json.channels,
+          routing: json.routing,
+          capabilities: json.capabilities,
+        });
+      } catch (err) {
+        if (!mountedRef.current) return;
+        setError(
+          err instanceof Error ? err.message : "Failed to load alert settings",
+        );
+      } finally {
+        if (mountedRef.current && !silent) setIsLoading(false);
       }
+    },
+    [t],
+  );
 
-      const json = await resp.json();
-      if (!mountedRef.current) return;
-
-      if (!json.success) {
-        setError(resolveErrorMessage(t, json.error, undefined, "Failed to fetch email alert settings"));
-        return;
-      }
-
-      setMsmtpInstalled(json.msmtp_installed !== false);
-      setSettings(json.settings);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to fetch email alert settings",
-      );
-    } finally {
-      if (mountedRef.current && !silent) {
-        setIsLoading(false);
-      }
-    }
-  }, [t]);
-
-  // Fetch on mount
   useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+    fetchState();
+  }, [fetchState]);
 
   // ---------------------------------------------------------------------------
-  // Save settings
+  // Save (one atomic POST covering both channels + routing)
   // ---------------------------------------------------------------------------
   const saveSettings = useCallback(
-    async (payload: EmailAlertsSavePayload): Promise<boolean> => {
+    async (payload: AlertsSavePayload): Promise<boolean> => {
       setError(null);
       setIsSaving(true);
-
       try {
         const resp = await authFetch(CGI_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
 
         const json = await resp.json();
         if (!mountedRef.current) return false;
 
         if (!json.success) {
-          setError(resolveErrorMessage(t, json.error, json.detail, "Failed to save settings"));
+          setError(
+            resolveErrorMessage(
+              t,
+              json.error,
+              json.detail,
+              "Failed to save settings",
+            ),
+          );
           return false;
         }
 
-        // Silent re-fetch to sync app_password_set
-        await fetchSettings(true);
+        await fetchState(true);
         return true;
       } catch (err) {
         if (!mountedRef.current) return false;
-        setError(
-          err instanceof Error ? err.message : "Failed to save settings",
-        );
+        setError(err instanceof Error ? err.message : "Failed to save settings");
         return false;
       } finally {
-        if (mountedRef.current) {
-          setIsSaving(false);
-        }
+        if (mountedRef.current) setIsSaving(false);
       }
     },
-    [fetchSettings, t],
+    [fetchState, t],
   );
 
   // ---------------------------------------------------------------------------
-  // Send test email
+  // Per-channel test send (real path, gated on saved config by the caller)
   // ---------------------------------------------------------------------------
-  const sendTestEmail = useCallback(async (): Promise<boolean> => {
-    setIsSendingTest(true);
+  const sendTest = useCallback(
+    async (channel: AlertChannel): Promise<boolean> => {
+      setError(null);
+      setTestingChannel(channel);
+      try {
+        const resp = await authFetch(CGI_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "send_test", channel }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-    try {
-      const resp = await authFetch(CGI_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_test" }),
-      });
+        const json = await resp.json();
+        if (!mountedRef.current) return false;
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      const json = await resp.json();
-      if (!mountedRef.current) return false;
-      return json.success;
-    } catch {
-      return false;
-    } finally {
-      if (mountedRef.current) {
-        setIsSendingTest(false);
+        if (!json.success) {
+          setError(
+            resolveErrorMessage(
+              t,
+              json.error,
+              json.detail,
+              "Failed to send test",
+            ),
+          );
+          return false;
+        }
+        return true;
+      } catch (err) {
+        if (!mountedRef.current) return false;
+        setError(err instanceof Error ? err.message : "Failed to send test");
+        return false;
+      } finally {
+        if (mountedRef.current) setTestingChannel(null);
       }
-    }
-  }, []);
+    },
+    [t],
+  );
 
   // ---------------------------------------------------------------------------
-  // Install via opkg
+  // msmtp install lifecycle (email channel only)
   // ---------------------------------------------------------------------------
   const stopInstallPolling = useCallback(() => {
     if (installPollRef.current) {
@@ -218,15 +219,19 @@ export function useEmailAlerts(): UseEmailAlertsReturn {
       setInstallResult(data);
       if (data.status === "complete" || data.status === "error") {
         stopInstallPolling();
-        await fetchSettings(true);
+        await fetchState(true);
       }
     } catch {
-      // Silently retry on next poll
+      // Silently retry on the next poll tick.
     }
-  }, [stopInstallPolling, fetchSettings]);
+  }, [stopInstallPolling, fetchState]);
 
   const runInstall = useCallback(async () => {
-    setInstallResult({ success: true, status: "running", message: "Starting installation..." });
+    setInstallResult({
+      success: true,
+      status: "running",
+      message: "Starting installation...",
+    });
     try {
       await authFetch(CGI_ENDPOINT, {
         method: "POST",
@@ -239,7 +244,8 @@ export function useEmailAlerts(): UseEmailAlertsReturn {
         setInstallResult({
           success: false,
           status: "error",
-          message: err instanceof Error ? err.message : "Failed to start installation",
+          message:
+            err instanceof Error ? err.message : "Failed to start installation",
         });
       }
     }
@@ -256,10 +262,12 @@ export function useEmailAlerts(): UseEmailAlertsReturn {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
       if (!json.success) {
-        setError(resolveErrorMessage(t, json.error, json.detail, "Failed to uninstall"));
+        setError(
+          resolveErrorMessage(t, json.error, json.detail, "Failed to uninstall"),
+        );
         return false;
       }
-      await fetchSettings(true);
+      await fetchState(true);
       return true;
     } catch (err) {
       if (mountedRef.current) {
@@ -269,21 +277,20 @@ export function useEmailAlerts(): UseEmailAlertsReturn {
     } finally {
       if (mountedRef.current) setIsUninstalling(false);
     }
-  }, [fetchSettings, t]);
+  }, [fetchState, t]);
 
   return {
-    settings,
-    msmtpInstalled,
+    state,
     isLoading,
     isSaving,
-    isSendingTest,
+    testingChannel,
     isUninstalling,
     installResult,
     error,
     saveSettings,
-    sendTestEmail,
-    uninstall,
+    sendTest,
     runInstall,
-    refresh: fetchSettings,
+    uninstall,
+    refresh: fetchState,
   };
 }

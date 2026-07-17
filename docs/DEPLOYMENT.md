@@ -317,7 +317,7 @@ cat /tmp/qmanager.log | tail -20
 ├── events.sh               # Event detection
 ├── profile_mgr.sh          # Profile CRUD
 ├── tower_lock_mgr.sh       # Tower lock management
-├── email_alerts.sh         # Email alert logic
+├── email_alerts.sh         # Email channel transport (downtime detection lives in alert_engine.sh)
 └── ethtool_helper.sh       # Ethernet helpers
 
 /etc/init.d/

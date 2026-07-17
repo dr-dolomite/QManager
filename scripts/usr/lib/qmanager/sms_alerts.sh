@@ -43,15 +43,12 @@ _sa_strip_noise() {
 }
 
 # --- State (populated by sms_alerts_init / _sa_read_config) ------------------
+# Downtime tracking now lives in alert_engine.sh; this lib only owns the
+# channel transport config + send/log helpers. The engine reads _sa_enabled
+# and _sa_threshold_minutes to gate + threshold the SMS channel.
 _sa_enabled="false"
 _sa_recipient=""
 _sa_threshold_minutes=5
-
-# --- Downtime tracking (poller runtime only) ---------------------------------
-_sa_was_down="false"
-_sa_downtime_start=0
-# Values: "none" | "pending" | "sent" | "failed"
-_sa_downtime_sms_status="none"
 
 # =============================================================================
 # _sa_flock_wait - BusyBox-compatible flock with timeout (polling loop)
@@ -138,10 +135,10 @@ _sa_read_config() {
 # =============================================================================
 # If the ping daemon reports the internet reachable, the modem is by
 # definition registered and attached to a PDN — trust that over the
-# serving-cell fields, which are populated by poll_serving_cell AFTER
-# check_sms_alert runs and are therefore stale by one cycle. Without this
-# shortcut, the recovery-path SMS gets skipped whenever ping recovers before
-# the next serving-cell poll refreshes lte_state/nr_state.
+# serving-cell fields, which are populated by poll_serving_cell AFTER the
+# alert engine's local block runs and are therefore stale by one cycle. Without
+# this shortcut, the recovery-path SMS gets skipped whenever ping recovers
+# before the next serving-cell poll refreshes lte_state/nr_state.
 _sa_is_registered() {
     [ "$conn_internet_available" = "true" ] && return 0
 
@@ -175,116 +172,54 @@ sms_alerts_init() {
 }
 
 # =============================================================================
-# check_sms_alert - Called every poll cycle after detect_events
+# sms_alert_emit <event> <secs> — engine-driven send + log (one message)
 # =============================================================================
-check_sms_alert() {
-    # No alerts during scheduled low power mode
-    [ -f "/tmp/qmanager_low_power_active" ] && return 0
+# Called by alert_engine.sh once the centralized state machine decides a
+# message is warranted. The engine owns downtime tracking, thresholds, routing
+# and suppression; this function only builds the body and sends it.
+#
+# Returns:
+#   0 = message sent
+#   1 = attempted but failed (terminal — engine will not retry)
+#   2 = not ready to attempt, retry next cycle (SMS modem not yet registered)
+#
+# The connection_lost registration gate reproduces the old pending-path outer
+# guard: when the modem is not registered we return 2 WITHOUT calling
+# _sa_do_send, so its 3x retry sleeps never block the poller's local block.
+sms_alert_emit() {
+    local _sae_event="$1"
+    local _sae_secs="$2"
+    local _sae_dur
+    local _sae_body
+    local _sae_trigger
 
-    # No alerts while watchcat is actively recovering — prevents racing on
-    # stale lte_state/nr_state during AT+COPS / AT+CFUN churn. Downtime
-    # tracking state (_sa_was_down, _sa_downtime_start) persists across this
-    # guard, so the recovery-branch SMS still fires on the first cycle after
-    # watchcat exits COOLDOWN if the outage exceeded the threshold. Mirrors
-    # the same guard in events.sh::detect_data_connection_events().
-    [ "$conn_during_recovery" = "true" ] && return 0
+    _sae_dur=$(_sa_format_duration "$_sae_secs")
 
-    # Reload config on CGI signal
-    if [ -f "$_SA_RELOAD_FLAG" ]; then
-        rm -f "$_SA_RELOAD_FLAG"
-        _sa_read_config
-        qlog_info "SMS alerts config reloaded: enabled=$_sa_enabled"
-    fi
-
-    # Disabled / not configured
-    [ "$_sa_enabled" != "true" ] && return 0
-
-    # Null/stale ping state: skip only if not tracking.
-    if [ "$conn_internet_available" = "null" ] || [ -z "$conn_internet_available" ]; then
-        [ "$_sa_was_down" != "true" ] && return 0
-        # Already tracking downtime - continue for threshold/pending checks.
-    fi
-
-    if [ "$conn_internet_available" = "false" ]; then
-        # Enter downtime
-        if [ "$_sa_was_down" != "true" ]; then
-            _sa_downtime_start=$(date +%s)
-            _sa_was_down="true"
-            _sa_downtime_sms_status="none"
-            qlog_debug "SMS alerts: downtime tracking started at $_sa_downtime_start"
-        fi
-
-    elif [ "$conn_internet_available" = "true" ] && [ "$_sa_was_down" = "true" ]; then
-        # Recovery path
-        now=$(date +%s)
-        duration=$((now - _sa_downtime_start))
-        dur_text=$(_sa_format_duration "$duration")
-        threshold_secs=$((_sa_threshold_minutes * 60))
-
-        qlog_info "SMS alerts: recovery detected - duration=${duration}s status=$_sa_downtime_sms_status"
-
-        if [ "$_sa_downtime_sms_status" = "sent" ]; then
-            # Separate recovery SMS
-            body="[QManager] Connection recovered (down ${dur_text})"
-            trigger="Connection recovered (down ${dur_text})"
-            if _sa_do_send "$body"; then
-                _sa_log_event "$trigger" "sent" "$_sa_recipient"
-            else
-                _sa_log_event "$trigger" "failed" "$_sa_recipient"
+    case "$_sae_event" in
+        connection_lost)
+            if ! _sa_is_registered; then
+                qlog_debug "SMS alerts: connection_lost deferred — modem not registered"
+                return 2
             fi
-        elif [ "$duration" -ge "$threshold_secs" ]; then
-            # Dedup path only when outage actually exceeded threshold.
-            body="[QManager] Connection was down for ${dur_text}, now restored"
-            trigger="Connection was down for ${dur_text}, now restored"
-            if _sa_do_send "$body"; then
-                _sa_log_event "$trigger" "sent" "$_sa_recipient"
-            else
-                _sa_log_event "$trigger" "failed" "$_sa_recipient"
-            fi
-        else
-            qlog_info "SMS alerts: recovery below threshold (${duration}s < ${threshold_secs}s) - skipped"
-        fi
+            _sae_body="[QManager] Connection down for ${_sae_dur}"
+            _sae_trigger="Connection down for ${_sae_dur}"
+            ;;
+        connection_restored)
+            _sae_body="[QManager] Connection recovered after ${_sae_dur}"
+            _sae_trigger="Connection recovered after ${_sae_dur}"
+            ;;
+        *)
+            qlog_warn "SMS alerts: unknown event '$_sae_event'"
+            return 1
+            ;;
+    esac
 
-        # Reset tracking
-        _sa_was_down="false"
-        _sa_downtime_start=0
-        _sa_downtime_sms_status="none"
+    if _sa_do_send "$_sae_body"; then
+        _sa_log_event "$_sae_trigger" "sent" "$_sa_recipient"
         return 0
     fi
-
-    # Promote "none" -> "pending" when threshold exceeded
-    if [ "$_sa_was_down" = "true" ] && [ "$_sa_downtime_sms_status" = "none" ]; then
-        now=$(date +%s)
-        elapsed=$((now - _sa_downtime_start))
-        threshold_secs=$((_sa_threshold_minutes * 60))
-
-        if [ "$elapsed" -ge "$threshold_secs" ]; then
-            _sa_downtime_sms_status="pending"
-            qlog_info "SMS alerts: threshold exceeded (${elapsed}s >= ${threshold_secs}s), marking pending"
-        fi
-    fi
-
-    # Pending path: attempt downtime-start send only when registered
-    if [ "$_sa_was_down" = "true" ] && [ "$_sa_downtime_sms_status" = "pending" ]; then
-        if _sa_is_registered; then
-            now=$(date +%s)
-            duration=$((now - _sa_downtime_start))
-            dur_text=$(_sa_format_duration "$duration")
-            body="[QManager] Connection down ${dur_text}"
-            trigger="Connection down ${dur_text}"
-
-            qlog_info "SMS alerts: attempting downtime-start send (registered)"
-            if _sa_do_send "$body"; then
-                _sa_downtime_sms_status="sent"
-                _sa_log_event "$trigger" "sent" "$_sa_recipient"
-            else
-                _sa_downtime_sms_status="failed"
-                _sa_log_event "$trigger" "failed" "$_sa_recipient"
-            fi
-        else
-            qlog_debug "SMS alerts: pending downtime send, modem not registered - waiting"
-        fi
-    fi
+    _sa_log_event "$_sae_trigger" "failed" "$_sa_recipient"
+    return 1
 }
 
 # =============================================================================

@@ -936,94 +936,85 @@ Get the currently active scenario.
 
 ## Monitoring
 
-### GET/POST `/monitoring/email_alerts.sh`
+### GET/POST `/monitoring/alerts.sh`
+
+Unified endpoint for the centralized Alerts page — replaces the four retired endpoints `monitoring/email_alerts.sh`, `monitoring/sms_alerts.sh`, `monitoring/email_alert_log.sh`, `monitoring/sms_alert_log.sh` (deleted; actively removed from installed devices on upgrade). See [`docs/features/alerts.md`](features/alerts.md) for the routing/capability model, the poller-sourced detection engine, and the rc-contract between the engine and the channel libs.
 
 **GET Response:**
 ```json
 {
   "success": true,
-  "settings": {
-    "enabled": true,
-    "sender_email": "alerts@gmail.com",
-    "recipient_email": "admin@example.com",
-    "app_password_set": true,
-    "threshold_minutes": 5
-  }
-}
-```
-
-**POST (save settings):**
-```json
-{
-  "action": "save_settings",
-  "enabled": true,
-  "sender_email": "alerts@gmail.com",
-  "recipient_email": "admin@example.com",
-  "app_password": "xxxx xxxx xxxx xxxx",
-  "threshold_minutes": 5
-}
-```
-`app_password` only sent when changed. Backend returns `app_password_set: boolean` (never the actual password).
-
-**POST (send test):**
-```json
-{ "action": "send_test" }
-```
-
-### GET `/monitoring/email_alert_log.sh`
-
-```json
-{
-  "success": true,
-  "entries": [
-    {
-      "timestamp": 1710700000,
-      "trigger": "downtime_recovery",
-      "status": "sent",
-      "recipient": "admin@example.com"
+  "channels": {
+    "sms": {
+      "enabled": true,
+      "recipient_phone": "14155551234",
+      "threshold_minutes": 5,
+      "configured": true
+    },
+    "email": {
+      "enabled": true,
+      "sender_email": "alerts@gmail.com",
+      "recipient_email": "admin@example.com",
+      "app_password_set": true,
+      "threshold_minutes": 5,
+      "msmtp_installed": true,
+      "configured": true
     }
-  ],
-  "total": 5
-}
-```
-
-### GET/POST `/monitoring/sms_alerts.sh`
-
-**GET Response:**
-```json
-{
-  "success": true,
-  "settings": {
-    "enabled": true,
-    "recipient_phone": "14155551234",
-    "threshold_minutes": 5
+  },
+  "routing": {
+    "events": {
+      "connection_lost":     { "sms": true, "email": false },
+      "connection_restored": { "sms": true, "email": true }
+    }
+  },
+  "capabilities": {
+    "connection_lost":     { "sms": true, "email": false, "email_reason": "email_needs_internet" },
+    "connection_restored": { "sms": true, "email": true }
   }
 }
 ```
+`email.app_password_set` is a boolean — the cleartext password is never returned by GET.
 
-**POST (save settings):**
+**POST (save settings)** — writes SMS + email + routing in one atomic call:
 ```json
 {
   "action": "save_settings",
-  "enabled": true,
-  "recipient_phone": "+14155551234",
-  "threshold_minutes": 5
+  "sms":   { "enabled": true, "recipient_phone": "+14155551234", "threshold_minutes": 5 },
+  "email": { "enabled": true, "sender_email": "alerts@gmail.com", "recipient_email": "admin@example.com",
+             "app_password": "xxxx xxxx xxxx xxxx", "threshold_minutes": 5 },
+  "routing": {
+    "events": {
+      "connection_lost":     { "sms": true, "email": false },
+      "connection_restored": { "sms": true, "email": true }
+    }
+  }
 }
 ```
+Validation notes:
+- `recipient_phone` accepts E.164 with or without a leading `+`; the CGI strips a leading `+` exactly once before writing `sms_alerts.json` — **storage and GET responses always return raw digits**. The send path passes the value verbatim to `sms_tool`.
+- `threshold_minutes` (both channels) range is `1..60`.
+- `app_password` is only sent when the user typed a new one; an empty/omitted value preserves the currently-stored password.
+- `routing.events.connection_lost.email` is **always clamped to `false` server-side** regardless of what is posted — email cannot deliver while the internet is down. This is the capability layer, not a routing preference; see the feature doc.
 
 **POST (send test):**
 ```json
-{ "action": "send_test" }
+{ "action": "send_test", "channel": "sms" }
 ```
+`channel` is `"sms"` or `"email"`. Requires that channel be `enabled` (not just filled in). SMS failures return `"error":"send_failed"` with detail `"sms_tool send failed — check logread for details"`; full context is logged via `qlog_error`.
 
-Validation notes:
-- `recipient_phone` is required when `enabled=true`
-- Accepts E.164 format with **or** without a leading `+` on input. The CGI strips a leading `+` exactly once before writing `sms_alerts.json`, so **storage and GET responses always return raw digits**. The send path passes the value verbatim to `sms_tool`.
-- `threshold_minutes` range is `1..60`
-- Test-send failures return `"error":"send_failed"` with a static `"detail":"sms_tool send failed — check logread for details"`. Full context (modem state, `sms_tool` stderr) is logged via `qlog_error`.
+**POST (mailer lifecycle):**
+```json
+{ "action": "install" }
+{ "action": "install_status" }
+{ "action": "uninstall" }
+```
+`install` installs `msmtp` via `opkg` in the background (poll with `install_status`). `uninstall` is refused with `"error":"still_enabled"` while email alerts are still enabled.
 
-### GET `/monitoring/sms_alert_log.sh`
-
+**POST (merged activity log):**
+```json
+{ "action": "get_log" }
+```
+Response:
 ```json
 {
   "success": true,
@@ -1032,14 +1023,14 @@ Validation notes:
       "timestamp": "2026-04-10 15:27:04",
       "trigger": "Connection down 5m 2s",
       "status": "sent",
-      "recipient": "14155551234"
+      "recipient": "14155551234",
+      "channel": "sms"
     }
   ],
   "total": 3
 }
 ```
-
-Note: `recipient` mirrors the stored form in `sms_alerts.json` — raw digits, no leading `+`.
+Merges both channels' NDJSON logs, tags each entry with `channel: "sms"|"email"`, sorts by timestamp, returns newest-first, capped at 100. `recipient` mirrors the stored form (SMS: raw digits, no leading `+`).
 
 ### GET/POST `/monitoring/bandwidth.sh`
 
@@ -1484,7 +1475,7 @@ Collects the plaintext sections selected by the user, ready for browser-side enc
 
 **Query parameters:**
 
-- `sections` — comma-separated list of section keys. Valid keys: `sms_alerts`, `watchdog`, `network_mode_apn`, `bands`, `tower_lock`, `ttl_hl`, `imei`, `profiles`. Unknown keys return 400.
+- `sections` — comma-separated list of section keys. Valid keys: `sms_alerts`, `alert_routing`, `watchdog`, `network_mode_apn`, `bands`, `tower_lock`, `ttl_hl`, `imei`, `profiles`. Unknown keys return 400.
 
 **Response:**
 

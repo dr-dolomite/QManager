@@ -75,8 +75,7 @@ The `out/` directory contains the complete frontend — deploy it to the OpenWRT
 - **Custom SIM Profiles** — Save and apply multi-step configurations (APN + TTL + IMEI)
 - **IMEI Toolkit** — Generate and validate IMEI values with TAC presets and Luhn checks
 - **Connection Watchdog** — 4-tier auto-recovery: ifup, CFUN toggle, SIM failover, reboot
-- **Email Alerts** — Downtime notifications via Gmail SMTP on recovery
-- **SMS Alerts** — Downtime notifications via cellular control channel during active outages
+- **Alerts** — Centralized SMS + email connection-lost/restored notifications with a per-event routing matrix (SMS via cellular control channel, email via Gmail SMTP)
 - **Latency Monitoring** — Real-time ping with 24-hour history and aggregated views
 - **Cell Scanner** — Active and neighbor cell scanning with frequency calculator
 - **Network Settings** — Ethernet link speed, TTL/HL, MTU, DNS, IP passthrough

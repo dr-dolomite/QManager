@@ -29,15 +29,14 @@ _EA_RELOAD_FLAG="/tmp/qmanager_email_reload"
 _EA_MAX_LOG=100
 
 # --- State (populated by email_alerts_init / _ea_read_config) ----------------
+# Downtime tracking now lives in alert_engine.sh; this lib only owns the
+# channel transport config + send/log helpers. The engine reads _ea_enabled
+# and _ea_threshold_minutes to gate + threshold the email channel.
 _ea_enabled="false"
 _ea_sender=""
 _ea_recipient=""
 _ea_app_password=""
 _ea_threshold_minutes=5
-
-# --- Downtime tracking (poller runtime only) ---------------------------------
-_ea_was_down="false"
-_ea_downtime_start=0
 
 # =============================================================================
 # _ea_read_config — Read settings from config JSON
@@ -79,97 +78,52 @@ email_alerts_init() {
 }
 
 # =============================================================================
-# check_email_alert — Called every poll cycle after detect_events
+# email_alert_emit <event> <secs> — engine-driven send + log (one message)
 # =============================================================================
-# Reads conn_internet_available (global from poller).
-# Tracks downtime start, sends recovery email when internet returns after
-# a downtime that exceeded the configured threshold.
-# =============================================================================
-check_email_alert() {
-    # No alerts during scheduled low power mode
-    [ -f "/tmp/qmanager_low_power_active" ] && return 0
+# Called by alert_engine.sh. The engine owns downtime tracking, thresholds,
+# routing and suppression (including the conn_during_recovery gate email used
+# to be missing). This function only builds + sends.
+#
+# connection_lost is NEVER routed to email (email is incapable during an
+# outage — no internet/DNS), so it is a deliberate no-op success. Only
+# connection_restored builds and sends the recovery email.
+#
+# Returns: 0 = sent (or intentional no-op), 1 = send failed.
+email_alert_emit() {
+    local event="$1"
+    local secs="$2"
+    local start_epoch
+    local start_time
+    local dur_text
+    local html
+    local trigger_text
+    local attempt
+    local max_attempts
+    local retry_delay
 
-    # Check for reload flag (CGI saved new settings)
-    if [ -f "$_EA_RELOAD_FLAG" ]; then
-        rm -f "$_EA_RELOAD_FLAG"
-        _ea_read_config
-        qlog_info "Email alerts config reloaded: enabled=$_ea_enabled"
-    fi
-
-    # Skip if disabled or not fully configured
-    [ "$_ea_enabled" != "true" ] && return 0
-
-    # Null/stale ping state: skip ONLY if not already tracking downtime.
-    # If we're already tracking, stale data likely means the poller was stuck
-    # on AT commands during an outage — keep the downtime timer running.
-    if [ "$conn_internet_available" = "null" ] || [ -z "$conn_internet_available" ]; then
-        [ "$_ea_was_down" != "true" ] && return 0
-        # Already tracking downtime — keep going (don't reset)
+    if [ "$event" != "connection_restored" ]; then
+        # Not capable/routed for connection_lost — nothing to send.
         return 0
     fi
 
-    if [ "$conn_internet_available" = "false" ]; then
-        # Internet is down — record start time if not already tracking
-        if [ "$_ea_was_down" != "true" ]; then
-            _ea_downtime_start=$(date +%s)
-            _ea_was_down="true"
-            qlog_debug "Email alerts: downtime tracking started at $_ea_downtime_start"
-        fi
-
-    elif [ "$conn_internet_available" = "true" ] && [ "$_ea_was_down" = "true" ]; then
-        # Internet recovered — check if downtime exceeded threshold
-        local now
-        local duration
-        local threshold_secs
-        now=$(date +%s)
-        duration=$((now - _ea_downtime_start))
-        threshold_secs=$((_ea_threshold_minutes * 60))
-
-        qlog_info "Email alerts: recovery detected — measured downtime=${duration}s, threshold=${threshold_secs}s"
-
-        if [ "$duration" -ge "$threshold_secs" ]; then
-            qlog_info "Email alerts: threshold exceeded, sending recovery email"
-            _ea_send_recovery_email "$_ea_downtime_start" "$duration"
-        else
-            qlog_info "Email alerts: downtime ${duration}s < threshold ${threshold_secs}s — skipped (ping debounce eats ~25s)"
-        fi
-
-        # Reset tracking
-        _ea_was_down="false"
-        _ea_downtime_start=0
-    fi
-}
-
-# =============================================================================
-# _ea_send_recovery_email — Format and send recovery notification
-# =============================================================================
-_ea_send_recovery_email() {
-    local start_epoch="$1"
-    local duration_secs="$2"
-
-    # Format start time
-    # BusyBox date supports -d @epoch on most builds; fall back to awk strftime
-    # (date -r is macOS/FreeBSD only — not available on BusyBox)
-    local start_time
+    # The engine measures duration with the monotonic clock. The email body
+    # only needs a human-readable start stamp, so reconstruct it from wall-clock
+    # now minus the outage duration. A NITZ step during the outage can skew this
+    # display value slightly, but it never affects whether the email is sent
+    # (that decision was already made monotonically upstream).
+    start_epoch=$(( $(date +%s) - secs ))
     start_time=$(date -d "@$start_epoch" "+%Y-%m-%d %H:%M:%S" 2>/dev/null) || \
         start_time=$(awk "BEGIN{print strftime(\"%Y-%m-%d %H:%M:%S\",$start_epoch)}" 2>/dev/null) || \
         start_time="$start_epoch"
 
-    # Format duration
-    local dur_text
-    dur_text=$(_ea_format_duration "$duration_secs")
-
-    # Build HTML email
-    local html
+    dur_text=$(_ea_format_duration "$secs")
     html=$(_ea_build_recovery_html "$start_time" "$dur_text" "$_ea_threshold_minutes")
+    trigger_text="Connection recovered (down ${dur_text})"
 
     # Send with retry — DNS may not be ready immediately after recovery.
-    # Recovery emails fire at the moment connectivity returns, but the DNS
-    # resolver often needs a few more seconds to stabilize.
-    local trigger_text="Connection recovered (down ${dur_text})"
-    local attempt=0
-    local max_attempts=3
-    local retry_delay=10
+    attempt=0
+    max_attempts=3
+    retry_delay=10
 
     while [ "$attempt" -lt "$max_attempts" ]; do
         attempt=$((attempt + 1))
@@ -181,7 +135,7 @@ _ea_send_recovery_email() {
 
         if _ea_do_send "Connection Recovered" "$html"; then
             _ea_log_event "$trigger_text" "sent" "$_ea_recipient"
-            return
+            return 0
         fi
 
         qlog_warn "Email alerts: send attempt $attempt/$max_attempts failed"
@@ -189,6 +143,7 @@ _ea_send_recovery_email() {
 
     qlog_error "Email alerts: all $max_attempts send attempts failed"
     _ea_log_event "$trigger_text" "failed" "$_ea_recipient"
+    return 1
 }
 
 # =============================================================================

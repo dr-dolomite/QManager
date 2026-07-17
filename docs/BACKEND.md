@@ -214,20 +214,36 @@ Tower lock state management:
 - Lock/unlock AT commands
 - Schedule management
 
+### alert_routing.sh
+
+Trigger×channel routing + capability library for the centralized Alerts feature (sourced by poller and by `monitoring/alerts.sh`):
+- Owns `/etc/qmanager/alert_routing.json` (routing matrix, user preference)
+- `alert_capable <event> <channel>` — hard-coded capability table; the only incapable pair is `connection_lost/email` (email needs internet+DNS, both down during an outage)
+- `alert_route_enabled <event> <channel>` — routing AND capability gate
+- `alert_routing_load` re-clamps `connection_lost.email` to `false` on every load regardless of the file contents (fail-closed)
+
+### alert_engine.sh
+
+One centralized downtime state machine (sourced by poller, last in the alert-lib sourcing chain), replacing the two duplicated per-channel state machines that used to live in `sms_alerts.sh`/`email_alerts.sh`:
+- `alert_engine_check` — per-cycle entry point, called from the poller's always-every-cycle local block (before any AT work)
+- Downtime timer uses the monotonic clock (`mono_now`, not wall-clock epoch) so an SSR-driven NITZ time step can't corrupt it
+- Suppresses both channels during low-power mode and watchdog recovery churn (`conn_during_recovery`) — the old `check_email_alert` was missing this guard
+- Dispatches sends via `sms_alert_emit`/`email_alert_emit <event> <secs>`, which return an rc contract of `0` (sent), `1` (failed, terminal), `2` (not ready, retry next cycle)
+- See [`docs/features/alerts.md`](features/alerts.md) for the full routing/capability model and clock-step rationale
+
 ### email_alerts.sh
 
-Downtime email alert logic (sourced by poller):
-- Config management (`/etc/qmanager/msmtprc`)
-- Alert triggering on recovery (not during downtime)
+Email channel transport library (sourced by poller; downtime detection now lives in `alert_engine.sh`):
+- Config management (`/etc/qmanager/email_alerts.json`, `/etc/qmanager/msmtprc`)
+- `email_alert_emit <event> <secs>` — builds and sends the HTML recovery email via msmtp; a `connection_lost` call is a deliberate no-op (email is never capable during an outage)
 - Log writing to `/tmp/qmanager_email_log.json`
 
 ### sms_alerts.sh
 
-Downtime SMS alert logic (sourced by poller):
+SMS channel transport library (sourced by poller; downtime detection now lives in `alert_engine.sh`):
 - Config management (`/etc/qmanager/sms_alerts.json`; recipient stored as raw digits, no leading `+`)
-- Alert triggering during active downtime after threshold (pending path) and on recovery
+- `sms_alert_emit <event> <secs>` — builds and sends via `sms_tool`; returns `2` (not ready to retry) when `_sa_is_registered()` fails rather than attempting a send
 - `_sa_is_registered()` short-circuits on `conn_internet_available=true` so the recovery branch is never blocked by stale `lte_state`/`nr_state`
-- `check_sms_alert` skips entirely while `/tmp/qmanager_recovery_active` is set (mirrors `events.sh` recovery guard); downtime tracking state persists across the guard
 - `sms_tool send` runs under the shared `/var/lock/qmanager.lock` so it serializes against `qcmd`/`atcli_smd11`
 - Test-send helper for CGI (`send_test` action)
 - Log writing to `/tmp/qmanager_sms_log.json`
@@ -304,8 +320,7 @@ The core daemon — runs forever, polls the modem at tiered intervals.
 - Detect and emit network events via `events.sh`
 - Manage signal/ping history NDJSON files
 - Read ping daemon and watchcat status
-- Trigger email alerts on recovery via `email_alerts.sh`
-- Trigger SMS alerts during active outages via `sms_alerts.sh`
+- Run the centralized alert engine (`alert_engine_check`, every cycle) to detect connection-lost/restored events and dispatch SMS/email via `sms_alerts.sh`/`email_alerts.sh`, gated by `alert_routing.sh`'s routing + capability matrix
 
 **Tier System:**
 
@@ -648,10 +663,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 
 | Script | Method | Description |
 |--------|--------|-------------|
-| `email_alerts.sh` | GET/POST | Email alert settings |
-| `email_alert_log.sh` | GET | Email alert history |
-| `sms_alerts.sh` | GET/POST | SMS alert settings + test send |
-| `sms_alert_log.sh` | GET | SMS alert history |
+| `alerts.sh` | GET/POST | Centralized SMS + email connection alerts: settings, routing matrix, capability matrix, test send, merged activity log |
 | `watchdog.sh` | GET/POST | Watchdog settings and status |
 
 #### Device (`device/`)
@@ -715,6 +727,8 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `band_lock.json` | Band lock configuration |
 | `imei_backup.json` | IMEI backup config (`{ enabled, imei }`) |
 | `sms_alerts.json` | SMS alert settings (`{ enabled, recipient_phone, threshold_minutes }`). `recipient_phone` is stored as raw digits with no leading `+` — the CGI save handler normalizes input before writing. |
+| `email_alerts.json` | Email alert settings (`{ enabled, sender_email, recipient_email, app_password, threshold_minutes }`). |
+| `alert_routing.json` | Trigger×channel routing matrix (`{ version, events: { connection_lost, connection_restored } }`); `connection_lost.email` is always clamped to `false`. See [`docs/features/alerts.md`](features/alerts.md). |
 | `last_iccid` | Last seen SIM ICCID (for swap detection) |
 | `msmtprc` | Gmail SMTP config (chmod 600) |
 | `imei_check_pending` | Flag for boot-time IMEI check |
