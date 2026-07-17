@@ -51,8 +51,7 @@ app/                            # Next.js App Router
 ├── monitoring/                 # Monitoring & alerts
 │   ├── page.tsx                # Network events hub
 │   ├── latency/                # Latency monitoring
-│   ├── email-alerts/           # Email alert settings
-│   ├── sms-alerts/             # SMS alert settings and log
+│   ├── alerts/                 # Centralized SMS + email connection alerts
 │   ├── watchdog/               # Watchdog settings
 │   ├── logs/                   # System logs
 │   └── tailscale/              # Tailscale VPN
@@ -122,8 +121,7 @@ constants/                      # Static configuration data
 | `/local-network/custom-dns` | CustomDNS | DNS override |
 | `/monitoring` | NetworkEvents | Event log hub |
 | `/monitoring/latency` | LatencyMonitoring | Real-time + history charts |
-| `/monitoring/email-alerts` | EmailAlerts | Downtime alert settings |
-| `/monitoring/sms-alerts` | SmsAlerts | SMS alert settings and send log |
+| `/monitoring/alerts` | Alerts | Centralized SMS + email connection alerts (routing matrix + capability, readiness status, merged log) |
 | `/monitoring/watchdog` | Watchdog | Connection health |
 | `/monitoring/logs` | SystemLogs | Log viewer |
 | `/monitoring/tailscale` | Tailscale | VPN status |
@@ -210,8 +208,8 @@ if (result.success) { /* toast success */ }
 | `useMTUSettings` | `/network/mtu.sh` | — |
 | `useDNSSettings` | `/network/dns.sh` | — |
 | `useIPPassthrough` | `/network/ip_passthrough.sh` | `ip-passthrough.ts` |
-| `useEmailAlerts` | `/monitoring/email_alerts.sh` | In hook file |
-| `useSmsAlerts` | `/monitoring/sms_alerts.sh` | In hook file |
+| `useAlerts` | `/monitoring/alerts.sh` | `alerts.ts` |
+| `useAlertsLog` | `/monitoring/alerts.sh` (`action: "get_log"`) | `alerts.ts` |
 | `useWatchdogSettings` | `/monitoring/watchdog.sh` | In hook file |
 | `useSystemSettings` | `/system/settings.sh` | `system-settings.ts` |
 | `useTailscale` | `/vpn/tailscale.sh` | — |
@@ -449,7 +447,7 @@ The sidebar (`app-sidebar.tsx`) defines the full navigation structure:
 | **Main** | Home (Dashboard) |
 | **Cellular** | Cellular Info, SMS, Custom Profiles (+ Connection Scenarios), Band Locking (+ Tower, Frequency), Cell Scanner (+ Neighbor, Calculator), Settings (+ APN, Network Priority, IMEI, FPLMN) |
 | **Local Network** | Ethernet Status, IP Passthrough, Custom DNS, TTL & MTU Settings |
-| **Monitoring** | Network Events (+ Latency), Email Alerts, SMS Alerts, Tailscale, Watchdog, Logs |
+| **Monitoring** | Network Events (+ Latency), Alerts, Tailscale, Watchdog, Logs |
 | **System** | System Settings |
 | **Secondary** | About Device, Support, Donate |
 | **Footer** | User menu (Change Password, Toggle Theme, Reboot Device, Logout) |

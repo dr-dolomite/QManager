@@ -34,7 +34,9 @@ _CFG_BACKUP_SECTIONS_LOADED=1
 }
 
 # --- Canonical apply order (safe first, IMEI/profiles last) ---
-CFG_BACKUP_APPLY_ORDER="sms_alerts watchdog network_mode_apn bands tower_lock ttl_hl imei profiles"
+# alert_routing sits with sms_alerts (both are trivial, safe JSON writes) so the
+# two alert-config sections restore together, ahead of the risky AT/IMEI work.
+CFG_BACKUP_APPLY_ORDER="sms_alerts alert_routing watchdog network_mode_apn bands tower_lock ttl_hl imei profiles"
 
 # --- Known section keys (used for validation) ---
 CFG_BACKUP_KNOWN_SECTIONS="$CFG_BACKUP_APPLY_ORDER"
@@ -51,6 +53,7 @@ cfg_backup_collect() {
     local key="$1"
     case "$key" in
         sms_alerts)       collect_sms_alerts ;;
+        alert_routing)    collect_alert_routing ;;
         watchdog)         collect_watchdog ;;
         network_mode_apn) collect_network_mode_apn ;;
         bands)            collect_bands ;;
@@ -67,6 +70,7 @@ cfg_backup_apply() {
     local key="$1"
     case "$key" in
         sms_alerts)       apply_sms_alerts ;;
+        alert_routing)    apply_alert_routing ;;
         watchdog)         apply_watchdog ;;
         network_mode_apn) apply_network_mode_apn ;;
         bands)            apply_bands ;;
@@ -111,6 +115,52 @@ apply_sms_alerts() {
     mv "$tmp" "$cfg" || return 1
     # Signal poller to reload
     touch /tmp/qmanager_sms_reload
+    return 0
+}
+
+# =============================================================================
+# Alert Routing — /etc/qmanager/alert_routing.json + reload flag
+# =============================================================================
+# Additive section. The on-disk shapes of sms_alerts.json / email_alerts.json
+# are untouched; only the routing matrix is backed up here. Booleans use the
+# null-safe "if . == null" form, never `//`, so a genuine `false` survives.
+collect_alert_routing() {
+    local cfg="/etc/qmanager/alert_routing.json"
+    if [ ! -f "$cfg" ]; then
+        # No file → emit the canonical default so restore is deterministic.
+        echo '{"version":1,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true}}}'
+        return 0
+    fi
+    jq -c '{version: (.version // 1),
+            events: {
+                connection_lost: {
+                    sms:   (if (.events.connection_lost.sms) == null then true else (.events.connection_lost.sms) end),
+                    email: false
+                },
+                connection_restored: {
+                    sms:   (if (.events.connection_restored.sms) == null then true else (.events.connection_restored.sms) end),
+                    email: (if (.events.connection_restored.email) == null then true else (.events.connection_restored.email) end)
+                }
+            }}' "$cfg"
+}
+
+apply_alert_routing() {
+    local cfg="/etc/qmanager/alert_routing.json"
+    local input
+    input=$(cat)
+    # Validate structure (events object present)
+    echo "$input" | jq -e '.events' >/dev/null 2>&1 || {
+        qlog_error "apply_alert_routing: invalid input"
+        return 1
+    }
+    mkdir -p /etc/qmanager
+    local tmp="${cfg}.tmp.$$"
+    # Re-clamp connection_lost.email to false (server is authoritative — email
+    # can never deliver during an outage regardless of what the backup holds).
+    echo "$input" | jq '.events.connection_lost.email = false' > "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$cfg" || return 1
+    # Signal the running poller to reload routing next cycle
+    touch /tmp/qmanager_alert_routing_reload
     return 0
 }
 

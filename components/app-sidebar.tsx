@@ -190,8 +190,7 @@ const data = {
       icon: PieChart,
       items: [
         { t_key: "latency_monitor", url: "/monitoring/latency" },
-        { t_key: "email_alerts", url: "/monitoring/email-alerts" },
-        { t_key: "sms_alerts", url: "/monitoring/sms-alerts" },
+        { t_key: "alerts", url: "/monitoring/alerts" },
       ],
     },
     { t_key: "tailscale", url: "/monitoring/tailscale", icon: WaypointsIcon },

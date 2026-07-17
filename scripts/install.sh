@@ -1090,6 +1090,18 @@ install_backend() {
         local cgi_count
         cgi_count=$(find "$CGI_DIR" -name "*.sh" -type f 2>/dev/null | wc -l | tr -d ' ')
         info "CGI endpoints: $cgi_count scripts -> $CGI_DIR"
+
+        # Retired alert CGIs superseded by monitoring/alerts.sh. Unconditional
+        # (harmless no-op on fresh installs; drops stale device copies on
+        # upgrade so the old endpoints stop answering). Runs AFTER install_tree,
+        # which no longer ships these four files.
+        local _stale
+        for _stale in sms_alerts.sh email_alerts.sh sms_alert_log.sh email_alert_log.sh; do
+            if [ -f "$CGI_DIR/monitoring/$_stale" ]; then
+                rm -f "$CGI_DIR/monitoring/$_stale"
+                info "  Removed retired CGI: monitoring/$_stale"
+            fi
+        done
     fi
 
     # --- Init.d services (flat) ---
@@ -1146,6 +1158,26 @@ install_backend() {
             cp "$SRC_SCRIPTS/etc/qmanager/supported_bands_hw.env" "$CONF_DIR/supported_bands_hw.env"
             info "  Force-deployed hardware band capability: supported_bands_hw.env"
         fi
+    fi
+
+    # --- Seed centralized alert routing (idempotent — never overwrite) ---
+    # New additive file; absence would fail-close to the same defaults, but
+    # seeding it makes the routing visible/editable from first boot. Sourced in
+    # a subshell so the lib's globals don't leak into the installer namespace.
+    if [ ! -f "$CONF_DIR/alert_routing.json" ]; then
+        local _ar_seed=""
+        if [ -f "$LIB_DIR/alert_routing.sh" ]; then
+            _ar_seed=$( . "$LIB_DIR/alert_routing.sh" 2>/dev/null && alert_default_routing_json 2>/dev/null )
+        fi
+        case "$_ar_seed" in
+            '{'*'}')
+                printf '%s\n' "$_ar_seed" > "$CONF_DIR/alert_routing.json"
+                info "  Seeded default alert routing: alert_routing.json"
+                ;;
+            *)
+                warn "  Could not seed alert_routing.json (alert_routing.sh missing?) — routing will fail-close to defaults"
+                ;;
+        esac
     fi
 
     # UCI config stub

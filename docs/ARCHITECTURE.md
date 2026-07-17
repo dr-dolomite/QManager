@@ -164,7 +164,7 @@ Auth endpoints use `_SKIP_AUTH=1` to bypass the automatic auth check in `cgi_bas
 ```
 init.d/qmanager (procd)
   └── qmanager_poller (main loop, runs forever)
-  ├── sources: events.sh, email_alerts.sh, sms_alerts.sh, parse_at.sh
+  ├── sources: events.sh, email_alerts.sh, sms_alerts.sh, alert_routing.sh, alert_engine.sh, parse_at.sh
        └── reads: qmanager_ping.json, qmanager_watchcat.json
 
 init.d/qmanager (procd)
@@ -282,6 +282,8 @@ The apply process runs asynchronously via `qmanager_profile_apply` daemon. The f
 | Band lock config | `/etc/qmanager/band_lock.json` | JSON |
 | IMEI backup config | `/etc/qmanager/imei_backup.json` | JSON |
 | SMS alerts config | `/etc/qmanager/sms_alerts.json` | JSON |
+| Email alerts config | `/etc/qmanager/email_alerts.json` | JSON |
+| Alert routing matrix | `/etc/qmanager/alert_routing.json` | JSON |
 | Last SIM ICCID | `/etc/qmanager/last_iccid` | Plain text |
 | Email SMTP config | `/etc/qmanager/msmtprc` | msmtp config (chmod 600) |
 | TTL/HL rules | `/etc/firewall.user.ttl` | Shell commands (iptables) |

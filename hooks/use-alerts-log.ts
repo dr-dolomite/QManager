@@ -5,36 +5,28 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
+import type { AlertLogEntry } from "@/types/alerts";
 
 // =============================================================================
-// useSmsAlertLog — Fetch Hook for SMS Alert Log Entries
+// useAlertsLog — merged SMS + email alert history
 // =============================================================================
-// Fetches SMS alert log entries on mount.
-// Supports manual refresh and silent re-fetch (e.g. after sending a test SMS).
+// Posts { action: "get_log" } to the unified CGI, which merges both channels'
+// NDJSON logs, tags each entry with its channel, and returns newest-first.
 //
-// Backend: GET /cgi-bin/quecmanager/monitoring/sms_alert_log.sh
+// Backend: POST /cgi-bin/quecmanager/monitoring/alerts.sh { action: "get_log" }
 // =============================================================================
 
-const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/sms_alert_log.sh";
+const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/alerts.sh";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-export interface SmsLogEntry {
-  timestamp: string;
-  trigger: string;
-  status: "sent" | "failed";
-  recipient: string;
-}
-
-interface SmsLogResponse {
+interface AlertsLogResponse {
   success: boolean;
-  entries: SmsLogEntry[];
+  entries: AlertLogEntry[];
   total: number;
   error?: string;
 }
 
-export interface UseSmsAlertLogReturn {
-  entries: SmsLogEntry[];
+export interface UseAlertsLogReturn {
+  entries: AlertLogEntry[];
   total: number;
   isLoading: boolean;
   isRefreshing: boolean;
@@ -44,11 +36,9 @@ export interface UseSmsAlertLogReturn {
   silentRefresh: () => void;
 }
 
-// ─── Hook ──────────────────────────────────────────────────────────────────
-
-export function useSmsAlertLog(): UseSmsAlertLogReturn {
+export function useAlertsLog(): UseAlertsLogReturn {
   const { t } = useTranslation("errors");
-  const [entries, setEntries] = useState<SmsLogEntry[]>([]);
+  const [entries, setEntries] = useState<AlertLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,11 +65,14 @@ export function useSmsAlertLog(): UseSmsAlertLogReturn {
 
       try {
         const resp = await authFetch(CGI_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "get_log" }),
           signal: controller.signal,
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-        const data: SmsLogResponse = await resp.json();
+        const data: AlertsLogResponse = await resp.json();
         if (controller.signal.aborted) return;
 
         if (data.success) {
@@ -87,14 +80,19 @@ export function useSmsAlertLog(): UseSmsAlertLogReturn {
           setTotal(data.total);
           setLastFetched(new Date());
         } else {
-          const msg = resolveErrorMessage(t, data.error, undefined, "Failed to load SMS log");
+          const msg = resolveErrorMessage(
+            t,
+            data.error,
+            undefined,
+            "Failed to load alert log",
+          );
           setError(msg);
           if (mode !== "silent") toast.error(msg);
         }
       } catch (err) {
         if (controller.signal.aborted) return;
         const msg =
-          err instanceof Error ? err.message : "Failed to load SMS alert log";
+          err instanceof Error ? err.message : "Failed to load alert log";
         setError(msg);
         if (mode !== "silent") toast.error(msg);
       } finally {
@@ -107,7 +105,6 @@ export function useSmsAlertLog(): UseSmsAlertLogReturn {
     [t],
   );
 
-  // Fetch on mount
   useEffect(() => {
     fetchLog("initial");
   }, [fetchLog]);

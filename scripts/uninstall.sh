@@ -394,6 +394,10 @@ remove_backend() {
         rm -f /etc/qmanager/supported_bands_hw.env
         info "Removed /etc/qmanager/supported_bands_hw.env (hardware band capability)"
     fi
+    # alert_routing.json is intentionally NOT removed here — it is user config
+    # (like sms_alerts.json / email_alerts.json) and must follow the same
+    # --keep-config treatment: left alone here, swept up only by remove_config's
+    # wholesale rm -rf "$CONF_DIR" when DO_CONFIG=purge.
 
     # --- Cron jobs ---
     if crontab -l 2>/dev/null | grep -q qmanager; then
@@ -472,6 +476,7 @@ remove_runtime_state() {
           /tmp/qmanager_*.pid \
           /tmp/qmanager_email_reload \
           /tmp/qmanager_sms_reload \
+          /tmp/qmanager_alert_routing_reload \
           /tmp/qmanager_sms_forward_reload \
           /tmp/qmanager_sms_forward_seen \
           /tmp/qmanager_sms_forward_failures.json \

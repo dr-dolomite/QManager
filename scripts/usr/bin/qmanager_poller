@@ -305,18 +305,33 @@ log_error() { qlog_error "$1"; }
     exit 1
 }
 
-# Email alerts (optional — non-fatal if missing)
+# Email alerts channel lib (optional — non-fatal if missing)
 . /usr/lib/qmanager/email_alerts.sh 2>/dev/null || {
     qlog_warn "email_alerts.sh not found, email alerts disabled"
-    check_email_alert() { :; }
     email_alerts_init() { :; }
 }
 
-# SMS alerts (optional — non-fatal if missing)
+# SMS alerts channel lib (optional — non-fatal if missing)
 . /usr/lib/qmanager/sms_alerts.sh 2>/dev/null || {
     qlog_warn "sms_alerts.sh not found, SMS alerts disabled"
-    check_sms_alert() { :; }
     sms_alerts_init() { :; }
+}
+
+# Alert routing + capability matrix (optional — non-fatal if missing)
+. /usr/lib/qmanager/alert_routing.sh 2>/dev/null || {
+    qlog_warn "alert_routing.sh not found, alert routing disabled"
+    alert_routing_load() { :; }
+    alert_route_enabled() { return 1; }
+    alert_capable() { return 1; }
+}
+
+# Centralized alert engine — one downtime state machine for both channels
+# (optional — non-fatal if missing). Sourced last: it reads globals + functions
+# owned by the channel libs and alert_routing.sh above.
+. /usr/lib/qmanager/alert_engine.sh 2>/dev/null || {
+    qlog_warn "alert_engine.sh not found, connection alerts disabled"
+    alert_engine_check() { :; }
+    alert_engine_init() { :; }
 }
 
 # =============================================================================
@@ -1525,8 +1540,10 @@ poll_cycle() {
     # They must also run before any AT command in case qcmd blocks on serial I/O.
     update_proc_metrics
     read_ping_data
-    check_email_alert
-    check_sms_alert
+    # One centralized engine drives both SMS + email downtime alerts, reading
+    # the conn_* globals read_ping_data just set. Replaces the two per-channel
+    # check_*_alert calls; suppression + debounce + routing live inside it.
+    alert_engine_check
 
     # --- SIM-switch quiesce (mtime-bounded) ---------------------------------
     # settings.sh raises SIM_SWITCH_FLAG for the duration of a slot switch. Skip
@@ -1733,6 +1750,9 @@ main() {
     update_proc_metrics
     email_alerts_init
     sms_alerts_init
+    # Prime the centralized alert engine after the channel libs have loaded
+    # their config (engine reads _sa_enabled/_ea_enabled + thresholds).
+    alert_engine_init
 
     # Seed the UI heartbeat so a fresh poller start begins in the Active tier for
     # one grace window — the dashboard is the most likely caller right after a
