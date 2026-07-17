@@ -14,6 +14,7 @@ Adaptive Polling makes the QManager AT poller ease off modem interrogation when 
 | Heartbeat file | `/tmp/qmanager_ui_active` (epoch seconds, written by status CGIs) |
 | Poller reload flag | `/tmp/qmanager_poller_reload` |
 | Force-active flag | `/tmp/qmanager_force_tier2` |
+| SIM-switch quiesce flag | `/tmp/qmanager_sim_switch_active` (producer `cellular/settings.sh`; early-return alongside `LONG_FLAG`; mtime-bounded 60 s) |
 | Tier field in status.json | `.device.poller_tier` — `"active"` | `"idle"` | `"deep"` |
 | Reboot required | No |
 
@@ -101,6 +102,8 @@ Two conditions pin the poller to Active regardless of heartbeat age:
 - `/tmp/qmanager_refresh_policy_band` present — written on SIM-swap to trigger a policy-band re-read.
 
 Both are one-shot: each flag forces exactly one Active cycle, then the poller removes the flag and returns to whatever tier the heartbeat age dictates. Tower-lock state no longer affects tier selection — see Known Gotchas.
+
+**A third flag does the opposite — quiesces rather than forces:** `/tmp/qmanager_sim_switch_active`, produced by `cellular/settings.sh` for the duration of a SIM slot switch's CFUN/QUIMSLOT sequence, is checked in the same early-return block as `LONG_FLAG` (not the force-to-active block above) — when present, the poller skips its AT-bearing work entirely for that cycle and reports `system_state: "scan_in_progress"`, rather than being forced to run one. This prevents poller `qcmd` traffic from contending with the CFUN/QUIMSLOT sequence, which was the root cause of a silent SIM-slot-switch failure (see [custom-sim-profiles.md](custom-sim-profiles.md) — "Verified QUIMSLOT Read-Back"). Like the force flags it is mtime-bounded (60 s) so a CGI that dies mid-switch cannot mute polling forever, but unlike them it is trap-cleared by its producer rather than consumed by the poller in the success path.
 
 ### 3. Boot seeds the heartbeat file before entering the poll loop
 

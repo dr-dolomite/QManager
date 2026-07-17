@@ -1,6 +1,6 @@
 # 🚀 QManager BETA v0.1.31
 
-v0.1.31 is a ground-up redesign of the Connection Watchdog page. The old three-card layout is replaced with a single-column, status-first anatomy: a live status hero up top, one tabbed settings panel with a sticky save bar, and a new recovery history log at the bottom — matching the calmer, more legible layout already used elsewhere in QManager.
+v0.1.31 pairs a ground-up redesign of the Connection Watchdog page with an important Custom SIM Profiles reliability fix. The watchdog moves to a single-column, status-first anatomy — a live status hero, one tabbed settings panel with a sticky save bar, and a new recovery history log — while SIM switching now verifies the slot change actually happened before applying a profile, fixing cases where the wrong profile (or none) was applied after switching SIMs.
 
 ## ✨ New Features
 
@@ -8,6 +8,9 @@ v0.1.31 is a ground-up redesign of the Connection Watchdog page. The old three-c
 
 ## ✅ Improvements
 
+- **SIM switching now verifies the slot change actually took effect before applying a profile.** Under certain timing conditions, the modem could report a slot switch as successful while silently staying on the old SIM. QManager now double-checks the switch really happened before matching and applying a Custom SIM Profile, fixing cases where the wrong profile — or no profile — was applied after switching SIMs.
+- **Rapid, back-to-back SIM switches now settle on the correct profile.** Switching SIMs twice in quick succession could previously leave the wrong profile active. The correct profile for whichever SIM is actually inserted now always wins.
+- **Profiles saved via "Load from SIM" now match reliably.** Some SIMs have an ICCID that QManager was reading slightly differently depending on where in the app it was read, which could prevent a saved profile from ever matching that SIM. ICCID reads are now consistent everywhere.
 - **Screen readers now announce watchdog state changes** as they happen, so you don't have to be looking at the screen to know the watchdog just started detecting an issue or recovering.
 - **Saving a settings mistake now takes you straight to the problem.** If a field is invalid, Save jumps to the tab that needs attention and puts your cursor in the exact field to fix.
 - **Cooldown and SIM-settle countdowns are now honest.** The status card only shows a cooldown timer when one is actually counting down, including the full ~90 second settle window after a SIM swap.
@@ -73,5 +76,3 @@ Bug reports and feature requests welcome on [GitHub Issues](https://github.com/d
 Like what's new? QManager is built and maintained for free — if these updates have made your setup a little better, you can show your support via [Wise](https://wise.com/pay/business/blackcatdev?currency=USD) or [PayPal](https://paypal.me/iamrusss). Every bit helps keep this project alive. [GitHub Sponsors](https://github.com/sponsors/dr-dolomite) works too.
 
 **License:** MIT + Commons Clause — **Happy connecting!**
-
----

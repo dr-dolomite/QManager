@@ -145,6 +145,7 @@
   "setup_required": "Pengaturan awal diperlukan — atur kata sandi terlebih dahulu",
   "shadow_unreadable": "Tidak dapat membaca file kata sandi (masalah izin)",
   "sim_mismatch": "SIM aktif tidak cocok dengan SIM yang diharapkan profil",
+  "sim_slot_switch_unverified": "Pergantian slot SIM tidak berhasil — silakan coba lagi",
   "speedtest_failed": "Speedtest tidak menghasilkan hasil",
   "start_failed": "Gagal memulai operasi",
   "still_enabled": "Layanan harus dinonaktifkan sebelum dicopot",

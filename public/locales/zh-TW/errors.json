@@ -140,6 +140,7 @@
   "setup_required": "需要初始設定 — 請先設定密碼",
   "shadow_unreadable": "無法讀取密碼檔案（許可權問題）",
   "sim_mismatch": "當前 SIM 與設定預期的 SIM 不匹配",
+  "sim_slot_switch_unverified": "SIM 卡槽切換未生效 — 請重試",
   "speedtest_failed": "速度測試未產生結果",
   "start_failed": "啟動操作失敗",
   "still_enabled": "解除安裝前必須停用服務",

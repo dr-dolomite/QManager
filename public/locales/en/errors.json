@@ -140,6 +140,7 @@
   "setup_required": "Initial setup required — set a password first",
   "shadow_unreadable": "Cannot read password file (permission issue)",
   "sim_mismatch": "Active SIM does not match the profile's expected SIM",
+  "sim_slot_switch_unverified": "SIM slot switch did not take effect — please try again",
   "speedtest_failed": "Speedtest did not produce a result",
   "start_failed": "Failed to start operation",
   "still_enabled": "Service must be disabled before uninstalling",
