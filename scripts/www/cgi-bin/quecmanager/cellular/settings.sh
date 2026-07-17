@@ -45,6 +45,29 @@ nr5g_unit_to_kbps() {
     esac
 }
 
+# --- QUIMSLOT read-back verification -----------------------------------------
+# verify_quimslot <expected_slot>
+# Poll AT+QUIMSLOT? up to 10x (1s apart) until the ACTIVE slot equals the
+# expected slot. Prints "1" and returns 0 once verified; prints nothing and
+# returns 1 if it never matches. AT+QUIMSLOT=N can return OK while the modem
+# silently stays on the old slot under qcmd lock contention, so a write is not
+# trusted until this read-back agrees. Empty reads (qcmd lock timeout) count as
+# not-yet-matched — never as success.
+verify_quimslot() {
+    _vq_want="$1"
+    _vq_i=1
+    while [ "$_vq_i" -le 10 ]; do
+        _vq_cur=$(qcmd 'AT+QUIMSLOT?' 2>/dev/null | grep '+QUIMSLOT:' | head -1 | sed 's/+QUIMSLOT: //' | tr -d ' \r')
+        if [ "$_vq_cur" = "$_vq_want" ]; then
+            printf '1'
+            return 0
+        fi
+        sleep 1
+        _vq_i=$((_vq_i + 1))
+    done
+    return 1
+}
+
 # =============================================================================
 # GET — Fetch current settings and AMBR data
 # =============================================================================
@@ -234,6 +257,9 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     errors=""
     applied=""
     sim_cfun_restored=""
+    sim_switch_verified=""
+    sim_unverified=""
+    sim_pre_iccid=""
 
     # 1. NR5G mode (least disruptive, NVM write)
     if [ "$NR5G_MODE" != "unset" ]; then
@@ -283,10 +309,27 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         sleep "$CMD_GAP"
     fi
 
-    # 4. SIM slot change (requires CFUN=0 -> sleep 2 -> QUIMSLOT -> sleep 2 -> CFUN=1)
+    # 4. SIM slot change (CFUN=0 -> sleep 2 -> QUIMSLOT -> sleep 2 -> CFUN=1,
+    #    then a read-back verification). AT+QUIMSLOT=N can return OK while the
+    #    modem silently STAYS on the old slot under qcmd lock contention (e.g. a
+    #    poller storm during the CFUN cycle); trusting the OK there applies the
+    #    wrong SIM's profile. So the write is verified via AT+QUIMSLOT?, retried
+    #    once, and only a verified switch feeds auto-apply.
     if [ "$SIM_SLOT" != "unset" ]; then
         qlog_info "SIM slot change: starting CFUN=0 -> QUIMSLOT=$SIM_SLOT -> CFUN=1 procedure"
         sim_proceed="1"
+
+        # Quiesce the poller for the switch window so its qcmd traffic does not
+        # contend with the CFUN/QUIMSLOT sequence (that contention is the root
+        # cause being fixed). The poller bounds this flag by mtime (~60s) so a
+        # crashed CGI can't mute polling forever; the trap guarantees removal on
+        # any exit path from here on.
+        trap 'rm -f /tmp/qmanager_sim_switch_active' EXIT INT TERM
+        : > /tmp/qmanager_sim_switch_active
+
+        # Capture the SIM in use BEFORE the switch so the post-switch ICCID read
+        # can reject a stale read that still returns the old SIM.
+        sim_pre_iccid=$(qcmd 'AT+QCCID' 2>/dev/null | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
 
         # Step 1: Switch to minimum functionality
         result=$(qcmd "AT+CFUN=0" 2>/dev/null)
@@ -307,8 +350,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                     errors="${errors}sim_slot,"
                     ;;
                 *)
-                    qlog_info "SIM procedure: QUIMSLOT=$SIM_SLOT OK"
-                    applied="${applied}sim_slot,"
+                    qlog_info "SIM procedure: QUIMSLOT=$SIM_SLOT accepted (pending read-back)"
                     ;;
             esac
             sleep 2
@@ -324,17 +366,51 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                     sim_cfun_restored="1"
                     ;;
             esac
+
+            # Step 4: Read-back verification. AT+QUIMSLOT? becomes readable
+            # shortly after CFUN=1, before full SIM init.
+            sim_switch_verified=$(verify_quimslot "$SIM_SLOT")
+
+            if [ -z "$sim_switch_verified" ]; then
+                # One full-discipline retry of the write, then re-verify.
+                qlog_warn "SIM procedure: QUIMSLOT read-back != $SIM_SLOT after 10 tries; retrying write once"
+                qcmd 'AT+CFUN=0' >/dev/null 2>&1
+                sleep 2
+                qcmd "AT+QUIMSLOT=$SIM_SLOT" >/dev/null 2>&1
+                sleep 2
+                result=$(qcmd 'AT+CFUN=1' 2>/dev/null)
+                case "$result" in
+                    *ERROR*) qlog_error "SIM procedure: CFUN=1 restore (retry) failed: $result" ;;
+                    *) sim_cfun_restored="1" ;;
+                esac
+                sim_switch_verified=$(verify_quimslot "$SIM_SLOT")
+            fi
+
+            if [ -n "$sim_switch_verified" ]; then
+                qlog_info "SIM procedure: QUIMSLOT=$SIM_SLOT verified active"
+                applied="${applied}sim_slot,"
+            else
+                qlog_error "SIM procedure: QUIMSLOT=$SIM_SLOT NOT verified after retry — modem stayed on old slot"
+                errors="${errors}sim_slot,"
+                sim_unverified="1"
+            fi
         fi
     fi
 
-    # --- Auto-apply profile matching new SIM (sim_switch) ---
-    if [ -n "$sim_cfun_restored" ]; then
-        # Retry ICCID query — modem may need a moment to register the new SIM.
+    # --- Auto-apply profile matching new SIM (sim_switch) — ONLY after a
+    #     VERIFIED slot change, so the old SIM's profile is never applied. ---
+    if [ -n "$sim_switch_verified" ]; then
+        # Retry ICCID query — the modem needs a moment to register the new SIM.
+        # A genuine switch returns EMPTY, then the NEW ICCID; a read equal to the
+        # pre-switch ICCID is stale, so keep waiting (5 attempts).
         _as_iccid=""
-        for _try in 1 2 3; do
+        for _try in 1 2 3 4 5; do
             _as_iccid_raw=$(qcmd 'AT+QCCID' 2>/dev/null)
-            _as_iccid=$(printf '%s' "$_as_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
-            [ -n "$_as_iccid" ] && break
+            _as_iccid_try=$(printf '%s' "$_as_iccid_raw" | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r ')
+            if [ -n "$_as_iccid_try" ] && [ "$_as_iccid_try" != "$sim_pre_iccid" ]; then
+                _as_iccid="$_as_iccid_try"
+                break
+            fi
             sleep 1
         done
         if [ -n "$_as_iccid" ]; then
@@ -346,13 +422,22 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             ( . /usr/lib/qmanager/sim_db.sh 2>/dev/null && sim_db_add "$_as_iccid" )
             ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_as_iccid" "sim_switch" )
         else
-            qlog_info "[sim_switch] ICCID query failed after SIM switch, skipping auto-apply"
+            qlog_info "[sim_switch] No new ICCID after verified switch, skipping auto-apply"
         fi
-        unset _as_iccid _as_iccid_raw _try
+        unset _as_iccid _as_iccid_raw _as_iccid_try _try
+    fi
+
+    # --- Clear the poller quiesce BEFORE forcing a Tier-2 refresh, so the
+    #     poller actually wakes and performs the AT read we request next. ---
+    if [ "$SIM_SLOT" != "unset" ]; then
+        rm -f /tmp/qmanager_sim_switch_active
+        trap - EXIT INT TERM
     fi
 
     # --- Force an early poller Tier-2 refresh so the UI shows the new SIM's
-    #     operator/APN/ICCID within ~2s instead of the next ~30s tier boundary ---
+    #     operator/APN/ICCID within ~2s instead of the next ~30s tier boundary.
+    #     Fires whenever the radio came back (CFUN=1 restored), after the
+    #     quiesce flag is cleared. ---
     if [ -n "$sim_cfun_restored" ]; then
         sleep 2
         touch /tmp/qmanager_force_tier2
@@ -384,7 +469,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # --- Response ---
-    if [ -z "$errors" ]; then
+    if [ -n "$sim_unverified" ]; then
+        # The user's primary action (slot switch) did not take effect and
+        # auto-apply did not run. Surface a dedicated code so the UI can prompt
+        # a retry rather than reporting a generic partial failure.
+        cgi_error "sim_slot_switch_unverified" "SIM slot switch did not take effect — please try again"
+    elif [ -z "$errors" ]; then
         cgi_success
     else
         jq -n --arg errors "$errors" --arg applied "$applied" \

@@ -46,6 +46,11 @@ CACHE_TMP="/tmp/qmanager_status.json.tmp"
 LONG_FLAG="/tmp/qmanager_long_running"
 FORCE_TIER2_FLAG="/tmp/qmanager_force_tier2"
 REFRESH_POLICY_FLAG="/tmp/qmanager_refresh_policy_band"
+# Raised by cellular/settings.sh during a SIM slot switch so poller qcmd traffic
+# does not contend with the CFUN/QUIMSLOT sequence. mtime-bounded (below) so a
+# crashed CGI that never clears it cannot mute polling forever.
+SIM_SWITCH_FLAG="/tmp/qmanager_sim_switch_active"
+SIM_SWITCH_MAX_AGE=60
 # Static hardware band-capability file (shipped from repo, force-copied on every
 # install/upgrade). Read once at boot to populate hw_* globals.
 HW_BANDS_FILE="/etc/qmanager/supported_bands_hw.env"
@@ -1523,9 +1528,31 @@ poll_cycle() {
     check_email_alert
     check_sms_alert
 
-    # --- Scan-in-progress early return (UNCHANGED behavior) -----------------
-    # A long-running scan IS active AT-bearing work; report the Active tier.
-    if [ -f "$LONG_FLAG" ]; then
+    # --- SIM-switch quiesce (mtime-bounded) ---------------------------------
+    # settings.sh raises SIM_SWITCH_FLAG for the duration of a slot switch. Skip
+    # AT this cycle so we don't contend with its CFUN/QUIMSLOT sequence. Bound by
+    # mtime so a CGI that died mid-switch (trap never ran) can't mute AT reads
+    # forever — a stale flag is removed and polling resumes.
+    local _sim_switch_active
+    local _ssf_mtime
+    local _ssf_now
+    _sim_switch_active=0
+    if [ -f "$SIM_SWITCH_FLAG" ]; then
+        _ssf_mtime=$(stat -c %Y "$SIM_SWITCH_FLAG" 2>/dev/null)
+        case "$_ssf_mtime" in ''|*[!0-9]*) _ssf_mtime=0 ;; esac
+        _ssf_now=$(date +%s)
+        if [ "$((_ssf_now - _ssf_mtime))" -lt "$SIM_SWITCH_MAX_AGE" ]; then
+            _sim_switch_active=1
+        else
+            rm -f "$SIM_SWITCH_FLAG"
+            qlog_warn "Removed stale SIM-switch flag (age >= ${SIM_SWITCH_MAX_AGE}s)"
+        fi
+    fi
+
+    # --- Scan / SIM-switch early return -------------------------------------
+    # A long-running scan or an in-progress SIM slot switch IS active AT-bearing
+    # work owned elsewhere; back off AT this cycle and report the Active tier.
+    if [ -f "$LONG_FLAG" ] || [ "$_sim_switch_active" = "1" ]; then
         if [ "$system_state" != "scan_in_progress" ]; then
             qlog_state_change "system_state" "$system_state" "scan_in_progress"
         fi

@@ -26,6 +26,10 @@
 [ -n "$_PROFILE_MGR_LOADED" ] && return 0
 _PROFILE_MGR_LOADED=1
 
+# Known-SIMs / ICCID helpers. Sourced at top (idempotent via _SIM_DB_LOADED) so
+# iccid_canonicalize is always defined for auto_apply_profile's compare logic.
+. /usr/lib/qmanager/sim_db.sh 2>/dev/null
+
 # --- Configuration -----------------------------------------------------------
 PROFILE_DIR="/etc/qmanager/profiles"
 ACTIVE_PROFILE_FILE="/etc/qmanager/active_profile"
@@ -542,11 +546,18 @@ auto_apply_profile() {
     local _ap_iccid
     local _ap_name
     local _ap_mno
+    local _ap_cur_canon
+    local _ap_live_len
+    local _ap_cand_len
 
     if [ -z "$current_iccid" ]; then
         qlog_info "[$caller] auto_apply_profile: empty ICCID, skipping" 2>/dev/null
         return 1
     fi
+
+    # Canonical form of the live ICCID for comparison (strips the trailing BCD
+    # pad F so a stored digits-only value still matches). Compare-time only.
+    _ap_cur_canon=$(iccid_canonicalize "$current_iccid")
 
     # Don't race a manual "Activate" click — if a worker is already running,
     # let it finish. It will finalize the active marker on its own.
@@ -560,7 +571,7 @@ auto_apply_profile() {
     for pf in "$PROFILE_DIR"/p_*.json; do
         [ -f "$pf" ] || continue
         pf_iccid=$(jq -r '(.sim_iccid) | if . == null then empty else . end' "$pf" 2>/dev/null)
-        if [ "$pf_iccid" = "$current_iccid" ]; then
+        if [ -n "$pf_iccid" ] && [ "$(iccid_canonicalize "$pf_iccid")" = "$_ap_cur_canon" ]; then
             match_id=$(jq -r '(.id) | if . == null then empty else . end' "$pf" 2>/dev/null)
             break
         fi
@@ -573,7 +584,7 @@ auto_apply_profile() {
         _ap_id=$(get_active_profile)
         if [ -n "$_ap_id" ]; then
             _ap_iccid=$(jq -r '(.sim_iccid) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
-            if [ -n "$_ap_iccid" ] && [ "$_ap_iccid" != "$current_iccid" ]; then
+            if [ -n "$_ap_iccid" ] && [ "$(iccid_canonicalize "$_ap_iccid")" != "$_ap_cur_canon" ]; then
                 _ap_name=$(jq -r '(.name) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
                 _ap_mno=$(jq -r '(.mno) | if . == null then empty else . end' "$PROFILE_DIR/${_ap_id}.json" 2>/dev/null)
                 if [ "$_ap_mno" = "Verizon" ]; then
@@ -592,7 +603,17 @@ auto_apply_profile() {
             fi
         fi
         if [ "$(profile_count)" -gt 0 ]; then
-            qlog_info "[$caller] No profile matches ICCID ...$iccid_suffix" 2>/dev/null
+            # Log the live ICCID and every candidate's stored sim_iccid with byte
+            # lengths, so a format/pad mismatch is visible in one log read.
+            _ap_live_len=$(printf '%s' "$current_iccid" | wc -c | tr -d ' ')
+            qlog_warn "[$caller] No profile matches live ICCID '$current_iccid' (len=$_ap_live_len, canon='$_ap_cur_canon')" 2>/dev/null
+            for pf in "$PROFILE_DIR"/p_*.json; do
+                [ -f "$pf" ] || continue
+                _ap_id=$(jq -r '(.id) | if . == null then empty else . end' "$pf" 2>/dev/null)
+                pf_iccid=$(jq -r '(.sim_iccid) | if . == null then empty else . end' "$pf" 2>/dev/null)
+                _ap_cand_len=$(printf '%s' "$pf_iccid" | wc -c | tr -d ' ')
+                qlog_warn "[$caller]   candidate $_ap_id stored sim_iccid='$pf_iccid' (len=$_ap_cand_len)" 2>/dev/null
+            done
         fi
         return 1
     fi

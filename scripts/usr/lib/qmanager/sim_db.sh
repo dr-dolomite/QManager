@@ -49,6 +49,25 @@ sim_db_normalize() {
     printf '%s' "$1" | tr -d ' \r\n'
 }
 
+# iccid_canonicalize <raw>
+# COMPARE-TIME normalization only. Strips space/CR/LF (like sim_db_normalize),
+# then strips a single trailing BCD pad nibble (F/f) if present. An ICCID whose
+# final significant digit is odd is padded to 20 nibbles with a trailing F, and
+# different read paths disagree on whether they keep it: apply-time readers keep
+# the raw QCCID string (with F), while a digits-only extractor drops it. The
+# real last character of an ICCID is always a decimal check digit, so a trailing
+# F is always pad and safe to drop. Use this to normalize BOTH operands when
+# COMPARING a live ICCID against a stored one — it does NOT change what the
+# known-SIMs set stores (byte-parity there is preserved by sim_db_normalize).
+iccid_canonicalize() {
+    local _simdb_canon
+    _simdb_canon=$(printf '%s' "$1" | tr -d ' \r\n')
+    case "$_simdb_canon" in
+        *[Ff]) _simdb_canon=${_simdb_canon%?} ;;
+    esac
+    printf '%s' "$_simdb_canon"
+}
+
 # sim_db_seed_if_absent
 # Migration + first-run guard.
 #   return 0 (prior knowledge existed) if KNOWN_SIMS_FILE already exists, OR

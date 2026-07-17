@@ -140,6 +140,7 @@
   "setup_required": "È richiesta la configurazione iniziale: imposta prima una password",
   "shadow_unreadable": "Impossibile leggere il file della password (problema di autorizzazione)",
   "sim_mismatch": "Il SIM attivo non corrisponde al SIM previsto dal profilo",
+  "sim_slot_switch_unverified": "Il cambio di slot SIM non ha avuto effetto — riprova",
   "speedtest_failed": "Lo Speedtest non ha prodotto risultati",
   "start_failed": "Impossibile avviare l'operazione",
   "still_enabled": "Il servizio deve essere disabilitato prima della disinstallazione",
