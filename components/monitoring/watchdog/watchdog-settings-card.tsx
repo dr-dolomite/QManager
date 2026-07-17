@@ -177,8 +177,12 @@ export function WatchdogSettingsCard({
         <CardDescription>{t("watchdog.settings_description")}</CardDescription>
       </CardHeader>
 
-      <CardContent>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)}>
+      <CardContent className="flex min-h-0 flex-1 flex-col">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as SettingsTab)}
+          className="min-h-0 flex-1"
+        >
           <TabsList className="w-full">
             {(["detection", "quality", "recovery"] as const).map((tk) => (
               <TabsTrigger key={tk} value={tk} className="gap-1.5">
@@ -776,7 +780,7 @@ export function WatchdogSettingsCard({
         </Tabs>
 
         {/* ---- Sticky save bar — commits every pending change on the page. ---- */}
-        <div className="bg-card/95 supports-[backdrop-filter]:bg-card/80 sticky bottom-0 z-10 -mx-6 -mb-6 mt-6 flex items-center justify-between gap-3 rounded-b-xl border-t px-6 py-4 backdrop-blur">
+        <div className="bg-card/95 supports-[backdrop-filter]:bg-card/80 sticky bottom-0 z-10 -mx-6 -mb-6 mt-6 flex shrink-0 items-center justify-between gap-3 rounded-b-xl border-t px-6 py-4 backdrop-blur">
           <SaveStatus
             t={t}
             isDirty={form.isDirty}

@@ -17,19 +17,22 @@ import { WatchdogSettingsCard } from "./watchdog-settings-card";
 import { WatchdogRecoveryActivityCard } from "./watchdog-recovery-activity-card";
 
 // -----------------------------------------------------------------------------
-// Connection Watchdog — page coordinator (status-first anatomy).
+// Connection Watchdog — page coordinator (status-first anatomy, 2-col desktop).
 // -----------------------------------------------------------------------------
-// A single centered column: page header → read-only Live Status hero →
-// one tabbed Settings card with a sticky save bar → the Recovery Activity log.
-// Because the backend save is atomic, one `useWatchdogForm` instance owns the
-// whole form and every card consumes the slice it renders; the single Save /
-// Discard pair lives in the settings card's sticky bar and commits every change.
+// Desktop widens into two columns: the left reads top-to-bottom (Live Status →
+// Recovery Activity) while the right holds the one write surface (Settings)
+// for its full height, so scanning state and editing configuration sit side
+// by side instead of stacked in sequence. Narrower viewports fall back to the
+// single-column status → settings → activity order. Because the backend save
+// is atomic, one `useWatchdogForm` instance owns the whole form and every card
+// consumes the slice it renders; the single Save / Discard pair lives in the
+// settings card's sticky bar and commits every change.
 const WatchdogComponent = () => {
   const { t } = useTranslation("monitoring");
   const hookData = useWatchdogSettings();
 
   return (
-    <div className="@container/main mx-auto flex max-w-[1100px] flex-col gap-6 p-2">
+    <div className="@container/main mx-auto flex flex-col gap-6 p-2">
       <div>
         <h1 className="mb-2 text-3xl font-bold">{t("watchdog.page_title")}</h1>
         <p className="text-muted-foreground">{t("watchdog.page_description")}</p>
@@ -96,18 +99,20 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
   });
 
   return (
-    <>
-      <WatchdogStatusCard
-        form={form}
-        settings={settings!}
-        liveStatus={status}
-        simFailover={simFailover}
-        autoDisabled={autoDisabled}
-        revertSim={revertSim}
-      />
+    <div className="grid grid-cols-1 gap-6 @4xl/main:grid-cols-2 @4xl/main:items-stretch">
+      <div className="flex flex-col gap-6 @4xl/main:h-full">
+        <WatchdogStatusCard
+          form={form}
+          settings={settings!}
+          liveStatus={status}
+          simFailover={simFailover}
+          autoDisabled={autoDisabled}
+          revertSim={revertSim}
+        />
+        <WatchdogRecoveryActivityCard />
+      </div>
       <WatchdogSettingsCard form={form} qualityThresholds={qualityThresholds} />
-      <WatchdogRecoveryActivityCard />
-    </>
+    </div>
   );
 }
 
@@ -118,14 +123,16 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
 function PageSkeleton() {
   return (
     <div
-      className="flex flex-col gap-6"
+      className="grid grid-cols-1 items-start gap-6 @4xl/main:grid-cols-2"
       role="status"
       aria-busy="true"
       aria-live="polite"
     >
-      <StatusSkeleton />
+      <div className="flex flex-col gap-6">
+        <StatusSkeleton />
+        <ActivitySkeleton />
+      </div>
       <SettingsSkeleton />
-      <ActivitySkeleton />
     </div>
   );
 }

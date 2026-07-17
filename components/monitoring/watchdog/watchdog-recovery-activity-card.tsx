@@ -91,7 +91,7 @@ export function WatchdogRecoveryActivityCard() {
   );
 
   return (
-    <Card className="@container/card">
+    <Card className="@container/card flex min-h-0 flex-1 flex-col">
       <CardHeader>
         <CardTitle>{t("watchdog.activity_title")}</CardTitle>
         <CardDescription>{t("watchdog.activity_description")}</CardDescription>
@@ -115,7 +115,7 @@ export function WatchdogRecoveryActivityCard() {
         </CardAction>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="flex min-h-0 flex-1 flex-col">
         {error ? (
           <Alert variant="destructive">
             <TriangleAlertIcon className="size-4" />
@@ -133,7 +133,7 @@ export function WatchdogRecoveryActivityCard() {
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
