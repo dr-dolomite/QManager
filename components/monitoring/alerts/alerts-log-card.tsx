@@ -76,9 +76,9 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
 
   if (isLoading) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card min-h-0 flex-1">
         {header}
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col justify-center">
           <div className="rounded-md border">
             <div className="border-b px-4 py-3">
               <div className="flex gap-4">
@@ -104,9 +104,9 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
 
   if (error && entries.length === 0) {
     return (
-      <Card className="@container/card">
+      <Card className="@container/card min-h-0 flex-1">
         {header}
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col justify-center">
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
             <AlertTitle>{t("alerts.log_error_title")}</AlertTitle>
@@ -129,10 +129,10 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
   }
 
   return (
-    <Card className="@container/card">
+    <Card className="@container/card min-h-0 flex-1">
       {header}
-      <CardContent>
-        <div className="max-h-[26rem] overflow-auto rounded-md border">
+      <CardContent className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-[12rem] flex-1 overflow-auto rounded-md border">
           <Table>
             <TableHeader className="bg-card sticky top-0 z-10">
               <TableRow>
