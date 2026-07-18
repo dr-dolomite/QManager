@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "generated_at": "2026-07-18T10:42:58Z",
+  "generated_at": "2026-07-18T10:43:14Z",
   "packs": [
     {
       "code": "id",
@@ -21,11 +21,11 @@
       "native_name": "Italiano",
       "english_name": "Italian",
       "rtl": false,
-      "version": "2026.06.14",
-      "completeness": 1,
-      "size_bytes": 51156,
-      "sha256": "87a465b39e135548bb0690fed79a690a9ced2411b70e0523ac8c245c2d3067a8",
-      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-it-2026.06.14.tar.gz",
+      "version": "2026.07.18",
+      "completeness": 0.998,
+      "size_bytes": 53107,
+      "sha256": "c772223bfa34536cbbf4966611bed52a90354fc96f96615d78ac28d6de7b61d2",
+      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-it-2026.07.18.tar.gz",
       "contributors": [
         "@fmase"
       ]
