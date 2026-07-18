@@ -266,7 +266,12 @@ sig_nr_sinr="[null,null,null,null]"
 # =============================================================================
 
 # Logging library
-. /usr/lib/qmanager/qlog.sh 2>/dev/null || {
+# GUARD with [ -f ] before dot-sourcing: a `.` on a MISSING file aborts a
+# non-interactive BusyBox ash script (POSIX special builtin), so a bare
+# `. FILE || {...}` fallback would never run. Guard, then stub in the else.
+if [ -f /usr/lib/qmanager/qlog.sh ]; then
+    . /usr/lib/qmanager/qlog.sh
+else
     # Fallback if logging library not found
     qlog_init() { :; }
     qlog_debug() { :; }
@@ -276,7 +281,8 @@ sig_nr_sinr="[null,null,null,null]"
     qlog_at_cmd() { :; }
     qlog_lock() { :; }
     qlog_state_change() { :; }
-}
+    record_planned_reboot() { :; }
+fi
 qlog_init "poller"
 
 # Backward-compatible aliases (used throughout this script)
@@ -332,6 +338,7 @@ log_error() { qlog_error "$1"; }
     qlog_warn "alert_engine.sh not found, connection alerts disabled"
     alert_engine_check() { :; }
     alert_engine_init() { :; }
+    alert_engine_reboot_detect() { :; }
 }
 
 # =============================================================================
@@ -1753,6 +1760,10 @@ main() {
     # Prime the centralized alert engine after the channel libs have loaded
     # their config (engine reads _sa_enabled/_ea_enabled + thresholds).
     alert_engine_init
+    # One-shot reboot detection: compare the kernel boot_id against the persisted
+    # value and stage a post-recovery reboot alert if a real reboot happened.
+    # Runs once per poller start; a bare procd respawn stages nothing.
+    alert_engine_reboot_detect
 
     # Seed the UI heartbeat so a fresh poller start begins in the Active tier for
     # one grace window — the dashboard is the most likely caller right after a

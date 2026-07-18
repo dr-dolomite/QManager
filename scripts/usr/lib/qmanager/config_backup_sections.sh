@@ -128,10 +128,11 @@ collect_alert_routing() {
     local cfg="/etc/qmanager/alert_routing.json"
     if [ ! -f "$cfg" ]; then
         # No file → emit the canonical default so restore is deterministic.
-        echo '{"version":1,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true}}}'
+        # reboot defaults off/off (opt-in); version 2 carries the reboot event.
+        echo '{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false}}}'
         return 0
     fi
-    jq -c '{version: (.version // 1),
+    jq -c '{version: (.version // 2),
             events: {
                 connection_lost: {
                     sms:   (if (.events.connection_lost.sms) == null then true else (.events.connection_lost.sms) end),
@@ -140,6 +141,10 @@ collect_alert_routing() {
                 connection_restored: {
                     sms:   (if (.events.connection_restored.sms) == null then true else (.events.connection_restored.sms) end),
                     email: (if (.events.connection_restored.email) == null then true else (.events.connection_restored.email) end)
+                },
+                reboot: {
+                    sms:   (if (.events.reboot.sms) == null then false else (.events.reboot.sms) end),
+                    email: (if (.events.reboot.email) == null then false else (.events.reboot.email) end)
                 }
             }}' "$cfg"
 }
@@ -157,6 +162,9 @@ apply_alert_routing() {
     local tmp="${cfg}.tmp.$$"
     # Re-clamp connection_lost.email to false (server is authoritative — email
     # can never deliver during an outage regardless of what the backup holds).
+    # The reboot event needs NO clamp (both channels are capable post-recovery)
+    # and simply passes through this write untouched; a v1 backup with no reboot
+    # key restores fine — alert_routing_load fail-closes reboot to off/off.
     echo "$input" | jq '.events.connection_lost.email = false' > "$tmp" || { rm -f "$tmp"; return 1; }
     mv "$tmp" "$cfg" || return 1
     # Signal the running poller to reload routing next cycle

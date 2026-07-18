@@ -22,7 +22,7 @@
 | Config reload flag | `/tmp/qmanager_watchcat_reload` |
 | SIM revert flag | `/tmp/qmanager_watchcat_revert_sim` (written by CGI `revert_sim` POST; consumed by daemon in `check_revert_request`) |
 | SIM failover state | `/tmp/qmanager_sim_failover` (written when failover is finalized in cooldown) |
-| Reboot log | `/etc/qmanager/crash.log` |
+| Reboot log | `/etc/qmanager/crash.log` — shared with [Alerts](alerts.md#reboot-alerts)' reboot detector; watchdog writes `tier4_escalation` rows, `record_planned_reboot` writes `user`/`unplanned` rows |
 | Tier-3 settle floor | `SIM_SETTLE_SECS=90` s (hard-coded constant — not a UCI key); applies to both forward Tier-3 swap and user-requested revert |
 | Reboot? | Tier 4 only (deferred via `sleep 1 && reboot` after state write) |
 | Frontend hook | `hooks/use-watchdog-settings.ts` |
@@ -360,7 +360,7 @@ Written atomically via `STATE_TMP` → `mv`. The CGI GET passes the full file co
 | `sim_failover_active` | bool | Whether modem is currently on the backup SIM. Written via `--arg sf_active "$sim_failover_active"` and compared `($sf_active == "true")` so the JSON output is a real boolean. |
 | `original_sim_slot` | int or null | SIM slot before Tier 3 |
 | `current_sim_slot` | int or null | Current SIM slot |
-| `reboots_this_hour` | int | Reboots from crash.log in last 3600s |
+| `reboots_this_hour` | int | **Watchdog (`tier4_escalation`) reboots only** from crash.log in the last 3600s — `count_recent_reboots()` filters on the reason field so the Alerts feature's `user`/`unplanned` rows (see [Alerts](alerts.md#reboot-alerts)) never inflate the tier-4 token bucket |
 | `quality_breach_count` | int | Current consecutive quality breach counter |
 | `quality_enabled` | bool | Reflects `CFG_QUALITY_ENABLED` at time of write |
 | `last_recovery_reason` | string | `"unreachable"` or `"quality"` |

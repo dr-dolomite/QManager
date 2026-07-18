@@ -92,33 +92,50 @@ email_alerts_init() {
 email_alert_emit() {
     local event="$1"
     local secs="$2"
+    local cause="$3"
+    local count="$4"
     local start_epoch
     local start_time
     local dur_text
     local html
+    local subject
     local trigger_text
     local attempt
     local max_attempts
     local retry_delay
 
-    if [ "$event" != "connection_restored" ]; then
-        # Not capable/routed for connection_lost — nothing to send.
+    # connection_lost is never capable for email (no internet/DNS during an
+    # outage) — deliberate no-op success. connection_restored and reboot both
+    # arrive post-recovery, when email can deliver.
+    if [ "$event" != "connection_restored" ] && [ "$event" != "reboot" ]; then
         return 0
     fi
 
-    # The engine measures duration with the monotonic clock. The email body
-    # only needs a human-readable start stamp, so reconstruct it from wall-clock
-    # now minus the outage duration. A NITZ step during the outage can skew this
-    # display value slightly, but it never affects whether the email is sent
-    # (that decision was already made monotonically upstream).
+    # The engine measures duration with the monotonic clock. The email body only
+    # needs a human-readable stamp, so reconstruct it from wall-clock now minus
+    # the elapsed seconds. A NITZ step can skew this display value slightly, but
+    # it never affects whether the email is sent (decided monotonically upstream).
     start_epoch=$(( $(date +%s) - secs ))
     start_time=$(date -d "@$start_epoch" "+%Y-%m-%d %H:%M:%S" 2>/dev/null) || \
         start_time=$(awk "BEGIN{print strftime(\"%Y-%m-%d %H:%M:%S\",$start_epoch)}" 2>/dev/null) || \
         start_time="$start_epoch"
-
     dur_text=$(_ea_format_duration "$secs")
-    html=$(_ea_build_recovery_html "$start_time" "$dur_text" "$_ea_threshold_minutes")
-    trigger_text="Connection recovered (down ${dur_text})"
+
+    if [ "$event" = "reboot" ]; then
+        if [ "$cause" = "storm" ]; then
+            subject="Modem Reboot Loop"
+            html=$(_ea_build_reboot_html "storm" "$dur_text" "$count")
+            trigger_text="Reboot loop (${count}/hr)"
+        else
+            subject="Modem Rebooted"
+            html=$(_ea_build_reboot_html "$cause" "$dur_text" "")
+            trigger_text="Reboot (${cause}) ~${dur_text} ago"
+        fi
+    else
+        subject="Connection Recovered"
+        html=$(_ea_build_recovery_html "$start_time" "$dur_text" "$_ea_threshold_minutes")
+        trigger_text="Connection recovered (down ${dur_text})"
+    fi
 
     # Send with retry — DNS may not be ready immediately after recovery.
     attempt=0
@@ -133,7 +150,7 @@ email_alert_emit() {
             sleep "$retry_delay"
         fi
 
-        if _ea_do_send "Connection Recovered" "$html"; then
+        if _ea_do_send "$subject" "$html"; then
             _ea_log_event "$trigger_text" "sent" "$_ea_recipient"
             return 0
         fi
@@ -359,6 +376,98 @@ _ea_build_recovery_html() {
   </table>
 
   <p style="margin:24px 0 0;font-size:13px;color:${_EA_COLOR_MUTED};line-height:1.5;">This alert was sent because the outage exceeded your configured threshold of ${threshold} minutes.</p>
+HTMLEOF
+
+        _ea_html_footer
+    }
+}
+
+# --- Reboot email -------------------------------------------------------------
+# _ea_build_reboot_html <cause> <age_text> <count>
+# cause: watchdog | user | unplanned | storm. age_text: human "~5m" string.
+# count: only used for the storm summary. Mirrors the recovery template; the
+# body notes that a reboot alert can only arrive AFTER the modem is back online.
+_ea_build_reboot_html() {
+    local cause="$1"
+    local age_text="$2"
+    local count="$3"
+    local badge
+    local badge_color
+    local headline
+    local detail
+    local cause_label
+    local timing_label
+    local timing_value
+
+    case "$cause" in
+        storm)
+            badge="REBOOT LOOP"
+            badge_color="#ef4444"
+            headline="Your modem is repeatedly rebooting"
+            detail="The modem has rebooted ${count} times in the last hour. This usually points to unstable power or a firmware fault. This is a single summary alert &mdash; per-reboot alerts are suppressed for the rest of the hour."
+            cause_label="Reboot loop"
+            timing_label="Reboots (last hour)"
+            timing_value="${count}"
+            ;;
+        watchdog)
+            badge="WATCHDOG REBOOT"
+            badge_color="${_EA_COLOR_PRIMARY}"
+            headline="The watchdog rebooted your modem to restore connectivity"
+            detail="The connection watchdog escalated to a full reboot after its recovery ladder did not restore the link. The modem is now back online."
+            cause_label="Watchdog recovery"
+            timing_label="Back online"
+            timing_value="~${age_text} ago"
+            ;;
+        user)
+            badge="REBOOTED"
+            badge_color="${_EA_COLOR_PRIMARY}"
+            headline="Your modem completed a planned reboot"
+            detail="A reboot you or a scheduled task initiated has completed, and the modem is back online."
+            cause_label="Planned reboot"
+            timing_label="Back online"
+            timing_value="~${age_text} ago"
+            ;;
+        *)
+            badge="UNEXPECTED REBOOT"
+            badge_color="#f59e0b"
+            headline="Your modem rebooted unexpectedly"
+            detail="No planned-reboot record was found for this boot, which typically means a power interruption or a firmware fault. The modem is now back online."
+            cause_label="Unexpected (power or firmware)"
+            timing_label="Back online"
+            timing_value="~${age_text} ago"
+            ;;
+    esac
+
+    {
+        _ea_html_header "Reboot Alert"
+
+        cat <<HTMLEOF
+  <!-- Badge -->
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td style="background-color:${badge_color};color:${_EA_COLOR_WHITE};font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;">${badge}</td>
+  </tr></table>
+
+  <!-- Headline -->
+  <h1 style="margin:16px 0 8px;font-size:18px;font-weight:600;color:${_EA_COLOR_TEXT};">${headline}</h1>
+  <p style="margin:0 0 24px;font-size:14px;color:${_EA_COLOR_MUTED};line-height:1.5;">${detail}</p>
+
+  <!-- Detail box -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${_EA_COLOR_BG};border-radius:8px;padding:4px 0;">
+  <tr>
+    <td style="padding:12px 20px;border-bottom:1px solid #e4e4e7;">
+      <span style="font-size:12px;color:${_EA_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;">Cause</span><br>
+      <span style="font-size:15px;color:${_EA_COLOR_TEXT};font-weight:500;">${cause_label}</span>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:12px 20px;">
+      <span style="font-size:12px;color:${_EA_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;">${timing_label}</span><br>
+      <span style="font-size:15px;color:${_EA_COLOR_TEXT};font-weight:500;">${timing_value}</span>
+    </td>
+  </tr>
+  </table>
+
+  <p style="margin:24px 0 0;font-size:13px;color:${_EA_COLOR_MUTED};line-height:1.5;">This alert was delivered after your modem came back online. At the moment of a reboot the device is fully offline and cannot send anything, so reboot alerts always arrive once connectivity is restored.</p>
 HTMLEOF
 
         _ea_html_footer

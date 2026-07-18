@@ -496,7 +496,12 @@ evaluate_quality() {
     return 1
 }
 
-# Count reboots in the last hour from crash.log
+# Count WATCHDOG reboots in the last hour from crash.log.
+# crash.log is now a shared reboot ledger: watchcat writes tier4_escalation rows,
+# and record_planned_reboot (qlog.sh) writes user/unplanned rows for the reboot-
+# alert feature. The tier-4 token bucket + the dashboard's reboots_this_hour must
+# keep their original meaning ("watchdog-caused reboots this hour"), so we count
+# ONLY tier4_escalation rows here. Field layout: <epoch>|reboot|<reason>.
 count_recent_reboots() {
     if [ ! -f "$CRASH_LOG" ]; then
         reboots_this_hour=0
@@ -507,7 +512,7 @@ count_recent_reboots() {
     local count
     now=$(date +%s)
     cutoff=$((now - 3600))
-    count=$(awk -v cutoff="$cutoff" -F'|' '$1 >= cutoff { n++ } END { print n+0 }' "$CRASH_LOG" 2>/dev/null)
+    count=$(awk -v cutoff="$cutoff" -F'|' '$1 >= cutoff && $3 == "tier4_escalation" { n++ } END { print n+0 }' "$CRASH_LOG" 2>/dev/null)
     reboots_this_hour="${count:-0}"
 }
 

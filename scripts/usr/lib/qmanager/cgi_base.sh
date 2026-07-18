@@ -14,13 +14,19 @@ _CGI_BASE_LOADED=1
 # ---------------------------------------------------------------------------
 # Logging — source qlog.sh with no-op fallbacks if library is missing
 # ---------------------------------------------------------------------------
-. /usr/lib/qmanager/qlog.sh 2>/dev/null || {
+# GUARD with [ -f ] before dot-sourcing: a `.` on a MISSING file aborts a
+# non-interactive BusyBox ash script (POSIX special builtin), so the `|| {...}`
+# stub fallback would never run. Guard, then define stubs in the else branch.
+if [ -f /usr/lib/qmanager/qlog.sh ]; then
+    . /usr/lib/qmanager/qlog.sh
+else
     qlog_init()  { :; }
     qlog_debug() { :; }
     qlog_info()  { :; }
     qlog_warn()  { :; }
     qlog_error() { :; }
-}
+    record_planned_reboot() { :; }
+fi
 
 # ---------------------------------------------------------------------------
 # Authentication — source cgi_auth.sh with no-op fallbacks if missing
@@ -126,8 +132,14 @@ cgi_error() {
 # Reboot After Response
 # Emit success JSON, then schedule an async reboot so the HTTP response
 # flushes to the client before the device goes down.
+#
+# $1 — optional reboot reason tag for the persistent ledger (default "user").
+# record_planned_reboot runs SYNCHRONOUSLY here, before the backgrounded reboot,
+# so the breadcrumb is durable on ubifs by the time the kernel goes down and the
+# next boot classifies this as a planned user reboot (not an unplanned loss).
 # ---------------------------------------------------------------------------
 cgi_reboot_response() {
+    record_planned_reboot "${1:-user}"
     echo '{"success":true}'
     ( ( sleep 1 && reboot ) </dev/null >/dev/null 2>&1 & )
     exit 0

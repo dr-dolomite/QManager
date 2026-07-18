@@ -13,7 +13,7 @@ export type AlertChannel = "sms" | "email";
 
 /** The trigger events a channel can be routed to. Extensible by design — new
  *  events are an additive key here + a backend capability entry + i18n. */
-export type AlertEventKey = "connection_lost" | "connection_restored";
+export type AlertEventKey = "connection_lost" | "connection_restored" | "reboot";
 
 // ─── Channel transport state (identity + master enable) ──────────────────────
 
@@ -61,12 +61,27 @@ export interface AlertCapabilityCell {
 
 export type AlertCapabilities = Record<AlertEventKey, AlertCapabilityCell>;
 
+// ─── Reboot history (read-only telemetry) ────────────────────────────────────
+
+/** How a recorded reboot was classified. `unplanned` is inferred as the
+ *  absence of any intentional-reboot breadcrumb — there is no positive
+ *  hardware signal for it on the device. */
+export type RebootCause = "watchdog" | "user" | "unplanned";
+
+export interface RebootHistoryEntry {
+  /** Unix epoch seconds of the reboot, as recorded on the device. */
+  epoch: number;
+  cause: RebootCause;
+}
+
 // ─── Full GET payload ────────────────────────────────────────────────────────
 
 export interface AlertsState {
   channels: AlertChannels;
   routing: AlertRouting;
   capabilities: AlertCapabilities;
+  /** Most-recent reboots (newest first), independent of alert routing. */
+  reboots: RebootHistoryEntry[];
 }
 
 // ─── Save payload ────────────────────────────────────────────────────────────
@@ -105,6 +120,7 @@ export interface AlertLogEntry {
 export const ALERT_EVENT_ORDER: AlertEventKey[] = [
   "connection_lost",
   "connection_restored",
+  "reboot",
 ];
 
 export const ALERT_CHANNEL_ORDER: AlertChannel[] = ["sms", "email"];

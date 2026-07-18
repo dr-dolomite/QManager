@@ -189,9 +189,12 @@ sms_alerts_init() {
 sms_alert_emit() {
     local _sae_event="$1"
     local _sae_secs="$2"
+    local _sae_cause="$3"
+    local _sae_count="$4"
     local _sae_dur
     local _sae_body
     local _sae_trigger
+    local _sae_phrase
 
     _sae_dur=$(_sa_format_duration "$_sae_secs")
 
@@ -207,6 +210,27 @@ sms_alert_emit() {
         connection_restored)
             _sae_body="[QManager] Connection recovered after ${_sae_dur}"
             _sae_trigger="Connection recovered after ${_sae_dur}"
+            ;;
+        reboot)
+            # Reboot alerts are delivered post-recovery (userspace was dead at
+            # the reboot instant), so the same registration gate the outage-start
+            # arm uses applies — return 2 to retry until the modem re-registers.
+            if ! _sa_is_registered; then
+                qlog_debug "SMS alerts: reboot deferred — modem not registered"
+                return 2
+            fi
+            if [ "$_sae_cause" = "storm" ]; then
+                _sae_body="[QManager] Modem is reboot-looping (${_sae_count} reboots in the last hour). Check power/firmware."
+                _sae_trigger="Reboot loop (${_sae_count}/hr)"
+            else
+                case "$_sae_cause" in
+                    watchdog) _sae_phrase="watchdog recovered the connection" ;;
+                    user)     _sae_phrase="planned reboot" ;;
+                    *)        _sae_phrase="unexpected - power or firmware" ;;
+                esac
+                _sae_body="[QManager] Modem rebooted ~${_sae_dur} ago (${_sae_phrase}) - now back online."
+                _sae_trigger="Reboot (${_sae_cause}) ~${_sae_dur} ago"
+            fi
             ;;
         *)
             qlog_warn "SMS alerts: unknown event '$_sae_event'"

@@ -38,6 +38,8 @@ SMS_LOG="/tmp/qmanager_sms_log.json"
 EMAIL_LOG="/tmp/qmanager_email_log.json"
 MSMTP_INSTALL_RESULT="/tmp/qmanager_msmtp_install.json"
 MSMTP_INSTALL_PID="/tmp/qmanager_msmtp_install.pid"
+# Persistent reboot ledger — powers the "Recent reboots" history list.
+CRASH_LOG="/etc/qmanager/crash.log"
 
 # Routing + capability library — the authority for the matrix the UI renders.
 . /usr/lib/qmanager/alert_routing.sh 2>/dev/null || {
@@ -45,9 +47,11 @@ MSMTP_INSTALL_PID="/tmp/qmanager_msmtp_install.pid"
     _ar_cl_email="false"
     _ar_cr_sms="true"
     _ar_cr_email="true"
+    _ar_rb_sms="false"
+    _ar_rb_email="false"
     alert_routing_load() { :; }
     alert_capabilities_json() {
-        printf '%s' '{"connection_lost":{"sms":true,"email":false,"email_reason":"email_needs_internet"},"connection_restored":{"sms":true,"email":true}}'
+        printf '%s' '{"connection_lost":{"sms":true,"email":false,"email_reason":"email_needs_internet"},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":true,"email":true}}'
     }
 }
 
@@ -129,6 +133,29 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     # --- Routing (fail-closed to defaults) + capabilities ---
     alert_routing_load
 
+    # --- Recent reboots history (newest first, cap 10) ---
+    # Read the shared crash.log ledger and map raw reason tags to the 3 buckets
+    # the UI renders. tier4_escalation -> watchdog, user -> user, unplanned ->
+    # unplanned (an inferred unplanned boot is recorded post-facto by the poller,
+    # so it does appear here). Any other planned tag folds to "user". awk regex
+    # is fine — only device jq lacks regex, and jq only reverses/caps here.
+    reboots_arr="[]"
+    if [ -f "$CRASH_LOG" ] && [ -s "$CRASH_LOG" ]; then
+        _rb_objs=$(awk -F'|' '
+            $2 == "reboot" && $1 ~ /^[0-9]+$/ {
+                cause = $3;
+                if (cause == "tier4_escalation") cause = "watchdog";
+                else if (cause == "user") cause = "user";
+                else if (cause == "unplanned") cause = "unplanned";
+                else cause = "user";
+                printf "%s{\"epoch\":%s,\"cause\":\"%s\"}", sep, $1, cause;
+                sep = ",";
+            }
+        ' "$CRASH_LOG" 2>/dev/null)
+        reboots_arr=$(printf '[%s]' "$_rb_objs" | jq -c 'reverse | .[0:10]' 2>/dev/null) || reboots_arr="[]"
+        [ -z "$reboots_arr" ] && reboots_arr="[]"
+    fi
+
     jq -n \
         --argjson sms_enabled "$sms_enabled" \
         --arg    sms_phone "$sms_phone" \
@@ -145,7 +172,10 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --argjson cl_email "$_ar_cl_email" \
         --argjson cr_sms "$_ar_cr_sms" \
         --argjson cr_email "$_ar_cr_email" \
+        --argjson rb_sms "$_ar_rb_sms" \
+        --argjson rb_email "$_ar_rb_email" \
         --argjson capabilities "$(alert_capabilities_json)" \
+        --argjson reboots "$reboots_arr" \
         '{
             success: true,
             channels: {
@@ -168,10 +198,12 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             routing: {
                 events: {
                     connection_lost:     { sms: $cl_sms, email: $cl_email },
-                    connection_restored: { sms: $cr_sms, email: $cr_email }
+                    connection_restored: { sms: $cr_sms, email: $cr_email },
+                    reboot:              { sms: $rb_sms, email: $rb_email }
                 }
             },
-            capabilities: $capabilities
+            capabilities: $capabilities,
+            reboots: $reboots
         }'
     exit 0
 fi
@@ -263,6 +295,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         r_cl_sms=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.connection_lost.sms)         | (if . == null then true else . end) | if . == true then "true" else "false" end')
         r_cr_sms=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.connection_restored.sms)     | (if . == null then true else . end) | if . == true then "true" else "false" end')
         r_cr_email=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.connection_restored.email) | (if . == null then true else . end) | if . == true then "true" else "false" end')
+        # reboot is OPT-IN → null defaults to FALSE (not true like the others).
+        # No clamp: both channels are capable post-recovery.
+        r_rb_sms=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.reboot.sms)                  | (if . == null then false else . end) | if . == true then "true" else "false" end')
+        r_rb_email=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.reboot.email)              | (if . == null then false else . end) | if . == true then "true" else "false" end')
         # CLAMP: connection_lost.email is always false — email cannot deliver
         # during an outage (no internet/DNS). Server is authoritative.
         r_cl_email="false"
@@ -299,9 +335,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                 --argjson cl_email "$r_cl_email" \
                 --argjson cr_sms "$r_cr_sms" \
                 --argjson cr_email "$r_cr_email" \
-                '{version: 1, events: {
+                --argjson rb_sms "$r_rb_sms" \
+                --argjson rb_email "$r_rb_email" \
+                '{version: 2, events: {
                     connection_lost:     {sms: $cl_sms, email: $cl_email},
-                    connection_restored: {sms: $cr_sms, email: $cr_email}
+                    connection_restored: {sms: $cr_sms, email: $cr_email},
+                    reboot:              {sms: $rb_sms, email: $rb_email}
                 }}' \
                 | _write_json_atomic "/etc/qmanager/alert_routing.json"; then
             cgi_error "write_failed" "Failed to write alert routing config"
@@ -332,7 +371,7 @@ MSMTPEOF
         # --- Signal poller: reload channel configs + routing next cycle ---
         touch /tmp/qmanager_sms_reload /tmp/qmanager_email_reload /tmp/qmanager_alert_routing_reload
 
-        qlog_info "Alert settings saved: sms_enabled=$sms_enabled email_enabled=$email_enabled routing(cl:sms=$r_cl_sms,email=$r_cl_email cr:sms=$r_cr_sms,email=$r_cr_email)"
+        qlog_info "Alert settings saved: sms_enabled=$sms_enabled email_enabled=$email_enabled routing(cl:sms=$r_cl_sms,email=$r_cl_email cr:sms=$r_cr_sms,email=$r_cr_email rb:sms=$r_rb_sms,email=$r_rb_email)"
         cgi_success
         exit 0
     fi

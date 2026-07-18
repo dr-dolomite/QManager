@@ -262,3 +262,53 @@ mono_now() {
         *)           echo "$_up" ;;
     esac
 }
+
+# --- Utility: Planned-reboot breadcrumb --------------------------------------
+# record_planned_reboot <reason>
+# Appends "<epoch>|reboot|<reason>" to the persistent reboot ledger
+# (/etc/qmanager/crash.log, ubifs — survives reboot) and trims it to the last 20
+# lines, matching qmanager_watchcat's own tier4 writer. Called synchronously by
+# EVERY intentional reboot path (CGI reboot button, scheduled reboot, IPPT/IMEI/
+# MBN apply, install/update) BEFORE the reboot is issued, so the poller can
+# classify the next boot as a planned "user" reboot instead of an unplanned
+# power loss. It is ALSO reused post-boot to record an inferred "unplanned"
+# breadcrumb (see alert_engine.sh) — the function is a neutral ledger writer;
+# the "planned" in the name reflects its primary caller set.
+#
+# A dedicated flock guards our append+trim against other concurrent callers of
+# this function. watchcat's tier4 writer does not take this lock (it is about to
+# reboot and never races a planned write), so the lock only serializes planned
+# writers among themselves — enough to keep the trim from corrupting the file.
+_QLOG_CRASH_LOG="/etc/qmanager/crash.log"
+_QLOG_CRASH_LOCK="/tmp/qmanager_crashlog.lock"
+
+record_planned_reboot() {
+    local _rpr_reason
+    local _rpr_ts
+    local _rpr_count
+    _rpr_reason="${1:-user}"
+    # Only bare lowercase reason tags — a stray | or newline would corrupt the
+    # pipe-delimited crash.log format the classifier/history depend on.
+    case "$_rpr_reason" in
+        ''|*[!a-z_]*) _rpr_reason="user" ;;
+    esac
+
+    mkdir -p /etc/qmanager 2>/dev/null
+    [ -e "$_QLOG_CRASH_LOCK" ] || : > "$_QLOG_CRASH_LOCK" 2>/dev/null
+
+    (
+        flock -x 8 2>/dev/null
+        _rpr_ts=$(date +%s)
+        echo "${_rpr_ts}|reboot|${_rpr_reason}" >> "$_QLOG_CRASH_LOG"
+
+        _rpr_count=$(wc -l < "$_QLOG_CRASH_LOG" 2>/dev/null || echo 0)
+        case "$_rpr_count" in ''|*[!0-9]*) _rpr_count=0 ;; esac
+        if [ "$_rpr_count" -gt 20 ]; then
+            if tail -n 20 "$_QLOG_CRASH_LOG" > "${_QLOG_CRASH_LOG}.tmp" 2>/dev/null; then
+                mv "${_QLOG_CRASH_LOG}.tmp" "$_QLOG_CRASH_LOG" 2>/dev/null || rm -f "${_QLOG_CRASH_LOG}.tmp"
+            else
+                rm -f "${_QLOG_CRASH_LOG}.tmp"
+            fi
+        fi
+    ) 8>"$_QLOG_CRASH_LOCK"
+}

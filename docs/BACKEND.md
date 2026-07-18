@@ -81,7 +81,20 @@ BusyBox doesn't have `setsid`. Use the double-fork pattern for background daemon
 
 In BusyBox `ash`, `. /path/to/file.sh 2>/dev/null || { stub; }` does **not** execute the `||` clause when the file is absent — it exits the entire shell with rc=2. The `2>/dev/null` silences the error but cannot prevent the shell from dying.
 
-Safe pattern: guard with an existence check first.
+This is true **regardless of how the `.` is wrapped** — the failure is not specific to the `||` idiom. It also aborts the shell when the `.` is used as the condition of an `if`:
+
+```sh
+# ALSO WRONG — a `.` on a missing file aborts the shell before `if` can even
+# evaluate the exit status. This is not a "did the guard work" bug — the
+# process is already gone.
+if . /usr/lib/qmanager/ondemand_radio.sh 2>/dev/null; then
+    :
+else
+    stub
+fi
+```
+
+Safe pattern: guard with an existence check **before** the `.` is ever reached, so the interpreter never attempts to open a nonexistent file.
 
 ```sh
 # WRONG — the || clause never fires if the file is absent
@@ -91,11 +104,17 @@ Safe pattern: guard with an existence check first.
 if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
     . /usr/lib/qmanager/ondemand_radio.sh
 fi
+
+# Also correct, more compact — safe because `&&` short-circuits BEFORE `.`
+# ever runs, so the file is never opened when [ -f ] fails.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
 ```
 
 **Why:** POSIX says a shell may exit when a sourced file cannot be found; BusyBox `ash` does. `bash` and `dash` do not. This difference is invisible in development but fatal on the device.
 
 **Practical consequence:** if a library is absent (e.g. introduced in a new release but not yet on the device because the installer was not re-run), any script that dot-sources it without an existence guard will silently die mid-execution. The only symptom is an abrupt empty response from the CGI or a silent poller crash. See the installer section below for the co-deployment requirement.
+
+> ⚠️ WARNING: **This is not a hypothetical.** It bit the reboot-alert feature's `uninstall.sh` → `reboot_system()` path: `uninstall.sh` best-effort sources `qlog.sh` to call `record_planned_reboot` before its final reboot, but by the time that function runs, uninstall has normally **already deleted** `/usr/lib/qmanager` — so `qlog.sh` is expected to be missing on this path, not just possibly missing. Every `record_planned_reboot` caller (`cgi_base.sh`, `qmanager_poller`, `qmanager_scheduled_reboot`, `qmanager_imei_check`, `install.sh`, `uninstall.sh`) uses the `[ -f ] && .` / `if [ -f ]; then … else <stubs>; fi` guard for exactly this reason — see [`docs/features/alerts.md`](features/alerts.md#reboot-alerts) for the full call-site list.
 
 ### jq `//` Gotcha
 
@@ -136,7 +155,7 @@ cgi_headers
 | `cgi_success` | Emit `{"success":true}` |
 | `cgi_error <code> <detail>` | Emit `{"success":false,"error":"...","detail":"..."}` |
 | `cgi_method_not_allowed` | Emit 405 JSON response |
-| `cgi_reboot_response` | Emit success JSON, then async reboot |
+| `cgi_reboot_response [reason]` | Emit success JSON, drop a `record_planned_reboot` breadcrumb (default reason `"user"`), then async reboot |
 | `serve_ndjson_as_array <file>` | Convert NDJSON file to JSON array |
 
 **Auto-enforces authentication** unless the script sets `_SKIP_AUTH=1` before sourcing.
@@ -184,6 +203,7 @@ qlog_error "Something failed"
 - `qlog_at_cmd <cmd> <response> [exit_code]` — Log AT command + response at DEBUG
 - `qlog_lock <event> [detail]` — Log flock events
 - `qlog_state_change <field> <old> <new>` — Log state transitions
+- `record_planned_reboot <reason>` — Appends `<epoch>|reboot|<reason>` to the shared, persistent reboot ledger `/etc/qmanager/crash.log` (flock on `/tmp/qmanager_crashlog.lock`, trims to 20 lines). `reason` is sanitized to `[a-z_]` only. Called synchronously, before the actual reboot, by every intentional-reboot path (`cgi_reboot_response`, `qmanager_scheduled_reboot`, IPPT apply, IMEI-check restore, install/uninstall) so `alert_engine.sh`'s reboot-alert detector can classify the next boot as planned rather than unplanned. Also reused post-boot to record an inferred `unplanned` breadcrumb. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts).
 
 ### parse_at.sh
 
@@ -217,16 +237,19 @@ Tower lock state management:
 ### alert_routing.sh
 
 Trigger×channel routing + capability library for the centralized Alerts feature (sourced by poller and by `monitoring/alerts.sh`):
-- Owns `/etc/qmanager/alert_routing.json` (routing matrix, user preference)
-- `alert_capable <event> <channel>` — hard-coded capability table; the only incapable pair is `connection_lost/email` (email needs internet+DNS, both down during an outage)
+- Owns `/etc/qmanager/alert_routing.json` (routing matrix, user preference; version 2 — additive `reboot` event)
+- `alert_capable <event> <channel>` — hard-coded capability table; the only incapable pair is `connection_lost/email` (email needs internet+DNS, both down during an outage). Both `reboot` cells are capable (the alert is always delivered post-recovery).
 - `alert_route_enabled <event> <channel>` — routing AND capability gate
-- `alert_routing_load` re-clamps `connection_lost.email` to `false` on every load regardless of the file contents (fail-closed)
+- `alert_routing_load` re-clamps `connection_lost.email` to `false` on every load regardless of the file contents (fail-closed); `reboot.sms`/`reboot.email` get no clamp but default to `false` when absent/null (opt-in), so a pre-v2 file on disk needs no migration
 
 ### alert_engine.sh
 
 One centralized downtime state machine (sourced by poller, last in the alert-lib sourcing chain), replacing the two duplicated per-channel state machines that used to live in `sms_alerts.sh`/`email_alerts.sh`:
 - `alert_engine_check` — per-cycle entry point, called from the poller's always-every-cycle local block (before any AT work)
 - Downtime timer uses the monotonic clock (`mono_now`, not wall-clock epoch) so an SSR-driven NITZ time step can't corrupt it
+- `alert_engine_reboot_detect` — one-shot per poller start (called from `main()`), compares the kernel's per-boot `/proc/sys/kernel/random/boot_id` against `/etc/qmanager/last_boot_id`; a change means a real reboot happened (a bare procd respawn keeps the same `boot_id` and stages nothing). Classifies the cause from the shared `/etc/qmanager/crash.log` ledger (newest row within a ±300s window → `watchdog`/`user`/`unplanned`) and stages `/tmp/qmanager_reboot_pending.json`.
+- `_ae_reboot_check` — per-cycle delivery of a staged reboot alert once `conn_internet_available == "true"`; reuses the same `sms_alert_emit`/`email_alert_emit` rc-contract; coalesces >3 all-cause reboots/hour into one storm message via `/tmp/qmanager_reboot_storm_hour`
+- See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts) for the full detection/classification/delivery model, and the critical **tier4-only vs all-cause reboot-count** distinction between `qmanager_watchcat`'s `count_recent_reboots()` and this engine's `_ae_reboot_count_last_hour()` — both read the same `crash.log` file but must never be conflated
 - Suppresses both channels during low-power mode and watchdog recovery churn (`conn_during_recovery`) — the old `check_email_alert` was missing this guard
 - Dispatches sends via `sms_alert_emit`/`email_alert_emit <event> <secs>`, which return an rc contract of `0` (sent), `1` (failed, terminal), `2` (not ready, retry next cycle)
 - See [`docs/features/alerts.md`](features/alerts.md) for the full routing/capability model and clock-step rationale
@@ -320,7 +343,7 @@ The core daemon — runs forever, polls the modem at tiered intervals.
 - Detect and emit network events via `events.sh`
 - Manage signal/ping history NDJSON files
 - Read ping daemon and watchcat status
-- Run the centralized alert engine (`alert_engine_check`, every cycle) to detect connection-lost/restored events and dispatch SMS/email via `sms_alerts.sh`/`email_alerts.sh`, gated by `alert_routing.sh`'s routing + capability matrix
+- Run the centralized alert engine (`alert_engine_check`, every cycle) to detect connection-lost/restored events and dispatch SMS/email via `sms_alerts.sh`/`email_alerts.sh`, gated by `alert_routing.sh`'s routing + capability matrix; also runs `alert_engine_reboot_detect` once at startup to detect and stage a post-recovery reboot alert via `boot_id` comparison
 
 **Tier System:**
 
@@ -367,6 +390,8 @@ State machine: `MONITOR → SUSPECT → RECOVERY → COOLDOWN → LOCKED`
 | 3 | SIM failover | Switch SIM slot (Golden Rule sequence) |
 | 4 | Full reboot | Max 3/hour via token bucket, auto-disables |
 
+> ℹ️ NOTE: `/etc/qmanager/crash.log` is now a **shared reboot ledger** — the centralized Alerts feature's `record_planned_reboot` (`qlog.sh`) writes `user`/`unplanned` rows into the same file the watchdog's tier-4 writer uses for `tier4_escalation` rows. `count_recent_reboots()` (which feeds this token bucket and `reboots_this_hour`) was tightened to count `awk ... $3 == "tier4_escalation"` only, so the watchdog's own reboot rate is unaffected by the new rows. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts) for the reboot-alert side of this shared-file contract.
+
 ### qmanager_cell_scanner / qmanager_neighbour_scanner
 
 On-demand cell scanning daemons started by CGI endpoints.
@@ -398,7 +423,7 @@ Waits for `rmnet_data0` interface (up to 120s), then applies MTU from `/etc/fire
 
 ### qmanager_imei_check
 
-Boot-time one-shot: checks if IMEI was rejected (cause 5 from `AT+QNETRC?`), restores backup IMEI if configured.
+Boot-time one-shot: checks if IMEI was rejected (cause 5 from `AT+QNETRC?`), restores backup IMEI if configured. Drops a `record_planned_reboot "user"` breadcrumb before the reboot that follows a backup-IMEI restore.
 
 ### qmanager_scheduled_reboot
 
@@ -407,7 +432,7 @@ Cron-called script that logs the event and reboots the device.
 **Location:** `scripts/usr/bin/qmanager_scheduled_reboot`
 **Triggered by:** Cron entry managed by `system/settings.sh`
 
-Minimal script: logs via qlog, then calls `reboot`.
+Minimal script: logs via qlog, drops a `record_planned_reboot "user"` breadcrumb, then calls `reboot`. Scheduled reboots fold into the single `user` cause bucket for the reboot-alert feature — there is no separate "scheduled" classification.
 
 ### qmanager_low_power
 
@@ -663,7 +688,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 
 | Script | Method | Description |
 |--------|--------|-------------|
-| `alerts.sh` | GET/POST | Centralized SMS + email connection alerts: settings, routing matrix, capability matrix, test send, merged activity log |
+| `alerts.sh` | GET/POST | Centralized SMS + email + reboot connection alerts: settings, routing matrix (incl. `reboot`), capability matrix, `reboots` history array, test send, merged activity log |
 | `watchdog.sh` | GET/POST | Watchdog settings and status |
 
 #### Device (`device/`)
@@ -713,6 +738,9 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `qmanager_dpi_install.pid` | dpi_install | Installer singleton PID |
 | `qmanager_dpi_verify.json` | dpi_verify | DPI verification test results |
 | `qmanager_dpi_verify.pid` | dpi_verify | Verification singleton PID |
+| `qmanager_reboot_pending.json` | poller (`alert_engine.sh`) | Staged reboot alert awaiting post-recovery delivery; tmpfs on purpose — a real reboot wipes it, a poller respawn does not |
+| `qmanager_reboot_storm_hour` | poller (`alert_engine.sh`) | Mono-stamped marker suppressing further reboot alerts after a coalesced storm message |
+| `qmanager_crashlog.lock` | qlog.sh (`record_planned_reboot`) | flock guarding appends to the shared `/etc/qmanager/crash.log` reboot ledger |
 | `qmanager_sessions/` | CGI (auth) | Session files |
 | `qmanager.log` | all (qlog) | Centralized log file |
 | `/var/run/nfqws_masq.pid` | qmanager_dpi | Traffic Masquerade nfqws instance PID (uptime tracking) |
@@ -728,7 +756,9 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `imei_backup.json` | IMEI backup config (`{ enabled, imei }`) |
 | `sms_alerts.json` | SMS alert settings (`{ enabled, recipient_phone, threshold_minutes }`). `recipient_phone` is stored as raw digits with no leading `+` — the CGI save handler normalizes input before writing. |
 | `email_alerts.json` | Email alert settings (`{ enabled, sender_email, recipient_email, app_password, threshold_minutes }`). |
-| `alert_routing.json` | Trigger×channel routing matrix (`{ version, events: { connection_lost, connection_restored } }`); `connection_lost.email` is always clamped to `false`. See [`docs/features/alerts.md`](features/alerts.md). |
+| `alert_routing.json` | Trigger×channel routing matrix, version 2 (`{ version, events: { connection_lost, connection_restored, reboot } }`); `connection_lost.email` is always clamped to `false`; `reboot.sms`/`reboot.email` default `false` (opt-in) when absent, no clamp. See [`docs/features/alerts.md`](features/alerts.md). |
+| `crash.log` | Shared reboot ledger, format `<epoch>\|reboot\|<reason>`, capped at 20 lines. Written by `qmanager_watchcat` (`tier4_escalation` rows) and by `record_planned_reboot` in `qlog.sh` (`user`/`unplanned` rows). Read by `count_recent_reboots()` (tier4-only) and `alert_engine.sh` (all-cause). See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts). |
+| `last_boot_id` | Persisted copy of `/proc/sys/kernel/random/boot_id`, compared once per poller start by `alert_engine_reboot_detect` to detect a real reboot (vs. a procd respawn). |
 | `last_iccid` | Last seen SIM ICCID (for swap detection) |
 | `msmtprc` | Gmail SMTP config (chmod 600) |
 | `imei_check_pending` | Flag for boot-time IMEI check |

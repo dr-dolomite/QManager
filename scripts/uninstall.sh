@@ -567,6 +567,16 @@ print_summary() {
 # --- Reboot ------------------------------------------------------------------
 
 reboot_system() {
+    # Best-effort planned-reboot breadcrumb. By this point the uninstaller has
+    # usually already removed /usr/lib/qmanager, so the lib is absent and we skip
+    # — correct: after an uninstall no poller remains to read the ledger, and we
+    # do NOT want record_planned_reboot recreating /etc/qmanager. GUARD with
+    # [ -f ] before dot-sourcing: a `.` on a MISSING file ABORTS a non-interactive
+    # BusyBox ash script (POSIX special builtin) — which here would kill
+    # uninstall.sh before it reaches the actual reboot below. This is the NORMAL
+    # path on uninstall, so the guard is load-bearing.
+    [ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+    [ -n "$(command -v record_planned_reboot)" ] && record_planned_reboot "user" 2>/dev/null
     if command -v reboot >/dev/null 2>&1; then
         reboot
         return $?

@@ -22,13 +22,19 @@
 # =============================================================================
 
 # --- Logging -----------------------------------------------------------------
-. /usr/lib/qmanager/qlog.sh 2>/dev/null || {
+# GUARD with [ -f ] before dot-sourcing: a `.` on a MISSING file aborts a
+# non-interactive BusyBox ash script (POSIX special builtin), so a bare
+# `. FILE || {...}` fallback would never run. Guard, then stub in the else.
+if [ -f /usr/lib/qmanager/qlog.sh ]; then
+    . /usr/lib/qmanager/qlog.sh
+else
     qlog_init() { :; }
     qlog_info() { :; }
     qlog_warn() { :; }
     qlog_error() { :; }
     qlog_debug() { :; }
-}
+    record_planned_reboot() { :; }
+fi
 qlog_init "imei_check"
 . /usr/lib/qmanager/cgi_at.sh
 
@@ -114,6 +120,9 @@ if [ -n "$imei_rejected" ]; then
     rm -f "$CHECK_PENDING"
 
     qlog_info "Backup IMEI written — rebooting device"
+    # Planned reboot (backup-IMEI apply) — record before reboot so the next boot
+    # classifies this as a user reboot rather than an unplanned power loss.
+    record_planned_reboot "user"
     sleep 1
     reboot
     exit 0

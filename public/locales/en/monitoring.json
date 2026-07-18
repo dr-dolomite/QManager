@@ -69,6 +69,18 @@
     "event_connection_lost_desc": "The internet has been down past the alert threshold.",
     "event_connection_restored_name": "Connection restored",
     "event_connection_restored_desc": "The internet came back after an outage.",
+    "event_reboot_name": "Modem rebooted",
+    "event_reboot_desc": "The modem restarted. Sent once it's back online, with the reason.",
+
+    "reboot_history_title": "Recent reboots",
+    "reboot_history_description": "When the modem last restarted, and why.",
+    "reboot_history_empty": "No reboots recorded yet.",
+    "reboot_history_empty_hint": "Reboots will appear here as they happen, tagged with their cause.",
+    "reboot_history_footer": "Newest first, up to 10 shown.",
+    "reboot_history_time_unknown": "Unknown time",
+    "reboot_cause_watchdog": "Watchdog",
+    "reboot_cause_user": "Planned",
+    "reboot_cause_unplanned": "Unexpected",
 
     "settings_title": "Alert Settings",
     "settings_description": "Choose which events reach each channel, then configure SMS and email.",

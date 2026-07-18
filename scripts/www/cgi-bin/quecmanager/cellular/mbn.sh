@@ -208,7 +208,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     if [ "$ACTION" = "reboot" ]; then
         qlog_info "Device reboot requested via MBN settings"
 
-        cgi_reboot_response
+        cgi_reboot_response "user"
     fi
 
     # --- Unknown action ---

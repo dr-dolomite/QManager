@@ -294,6 +294,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # Return response BEFORE rebooting so HTTP is flushed
         cgi_success
 
+        # Drop a planned-reboot breadcrumb (synchronously, before the async
+        # reboot) so the next boot classifies this IPPT apply as a user reboot.
+        record_planned_reboot "user"
+
         # Reboot with short delay to ensure response is sent
         ( ( sleep 2 && reboot ) </dev/null >/dev/null 2>&1 & )
         exit 0

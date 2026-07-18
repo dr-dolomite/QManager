@@ -95,6 +95,7 @@ export function useAlerts(): UseAlertsReturn {
           channels: json.channels,
           routing: json.routing,
           capabilities: json.capabilities,
+          reboots: Array.isArray(json.reboots) ? json.reboots : [],
         });
       } catch (err) {
         if (!mountedRef.current) return;

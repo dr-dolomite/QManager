@@ -964,16 +964,24 @@ Unified endpoint for the centralized Alerts page — replaces the four retired e
   "routing": {
     "events": {
       "connection_lost":     { "sms": true, "email": false },
-      "connection_restored": { "sms": true, "email": true }
+      "connection_restored": { "sms": true, "email": true },
+      "reboot":              { "sms": false, "email": false }
     }
   },
   "capabilities": {
     "connection_lost":     { "sms": true, "email": false, "email_reason": "email_needs_internet" },
-    "connection_restored": { "sms": true, "email": true }
-  }
+    "connection_restored": { "sms": true, "email": true },
+    "reboot":              { "sms": true, "email": true }
+  },
+  "reboots": [
+    { "epoch": 1737158400, "cause": "watchdog" },
+    { "epoch": 1737100000, "cause": "user" }
+  ]
 }
 ```
 `email.app_password_set` is a boolean — the cleartext password is never returned by GET.
+
+`reboots` is the device's recent-reboot history — read from the shared `/etc/qmanager/crash.log` ledger, newest-first, capped at 10, `cause` one of `"watchdog"` / `"user"` / `"unplanned"`. It is populated independently of `routing.events.reboot` — every real reboot is recorded here whether or not the reboot alert itself is routed to any channel. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts).
 
 **POST (save settings)** — writes SMS + email + routing in one atomic call:
 ```json
@@ -985,7 +993,8 @@ Unified endpoint for the centralized Alerts page — replaces the four retired e
   "routing": {
     "events": {
       "connection_lost":     { "sms": true, "email": false },
-      "connection_restored": { "sms": true, "email": true }
+      "connection_restored": { "sms": true, "email": true },
+      "reboot":              { "sms": false, "email": false }
     }
   }
 }
@@ -995,6 +1004,7 @@ Validation notes:
 - `threshold_minutes` (both channels) range is `1..60`.
 - `app_password` is only sent when the user typed a new one; an empty/omitted value preserves the currently-stored password.
 - `routing.events.connection_lost.email` is **always clamped to `false` server-side** regardless of what is posted — email cannot deliver while the internet is down. This is the capability layer, not a routing preference; see the feature doc.
+- `routing.events.reboot.sms`/`.email` default to `false` (not `true`) when omitted or `null` — unlike the other two events, `reboot` is opt-in. Both cells are otherwise unclamped (both channels are genuinely capable, since the alert only ever sends post-recovery).
 
 **POST (send test):**
 ```json

@@ -12,9 +12,17 @@ import {
   MailIcon,
   WifiOffIcon,
   Wifi as WifiIcon,
+  RotateCcwIcon,
+  ShieldCheckIcon,
+  PowerIcon,
+  TriangleAlertIcon,
   type LucideIcon,
 } from "lucide-react";
-import type { AlertChannel, AlertEventKey } from "@/types/alerts";
+import type {
+  AlertChannel,
+  AlertEventKey,
+  RebootCause,
+} from "@/types/alerts";
 
 interface ChannelMeta {
   icon: LucideIcon;
@@ -36,6 +44,33 @@ interface EventMeta {
 export const EVENT_META: Record<AlertEventKey, EventMeta> = {
   connection_lost: { icon: WifiOffIcon, key: "connection_lost" },
   connection_restored: { icon: WifiIcon, key: "connection_restored" },
+  reboot: { icon: RotateCcwIcon, key: "reboot" },
+};
+
+// ─── Reboot-cause presentation (icon + tone + i18n key) ──────────────────────
+// Tone is a status role, never a brand accent: `unplanned` earns attention
+// (warning), `watchdog` reads as an automated recovery (info), `user` is the
+// expected, low-signal case (muted). Color is always paired with icon + text.
+
+type RebootTone = "warning" | "info" | "muted";
+
+interface RebootCauseMeta {
+  icon: LucideIcon;
+  tone: RebootTone;
+  /** i18n key under `alerts.reboot_cause_<key>` / `_desc`. */
+  key: string;
+}
+
+export const REBOOT_CAUSE_META: Record<RebootCause, RebootCauseMeta> = {
+  unplanned: { icon: TriangleAlertIcon, tone: "warning", key: "unplanned" },
+  watchdog: { icon: ShieldCheckIcon, tone: "info", key: "watchdog" },
+  user: { icon: PowerIcon, tone: "muted", key: "user" },
+};
+
+export const REBOOT_TONE_BADGE: Record<RebootTone, string> = {
+  warning: "bg-warning/15 text-warning border-warning/30",
+  info: "bg-info/15 text-info border-info/30",
+  muted: "bg-muted/50 text-muted-foreground border-muted-foreground/30",
 };
 
 // ─── Recipient masking (never show the full contact in the glance hero) ──────

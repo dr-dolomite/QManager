@@ -6,11 +6,21 @@
 # Install location: /usr/bin/qmanager_scheduled_reboot
 # =============================================================================
 
-. /usr/lib/qmanager/qlog.sh 2>/dev/null || {
+# GUARD with [ -f ] before dot-sourcing: a `.` on a MISSING file aborts a
+# non-interactive BusyBox ash script (POSIX special builtin), so a bare
+# `. FILE || {...}` fallback would never run. Guard, then stub in the else.
+if [ -f /usr/lib/qmanager/qlog.sh ]; then
+    . /usr/lib/qmanager/qlog.sh
+else
     qlog_init() { :; }
     qlog_info() { logger -t scheduled_reboot "$1"; }
-}
+    record_planned_reboot() { :; }
+fi
 
 qlog_init "scheduled_reboot"
 qlog_info "Scheduled system reboot triggered"
+# Scheduled reboots fold into the single "user" (planned) class per the reboot-
+# alert routing model — drop the breadcrumb before rebooting so the next boot
+# classifies this as planned, not an unplanned power loss.
+record_planned_reboot "user"
 reboot

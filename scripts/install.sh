@@ -1687,6 +1687,15 @@ print_summary() {
 # --- Reboot ------------------------------------------------------------------
 
 reboot_system() {
+    # Best-effort planned-reboot breadcrumb so the post-update boot classifies
+    # this as a user reboot (not an unplanned power loss). The lib was just
+    # deployed by this same install run, so it is normally present; if absent we
+    # simply skip — the poller then infers "unplanned", an acceptable degradation
+    # for a broken install. GUARD with [ -f ] before dot-sourcing: a `.` on a
+    # missing file ABORTS a non-interactive BusyBox ash script (POSIX special
+    # builtin), which would kill install.sh before it ever reaches the reboot.
+    [ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+    [ -n "$(command -v record_planned_reboot)" ] && record_planned_reboot "user" 2>/dev/null
     if command -v reboot >/dev/null 2>&1; then
         reboot
         return $?
