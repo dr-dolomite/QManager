@@ -1,6 +1,6 @@
 # 🚀 QManager BETA v0.1.31
 
-v0.1.31 pairs a ground-up redesign of the Connection Watchdog page with an important Custom SIM Profiles reliability fix, and unifies SMS and email downtime alerts into a single Alerts page. The watchdog moves to a single-column, status-first anatomy — a live status hero, one tabbed settings panel with a sticky save bar, and a new recovery history log — while SIM switching now verifies the slot change actually happened before applying a profile, fixing cases where the wrong profile (or none) was applied after switching SIMs. Alerts brings the old separate SMS and Email alert pages together in one place with a live readiness view, a shared activity log, per-event control over which channel notifies you, and a new opt-in alert that tells you when — and why — your modem rebooted.
+v0.1.31 pairs a ground-up redesign of the Connection Watchdog page with an important Custom SIM Profiles reliability fix, and unifies SMS and email downtime alerts into a single Alerts page. The watchdog moves to a single-column, status-first anatomy — a live status hero, one tabbed settings panel with a sticky save bar, and a new recovery history log — while SIM switching now verifies the slot change actually happened before applying a profile, fixing cases where the wrong profile (or none) was applied after switching SIMs. Alerts brings the old separate SMS and Email alert pages together in one place with a live readiness view, a shared activity log, per-event control over which channel notifies you, and a new opt-in alert that tells you when — and why — your modem rebooted. The new Alerts page is also fully translated into Italian, Indonesian, and Chinese (Simplified and Traditional).
 
 ## ✨ New Features
 
@@ -17,6 +17,7 @@ v0.1.31 pairs a ground-up redesign of the Connection Watchdog page with an impor
 - **Screen readers now announce watchdog state changes** as they happen, so you don't have to be looking at the screen to know the watchdog just started detecting an issue or recovering.
 - **Saving a settings mistake now takes you straight to the problem.** If a field is invalid, Save jumps to the tab that needs attention and puts your cursor in the exact field to fix.
 - **Cooldown and SIM-settle countdowns are now honest.** The status card only shows a cooldown timer when one is actually counting down, including the full ~90 second settle window after a SIM swap.
+- **The Alerts page is now fully localized.** Italian, Indonesian, and Chinese (Simplified and Traditional) users now see the whole unified Alerts page in their own language, matching the English version, instead of falling back to English text.
 
 ## 📥 Installation
 
