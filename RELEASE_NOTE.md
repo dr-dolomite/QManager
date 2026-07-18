@@ -10,6 +10,7 @@ v0.1.31 pairs a ground-up redesign of the Connection Watchdog page with an impor
 
 ## ✅ Improvements
 
+- **IP Passthrough can now pick the target device from a list of connected LAN devices**, alongside the existing automatic and manual-entry options — no more copying a MAC address by hand.
 - **SIM switching now verifies the slot change actually took effect before applying a profile.** Under certain timing conditions, the modem could report a slot switch as successful while silently staying on the old SIM. QManager now double-checks the switch really happened before matching and applying a Custom SIM Profile, fixing cases where the wrong profile — or no profile — was applied after switching SIMs.
 - **Email alerts no longer fire a "recovered" notice during an automatic recovery attempt.** Email alerts now wait out the same brief window SMS alerts already did before declaring the connection recovered, so you no longer get a "recovered" email moments before another outage starts.
 - **Rapid, back-to-back SIM switches now settle on the correct profile.** Switching SIMs twice in quick succession could previously leave the wrong profile active. The correct profile for whichever SIM is actually inserted now always wins.

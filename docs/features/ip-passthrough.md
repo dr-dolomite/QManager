@@ -11,6 +11,8 @@ IP Passthrough bridges one LAN device directly to the modem's WAN IP, bypassing 
 | Hook | `hooks/use-ip-passthrough.ts` |
 | Types | `types/ip-passthrough.ts` |
 | CGI | `scripts/www/cgi-bin/quecmanager/network/ip_passthrough.sh` |
+| Connected-device CGI | `scripts/www/cgi-bin/quecmanager/network/lan_devices.sh` (GET, read-only) |
+| Connected-device hook / types | `hooks/use-lan-devices.ts` / `types/lan-devices.ts` |
 | Config file | `/etc/qmanager/ippt_config.json` (authoritative, written by POST) |
 | Boot cache | `/tmp/qmanager_status.json` `.device.ippt_*` fields (poller-populated at boot) |
 | Boot parsers | `parse_ippt_nat`, `parse_ippt_usbnet`, `parse_ippt_dhcpv4dns`, `parse_ippt_mpdn_rule` in `scripts/usr/lib/qmanager/parse_at.sh` |
@@ -197,7 +199,44 @@ This mirrors the pattern already used in `parse_ippt_mpdn_rule` (`grep '"MPDN_ru
 
 **DHCPV4DNS note:** the response value is `"enable"` or `"disable"` (no trailing `d`). The parser normalizes to `"enabled"`/`"disabled"` for the cache and GET response. The POST accepts `"enabled"`/`"disabled"` and converts back to `"enable"`/`"disable"` for the AT command.
 
+## Connected-Device MAC Picker
+
+The `target_mac` field can come from three sources in the UI, all of which resolve to the same `localMacInput` state before submit — the apply pipeline above is completely unaware which source was used:
+
+| Source | Resolved MAC |
+|---|---|
+| Automatic | `FF:FF:FF:FF:FF:FF` sentinel (first connected device, modem-side) |
+| From connected device | The MAC of whichever `LanDevice` the user picked from a live list |
+| Manual | Hand-typed, formatted to `XX:XX:XX:XX:XX:XX` as the user types |
+
+This is purely additive parity with the original QuecManager project (whose `fetch_macs.sh` offered the same picker) — it does not change the apply pipeline, the config file schema, the reboot behavior, or the Verizon lock. Picking a device just fills `localMacInput`, so the existing validation (`macValid`), reset, and save logic in `ip-passthrough-card.tsx` are untouched.
+
+### `GET /cgi-bin/quecmanager/network/lan_devices.sh`
+
+New, standalone, **read-only**, session-gated (auth-cookie) endpoint. Backs the device dropdown; it has no POST action and never touches AT commands, UCI, or the IPPT config file.
+
+**Response:**
+
+```json
+{ "success": true, "devices": [ { "mac": "94:83:c4:a6:ff:8b", "ip": "192.168.225.129", "hostname": "GL-MT6000" } ] }
+```
+
+An empty LAN is `{ "success": true, "devices": [] }` — not an error. `mac` is always a validated, lowercase 6-octet MAC (`validate_mac()` drops anything malformed); `hostname` is `""` when unknown; `ip` may be `""` if the device is only known from the neighbour table.
+
+**Data sources, merged and deduped by MAC (lease wins on conflict):**
+
+1. **DHCP leases** (primary — gives hostnames). The lease file path is read via `uci -q get dhcp.lan_dns.leasefile`, falling back to `/tmp/dhcp.leases` only if that UCI key is empty.
+   > ⚠️ WARNING: On RM551E hardware this UCI key is overridden to `/tmp/data/dhcp.leases.lan`. Hardcoding the `/tmp/dhcp.leases` default instead of resolving through UCI would silently return zero leases on that hardware.
+2. **`ip neigh show`** (secondary — catches static-IP devices with no lease, e.g. no hostname), falling back to `/proc/net/arp` when `ip` is unavailable. Entries in `FAILED`/`INCOMPLETE` state (or ARP rows with an all-zero MAC / incomplete flag) are dropped.
+
+Dedup key is the lowercased MAC; a lease-sourced entry (which carries a hostname) always wins over a neigh/ARP entry for the same MAC. The response assembly builds a `mac\tip\thostname` scratch file and turns it into JSON via `jq -R -s ... split("\t")` — a literal-string `split`, not a regex. The device's `jq` build has no Oniguruma, so `test()`/`match()`/`sub()`/`gsub()` are unavailable at runtime; `split()` on a literal separator sidesteps that entirely.
+
+### UI Gating
+
+`hooks/use-lan-devices.ts`'s `useLanDevices(enabled)` only scans once per enable, lazily — the IP Passthrough card gates it on `mode !== "disabled" && macSource === "device"` (`deviceScanEnabled` in `ip-passthrough-card.tsx`), so the LAN is never scanned while passthrough is off or another MAC source is selected. `refresh()` triggers a manual rescan (wired to a rescan button, plus an "enter manually" escape hatch in the empty state).
+
 ## Known Limitations
 
 - **No rollback on partial apply.** See the Apply Pipeline section above.
 - **Boot cache is stale after a manual AT change** (e.g. from another tool). The config file takes priority on GET, so as long as QManager applied the settings itself the config file is authoritative. If IPPT was configured outside QManager, the config file won't exist and the boot cache will correctly reflect modem state.
+- **The connected-device list is a point-in-time scan**, not live-updating. A device that joins the LAN after the scan won't appear until the user hits rescan.

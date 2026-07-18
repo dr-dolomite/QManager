@@ -796,6 +796,23 @@ Custom DNS override settings. Auth-gated. See [`docs/features/custom-dns.md`](fe
 
 IP passthrough mode configuration. Auth-gated. See [`docs/features/ip-passthrough.md`](features/ip-passthrough.md) for the full request/response shapes, apply pipeline, boot parser invariants, and Verizon lock semantics.
 
+### GET `/network/lan_devices.sh`
+
+Lists devices currently visible on the LAN. Auth-gated, **read-only** (GET only — `method_not_allowed` on any other verb). Backs the IP Passthrough "From connected device" MAC picker; does not touch the IPPT apply pipeline, config file, or any AT command. See [`docs/features/ip-passthrough.md`](features/ip-passthrough.md#connected-device-mac-picker) for the DHCP-lease + neigh/ARP merge and the UCI-overridden lease-path gotcha.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "devices": [
+    { "mac": "94:83:c4:a6:ff:8b", "ip": "192.168.225.129", "hostname": "GL-MT6000" }
+  ]
+}
+```
+
+An empty LAN returns `{ "success": true, "devices": [] }` — not an error. `hostname` is `""` when unknown.
+
 ### GET/POST `/network/lan_config.sh`
 
 Read or write the LAN bridge (`br-lan`) IPv4 address and subnet. Auth-gated. See [`docs/features/lan-config.md`](features/lan-config.md) for the self-severing apply pattern and validation invariants.
