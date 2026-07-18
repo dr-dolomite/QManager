@@ -1,6 +1,6 @@
 # 🚀 QManager BETA v0.1.31
 
-v0.1.31 delivers a redesigned Connection Watchdog page, a unified SMS + email Alerts page with optional reboot notifications, and a critical SIM-profile reliability fix.
+v0.1.31 is a monitoring-focused release built around a redesigned Connection Watchdog page and a unified SMS + email Alerts page with opt-in reboot notifications. It also ships a critical SIM-profile reliability fix — the modem no longer activates the wrong profile after a SIM switch — plus a connected-device MAC picker for IP Passthrough and a round of watchdog, accessibility, and localization polish. Mainly new features backed by reliability fixes.
 
 ## ✨ New Features
 
