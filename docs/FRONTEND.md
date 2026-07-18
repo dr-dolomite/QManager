@@ -95,7 +95,7 @@ constants/                      # Static configuration data
 
 | Route | Component | Description |
 |-------|-----------|-------------|
-| `/` | Redirect | → `/dashboard` |
+| `/` | Home (`app/page.tsx`) | Public Overview splash by default; confirms a live session via `auth/check.sh` before forwarding to `/dashboard` — never trusts the `qm_logged_in` indicator cookie alone (see gotcha below) |
 | `/login` | LoginForm | Authentication (login or first-time setup) |
 | `/dashboard` | HomeComponent | Real-time signal, traffic, device status |
 | `/cellular` | CellularInformation | Cellular info cards |
@@ -137,6 +137,7 @@ RootLayout (app/layout.tsx)
 ├── Toaster (sonner notifications)
 └── Page Content
     ├── /login → LoginPage (no sidebar)
+    ├── / → Home / public Overview splash (no sidebar; pre-login surface)
     └── /* → AppLayout
          ├── AppSidebar (navigation)
          ├── Breadcrumbs (auto-generated from route)
@@ -328,6 +329,14 @@ const response = await authFetch("/cgi-bin/quecmanager/cellular/settings.sh");
 It's a thin wrapper around `fetch()` that:
 1. Lets the browser auto-send cookies (no manual token injection)
 2. Catches 401 responses → clears indicator cookie → redirects to `/login`
+
+> ⚠️ WARNING: **Never call `authFetch()` from a pre-login / public surface.** Its 401 handler is a global side effect (`window.location.href = "/login/"`), so any component that uses it inherits "redirect to login on 401" — correct for authenticated pages, wrong for a page a logged-out visitor is supposed to see. A public component that calls `authFetch()` against an authenticated endpoint will bounce itself to `/login/` the instant the visitor has no session, i.e. almost immediately.
+>
+> This bit the `/` Overview splash (`components/public/overview-card.tsx`): its `useUnitPreferences()` hook (`hooks/use-system-settings.ts`) called `authFetch()` against `system/settings.sh`, 401ing for every logged-out visitor and redirecting the public landing page to `/login/`. Fixed by switching it to a plain `fetch()` with a graceful celsius/km fallback on non-2xx — cookies still ride along by default (same-origin), so the authenticated dashboard still gets real unit prefs.
+>
+> Public hooks (`use-public-overview.ts`, `use-device-hostname.ts`, and now the unit-preference read in `use-system-settings.ts`) use plain `fetch()`, never `authFetch()`. The first two also pass `credentials: "omit"` since their endpoints are unauthenticated by design; `useUnitPreferences()` is shared with the logged-in dashboard so it keeps default same-origin credentials, just not the `authFetch` 401 redirect.
+>
+> The `/` route gate (`app/page.tsx`) has the mirror-image problem covered: it never trusts the `qm_logged_in` indicator cookie by itself to forward to `/dashboard` (a stale/foreign-domain cookie would otherwise trap the visitor in a `/dashboard` → auto-logout → `/login/` bounce) — it confirms via `auth/check.sh` first and falls back to the public splash on anything but an explicit `authenticated: true`.
 
 ### Development Proxy
 

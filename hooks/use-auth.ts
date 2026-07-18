@@ -159,7 +159,9 @@ export async function logout(): Promise<void> {
     // Ignore network errors on logout
   } finally {
     clearIndicatorCookie();
-    window.location.href = "/login/";
+    // Land on the public Overview splash ("/"), not the bare login form. The
+    // indicator cookie is cleared above, so "/" renders OverviewCard directly.
+    window.location.href = "/";
   }
 }
 

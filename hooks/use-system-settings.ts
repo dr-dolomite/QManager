@@ -223,10 +223,19 @@ export function useUnitPreferences(): UnitPreferences | null {
   useEffect(() => {
     let cancelled = false;
 
-    authFetch(CGI_ENDPOINT)
-      .then((r) => r.json())
-      .then((json: SystemSettingsResponse) => {
-        if (!cancelled && json.success && json.settings) {
+    // Plain fetch, NOT authFetch: this is a best-effort display-preference read
+    // that also runs on the public Overview splash ("/"), where the visitor is
+    // logged out and this endpoint returns 401. authFetch turns any 401 into a
+    // global `window.location = "/login/"` redirect — which would bounce the
+    // public splash straight to the login form the instant it mounts. A display
+    // preference must never drive session-loss routing. Cookies still ride along
+    // (same-origin default credentials), so the logged-in dashboard keeps
+    // getting the user's real °F/miles prefs; logged-out simply falls through to
+    // the celsius/km defaults below.
+    fetch(CGI_ENDPOINT, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: SystemSettingsResponse | null) => {
+        if (!cancelled && json?.success && json.settings) {
           setPrefs({
             tempUnit: json.settings.temp_unit || "celsius",
             distanceUnit: json.settings.distance_unit || "km",
@@ -234,7 +243,7 @@ export function useUnitPreferences(): UnitPreferences | null {
         }
       })
       .catch(() => {
-        // Fallback to defaults on error
+        // Silent: fall back to the celsius/km defaults on any error.
       });
 
     return () => {
