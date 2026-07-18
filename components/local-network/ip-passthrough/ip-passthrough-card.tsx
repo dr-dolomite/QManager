@@ -34,12 +34,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { InfoIcon, RotateCcwIcon } from "lucide-react";
+import { InfoIcon, RotateCcwIcon, RefreshCwIcon } from "lucide-react";
 import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useIpPassthrough } from "@/hooks/use-ip-passthrough";
 import { useActiveProfile } from "@/hooks/use-active-profile";
+import { useLanDevices } from "@/hooks/use-lan-devices";
 import type {
   PassthroughMode,
   DnsProxy,
@@ -47,8 +48,11 @@ import type {
   UsbMode,
 } from "@/types/ip-passthrough";
 
-// MAC source: "automatic" = FF:FF:FF:FF:FF:FF (first connected device), "manual" = text input
-type MacSource = "automatic" | "manual";
+// MAC source:
+//   "automatic" = FF:FF:FF:FF:FF:FF (first connected device)
+//   "device"    = pick from the live connected-LAN-device list (fills the MAC)
+//   "manual"    = hand-typed MAC text input
+type MacSource = "automatic" | "device" | "manual";
 
 // Local-only types — descriptive strings avoid Radix Select "0"-as-falsy bug
 type NatMode = "nat-on" | "nat-off";
@@ -92,6 +96,22 @@ const IPPassthroughCard = () => {
   const [localIpptNat, setLocalIpptNat] = useState<NatMode | "">("");
   const [localUsbMode, setLocalUsbMode] = useState<UsbModeLocal>("ecm");
   const [localDnsProxy, setLocalDnsProxy] = useState<DnsProxy>("disabled");
+
+  // Connected LAN devices — scanned lazily, only once the user is actually
+  // picking a device (passthrough active AND "From connected device" chosen).
+  const deviceScanEnabled = localMode !== "disabled" && localMacSource === "device";
+  const {
+    devices,
+    isLoading: isDevicesLoading,
+    error: devicesError,
+    refresh: refreshDevices,
+  } = useLanDevices(deviceScanEnabled);
+
+  // The device Select's value is the list entry whose MAC matches the stored
+  // (uppercased) MAC — case-insensitive, since the backend returns lowercase.
+  const selectedDevice = devices.find(
+    (d) => d.mac.toUpperCase() === localMacInput.toUpperCase()
+  );
 
   // Pre-save confirmation dialog
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -363,11 +383,129 @@ const IPPassthroughCard = () => {
                               <SelectItem value="automatic">
                                 {t("ippt.option_mac_automatic")}
                               </SelectItem>
+                              <SelectItem value="device">
+                                {t("ippt.option_mac_device")}
+                              </SelectItem>
                               <SelectItem value="manual">
                                 {t("ippt.option_mac_manual")}
                               </SelectItem>
                             </SelectContent>
                           </Select>
+
+                          {/* Connected-device picker (fills the MAC) */}
+                          <AnimatePresence mode="wait">
+                            {localMacSource === "device" && (
+                              <motion.div
+                                key="device-mac-picker"
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{
+                                  duration: 0.3,
+                                  ease: [0.16, 1, 0.3, 1],
+                                }}
+                                className="flex flex-col gap-1.5"
+                              >
+                                {isDevicesLoading ? (
+                                  // Scanning
+                                  <div className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm text-muted-foreground">
+                                    <RefreshCwIcon className="size-3.5 animate-spin" />
+                                    {t("ippt.device_scanning")}
+                                  </div>
+                                ) : devicesError ? (
+                                  // Error
+                                  <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+                                    <p className="text-xs text-destructive">
+                                      {t("ippt.device_error")}
+                                    </p>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 shrink-0 text-destructive hover:text-destructive"
+                                      onClick={refreshDevices}
+                                    >
+                                      {t("actions.retry", { ns: "common" })}
+                                    </Button>
+                                  </div>
+                                ) : devices.length === 0 ? (
+                                  // Empty — teaches how to recover
+                                  <div className="flex flex-col gap-2 rounded-md border border-dashed border-border px-3 py-2.5">
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("ippt.device_empty")}
+                                    </p>
+                                    <div className="flex items-center gap-4">
+                                      <button
+                                        type="button"
+                                        onClick={refreshDevices}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                                      >
+                                        <RefreshCwIcon className="size-3" />
+                                        {t("ippt.device_rescan")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setLocalMacSource("manual")}
+                                        className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                                      >
+                                        {t("ippt.device_enter_manually")}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  // Populated
+                                  <>
+                                    <div className="flex items-center gap-2">
+                                      <Select
+                                        value={selectedDevice?.mac ?? ""}
+                                        onValueChange={(v) =>
+                                          setLocalMacInput(v.toUpperCase())
+                                        }
+                                        disabled={isSaving}
+                                      >
+                                        <SelectTrigger
+                                          aria-label={t("ippt.aria_mac_device")}
+                                          className="w-full"
+                                        >
+                                          <SelectValue
+                                            placeholder={t("ippt.placeholder_mac_device")}
+                                          />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {devices.map((d) => (
+                                            <SelectItem key={d.mac} value={d.mac}>
+                                              <span className="flex w-full items-center justify-between gap-3">
+                                                <span className="truncate">
+                                                  {d.hostname || d.ip || t("ippt.device_unknown")}
+                                                </span>
+                                                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                                  {d.mac.toUpperCase()}
+                                                </span>
+                                              </span>
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="shrink-0"
+                                        onClick={refreshDevices}
+                                        disabled={isSaving}
+                                        aria-label={t("ippt.aria_device_refresh")}
+                                      >
+                                        <RefreshCwIcon />
+                                      </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("ippt.helper_mac_device")}
+                                    </p>
+                                  </>
+                                )}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
 
                           {/* Manual MAC text input */}
                           <AnimatePresence mode="wait">

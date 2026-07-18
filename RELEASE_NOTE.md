@@ -10,6 +10,7 @@ v0.1.31 delivers a redesigned Connection Watchdog page, a unified SMS + email Al
 
 ## ✅ Improvements
 
+- **IP Passthrough can now pick the target device from a list of connected LAN devices**, alongside the existing automatic and manual-entry options — no more copying a MAC address by hand.
 - **SIM switch now waits for slot verification before applying a profile.** Fixes cases where the modem reported a successful switch but stayed on the old SIM, causing the wrong profile (or none) to activate.
 - **Email alerts no longer fire premature "recovered" notices** during active recovery attempts.
 - **Rapid back-to-back SIM switches now always settle on the correct profile.**
