@@ -7,9 +7,16 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardFooter,
   CardHeader,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWatchdogForm } from "./use-watchdog-form";
 import { WatchdogStatusCard } from "./watchdog-status-card";
@@ -118,9 +125,14 @@ function WatchdogForm({ hookData }: { hookData: UseWatchdogSettingsReturn }) {
 
 // -----------------------------------------------------------------------------
 // Page skeleton — mirrors the live column geometry (Skeleton-Mirror rule) so
-// content replacement is a clean fill with zero reflow.
+// content replacement is a clean fill with zero reflow. Each sub-skeleton is
+// shaped to the state its card lands in *next*: Status → the live hero, Activity
+// → the recovery card's own loading table (header strip + rows, no pager yet),
+// Settings → the Detection tab that opens by default. Getting the *next* state
+// right, not the eventual one, is what makes the hand-off invisible.
 // -----------------------------------------------------------------------------
 function PageSkeleton() {
+  const { t } = useTranslation("monitoring");
   return (
     <div
       className="grid grid-cols-1 items-start gap-6 @4xl/main:grid-cols-2"
@@ -128,6 +140,8 @@ function PageSkeleton() {
       aria-busy="true"
       aria-live="polite"
     >
+      {/* Every card below is aria-hidden, so voice the busy region here. */}
+      <span className="sr-only">{t("common:loading")}</span>
       <div className="flex flex-col gap-6">
         <StatusSkeleton />
         <ActivitySkeleton />
@@ -137,8 +151,8 @@ function PageSkeleton() {
   );
 }
 
-// Status hero: header + switch action, a state tile, a counter strip, and the
-// read-only ladder stepper.
+// Status hero: header + switch action, the state tile (matches the p-4 + size-12
+// tile → 80px), the wrap-flow counter strip, and the read-only ladder stepper.
 function StatusSkeleton() {
   return (
     <Card className="@container/card" aria-hidden>
@@ -154,7 +168,7 @@ function StatusSkeleton() {
         <div className="border-t pt-5">
           <div className="flex flex-wrap gap-x-10 gap-y-5">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="grid gap-1.5">
+              <div key={i} className="grid gap-1">
                 <Skeleton className="h-3 w-20" />
                 <Skeleton className="h-4 w-16" />
               </div>
@@ -162,7 +176,7 @@ function StatusSkeleton() {
           </div>
         </div>
         <div className="border-t pt-5">
-          <Skeleton className="mb-3 h-3 w-24" />
+          <Skeleton className="mb-2.5 h-3 w-24" />
           <div className="flex items-center gap-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex flex-1 items-center gap-1.5">
@@ -177,7 +191,9 @@ function StatusSkeleton() {
   );
 }
 
-// Settings: tab strip + a couple of field rows + the sticky save bar.
+// Settings: tab strip + the Detection tab's fields (each label + control +
+// description, so the height matches the real tab) + the derived-preview row +
+// the sticky save bar.
 function SettingsSkeleton() {
   return (
     <Card className="@container/card" aria-hidden>
@@ -191,19 +207,23 @@ function SettingsSkeleton() {
           <div className="grid gap-1.5">
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-3 w-40" />
           </div>
           <div className="grid gap-1.5">
-            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="h-3.5 w-24" />
             <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-3 w-36" />
           </div>
         </div>
         <div className="mt-4 grid gap-1.5">
-          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-3.5 w-20" />
           <Skeleton className="h-9 w-full max-w-[18rem] rounded-md" />
+          <Skeleton className="h-3 w-44" />
         </div>
-        <Skeleton className="mt-4 h-10 w-full rounded-lg" />
-        {/* Sticky bar silhouette */}
-        <div className="-mx-6 -mb-6 mt-6 flex items-center justify-between gap-3 border-t px-6 py-4">
+        {/* "Declares down after ~Ns" derivation row (px-3 py-2 text-sm → 36px). */}
+        <Skeleton className="mt-4 h-9 w-full rounded-lg" />
+        {/* Sticky save-bar silhouette — same negative-margin bleed + rounded-b. */}
+        <div className="-mx-6 -mb-6 mt-6 flex items-center justify-between gap-3 rounded-b-xl border-t px-6 py-4">
           <Skeleton className="h-3.5 w-28" />
           <div className="flex items-center gap-2">
             <Skeleton className="h-8 w-16 rounded-md" />
@@ -215,7 +235,9 @@ function SettingsSkeleton() {
   );
 }
 
-// Activity: header + refresh action, a bordered table of rows, footer pager.
+// Activity: header + refresh action, then the exact bordered table the recovery
+// card renders in its own loading state — header strip + four rows, and no pager
+// (the footer only appears once >6 events land, never during load).
 function ActivitySkeleton() {
   return (
     <Card className="@container/card" aria-hidden>
@@ -227,23 +249,39 @@ function ActivitySkeleton() {
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 rounded-lg border p-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="size-5 shrink-0 rounded-full" />
-              <Skeleton className="h-4 flex-1" />
-              <Skeleton className="h-4 w-24 shrink-0" />
-            </div>
-          ))}
+        <div className="overflow-hidden rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="hidden @md/card:table-cell">
+                  <Skeleton className="h-3 w-14" />
+                </TableHead>
+                <TableHead>
+                  <Skeleton className="h-3 w-14" />
+                </TableHead>
+                <TableHead className="text-right @md/card:text-left">
+                  <Skeleton className="h-3 w-10 ml-auto @md/card:ml-0" />
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <TableRow key={i} className="hover:bg-transparent">
+                  <TableCell className="hidden @md/card:table-cell">
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-full" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24 ml-auto @md/card:ml-0" />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </CardContent>
-      <CardFooter className="justify-between gap-3 border-t pt-4">
-        <Skeleton className="h-3.5 w-20" />
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-8 rounded-md" />
-          <Skeleton className="size-8 rounded-md" />
-        </div>
-      </CardFooter>
     </Card>
   );
 }
