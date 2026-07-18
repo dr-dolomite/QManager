@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "generated_at": "2026-07-18T10:43:14Z",
+  "generated_at": "2026-07-18T10:43:28Z",
   "packs": [
     {
       "code": "id",
@@ -35,11 +35,11 @@
       "native_name": "繁體中文",
       "english_name": "Traditional Chinese",
       "rtl": false,
-      "version": "2026.06.14",
-      "completeness": 1,
-      "size_bytes": 49203,
-      "sha256": "6630827708304e3ab5d7faf1d627d8dbb42e916d09b110f7aa83d766ca6bd264",
-      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-zh-TW-2026.06.14.tar.gz",
+      "version": "2026.07.18",
+      "completeness": 0.998,
+      "size_bytes": 51228,
+      "sha256": "463bfe15470039d7c004c578ecc5456a4a4c31ec81c271cd41009e61d1cde690",
+      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-zh-TW-2026.07.18.tar.gz",
       "contributors": [
         "@po1son7"
       ]
