@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import {
@@ -30,14 +30,53 @@ import {
   AlertCircle,
   CheckCircle2Icon,
   XCircleIcon,
+  RotateCcwIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAlertsLog } from "@/hooks/use-alerts-log";
-import { CHANNEL_META } from "./constants";
+import type { AlertLogEntry, RebootHistoryEntry } from "@/types/alerts";
+import { CHANNEL_META, REBOOT_CAUSE_META, REBOOT_TONE_BADGE } from "./constants";
 
 const MotionTableRow = motion.create(TableRow);
 
-export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
+// -----------------------------------------------------------------------------
+// Activity — one time-ordered feed of alert deliveries + recorded reboots.
+// -----------------------------------------------------------------------------
+// Deliveries (sent/failed SMS+email) come from the pollable `useAlertsLog`
+// hook; reboots are read-only telemetry passed down from the page's single
+// `useAlerts` GET. The two shapes are interleaved by time: a delivery row keeps
+// the full channel/status/recipient columns, while a reboot row is an *event*
+// row — it fills the columns it owns (timestamp, label, cause) and leaves the
+// delivery-only columns as muted em-dashes, so a reader can tell at a glance
+// that it is something that happened, not something that was sent.
+// -----------------------------------------------------------------------------
+
+type FeedRow =
+  | { kind: "delivery"; key: string; time: number; entry: AlertLogEntry }
+  | { kind: "reboot"; key: string; time: number; reboot: RebootHistoryEntry };
+
+/** Delivery timestamps are device-local "YYYY-MM-DD HH:MM:SS"; reboots are
+ *  epoch seconds. Normalize both to a comparable ms key for one desc sort. */
+function deliveryTime(ts: string): number {
+  const parsed = Date.parse(ts.replace(" ", "T"));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Render an epoch as the same "YYYY-MM-DD HH:MM:SS" shape delivery rows use,
+ *  so the timestamp column stays homogeneous. */
+function formatEpoch(epoch: number): string {
+  const d = new Date(epoch * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+export function AlertsLogCard({
+  refreshKey,
+  reboots,
+}: {
+  refreshKey?: number;
+  reboots: RebootHistoryEntry[];
+}) {
   const { t } = useTranslation("monitoring");
   const {
     entries,
@@ -53,6 +92,24 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
   useEffect(() => {
     if (refreshKey) silentRefresh();
   }, [refreshKey, silentRefresh]);
+
+  const feed = useMemo<FeedRow[]>(() => {
+    const rows: FeedRow[] = [
+      ...entries.map((entry, i): FeedRow => ({
+        kind: "delivery",
+        key: `d-${entry.timestamp}-${entry.channel}-${i}`,
+        time: deliveryTime(entry.timestamp),
+        entry,
+      })),
+      ...reboots.map((reboot, i): FeedRow => ({
+        kind: "reboot",
+        key: `r-${reboot.epoch}-${i}`,
+        time: Number.isFinite(reboot.epoch) ? reboot.epoch * 1000 : 0,
+        reboot,
+      })),
+    ];
+    return rows.sort((a, b) => b.time - a.time);
+  }, [entries, reboots]);
 
   const header = (
     <CardHeader>
@@ -102,7 +159,10 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
     );
   }
 
-  if (error && entries.length === 0) {
+  // Only hard-block on error when there is genuinely nothing to show. If reboots
+  // (from the page GET) are present, the feed is still useful even if the
+  // delivery-log fetch failed.
+  if (error && feed.length === 0) {
     return (
       <Card className="@container/card min-h-0 flex-1">
         {header}
@@ -143,7 +203,7 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
                 <TableHead scope="col" className="hidden @sm/card:table-cell">
                   {t("alerts.log_header_channel")}
                 </TableHead>
-                <TableHead scope="col" className="w-20">
+                <TableHead scope="col" className="whitespace-nowrap">
                   {t("alerts.log_header_status")}
                 </TableHead>
                 <TableHead scope="col" className="hidden @md/card:table-cell">
@@ -152,7 +212,7 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
               </TableRow>
             </TableHeader>
             <TableBody aria-live="polite" aria-relevant="additions">
-              {entries.length === 0 ? (
+              {feed.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-10 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -172,19 +232,70 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                entries.map((entry, index) => {
-                  const ChannelIcon = CHANNEL_META[entry.channel]?.icon ?? BellIcon;
+                feed.map((row, index) => {
+                  const entrance = {
+                    initial: { opacity: 0, x: -8 },
+                    animate: { opacity: 1, x: 0 },
+                    transition: {
+                      duration: 0.2,
+                      delay: Math.min(index * 0.03, 0.3),
+                      ease: "easeOut" as const,
+                    },
+                  };
+
+                  if (row.kind === "reboot") {
+                    const meta =
+                      REBOOT_CAUSE_META[row.reboot.cause] ??
+                      REBOOT_CAUSE_META.unplanned;
+                    const CauseIcon = meta.icon;
+                    const valid =
+                      Number.isFinite(row.reboot.epoch) && row.reboot.epoch > 0;
+                    return (
+                      <MotionTableRow
+                        key={row.key}
+                        className="bg-muted/25"
+                        {...entrance}
+                      >
+                        <TableCell className="font-mono text-xs whitespace-nowrap">
+                          {valid
+                            ? formatEpoch(row.reboot.epoch)
+                            : t("alerts.log_time_unknown")}
+                        </TableCell>
+                        <TableCell className="min-w-0 text-sm">
+                          <span className="flex items-center gap-1.5">
+                            <RotateCcwIcon className="text-muted-foreground size-3.5 shrink-0" />
+                            <span className="truncate">
+                              {t("alerts.log_reboot_event")}
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground/40 hidden @sm/card:table-cell">
+                          —
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "gap-1 whitespace-nowrap",
+                              REBOOT_TONE_BADGE[meta.tone],
+                            )}
+                          >
+                            <CauseIcon className="size-3" />
+                            {t(`alerts.reboot_cause_${meta.key}`)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground/40 hidden @md/card:table-cell">
+                          —
+                        </TableCell>
+                      </MotionTableRow>
+                    );
+                  }
+
+                  const { entry } = row;
+                  const ChannelIcon =
+                    CHANNEL_META[entry.channel]?.icon ?? BellIcon;
                   return (
-                    <MotionTableRow
-                      key={`${entry.timestamp}-${entry.channel}-${index}`}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{
-                        duration: 0.2,
-                        delay: Math.min(index * 0.03, 0.3),
-                        ease: "easeOut",
-                      }}
-                    >
+                    <MotionTableRow key={row.key} {...entrance}>
                       <TableCell className="font-mono text-xs whitespace-nowrap">
                         {entry.timestamp}
                       </TableCell>
@@ -209,7 +320,7 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
                         {entry.status === "sent" ? (
                           <Badge
                             variant="outline"
-                            className="bg-success/15 text-success hover:bg-success/20 border-success/30 gap-1"
+                            className="bg-success/15 text-success hover:bg-success/20 border-success/30 gap-1 whitespace-nowrap"
                           >
                             <CheckCircle2Icon className="size-3" />
                             {t("alerts.log_badge_sent")}
@@ -217,7 +328,7 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
                         ) : (
                           <Badge
                             variant="outline"
-                            className="bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/30 gap-1"
+                            className="bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/30 gap-1 whitespace-nowrap"
                           >
                             <XCircleIcon className="size-3" />
                             {t("alerts.log_badge_failed")}
@@ -237,13 +348,13 @@ export function AlertsLogCard({ refreshKey }: { refreshKey?: number }) {
           </Table>
         </div>
       </CardContent>
-      {entries.length > 0 && (
+      {feed.length > 0 && (
         <CardFooter className="flex flex-col gap-1 @xs/card:flex-row @xs/card:items-center @xs/card:justify-between">
           <div className="text-muted-foreground text-xs">
             {t("alerts.log_showing_count", {
-              count: total,
-              shown: entries.length,
-              total,
+              count: feed.length,
+              shown: feed.length,
+              total: total + reboots.length,
             })}
           </div>
           {lastFetched && (

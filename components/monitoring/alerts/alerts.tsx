@@ -16,13 +16,12 @@ import { useAlertsForm } from "./use-alerts-form";
 import { AlertsStatusCard } from "./alerts-status-card";
 import { AlertsSettingsCard } from "./alerts-settings-card";
 import { AlertsLogCard } from "./alerts-log-card";
-import { RebootHistoryCard } from "./reboot-history-card";
 
 // -----------------------------------------------------------------------------
 // Alerts — page coordinator (status-first anatomy, 2-col desktop).
 // -----------------------------------------------------------------------------
-// The left column reads top-to-bottom (Channel Readiness → Activity Log) while
-// the right holds the one write surface (Settings) for its full height. One
+// The left column reads top-to-bottom (Channel Readiness → Activity) while the
+// right holds the one write surface (Settings) for its full height. One
 // `useAlerts` instance owns fetch/save/test/install; one `useAlertsForm`
 // (remounted on a settings signature after every save) owns the whole editable
 // form, and its single sticky Save bar commits both channels + the routing map.
@@ -87,8 +86,7 @@ function AlertsBody({
     <div className="grid grid-cols-1 gap-6 @4xl/main:grid-cols-2 @4xl/main:items-stretch">
       <div className="flex flex-col gap-6 @4xl/main:h-full">
         <AlertsStatusCard state={state} />
-        <RebootHistoryCard reboots={state.reboots} />
-        <AlertsLogCard refreshKey={logRefreshKey} />
+        <AlertsLogCard refreshKey={logRefreshKey} reboots={state.reboots} />
       </div>
       <AlertsSettingsCard
         form={form}
@@ -114,7 +112,6 @@ function PageSkeleton() {
     >
       <div className="flex flex-col gap-6">
         <StatusSkeleton />
-        <RebootHistorySkeleton />
         <LogSkeleton />
       </div>
       <SettingsSkeleton />
@@ -179,33 +176,6 @@ function SettingsSkeleton() {
           </div>
         </div>
       </CardContent>
-    </Card>
-  );
-}
-
-function RebootHistorySkeleton() {
-  return (
-    <Card className="@container/card" aria-hidden>
-      <CardHeader>
-        <Skeleton className="h-5 w-32" />
-        <Skeleton className="h-4 w-56" />
-      </CardHeader>
-      <CardContent>
-        <div className="divide-y rounded-md border">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
-              <Skeleton className="h-5 w-24 rounded-full" />
-              <div className="grid justify-items-end gap-1">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-      <CardFooter className="border-t pt-4">
-        <Skeleton className="h-3.5 w-28" />
-      </CardFooter>
     </Card>
   );
 }
