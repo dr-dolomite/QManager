@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
-import { formatCellBandwidth } from "@/lib/earfcn";
+import { formatCellBandwidth, NR_BANDS, suggestNRSCS } from "@/lib/earfcn";
 
 import { Card, CardContent } from "@/components/ui/card";
 import ScannerEmptyView from "./empty-view";
@@ -78,12 +78,20 @@ const FullScannerComponent = () => {
       let body: Record<string, unknown>;
 
       if (lockTarget.networkType === "NR5G") {
+        // AT+QNWLOCK requires a concrete SCS, so we can't defer here the way the
+        // BW display can. Prefer the SCS the modem actually reported for this
+        // cell; when it's missing, infer from the band's duplex mode (FDD→15,
+        // TDD→30, FR2→60) rather than blindly assuming 30 kHz — a wrong SCS gets
+        // baked into the radio lock (e.g. FDD n71/n25 are 15 kHz, not 30).
+        const nrBand = NR_BANDS.find((b) => b.band === lockTarget.band);
+        const scs =
+          lockTarget.scs ?? (nrBand ? suggestNRSCS(nrBand) : 30);
         body = {
           type: "nr_sa",
           action: "lock",
           pci: lockTarget.pci,
           arfcn: lockTarget.earfcn,
-          scs: lockTarget.scs ?? 30, // Default SCS 30kHz if missing
+          scs,
           band: lockTarget.band,
         };
       } else {
