@@ -5,6 +5,7 @@ v0.1.32 is in progress. This release is shaping up as a polish and correctness p
 ## ✅ Improvements
 
 - **5G bands are now labeled correctly in the Cell Scanner.** NR5G cells show an `N` prefix (`N41`, `N71`) instead of the LTE-style `B` prefix. LTE cells still use `B`.
+- **5G channel bandwidth is now shown in MHz, not raw resource blocks.** The Cell Scanner's BW column converts each NR carrier's resource-block count to its true channel bandwidth using the subcarrier spacing — e.g. an n41 carrier now reads 90 MHz instead of 245 MHz. If the modem doesn't report a spacing for a cell, the raw block count is shown labeled "PRB" rather than a misleading MHz figure.
 
 ## 📥 Installation
 
