@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
+import { formatCellBandwidth } from "@/lib/earfcn";
 
 import { Card, CardContent } from "@/components/ui/card";
 import ScannerEmptyView from "./empty-view";
@@ -44,7 +45,7 @@ function buildCsvRows(results: CellScanResult[]): string[] {
       r.pci,
       r.cellID,
       r.tac,
-      r.bandwidth,
+      `"${formatCellBandwidth(r.networkType, r.bandwidth, r.scs)}"`,
       r.signalStrength,
     ].join(","),
   );

@@ -25,6 +25,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 
+import { formatCellBandwidth } from "@/lib/earfcn";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -171,7 +172,13 @@ const createColumns = (
     accessorKey: "bandwidth",
     header: t("cell_scanner.result_table.column_headers.bandwidth"),
     cell: ({ row }) => (
-      <div className="font-medium">{row.getValue("bandwidth")} MHz</div>
+      <div className="font-medium">
+        {formatCellBandwidth(
+          row.original.networkType,
+          row.original.bandwidth,
+          row.original.scs,
+        )}
+      </div>
     ),
   },
   {
