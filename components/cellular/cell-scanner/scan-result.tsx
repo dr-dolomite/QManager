@@ -51,9 +51,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/**
+ * RAT token as emitted by the scanner daemon. Sourced verbatim from field 1 of
+ * the `+QSCAN:` line; `qmanager_cell_scanner` skips any other type, so these
+ * two values are exhaustive. Keep this a union, not `string` — it is what makes
+ * a mistyped comparison (e.g. "NR5G-SA") a compile error instead of a silent
+ * fall-through.
+ */
+export type CellNetworkType = "LTE" | "NR5G";
+
 export interface CellScanResult {
   id: string;
-  networkType: string;
+  networkType: CellNetworkType;
   earfcn: number;
   pci: number;
   band: number;
@@ -122,7 +131,8 @@ const createColumns = (
     cell: ({ row }) => {
       const networkType = row.original.networkType;
       const band = row.getValue("band") as number;
-      const prefix = networkType === "NR5G-SA" ? "N" : "B";
+      // 3GPP labels NR bands N<n> and everything else (LTE) B<n>.
+      const prefix = networkType === "NR5G" ? "N" : "B";
       return (
         <div className="font-semibold">
           {prefix}
