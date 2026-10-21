@@ -163,7 +163,7 @@ This invariant has two layers, applied across two releases:
 **When the poller is Idle, the Tier-1 signal set runs in full:**
 
 - `AT+QENG="servingcell"` — serving-cell signal metrics
-- `AT+QCAINFO` — carrier-aggregation info
+- `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` — carrier-aggregation info. Extended reporting is switched on, read and switched off in one exchange (QuecManager's pattern); never leave `AT+QCAINFO=1` set at boot or between cycles, since a persistent `=1` drops the connection on RM551E R01A04 (confirmed by field test, v0.1.33 hotfix).
 - `AT+CFUN?` — radio function state
 - `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
 
