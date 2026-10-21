@@ -164,11 +164,13 @@ function bucketHistory(
     const lat = worstLat[i];
     const loss = worstLoss[i];
     // A cell holds only 3-5 rows, so one drop is already 20-33 %: it takes two failed
-    // rows at the loss cut (or the poller's rolling loss at it) to go red.
+    // rows at the loss cut (or the poller's rolling loss at it) to go red. The rolling
+    // loss spans ~10 min, so it only counts in a cell that dropped a probe itself;
+    // otherwise an old drop paints every answered cell after it red.
     const failedPct = (failed[i] / rows[i]) * 100;
     const tone: BucketTone =
       (failed[i] >= 2 && failedPct >= limits.lossPct) ||
-      (loss !== null && loss >= limits.lossPct)
+      (failed[i] > 0 && loss !== null && loss >= limits.lossPct)
         ? "destructive"
         : failed[i] > 0 || (lat !== null && lat > limits.latencyMs)
           ? "warning"
