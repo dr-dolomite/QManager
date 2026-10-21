@@ -74,6 +74,9 @@ const JITTER_ROUGH_MS = 40;
 /** Fixed jitter full-scale, so bar height means the same thing every poll. */
 const JITTER_TRACK_MAX_MS = 80;
 
+/** Latency bar full-scale as a multiple of the profile's cut (cut lands at 80%). */
+const LATENCY_BAR_SCALE = 1.25;
+
 // --- Bucketing ---------------------------------------------------------------
 
 type BucketTone = "none" | "success" | "warning" | "destructive";
@@ -241,7 +244,9 @@ function formatAgo(sec: number, t: TFunction): string {
 // --- Latency row -------------------------------------------------------------
 
 /** A null value reaches MetricBar untouched, so "no reading" is an empty track.
- *  Amber from the configured latency cut (as on the strip), red from twice it. */
+ *  Amber from the configured latency cut (as on the strip), red from twice it.
+ *  Full scale is 1.25x the cut, so the cut sits at 80% and nearing it reads long;
+ *  past full scale the bar stays full and colour carries amber → red. */
 function LatencyRow({
   icon,
   label,
@@ -264,7 +269,7 @@ function LatencyRow({
       <span className={QUALITY.LANE}>
         <MetricBar
           value={value}
-          max={cutMs * 2}
+          max={cutMs * LATENCY_BAR_SCALE}
           warnAt={cutMs}
           dangerAt={cutMs * 2}
           baseTone="success"
