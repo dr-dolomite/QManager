@@ -83,6 +83,11 @@ PING_RECOVER_SECS=10       # in the cache as fail_secs / recover_secs
 HISTORY_SIZE="${HISTORY_SIZE:-60}"
 PROBE_COUNT=1              # ping -c : ICMP echo requests per probe
 PROBE_TIMEOUT=2            # ping -W : per-probe wait (BusyBox: seconds)
+# Attach warm-up: until the first probe answers (at most this long after start),
+# a failed probe still drives the streaks and `reachable`, but it is not written to
+# the history ring. At boot the daemon starts before the data call is up, and those
+# pre-attach failures used to read as packet loss for a whole ring (~10 min).
+ATTACH_GRACE_SECS=120
 
 # IPv6 ping invocation, detected once at startup via detect_ping6().
 # Empty string = IPv6 probing unavailable on this build (v4-only fallback off).
@@ -96,6 +101,7 @@ HISTORY_FILE="/tmp/qmanager_ping_history"
 RECOVERY_FLAG="/tmp/qmanager_recovery_active"
 RELOAD_FLAG="/tmp/qmanager_ping_reload"
 PID_FILE="/tmp/qmanager_ping.pid"
+ATTACH_FLAG="/tmp/qmanager_ping_attaching"   # present during the attach warm-up; the poller skips archive rows
 
 # Sidecars for the poller (B5.29 Phase C): the values it would otherwise extract
 # from ping.json / dns.json with jq, as shell assignments, written tmp + mv right
@@ -112,6 +118,7 @@ reachable="true"
 prev_reachable="true"
 last_family="none"     # ipv4 | ipv6 | none — which family answered last cycle
 history_count=0        # tracked in shell — avoids wc -l fork every cycle
+attach_until=""        # mono deadline of the attach warm-up; empty once it has ended
 
 # =============================================================================
 # HELPERS
@@ -548,8 +555,8 @@ main() {
     # restart leaves a zombie until procd's SIGKILL fallback. The EXIT trap covers
     # the cleanup on every path; INT/TERM additionally force the exit.
     # (confirmed on RM551E 2026-06-26 — see docs/development/busybox-quirks.md)
-    trap 'rm -f "$PID_FILE" "$CACHE_TMP" "${SC_PING}.new"' EXIT
-    trap 'rm -f "$PID_FILE" "$CACHE_TMP" "${SC_PING}.new"; exit' INT TERM
+    trap 'rm -f "$PID_FILE" "$CACHE_TMP" "${SC_PING}.new" "$ATTACH_FLAG"' EXIT
+    trap 'rm -f "$PID_FILE" "$CACHE_TMP" "${SC_PING}.new" "$ATTACH_FLAG"; exit' INT TERM
 
     # Load profile + targets from UCI (resolves interval/thresholds), then detect
     # the IPv6 ping invocation once (cheap loopback probe).
@@ -570,6 +577,9 @@ main() {
     _sc_dir_ok
     : > "$HISTORY_FILE"  # Start with empty history
     history_count=0
+    mono_now_set
+    attach_until=$((_MONO + ATTACH_GRACE_SECS))
+    : > "$ATTACH_FLAG"
 
     while true; do
         # Live reload: re-read UCI (profile/targets/thresholds) within one
@@ -582,6 +592,7 @@ main() {
         fi
 
         local rtt
+        local record=1
         if probe_cycle; then
             rtt="$PROBE_RTT"
         else
@@ -602,6 +613,12 @@ main() {
                 qlog_state_change "reachable" "false" "true"
             fi
 
+            if [ -n "$attach_until" ]; then
+                attach_until=""
+                rm -f "$ATTACH_FLAG"
+                qlog_info "First probe answered, attach warm-up over"
+            fi
+
             # Append to history ring buffer
             echo "$rtt" >> "$HISTORY_FILE"
         else
@@ -620,16 +637,29 @@ main() {
                 qlog_warn "Internet unreachable after ${FAIL_THRESHOLD} consecutive failures"
             fi
 
-            # Append null to history
-            echo "null" >> "$HISTORY_FILE"
+            if [ -n "$attach_until" ]; then
+                mono_now_set
+                if [ "$_MONO" -lt "$attach_until" ]; then
+                    record=0
+                else
+                    attach_until=""
+                    rm -f "$ATTACH_FLAG"
+                    qlog_warn "No probe answered within ${ATTACH_GRACE_SECS}s of start, recording failures"
+                fi
+            fi
+
+            # Append null to history (not during the attach warm-up)
+            [ "$record" -eq 1 ] && echo "null" >> "$HISTORY_FILE"
         fi
 
         # Trim history using shell counter (no wc -l fork)
-        history_count=$((history_count + 1))
-        if [ "$history_count" -gt "$HISTORY_SIZE" ]; then
-            tail -n "$HISTORY_SIZE" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
-            mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
-            history_count=$HISTORY_SIZE
+        if [ "$record" -eq 1 ]; then
+            history_count=$((history_count + 1))
+            if [ "$history_count" -gt "$HISTORY_SIZE" ]; then
+                tail -n "$HISTORY_SIZE" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
+                mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+                history_count=$HISTORY_SIZE
+            fi
         fi
 
         # Write slim JSON cache

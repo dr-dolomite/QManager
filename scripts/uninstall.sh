@@ -496,6 +496,7 @@ remove_runtime_state() {
     for f in /tmp/qmanager_status.json \
              /tmp/qmanager_ping.json \
              /tmp/qmanager_ping_history \
+             /tmp/qmanager_ping_attaching \
              /tmp/qmanager_dns.json \
              /tmp/qmanager_signal_history.json \
              /tmp/qmanager_events.json \

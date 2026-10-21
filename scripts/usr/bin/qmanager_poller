@@ -1183,6 +1183,14 @@ append_ping_history() {
     local _p5
     local _p6
     local tmp
+
+    # Attach warm-up (qmanager_ping): pre-attach failures are not an outage, so
+    # those seconds stay unmeasured. Honoured only while the ping cache is fresh,
+    # so a flag left by a dead daemon cannot blank the archive.
+    if [ -f /tmp/qmanager_ping_attaching ] && [ "$conn_internet_available" != "null" ]; then
+        return 0
+    fi
+
     ts="$_NOW"
     case "$ts" in ''|*[!0-9]*) ts=$(date +%s) ;; esac
 
