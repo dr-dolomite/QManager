@@ -8,6 +8,7 @@ v0.1.33 is a follow-up to v0.1.32, built from your feedback, with a round of fix
 
 ## ✅ Improvements
 
+- **Connection Quality no longer shows red right after a restart.** While the modem was still connecting after a reboot, its first internet checks failed and were counted as packet loss, so the card showed red, and could report the connection as degraded, for up to 10 minutes even though the internet was working. Those first checks are now left out, and a bar only turns red when a check in that minute actually failed.
 - **The watchdog's reboot count resets after an hour.** The Watchdog page's reboots figure could stay at 1 for days after a single watchdog restart, and that restart vanished from Recent Activity. The count is now a true rolling hour, and restarts the watchdog caused stay listed in Recent Activity after the modem comes back. Thanks to Outright0181 for reporting it.
 - **The Watchdog page tells you when the watchdog stops responding.** If the watchdog is turned on but has gone quiet, the page now shows "Not reporting" and the sidebar activity indicator hides, instead of leaving the last status on screen as if nothing were wrong.
 - **Saving watchdog settings no longer restarts it.** A recovery already in progress is not interrupted, and the new settings take effect within a minute. Restoring a backup does the same.
