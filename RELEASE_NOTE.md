@@ -4,7 +4,7 @@ v0.1.34 is a hotfix for v0.1.33 with one fix: modems on RM551E R01A04 firmware n
 
 ## ✅ Improvements
 
-- **Fixed repeated disconnects on RM551E R01A04 firmware.** QManager left the modem's extended carrier-aggregation reporting switched on all the time, which made R01A04 drop the connection again and again. It is now switched on only for the moment each reading is taken, so 5G carrier details still show in full.
+- **Fixed repeated disconnects on RM551E R01A04 firmware.** QManager left the modem's extended carrier-aggregation reporting switched on all the time, which made R01A04 drop the connection again and again. It is now switched on only for the moment each reading is taken, so 5G carrier details still show in full. Thanks to No_way for testing the patch first.
 
 ## 📥 Installation
 
