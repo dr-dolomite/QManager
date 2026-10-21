@@ -37,10 +37,8 @@ qcmd 'AT+QRSRP;+QRSRQ;+QSINR' 2>/dev/null
 # --- Tier 2: Warm (every 30s) ---
 # These sections mirror the actual poller command groups.
 
-separator "TIER 2 — AT+QCAINFO (enable + query)"
-qcmd 'AT+QCAINFO=1' >/dev/null 2>&1
-sleep 1
-qcmd 'AT+QCAINFO' 2>/dev/null
+separator "TIER 1 — AT+QCAINFO (enable + query + disable)"
+qcmd 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0' 2>/dev/null
 
 separator "TIER 2 — Group 1: AT+CGCONTRDP;+QMAP=\"WWAN\" (APN + WAN IPs)"
 qcmd 'AT+CGCONTRDP;+QMAP="WWAN"' 2>/dev/null

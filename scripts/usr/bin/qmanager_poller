@@ -884,10 +884,11 @@ collect_boot_data() {
     # docs/features/ondemand-radio-details.md). The display values persist via
     # /tmp/qmanager_ondemand.json, which write_cache() reads.
     #
-    # The QCAINFO enable stays (it feeds Tier-1 carrier-aggregation parsing) and
-    # the mode-independent IPPT reads stay (config state, not L1 measurement).
+    # No QCAINFO enable here: leaving AT+QCAINFO=1 on drops the connection on
+    # RM551E R01A04, so the per-cycle read opens and closes it itself. The
+    # mode-independent IPPT reads stay (config state, not L1 measurement).
     # =========================================================================
-    local boot_cmd='AT+QCAINFO=1;+QMAP="MPDN_RULE";+QMAP="IPPT_NAT";+QCFG="usbnet";+QMAP="DHCPV4DNS"'
+    local boot_cmd='AT+QMAP="MPDN_RULE";+QMAP="IPPT_NAT";+QCFG="usbnet";+QMAP="DHCPV4DNS"'
     result=$(qcmd "$boot_cmd" 2>/dev/null)
 
     if [ -n "$result" ]; then
@@ -2870,9 +2871,11 @@ poll_cycle() {
         # must NOT run the QCAINFO else-branch — the CA fields keep their
         # last-known values so write_cache emits them unchanged.
         if [ "$ap_tier" != "deep" ]; then
-            # Carrier Aggregation — QCAINFO reporting enabled at boot (Group B).
+            # Carrier Aggregation — enable, query and disable in one exchange
+            # (as QuecManager does): =1 adds the extended NR fields, and leaving
+            # it on drops the connection on RM551E R01A04.
             local ca_rc
-            qcmd_exec_g 'AT+QCAINFO'
+            qcmd_exec_g 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0'
             ca_rc=$?
             if [ $ca_rc -eq 0 ] && [ -n "$_QR" ]; then
                 parse_ca_info "$_QR"
