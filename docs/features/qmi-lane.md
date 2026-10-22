@@ -156,7 +156,33 @@ These keep a silent QMI service from starving AT of reader threads. Constants: `
 
 ## Validation
 
-Pending on-device results (to be filled in): `qmi bundle` in 10 ms or less during a held modem lock and during a real `AT+QSCAN`; in-process fallback with the daemon stopped; fd count and RSS flat across a forced or real SSR; 30-minute soak with `qmi bundle` every 2 s beside the poller; install, OTA re-install and uninstall leave no strays. Host: `cargo test --release` 222 tests (236 with `--features poll`), including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
+Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`, 5G-NSA: B1 20 MHz PCC plus N41 SCC), `qmanager_atd` 0.3.0 (md5 `dbe079d2964854d91eb23209f78a4c8a`). No reboot, no SSR. AT-path results are in [`at-broker.md`](at-broker.md#qmi-phase-1-on-device-validation).
+
+| Check | Result |
+|---|---|
+| `qmi bundle` latency, idle (50 back-to-back) | p50 6.5 ms, p95 8.4 ms, max 9.2 ms |
+| `qmi bundle` with the modem lock held (15 s, 14 calls) | p50 9.3 ms, p95 12.4 ms. Unlocked 1 Hz control p50 9.9 ms, p95 12.2 ms: no effect |
+| `qmi bundle` during real `AT+QSCAN=3,1` (180 s) | 173/173 ok, p50 8.3 ms, p95 12.2 ms, max 43.6 ms (one system hiccup). Control after the scan p50 9.2 ms, p95 13.0 ms: no effect |
+| Reads and bad args | `bundle` and all 13 single reads rc 0 `ok:true`. Bad args (`bogus`, none, `bundle serving`, `-x`, `SERVING`, 17 args) rc 1 `bad_args`. Duplicate `serving serving` rc 0 (deduplicated) |
+| In-process fallback, daemon stopped | rc 0 in 9 ms, same JSON path set as the daemon |
+| Sidecar `qmi.env` | 38 lines plus `qm_sidecar_end='1'`. The real `cq_env_source` (`conn_state.sh`) accepts it. Dir `0700`, root |
+| Live lease | Sidecar rewrites per 10 s: 5 with no lease, 21 while leased (about 2 Hz), 6 after expiry. A future-mtime lease (2030) counts as expired |
+| Cross-check vs `AT+QENG` | Exact: PCI 295, EARFCN 150, B1, 20 MHz, TAC 49026, cell 36393062, RSRP −88/−88, RSRQ −10/−10, RSSI −58/−58 |
+| 30-minute soak beside the poller (`qmi bundle` every 2 s) | 900/900 ok, `ssr_count` 0. Latency p50 8.9, p95 12.8, p99 14.2, max 25.1 ms. Daemon fd 12→12, threads 10→10. Smaps Rss 724→736 kB over 2000 back-to-back bundles. `netmgrd` and QCMAP unchanged |
+| `compare.py`, active tier (292 fresh pairs, 10 min) | Identity 100 %. LTE RSRP within ±2 dB 98.6 % (Phase 0: 99.3 %; the 5 misses had AT 2.2–3.0 s older than QMI). RSRQ 90.1 %. RSSI 95.2 %. CA 100 % (one LTE carrier this run; Phase 0 had three) |
+
+**Latency target.** The ≤ 10 ms target is met at p50 (6.5 ms idle, 8.3–9.3 ms under load). p95 is about 12 ms. That is client process-start cost: `qmi --version` alone is 2.3–3.6 ms p50, and the bundle minus the exec floor is 5.4 ms p50. The held lock and the scan add nothing measurable, so the intent (QMI is not blocked by AT work) holds. Whether the target is client wall time or broker time is still open, and the shell cannot measure daemon-side time.
+
+Not run on device: install, OTA re-install and uninstall (static review only).
+
+Host: `cargo test --release` 222 tests (236 with `--features poll`), including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
+
+## Gotchas for Phase 2 consumers
+
+- **`serving.mcc` / `serving.mnc` are integers.** The leading zero is lost (`"mnc":3` for `"03"`), so a 2- and 3-digit MNC cannot be told apart from `serving`. Read MCC and MNC from `cell.lte.mcc` and `cell.lte.mnc`, which are strings.
+- **In NSA, `serving.rats` is `["lte"]`.** Do not detect NSA from it. The NR leg shows only as `cell.nr.arfcn` and the cached `signal.nr`.
+- **During a network scan the QMI serving EARFCN follows the scanned carriers.** Mid-scan the serving row showed 38927/39125 at RSRP −95 on 47 samples. Do not treat that as a handover; gate on the long/scan flag (`scan_in_progress`).
+- **Timing on BusyBox.** `date` has no `%N`. Read `/proc/timer_list` (`now at N nsecs`) with shell builtins for a monotonic microsecond clock, measure the exec floor (`qmi --version`) alongside, and say whether a figure includes process spawn. See `tools/atd-parity/parity.sh` for the helper.
 
 ## Phase 2 (not built)
 

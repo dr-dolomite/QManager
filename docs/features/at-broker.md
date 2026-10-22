@@ -49,7 +49,7 @@ share.
 ## The output contract is frozen
 
 The broker reproduces the original shell `qcmd` exactly, because about 50
-callers parse its output. The on-device parity suite (18 commands) checks it, and so do the
+callers parse its output. The on-device parity suite ([`tools/atd-parity/`](../../tools/atd-parity/README.md), 50 cases) checks it, and so do the
 crate's unit tests:
 
 - **Raw mode:** atcli's bytes with all trailing `\n` stripped, then one `\n`
@@ -572,13 +572,19 @@ waits). Both are covered by the crate's tests.
 
 ## QMI Phase 1 on-device validation
 
-Pending (to be filled in after the device run): AT parity suite byte-identical
-through the daemon and the in-process fallback; lock-contention checks
-(`modem_busy` at about 5 s, queued-caller skip, `scan_in_progress` in 10 ms);
-`qmi bundle` in 10 ms or less during a held modem lock and during a real
-`AT+QSCAN`; in-process fallback with the daemon stopped; 30-minute soak next
-to the poller; install, OTA re-install and uninstall leave no strays. The QMI
-checklist is in [`qmi-lane.md`](qmi-lane.md#validation).
+Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`), `qmanager_atd` 0.3.0 (md5 `dbe079d2964854d91eb23209f78a4c8a`) against 0.2.0 (`2aac2309…`). No reboot and no SSR during the run. The QMI reads and their timings are in [`qmi-lane.md`](qmi-lane.md#validation). The AT path results:
+
+| Check | Result |
+|---|---|
+| Parity suite ([`tools/atd-parity/`](../../tools/atd-parity/README.md)), daemon and in-process fallback | 42/50 byte-identical to 0.2.0. The 8 live cases that differ (QENG, QCAINFO, QTEMP, CCLK) also differ between two 0.2.0 runs |
+| Lock busy, lock held 8 s | `modem_busy` rc 1 at 5076 ms (0.2.0: 5073 ms) |
+| Queued caller gone before its turn | Skipped and logged on both binaries. A capped waiter (`-t 1000`) returned busy at 1007 ms |
+| Long flag (`scan_in_progress`) | 5–6 ms when raised before the call; 1018 ms when raised during a queued wait (0.2.0: 1030 ms) |
+| 20 simultaneous `qcmd` (10 `ATI`, 10 `AT+CSQ`) | 20/20 rc 0, no interleaving |
+| Daemon stopped (fallback) | `qmi bundle` rc 0 in 9 ms, same JSON paths as the daemon |
+| Lifecycle, old init.d on device | Socket and proto removed. `/tmp/qmanager_qmi.json` and `qmi.env` stay (the old script does not clean them); the repo `stop_service` does |
+
+Not run on device: install, OTA re-install and uninstall (static review only).
 
 ## Rollback
 
