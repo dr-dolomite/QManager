@@ -72,10 +72,10 @@ export const NOTICE_SPAN = "@xl/main:col-span-2 @5xl/main:col-span-4";
 export const NOTICE_TITLE = "truncate text-lg font-semibold";
 
 // -----------------------------------------------------------------------------
-// The speed-limit card
+// The Ethernet Port card
 // -----------------------------------------------------------------------------
 
-/** The card's one inner container: a tonal group holding the setting row. */
+/** The card's one inner container: a tonal group holding the setting rows. */
 export const ROW_GROUP = "flex flex-col gap-0.5 rounded-tile bg-surface-container p-1.5";
 
 /**

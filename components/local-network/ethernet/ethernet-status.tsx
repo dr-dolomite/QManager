@@ -13,16 +13,17 @@ import { Button } from "@/components/ui/button";
 import LanConfigCard from "@/components/local-network/lan-config-card";
 
 import { LinkStateStrip } from "./link-state-strip";
-import { SpeedLimitCard } from "./speed-limit-card";
+import { EthernetPortCard } from "./ethernet-port-card";
 import { CARD_GRID, PAGE_ROOT } from "./shapes";
-import type { EthernetStatus } from "./types";
+import type { EthernetPortChange, EthernetStatus } from "./types";
 
 // =============================================================================
 // Ethernet Status — page shell (ledger U4.12, ported from the RM520N fork)
 // =============================================================================
-// Owns the data: the GET, the 10 s poll and the speed-limit apply with its
-// confirm-poll. Renders a header with a Refresh pill, the link strip, then the
-// speed-limit card beside the LAN Config card.
+// Owns the data: the GET, the 10 s poll and the port apply (speed limit with
+// its confirm-poll, PCIe ASPM policy settled on the response). Renders a header
+// with a Refresh pill, the link strip, then the Ethernet Port card beside the
+// LAN Config card.
 //
 // A failed refresh is reported: `pollFailed` is set on every failure and
 // cleared on every success (the old card swallowed every error once it had
@@ -53,6 +54,9 @@ const ABSENT_STATUS: EthernetStatus = {
   speed_limit: "",
   supports_2500: false,
   interface_present: false,
+  aspm_supported: false,
+  aspm_policy: "",
+  aspm_configured: "",
 };
 
 /** Picks the GET's fields (drops `success` and anything the UI does not read). */
@@ -65,6 +69,9 @@ function toStatus(data: EthernetStatus): EthernetStatus {
     speed_limit: data.speed_limit,
     supports_2500: data.supports_2500,
     interface_present: data.interface_present,
+    aspm_supported: data.aspm_supported === true,
+    aspm_policy: data.aspm_policy ?? "",
+    aspm_configured: data.aspm_configured ?? "",
   };
 }
 
@@ -161,7 +168,11 @@ const EthernetStatusComponent = () => {
     return false;
   };
 
-  const handleApply = async (value: string): Promise<boolean> => {
+  // One POST carries whichever fields changed. The ASPM write is synchronous
+  // and read back by the CGI, so an ASPM-only apply settles on its response;
+  // a speed change bounces the link and is confirmed by polling.
+  const handleApply = async (change: EthernetPortChange): Promise<boolean> => {
+    const speed = change.speed_limit;
     setIsSaving(true);
     savingRef.current = true;
 
@@ -171,7 +182,7 @@ const EthernetStatusComponent = () => {
         const resp = await authFetch(CGI_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ speed_limit: value }),
+          body: JSON.stringify(change),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
@@ -188,16 +199,37 @@ const EthernetStatusComponent = () => {
           );
           return false;
         }
+        if (typeof data.aspm_policy === "string") {
+          const active: string = data.aspm_policy;
+          setStatus((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  aspm_policy: active,
+                  aspm_configured: change.aspm_policy ?? prev.aspm_configured,
+                }
+              : prev,
+          );
+        }
+        if (speed === undefined) {
+          toast.success(t(`${K}.settings.toast_aspm_success`));
+          return true;
+        }
         if (typeof data.disconnect_window_seconds === "number") {
           windowSec = data.disconnect_window_seconds;
         }
       } catch {
+        if (!mountedRef.current) return false;
+        // Without a speed change nothing bounced the link: this is a real failure.
+        if (speed === undefined) {
+          toast.error(t(`${K}.settings.toast_error`));
+          return false;
+        }
         // A network error mid-POST usually means the PHY bounced under the
         // request. Confirm against the link instead of reporting a false failure.
-        if (!mountedRef.current) return false;
       }
 
-      const confirmed = await confirmSpeedChange(value, windowSec);
+      const confirmed = await confirmSpeedChange(speed, windowSec);
       if (!mountedRef.current) return confirmed;
       // An exhausted poll is not a save: the link never came back at the speed.
       if (confirmed) {
@@ -253,9 +285,11 @@ const EthernetStatusComponent = () => {
       </motion.div>
 
       <motion.div variants={staggerItem} className={CARD_GRID}>
-        <SpeedLimitCard
+        <EthernetPortCard
           speedLimit={status?.speed_limit ?? ""}
           supports2500={status?.supports_2500 ?? false}
+          aspmPolicy={status?.aspm_policy ?? ""}
+          aspmSupported={status?.aspm_supported ?? false}
           isSaving={isSaving}
           hasStatus={status !== null}
           pollFailed={pollFailed}

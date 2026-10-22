@@ -178,8 +178,8 @@
       }
     },
     "settings": {
-      "title": "Link Speed Limit",
-      "description": "Force the ethernet port to a fixed speed instead of letting it negotiate one.",
+      "title": "Ethernet Port",
+      "description": "Set the port's link speed and how the modem powers its ethernet controller.",
       "row_label": "Speed limit",
       "placeholder": "Select speed",
       "option_auto": "Auto (max)",
@@ -195,7 +195,17 @@
       "toast_success": "Link speed updated",
       "toast_error": "Failed to set link speed",
       "toast_confirm_error": "Couldn't confirm the new speed. Check the link.",
-      "apply": "Apply speed"
+      "apply": "Apply speed",
+      "aspm_label": "PCIe power saving",
+      "aspm_hint_aria": "About PCIe power saving",
+      "aspm_hint": "Active State Power Management (ASPM) lets the PCIe link to the ethernet controller doze between packets. Performance keeps it awake.",
+      "aspm_consequence": "Power saving modes can cause dropouts and added latency on the ethernet port. Applying does not drop the link.",
+      "aspm_placeholder": "Select policy",
+      "aspm_option_performance": "Performance (recommended)",
+      "aspm_option_default": "Kernel default",
+      "aspm_option_powersave": "Power saving",
+      "aspm_option_powersupersave": "Max power saving",
+      "toast_aspm_success": "PCIe power saving updated"
     }
   },
   "lan_config": {

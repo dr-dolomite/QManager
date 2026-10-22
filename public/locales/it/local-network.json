@@ -178,8 +178,8 @@
       }
     },
     "settings": {
-      "title": "Limite velocità collegamento",
-      "description": "Forza la porta ethernet a una velocità fissa invece di lasciarla negoziare.",
+      "title": "Porta ethernet",
+      "description": "Imposta la velocità di collegamento della porta e come il modem alimenta il controller ethernet.",
       "row_label": "Limite velocità",
       "placeholder": "Seleziona velocità",
       "option_auto": "Auto (max)",
@@ -195,7 +195,17 @@
       "toast_success": "Velocità collegamento aggiornata",
       "toast_error": "Impossibile impostare la velocità del collegamento",
       "toast_confirm_error": "Impossibile confermare la nuova velocità. Controlla il collegamento.",
-      "apply": "Applica velocità"
+      "apply": "Applica velocità",
+      "aspm_label": "Risparmio energetico PCIe",
+      "aspm_hint_aria": "Informazioni sul risparmio energetico PCIe",
+      "aspm_hint": "Active State Power Management (ASPM) lascia sospendere il collegamento PCIe al controller ethernet tra un pacchetto e l'altro. Prestazioni lo tiene attivo.",
+      "aspm_consequence": "Le modalità di risparmio possono causare interruzioni e latenza aggiuntiva sulla porta ethernet. L'applicazione non interrompe il collegamento.",
+      "aspm_placeholder": "Seleziona criterio",
+      "aspm_option_performance": "Prestazioni (consigliato)",
+      "aspm_option_default": "Predefinito del kernel",
+      "aspm_option_powersave": "Risparmio energetico",
+      "aspm_option_powersupersave": "Risparmio massimo",
+      "toast_aspm_success": "Risparmio energetico PCIe aggiornato"
     }
   },
   "lan_config": {

@@ -177,8 +177,8 @@
       }
     },
     "settings": {
-      "title": "鏈路速度限制",
-      "description": "強制乙太網路連接埠使用固定速度，而不是自動協商。",
+      "title": "乙太網路連接埠",
+      "description": "設定連接埠的鏈路速度，以及數據機為乙太網路控制器供電的方式。",
       "row_label": "速度限制",
       "placeholder": "選擇速度",
       "option_auto": "自動（最大）",
@@ -194,7 +194,17 @@
       "toast_success": "鏈路速度已更新",
       "toast_error": "設定鏈路速度失敗",
       "toast_confirm_error": "無法確認新速度。請檢查鏈路。",
-      "apply": "套用速度"
+      "apply": "套用速度",
+      "aspm_label": "PCIe 節能",
+      "aspm_hint_aria": "關於 PCIe 節能",
+      "aspm_hint": "活動狀態電源管理（ASPM）允許通往乙太網路控制器的 PCIe 鏈路在封包之間休眠。效能模式讓它保持喚醒。",
+      "aspm_consequence": "節能模式可能導致乙太網路連接埠斷流並增加延遲。套用時不會中斷鏈路。",
+      "aspm_placeholder": "選擇策略",
+      "aspm_option_performance": "效能（建議）",
+      "aspm_option_default": "核心預設",
+      "aspm_option_powersave": "節能",
+      "aspm_option_powersupersave": "最大節能",
+      "toast_aspm_success": "PCIe 節能已更新"
     }
   },
   "lan_config": {

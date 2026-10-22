@@ -26,4 +26,18 @@ export interface EthernetStatus {
    * does send it (the RM520N fork's) reads the same way.
    */
   interface_present?: boolean;
+  /** Whether the kernel exposes a PCIe ASPM policy. A missing value means FALSE. */
+  aspm_supported?: boolean;
+  /** The kernel's ACTIVE ASPM policy (`""` when unsupported). */
+  aspm_policy?: string;
+  /** The SAVED ASPM policy, applied at boot (`""` when never set). */
+  aspm_configured?: string;
+}
+
+export type AspmPolicy = "default" | "performance" | "powersave" | "powersupersave";
+
+/** The POST body: only the fields the user changed. */
+export interface EthernetPortChange {
+  speed_limit?: string;
+  aspm_policy?: AspmPolicy;
 }

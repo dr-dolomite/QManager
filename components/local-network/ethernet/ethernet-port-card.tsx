@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CardFoot } from "@/components/ui/card-foot";
+import { HintIcon } from "@/components/ui/hint-icon";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
 import {
   Select,
@@ -26,57 +27,78 @@ import {
 import { cn } from "@/lib/utils";
 
 import { FIELD, FIELD_GLYPH, ROW, ROW_GROUP } from "./shapes";
+import type { AspmPolicy, EthernetPortChange } from "./types";
 
 // =============================================================================
-// SpeedLimitCard — the write card of /local-network/ethernet
+// EthernetPortCard — the write card of /local-network/ethernet
 // =============================================================================
-// The one thing this page writes, in one row of one group.
+// The two things this page writes, as two rows of one group: the link speed
+// limit and the PCIe ASPM policy of the ethernet controller.
 //
-// Target deviation from the fork: the fork applies on Select change. Here the
-// Select edits a draft and `CardFoot` commits it (Card-Foot Apply Rule),
-// because applying drops the link the user is on: a stray pick in a dropdown
-// should not cut the session. Apply then runs the same POST, wait-out and
-// confirm-poll in the shell.
+// Target deviation from the fork: the fork applies on Select change. Here each
+// Select edits a draft and `CardFoot` commits both in one POST (Card-Foot Apply
+// Rule), because a speed change drops the link the user is on: a stray pick in
+// a dropdown should not cut the session. An ASPM-only change does not touch the
+// link, so the shell skips the wait-out for it.
 //
-// The consequence sentence changes with the row's condition: it names the risk
-// when the control is live, says what is happening while applying, and says why
-// the control is held when it cannot work.
+// The speed row's consequence sentence changes with the row's condition: it
+// names the risk when the control is live, says what is happening while
+// applying, and says why the control is held when it cannot work. The ASPM row
+// is hidden when the kernel exposes no ASPM policy.
 // =============================================================================
 
 const K = "ethernet";
 const SPEED_LIMIT_LABEL_ID = "ethernet-speed-limit-label";
+const ASPM_LABEL_ID = "ethernet-aspm-label";
 
-export interface SpeedLimitCardProps {
+const ASPM_OPTIONS: readonly { value: AspmPolicy; key: string }[] = [
+  { value: "performance", key: "aspm_option_performance" },
+  { value: "default", key: "aspm_option_default" },
+  { value: "powersave", key: "aspm_option_powersave" },
+  { value: "powersupersave", key: "aspm_option_powersupersave" },
+];
+
+export interface EthernetPortCardProps {
   /** The saved limit, or `""` before the first read (never a defaulted `"auto"`). */
   speedLimit: string;
   supports2500: boolean;
+  /** The kernel's ACTIVE ASPM policy, or `""` when unread or unsupported. */
+  aspmPolicy: string;
+  /** False when the kernel exposes no ASPM policy: the row is not rendered. */
+  aspmSupported: boolean;
   isSaving: boolean;
   /** False until the first successful read lands. */
   hasStatus: boolean;
-  /** The last poll failed: the control is held so a write is never sent blind. */
+  /** The last poll failed: the controls are held so a write is never sent blind. */
   pollFailed: boolean;
   /** False when the device has no ethernet controller. */
   interfacePresent: boolean;
-  /** Resolves true once the new speed is confirmed on the link. */
-  onApply: (value: string) => Promise<boolean>;
+  /** Resolves true once every requested change is confirmed. */
+  onApply: (change: EthernetPortChange) => Promise<boolean>;
 }
 
-export function SpeedLimitCard({
+export function EthernetPortCard({
   speedLimit,
   supports2500,
+  aspmPolicy,
+  aspmSupported,
   isSaving,
   hasStatus,
   pollFailed,
   interfacePresent,
   onApply,
-}: SpeedLimitCardProps) {
+}: EthernetPortCardProps) {
   const { t } = useTranslation("local-network");
   const { saved, markSaved } = useSaveFlash();
-  // `null` = untouched, so the Select follows every poll until the user edits.
-  const [draft, setDraft] = React.useState<string | null>(null);
+  // `null` = untouched, so each Select follows every poll until the user edits.
+  const [speedDraft, setSpeedDraft] = React.useState<string | null>(null);
+  const [aspmDraft, setAspmDraft] = React.useState<string | null>(null);
 
-  const value = draft ?? speedLimit;
-  const isDirty = draft !== null && draft !== speedLimit;
+  const speedValue = speedDraft ?? speedLimit;
+  const aspmValue = aspmDraft ?? aspmPolicy;
+  const speedDirty = speedDraft !== null && speedDraft !== speedLimit;
+  const aspmDirty = aspmDraft !== null && aspmDraft !== aspmPolicy;
+  const isDirty = speedDirty || aspmDirty;
   const held = !interfacePresent || !hasStatus || (pollFailed && !isSaving);
 
   const consequence = !interfacePresent
@@ -89,14 +111,34 @@ export function SpeedLimitCard({
           ? t(`${K}.settings.consequence_unresponsive`)
           : t(`${K}.settings.consequence`);
 
+  const discard = () => {
+    setSpeedDraft(null);
+    setAspmDraft(null);
+  };
+
   const handleApply = async () => {
-    if (draft === null || !isDirty) return;
-    const ok = await onApply(draft);
+    if (!isDirty) return;
+    const change: EthernetPortChange = {};
+    if (speedDirty && speedDraft !== null) change.speed_limit = speedDraft;
+    if (aspmDirty && aspmDraft !== null) {
+      change.aspm_policy = aspmDraft as AspmPolicy;
+    }
+    const ok = await onApply(change);
     if (ok) {
-      setDraft(null);
+      discard();
       markSaved();
     }
   };
+
+  const applyingValue = (
+    <span className="flex items-center gap-2">
+      <Loader2Icon
+        className={cn(FIELD_GLYPH, "motion-safe:animate-spin")}
+        aria-hidden="true"
+      />
+      {t("state.applying", { ns: "common" })}
+    </span>
+  );
 
   return (
     <Card className="@container/card">
@@ -115,8 +157,8 @@ export function SpeedLimitCard({
             </div>
             <div className={ROW.CONTROL}>
               <Select
-                value={value}
-                onValueChange={setDraft}
+                value={speedValue}
+                onValueChange={setSpeedDraft}
                 disabled={isSaving || held}
               >
                 <SelectTrigger
@@ -124,14 +166,8 @@ export function SpeedLimitCard({
                   aria-labelledby={SPEED_LIMIT_LABEL_ID}
                   className={FIELD}
                 >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2Icon
-                        className={cn(FIELD_GLYPH, "motion-safe:animate-spin")}
-                        aria-hidden="true"
-                      />
-                      {t("state.applying", { ns: "common" })}
-                    </span>
+                  {isSaving && speedDirty ? (
+                    applyingValue
                   ) : (
                     <SelectValue placeholder={t(`${K}.settings.placeholder`)} />
                   )}
@@ -161,6 +197,55 @@ export function SpeedLimitCard({
               </Select>
             </div>
           </div>
+
+          {aspmSupported ? (
+            <div className={ROW.ROOT}>
+              <div className={ROW.TEXT}>
+                <span className="flex items-center gap-1.5">
+                  <span id={ASPM_LABEL_ID} className={ROW.LABEL}>
+                    {t(`${K}.settings.aspm_label`)}
+                  </span>
+                  <HintIcon label={t(`${K}.settings.aspm_hint_aria`)}>
+                    {t(`${K}.settings.aspm_hint`)}
+                  </HintIcon>
+                </span>
+                <span className={ROW.CONSEQUENCE}>
+                  {t(`${K}.settings.aspm_consequence`)}
+                </span>
+              </div>
+              <div className={ROW.CONTROL}>
+                <Select
+                  value={aspmValue}
+                  onValueChange={setAspmDraft}
+                  disabled={isSaving || held}
+                >
+                  <SelectTrigger
+                    host="container"
+                    aria-labelledby={ASPM_LABEL_ID}
+                    className={FIELD}
+                  >
+                    {isSaving && aspmDirty ? (
+                      applyingValue
+                    ) : (
+                      <SelectValue
+                        placeholder={t(`${K}.settings.aspm_placeholder`)}
+                      />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>{t(`${K}.settings.aspm_label`)}</SelectLabel>
+                      {ASPM_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(`${K}.settings.${option.key}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : null}
         </div>
       </CardContent>
       <CardFoot
@@ -171,7 +256,7 @@ export function SpeedLimitCard({
               type="button"
               variant="ghost"
               size="action"
-              onClick={() => setDraft(null)}
+              onClick={discard}
               disabled={!isDirty || isSaving}
             >
               {t("actions.discard", { ns: "common" })}
@@ -192,4 +277,4 @@ export function SpeedLimitCard({
   );
 }
 
-export default SpeedLimitCard;
+export default EthernetPortCard;
