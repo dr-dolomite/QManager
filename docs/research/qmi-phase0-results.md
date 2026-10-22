@@ -60,7 +60,7 @@ So the QRTR reset is an exact, instant SSR signal, which could be useful for the
 3. **The deep tier gets fresh data at zero AT cost.** In the deep tier (120 s), status.json was showing a CA set from minutes earlier, while QMI was current.
 4. **Open items:**
    - Validate in SA, where TLV 0x2F should supply NR PCI and RSRP.
-   - Decide whether to approve `Config Signal Info v2` for live SINR/NR. It is per-client by design, but unverified on this firmware, so it needs explicit OK.
+   - Decide whether to approve `Config Signal Info v2` for live SINR/NR. Evaluated in [`qmi-signal-info-v2.md`](qmi-signal-info-v2.md): GO pending a soak. Indications are per-client, and the shared cache stays fine-grained until the next SSR.
    - Map LTE TA while the device moves.
    - Port the decoders into `qmanager_atd` (`src/qrtr.rs`) behind a `QMI` verb.
 
