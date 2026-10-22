@@ -273,8 +273,18 @@ fn main() {
     match args.first().map(|x| x.as_str()) {
         Some("json") => cmd_json(&mut s, &args[1..]),
         Some("get") => {
-            let (svc, id) = args.get(1).and_then(|a| parse_svcmsg(a)).unwrap_or_else(|| die("usage: get <svc>:<msg>"));
-            match s.call(svc, id, &[]) {
+            let (svc, id) = args.get(1).and_then(|a| parse_svcmsg(a)).unwrap_or_else(|| die("usage: get <svc>:<msg> [tt=hex ..]"));
+            // Optional request TLVs as tt=hexbytes, e.g. 01=08000000.
+            let mut req = Vec::new();
+            for a in &args[2..] {
+                let (t, h) = a.split_once('=').unwrap_or_else(|| die("bad tlv arg"));
+                let t = u8::from_str_radix(t, 16).unwrap_or_else(|_| die("bad tlv type"));
+                let v: Vec<u8> = (0..h.len() / 2)
+                    .map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or_else(|_| die("bad hex")))
+                    .collect();
+                req.push(tlv(t, &v));
+            }
+            match s.call(svc, id, &req) {
                 Ok((m, rtt)) => {
                     let tl: Vec<String> = m.tlvs.iter().map(|t| format!("{{\"t\":\"{:02x}\",\"hex\":\"{}\"}}", t.t, decode::hex(&t.v))).collect();
                     println!("{{\"rtt_ms\":{:.2},\"tlvs\":{}}}", ms(rtt), arr(&tl));

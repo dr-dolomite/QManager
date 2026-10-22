@@ -348,7 +348,10 @@ pub fn ca(m: &Msg) -> String {
         band_obj(&mut p, r.u16());
         j.raw("pcell", &p.done());
     }
-    if let Some(v) = m.tlv(0x19) {
+    // 0x15 = SCell list with u16 EARFCN (present in every sample so far);
+    // 0x19 = the same list with u32 EARFCN (seen only sometimes).
+    let wide = m.tlv(0x15).is_none();
+    if let Some(v) = m.tlv(0x15).or(m.tlv(0x19)) {
         let mut r = Rd::new(v);
         let n = r.u8() as usize;
         let mut out = Vec::new();
@@ -357,15 +360,20 @@ pub fn ca(m: &Msg) -> String {
                 break;
             }
             let mut s = J::obj();
-            s.num("pci", r.u16()).num("earfcn", r.u32()).num("bw_enum", r.u32());
+            let pci = r.u16();
+            let earfcn = if wide { r.u32() } else { r.u16() as u32 };
+            s.num("pci", pci).num("earfcn", earfcn).num("bw_enum", r.u32());
             band_obj(&mut s, r.u16());
+            // state: 0 deconfigured, 1 configured-deactivated, 2 activated
             s.num("state", r.u32()).num("idx", r.u8());
-            r.u8();
+            if wide {
+                r.u8();
+            }
             out.push(s.done());
         }
         j.raw("scells", &arr(&out));
     }
-    unknown(&mut j, m, &[0x13, 0x19]);
+    unknown(&mut j, m, &[0x13, 0x15, 0x19]);
     j.done()
 }
 
