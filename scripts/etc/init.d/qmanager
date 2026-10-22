@@ -101,6 +101,8 @@ stop_service() {
     rm -rf /var/run/qmanager/tap
     # Poller's on-demand cache read stamp (B5.29): a fresh start re-reads once.
     rm -f /var/run/qmanager/ondemand.stamp
+    # Poller's qmi.env read stamp: a fresh start re-reads the sidecar once.
+    rm -f /var/run/qmanager/qmi.stamp
     # B5.29 Phase C runtime files: the poller's jq-free sidecars (written by
     # qmanager_ping and ondemand_radio.sh), the state-file read stamps, and the
     # dev-only status parity hook. A fresh start rebuilds them.
