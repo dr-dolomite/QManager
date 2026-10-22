@@ -32,6 +32,7 @@ _AT_ENGINE_LOADED=1
 ATE_BROKER_BIN="/usr/bin/qmanager_atd"
 ATE_LINK="/usr/bin/qcmd"
 ATE_SMS_LINK="/usr/bin/qsms"
+ATE_QMI_LINK="/usr/bin/qmi"
 ATE_SOCK="/var/run/qmanager_atd.sock"
 PB_INIT="/etc/init.d/port-bridged"
 
@@ -48,7 +49,7 @@ at_broker_running() {
 # Atomically repoint a client link ($1 = link path) at $2. ln -sf would unlink
 # then create, leaving a moment with no link at all; a temp link + rename(2)
 # never does. The rename also replaces a regular file an old install left at
-# that path. Temp names are /usr/bin/.qcmd.<pid> / .qsms.<pid>.
+# that path. Temp names are /usr/bin/.qcmd.<pid> / .qsms.<pid> / .qmi.<pid>.
 _ate_link_to() {
     _ate_tmp="${1%/*}/.${1##*/}.$$"
     rm -f "$_ate_tmp"
@@ -70,6 +71,14 @@ at_qcmd_link() {
 at_qsms_link() {
     [ -L "$ATE_SMS_LINK" ] && [ "$(readlink "$ATE_SMS_LINK" 2>/dev/null)" = "qmanager_atd" ] && return 0
     _ate_link_to "$ATE_SMS_LINK" "qmanager_atd"
+}
+
+# Point /usr/bin/qmi at qmanager_atd. Idempotent. Unconditional like qsms: callers
+# gate on the daemon-written capability file (qmi=1), so a link left behind by a
+# rollback to a binary without the QMI lane is inert, not an error.
+at_qmi_link() {
+    [ -L "$ATE_QMI_LINK" ] && [ "$(readlink "$ATE_QMI_LINK" 2>/dev/null)" = "qmanager_atd" ] && return 0
+    _ate_link_to "$ATE_QMI_LINK" "qmanager_atd"
 }
 
 # --- Host AT ports (port-bridge) ---------------------------------------------

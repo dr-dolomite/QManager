@@ -308,16 +308,18 @@ remove_backend() {
     # --- Binaries in /usr/bin/ ---
     local bin_count=0
 
-    # /usr/bin/qcmd + qsms are symlinks to qmanager_atd; -L also catches a dangling
+    # /usr/bin/qcmd + qsms + qmi are symlinks to qmanager_atd; -L also catches a dangling
     # link whose target is already gone.
-    for link in qcmd qsms; do
+    for link in qcmd qsms qmi; do
         if [ -f "$BIN_DIR/$link" ] || [ -L "$BIN_DIR/$link" ]; then
             rm -f "$BIN_DIR/$link"
             bin_count=$(( bin_count + 1 ))
         fi
     done
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
-        "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* 2>/dev/null || true
+        /var/run/qmanager_atd.restart /tmp/qmanager_qmi.env /tmp/qmanager_qmi.json \
+        /tmp/qmanager_qmi_live /tmp/qmanager_qmi.* \
+        "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* "$BIN_DIR"/.qmi.* 2>/dev/null || true
 
     for f in "$BIN_DIR"/qmanager_*; do
         [ -f "$f" ] || continue

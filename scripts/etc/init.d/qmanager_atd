@@ -6,7 +6,7 @@
 # call already goes through the broker, and stops after it.
 #
 # On every start it also reconciles these boot-time states:
-#   - /usr/bin/qcmd and /usr/bin/qsms -> qmanager_atd (multicall clients)
+#   - /usr/bin/qcmd, qsms and qmi -> qmanager_atd (multicall clients)
 #   - port-bridge on/off (quecmanager.ports.host_at); a firmware update can
 #     re-enable the vendor service, so this re-applies the user's choice.
 #
@@ -26,6 +26,7 @@ start_service() {
 
     at_qcmd_link
     command -v at_qsms_link >/dev/null 2>&1 && at_qsms_link
+    command -v at_qmi_link >/dev/null 2>&1 && at_qmi_link
     host_at_apply
 
     at_broker_available || return 0
@@ -50,6 +51,9 @@ stop_service() {
     # here so a rolled-back binary, which never writes it, is not credited
     # with a protocol it does not speak.
     rm -f /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new
+    # QMI sidecars + lease. Atomic-write temps assumed "<path>.new" (like .proto);
+    # the narrow glob covers any suffix.
+    rm -f /tmp/qmanager_qmi.env /tmp/qmanager_qmi.json /tmp/qmanager_qmi_live /tmp/qmanager_qmi.*
 }
 
 # No reload trigger on purpose: many CGIs commit the quecmanager config, and

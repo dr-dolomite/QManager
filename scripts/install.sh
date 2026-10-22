@@ -1361,7 +1361,7 @@ seed_uci_defaults() {
 
     seed_web_port
 
-    # Point /usr/bin/qcmd + /usr/bin/qsms at qmanager_atd (atomic symlink swap). Must run after
+    # Point /usr/bin/qcmd + qsms + qmi at qmanager_atd (atomic symlink swap). Must run after
     # install_backend + install_bundled_binaries.
     if [ -f "$LIB_DIR/at_engine.sh" ]; then
         . "$LIB_DIR/at_engine.sh"
@@ -1375,8 +1375,13 @@ seed_uci_defaults() {
         else
             warn "Could not link $BIN_DIR/qsms — SMS may be unavailable"
         fi
+        if at_qmi_link; then
+            info "qmi -> $(readlink "$BIN_DIR/qmi" 2>/dev/null)"
+        else
+            warn "Could not link $BIN_DIR/qmi — QMI client unavailable"
+        fi
     else
-        warn "at_engine.sh missing — /usr/bin/qcmd and /usr/bin/qsms not linked"
+        warn "at_engine.sh missing — /usr/bin/qcmd, qsms and qmi not linked"
     fi
 }
 
