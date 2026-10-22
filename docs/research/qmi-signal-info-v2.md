@@ -2,7 +2,7 @@
 
 Follow-up to [`qmi-phase0-results.md`](qmi-phase0-results.md), which found NAS `0x004F` Get Signal Info cached when polled. The question was whether `0x006C` makes it live, and whether that is safe to hold for the long run. The user approved the write conditionally ("I approve it now if its good for the long run").
 
-**Verdict: GO, with one condition.** The config is not persisted, the indication stream is per-client, and the only global side effect is benign and volatile. The condition is a soak to rule out a link to the baseband RF fault (see [Risk](#risk-one-ssr-during-the-test)).
+**Verdict: GO (green-lit by the user, 2026-10-22).** The config is not persisted, the indication stream is per-client, and the only global side effect is benign and volatile. The user waived the proposed 24 h pre-integration soak, so the SSR rate becomes a watch item (see [Risk](#risk-one-ssr-during-the-test)).
 
 **Setup**
 - **Device:** RM551E-GL, fw RM551EGL00AAR02A01M8G, TNT 515-03, 5G-NSA (B1 LTE anchor + N41), RRC idle (`NOCONN`) in every run.
@@ -97,7 +97,7 @@ LTE RSRQ and RSSI follow the LTE RSRP pattern, from 0 changes when cached to 30�
 
 ## Risk: one SSR during the test
 
-At uptime 20445 s the MPSS crashed with `nr_rx_ctl_agc.c:7563:RXCTL_IUSS: RFG 0 rx 0 state is wrong`. That is the known RF IU fault, crash #4 of this boot. Crashes #1–#3 (1051 s, 2414 s, 8455 s) all came before any `0x006C` write, and #1 came before any QMI traffic. #4 came 16 min after the first apply. One event can't separate cause from coincidence, and NR RX AGC is not obviously connected to reporting thresholds. **The broker integration should start with a soak** that holds the config for 24 h and compares crashes per hour against this device's history. Stop if the rate goes up.
+At uptime 20445 s the MPSS crashed with `nr_rx_ctl_agc.c:7563:RXCTL_IUSS: RFG 0 rx 0 state is wrong`. That is the known RF IU fault, crash #4 of this boot. Crashes #1–#3 (1051 s, 2414 s, 8455 s) all came before any `0x006C` write, and #1 came before any QMI traffic. #4 came 16 min after the first apply. One event can't separate cause from coincidence, and NR RX AGC is not obviously connected to reporting thresholds. The pre-integration soak was waived. Instead, after the broker integration ships, compare SSRs per hour (`handling crash #N` in `dmesg`) against this device's history. If the rate goes up, back the config out of the broker.
 
 ## Recommended design
 
