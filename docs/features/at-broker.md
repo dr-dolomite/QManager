@@ -129,9 +129,14 @@ acceptor (main thread)
 - **QMI lane** (`daemon/qmi_lane.rs`). Built on a background thread
   (`qmi-start`) after the AT lane is up, because the registry's name-server
   lookup is bounded at 500 ms and AT serving must never wait on it. Until it
-  arrives a valid `QMI` request answers `modem_not_ready`. Details in
-  [`qmi-lane.md`](qmi-lane.md).
-- **Logger** is thread-safe: one `Mutex` around write and rotate.
+  arrives a valid `QMI` request answers `modem_not_ready`. If the lane never
+  started, or 4 QMI requests are already in flight, a valid `QMI` request
+  answers `ERR command_failed` and the client reads in-process, so AT keeps at
+  least 12 of the 16 readers. Each QMI request has a 2.0 s overall deadline.
+  Details in [`qmi-lane.md`](qmi-lane.md#daemon-limits-cap-deadline-circuit).
+- **Logger** is thread-safe: one `Mutex` around write and rotate. The log file
+  is opened `O_NOFOLLOW` and `O_NONBLOCK`, and a line is dropped unless the
+  open object is a regular file, so a planted FIFO can never block an AT caller.
 
 **Why the AT invariants survive the move.** The queue is the old backlog
 in-process: still FIFO, still one request on the modem at a time.
@@ -338,6 +343,7 @@ covered by fake-modem tests only (86 crate tests).
 - **Client:** `/usr/bin/qmi` → `qmanager_atd`. `qmi <read> [<read>...]` prints one JSON line; rc 0 ok, rc 1 failure. Reads, envelope, error words and the allow-list are in [`qmi-lane.md`](qmi-lane.md).
 - **Wire format:** `QMI <nbytes> <sent_ms>\n` + the read names joined by NUL (cap 1 KB, same exact-length and uid rules). Reply `RES <0|1> <nbytes>\n<json>` (as SMS) or `ERR command_failed` for a refused frame. A bad read name is a normal `RES 1` answer (`bad_args`), not a refusal.
 - **No lock, no queue.** The reader thread answers it itself, in about a millisecond, even while the AT lane holds a 20 s command or a scan runs. That independence is the reason the lane exists; a test pins it (`a_qmi_read_answers_in_milliseconds_while_an_at_job_holds_the_lane`).
+- **Bounded on the reader pool.** At most 4 QMI requests run at once; over the cap the reader answers `ERR command_failed` immediately. A silent QMI service can hold a reader for at most about 2 s (the 2.0 s daemon deadline, plus the per-service circuit that fails requests at once after 2 timeouts). Limits and the circuit rules are in [`qmi-lane.md`](qmi-lane.md#daemon-limits-cap-deadline-circuit).
 - **Transport order:** broker (only if the capability file allows it), else the same reads in the client process on its own registry. QMI is read-only and lock-free, so unlike AT a retry or a duplicate is harmless; the client falls back if the broker hangs up, answers `ERR`, or says nothing within 3 s. It never restarts a frozen broker.
 
 ## Invariants (and why they exist)
@@ -427,8 +433,8 @@ covered by fake-modem tests only (86 crate tests).
 | `poll/` | The parked B5.29 `POLL` parsers and env writer (`parse.rs`, `parse/ca.rs`, `envout.rs`). Compiled **only** with `--features poll` (off by default, so the shipped binary does not carry them). They are library code with host tests; no CLI entry point is wired to them. |
 
 The crate is `libc`-only (no async runtime, no other crates). `cargo test --release`
-runs **211** tests and `cargo test --release --features poll` runs **225**
-(WSL, 2026-10-22, working tree with the run-directory tests).
+runs **222** tests and `cargo test --release --features poll` runs **236**
+(WSL, 2026-10-22, working tree with the QMI limit and hardening tests).
 
 ## Host AT ports (`quecmanager.ports.host_at`)
 

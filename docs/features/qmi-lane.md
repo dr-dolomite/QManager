@@ -19,7 +19,7 @@ Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Fi
 
 ## Architecture
 
-- **Registry** (`qmi/registry.rs`). One long-lived `AF_QIPCRTR` client socket per service (NAS 3, DMS 2, UIM 11, WDS 1, DSD 42), a demux thread per socket (matches responses to the waiting request by transaction id; indications go to subscribers) and a name-server watcher thread. All threads have 128 KiB stacks. Per-request timeout 1 s; the startup lookup is bounded at 500 ms.
+- **Registry** (`qmi/registry.rs`). One long-lived `AF_QIPCRTR` client socket per service (NAS 3, DMS 2, UIM 11, WDS 1, DSD 42), a demux thread per socket (matches responses to the waiting request by transaction id; indications go to subscribers) and a name-server watcher thread. All threads have 128 KiB stacks. Per-request timeout 1 s; the startup lookup is bounded at 500 ms. A per-service fast-fail circuit sits on top of that timeout (see [Daemon limits](#daemon-limits-cap-deadline-circuit)).
 - **Requests run on the caller's thread** (a reader, the sampler, or the client process). No lock is held while waiting for a reply.
 - **Codecs and model** (`qmi/codec/*`, `qmi/model.rs`) turn TLVs into QManager's vocabulary: bands `B41` / `N41`, bandwidth in whole MHz (1.4 rounds to 1), signal as whole dBm/dB plus a tenths field, absent = `null` (never `NaN`, `N/A` or an empty string).
 - **Startup is off the serving path.** `qmi-start` builds the registry after the AT lane is up. Until it exists a valid request answers `modem_not_ready`; AT never waits on it.
@@ -121,14 +121,25 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 - **Why `/var/run/qmanager`:** the poller will `source` the env, and `/tmp` is world-writable. The daemon makes the dir `0700`, owned by its euid, and verifies it before **every** env write (`safefs::ensure_own_dir`: a planted symlink, file or foreign dir is removed first). If that fails, the env is not written. The JSON is not sourced, so it stays in `/tmp`.
 - **Why a sidecar and not `qmi bundle` from the poller:** sourcing adds zero forks (builtin `read`, gated by `-nt`); a per-cycle `qmi` call is about 5 ms and one fork. The sampler's cadence is independent of poller tiers, so deep tier and AT suppression still get fresh LTE data.
 - A write failure is logged once (`cannot publish the qmi snapshot`) and again on recovery, never per cycle.
+- **The JSON and the env are written independently.** A directory or other object planted at `/tmp/qmanager_qmi.json` (or its `.new`) fails only the JSON: the env still publishes to `/var/run/qmanager/` and the failure is reported. The planted object is left alone; the temp name is cleared when it is in the way.
 
 **Live lease.** A caller touches `/tmp/qmanager_qmi_live`; while its mtime is within **10 s**, the sampler runs every **500 ms** (2 Hz; the floor is 200 ms / 5 Hz). Without it, 2 s. The lease is judged by mtime against the wall clock, which steps on this modem after an SSR or NTP sync, so an mtime **in the future or older than 10 s counts as expired**: a clock step can only drop the rate to 2 s until the next renewal, never hold it up. Phase 0 measured about 0.5 % CPU at 10 Hz.
 
 **Lifecycle.** `init.d` `stop_service` and `uninstall.sh` remove the env (+ `.new`), JSON (+ `.new`) and lease. Files persist across a daemon crash with stale content; judge freshness by `qmi_mono` and `qmi_state`, never by existence.
 
+## Daemon limits (cap, deadline, circuit)
+
+These keep a silent QMI service from starving AT of reader threads. Constants: `daemon/qmi_lane.rs` (`MAX_IN_FLIGHT`, `DEADLINE`) and `qmi/registry.rs` (`Config`).
+
+- **In-flight cap.** At most **4** QMI requests (`MAX_IN_FLIGHT`) run in the daemon at once, so AT always keeps at least 12 of the 16 readers. The check is a non-blocking try-acquire on the reader thread. Over the cap the reader answers `ERR command_failed` at once and the `qmi` client runs the reads in-process. A "busy" warning is logged at most once a minute.
+- **Lane never started.** If the QMI lane could not start (its thread failed to spawn), valid requests also get `ERR command_failed`, so the client falls back instead of seeing `modem_not_ready` forever. Argument validation runs first, so a malformed request still gets `bad_args`.
+- **Overall deadline.** Each daemon request has a **2.0 s** budget (`DEADLINE`), below the client's 3 s reply timeout. Reads still pending when it passes fail `modem_not_ready` without being sent. The in-process client fallback is **not** deadline-bounded.
+- **Per-service circuit.** After **2** consecutive full timeouts on a service, its requests fail `modem_not_ready` at once. One probe is let through per **1 s**. The circuit closes on any response (a QMI error counts), on a link rebuild (`NEW_SERVER` or a re-lookup), or on `mark_down`. The snapshot sampler runs on its own thread, is not counted against the cap, and is normally what probes a recovering service.
+- **Panics.** The signal-read re-fetch panic sites are gone. Runtime data is never unwrapped, expected or indexed (see the invariants below).
+
 ## Client and fallback
 
-`qmi` uses the broker only if the capability file says `proto>=3` and `qmi=1`; otherwise, or if the broker hangs up, answers `ERR` or is silent for 3 s, the same reads run in the client process on its own registry (a one-shot; it opens QRTR itself). This is safe because QMI is read-only and lock-free, and both paths call the same `query::answer`, so there is one behaviour. Callers detect support with `[ -x /usr/bin/qmi ]` **plus** the capability file; a rolled-back 0.2.0 broker leaves the link inert.
+`qmi` uses the broker only if the capability file says `proto>=3` and `qmi=1`; otherwise, or if the broker hangs up, answers `ERR` (including the cap and the dead-lane case above) or is silent for 3 s, the same reads run in the client process on its own registry (a one-shot; it opens QRTR itself). This is safe because QMI is read-only and lock-free, and both paths call the same `query::answer`, so there is one behaviour. Callers detect support with `[ -x /usr/bin/qmi ]` **plus** the capability file; a rolled-back 0.2.0 broker leaves the link inert.
 
 ## Invariants a future editor must not break
 
@@ -139,11 +150,13 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 - **The env lives in the verified root-only dir.** Do not move it back to `/tmp`.
 - **Never delete the sidecars during an SSR**, and keep `qmi_mono` as the last successful read's time.
 - **Keep the sampler's lease check tolerant of clock steps** (future mtime = expired).
+- **Keep the daemon's QMI limits.** The cap (4) must leave AT at least 12 of the 16 readers, the daemon deadline (2.0 s) must stay below the client's 3 s reply timeout, and over-cap or dead-lane requests answer `ERR command_failed` so the client falls back rather than waiting.
+- **No `unwrap`, `expect` or indexing on runtime data in non-test code.** Release builds are `panic=abort`, so a panic kills every AT caller, not just the QMI request.
 - **Do not put QMI values into `events.sh` input.** Its settle/churn counters count samples; a faster QMI cadence would silently retune `ca_change`. (Phase 2 rule.)
 
 ## Validation
 
-Pending on-device results (to be filled in): `qmi bundle` in 10 ms or less during a held modem lock and during a real `AT+QSCAN`; in-process fallback with the daemon stopped; fd count and RSS flat across a forced or real SSR; 30-minute soak with `qmi bundle` every 2 s beside the poller; install, OTA re-install and uninstall leave no strays. Host: `cargo test --release` 211 tests (225 with `--features poll`), including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
+Pending on-device results (to be filled in): `qmi bundle` in 10 ms or less during a held modem lock and during a real `AT+QSCAN`; in-process fallback with the daemon stopped; fd count and RSS flat across a forced or real SSR; 30-minute soak with `qmi bundle` every 2 s beside the poller; install, OTA re-install and uninstall leave no strays. Host: `cargo test --release` 222 tests (236 with `--features poll`), including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
 
 ## Phase 2 (not built)
 
