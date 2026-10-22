@@ -11,12 +11,15 @@
 //!   So a `qmi-start` thread builds it after the AT lane is up and publishes
 //!   it through a `OnceLock`. Until then (a few milliseconds on the device) a
 //!   valid request answers `modem_not_ready`, and the AT path never waits.
+//! - **The snapshot sampler** (`qmi_snapshot`) is started with it and shares
+//!   the registry: it publishes the poller's sidecar and the CGI json.
 //! - **Logging is state changes only.** The same thread then watches the
 //!   registry: it logs when a service changes state and when the SSR counter
 //!   moves, never per request.
 
 use crate::common::log::Logger;
 use crate::common::proto::Reply;
+use super::qmi_snapshot;
 use crate::qmi::query;
 use crate::qmi::registry::{Registry, SvcState};
 use crate::qmi::service_name;
@@ -41,6 +44,11 @@ impl QmiLane {
             .spawn(move || {
                 let reg = Arc::new(Registry::start_qrtr());
                 let _ = c.set(reg.clone());
+                // The snapshot sampler (poller sidecar + CGI json) shares the
+                // registry; a failure to start it costs the sidecar only.
+                if let Err(e) = qmi_snapshot::spawn(reg.clone(), qmi_snapshot::Paths::production(), log.clone()) {
+                    log.error(&format!("cannot start the qmi snapshot sampler: {e}"));
+                }
                 monitor(&reg, &log);
             });
         if let Err(e) = spawned {

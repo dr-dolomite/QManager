@@ -16,6 +16,7 @@
 
 pub(crate) mod at_lane;
 pub(crate) mod qmi_lane;
+pub(crate) mod qmi_snapshot;
 
 use crate::at::exec;
 use crate::at::new_channel;

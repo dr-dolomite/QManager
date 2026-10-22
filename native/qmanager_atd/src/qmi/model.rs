@@ -316,7 +316,6 @@ impl Ca {
         self.carriers.len()
     }
 
-    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn pcc(&self) -> Option<&Carrier> {
         self.carriers.first().filter(|c| c.kind == "PCC")
     }
@@ -439,7 +438,6 @@ impl Bundle {
         }
     }
 
-    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn registered(&self) -> bool {
         self.signal.registration == Registration::Registered
     }
@@ -447,7 +445,6 @@ impl Bundle {
     /// Band and bandwidth of the serving LTE carrier: the RF entry on the
     /// serving EARFCN (else the first LTE entry), falling back to the CA
     /// PCC when RF info is missing.
-    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn lte_band(&self) -> (Option<String>, Option<u32>) {
         let earfcn = self.cell.as_ref().and_then(|c| c.lte.as_ref()).map(|l| l.earfcn);
         if let Some(rf) = &self.rf {

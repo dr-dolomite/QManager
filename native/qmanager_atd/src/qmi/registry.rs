@@ -562,7 +562,6 @@ impl Registry {
         Some(rx)
     }
 
-    #[allow(dead_code)] // consumed by the phase 2 indication path
     pub fn state(&self, svc: u32) -> Option<SvcState> {
         let i = self.shared.idx(svc)?;
         Some(lock(&self.shared.services[i].inner).state)
