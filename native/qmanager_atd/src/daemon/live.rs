@@ -31,8 +31,8 @@
 //! the public file and its `.new`, and clears its ring. The next lease mints
 //! a new token.
 //!
-//! Ring. Up to 16 samples, each with a `seq` that only grows within one
-//! daemon run (`run` = the daemon's start, CLOCK_BOOTTIME ms; it changes on
+//! Ring. Up to 32 samples (about 6.4 s at 5 Hz), each with a `seq` that only
+//! grows within one daemon run (`run` = the daemon's start, CLOCK_BOOTTIME ms; it changes on
 //! a restart, which tells a client to reset). A failed read pushes no sample
 //! (the file's `qmi_state` says why nothing new arrived). While the long /
 //! scan flag is up, `scan` is true and the serving fields of new samples are
@@ -68,7 +68,7 @@ pub const MIN_PERIOD: Duration = Duration::from_millis(200);
 pub const MAX_SLICE: Duration = Duration::from_millis(250);
 /// A stamp older than this (seconds on the boot clock) is no lease.
 pub const STAMP_TTL_S: u64 = 10;
-pub const RING: usize = 16;
+pub const RING: usize = 32;
 /// SCCs listed per sample (the PCC is the sample's own serving fields).
 const SCCS: usize = 4;
 
@@ -281,8 +281,9 @@ pub struct Head<'a> {
     pub scan: bool,
 }
 
+/// The samples are already rendered; they are appended in place (no copy of
+/// the ring, one allocation sized for the whole file).
 pub fn render_file(h: &Head, ring: &VecDeque<String>) -> String {
-    let items: Vec<String> = ring.iter().cloned().collect();
     let mut j = J::obj();
     j.num("v", 1)
         .num("run", h.run)
@@ -290,10 +291,19 @@ pub fn render_file(h: &Head, ring: &VecDeque<String>) -> String {
         .num("period_ms", h.period_ms)
         .str("qmi_state", h.state)
         .num("ssr_count", h.ssr_count)
-        .boolean("scan", h.scan)
-        .raw("samples", &arr(&items));
-    let mut s = j.done();
-    s.push('\n');
+        .boolean("scan", h.scan);
+    let head = j.done();
+    let body: usize = ring.iter().map(|x| x.len() + 1).sum();
+    let mut s = String::with_capacity(head.len() + body + 16);
+    s.push_str(&head[..head.len() - 1]);
+    s.push_str(",\"samples\":[");
+    for (i, x) in ring.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(x);
+    }
+    s.push_str("]}\n");
     s
 }
 
@@ -306,6 +316,10 @@ pub struct Live {
     ring: VecDeque<String>,
     /// The token the public file is currently published under.
     cur_token: Option<String>,
+    /// `cur_token`'s public file path, built once per episode.
+    cur_file: String,
+    /// The index's path, built once.
+    index: String,
     /// A sample is waiting for a token (the CGI writes the stamp first).
     pending: bool,
     last_state: &'static str,
@@ -320,13 +334,16 @@ pub struct Live {
 
 impl Live {
     pub fn new(paths: LivePaths, log: std::sync::Arc<Logger>) -> Live {
+        let index = format!("{}/{INDEX}", paths.public_dir);
         Live {
+            index,
             paths,
             uid: euid(),
             run: boot_ms(),
             seq: 0,
             ring: VecDeque::with_capacity(RING),
             cur_token: None,
+            cur_file: String::new(),
             pending: false,
             last_state: "unavailable",
             last_ssr: 0,
@@ -362,15 +379,16 @@ impl Live {
     }
 
     /// Makes the public dir trustworthy and puts the empty index in it.
+    /// Runs before every publish; in the steady state it is three lstat
+    /// calls (`ensure_own_dir` only chmods a dir whose mode is wrong).
     fn ensure_public(&self) -> io::Result<()> {
         if let Some(d) = &self.paths.run_dir {
             safefs::ensure_own_dir(d, 0o700)?;
         }
         safefs::ensure_own_dir(&self.paths.public_dir, 0o755)?;
-        let index = format!("{}/{INDEX}", self.paths.public_dir);
-        match std::fs::symlink_metadata(&index) {
+        match std::fs::symlink_metadata(&self.index) {
             Ok(m) if m.file_type().is_file() && m.len() == 0 && m.uid() == self.uid => Ok(()),
-            _ => safefs::write_atomic(&index, b""),
+            _ => safefs::write_atomic(&self.index, b""),
         }
     }
 
@@ -431,7 +449,7 @@ impl Live {
         self.last_scan = self.scan_up();
         self.last_period = period_for(tier);
         // The token first: a new episode clears the ring before this sample.
-        let token = self.sync_token();
+        let published = self.sync_token();
         if let Some(b) = bundle {
             self.seq += 1;
             if self.ring.len() >= RING {
@@ -440,8 +458,8 @@ impl Live {
             self.ring.push_back(render_sample(self.seq, boot_ms(), Some(b), self.last_scan));
         }
         self.pending = true;
-        if let Some(t) = token {
-            self.write(&t);
+        if published {
+            self.write();
         }
     }
 
@@ -449,10 +467,8 @@ impl Live {
     /// expires the lease when no stamp is fresh.
     pub fn tick(&mut self, tier: Tier, now_s: u64) {
         if tier != Tier::None {
-            if self.pending {
-                if let Some(t) = self.sync_token() {
-                    self.write(&t);
-                }
+            if self.pending && self.sync_token() {
+                self.write();
             }
             return;
         }
@@ -497,10 +513,10 @@ impl Live {
         self.note(r);
     }
 
-    /// The current valid token, after following a change: a revoked token
-    /// unpublishes at once, a new one (a new episode) clears the ring and
-    /// the public dir of the old file.
-    fn sync_token(&mut self) -> Option<String> {
+    /// True when a valid token is current, after following a change: a
+    /// revoked token unpublishes at once, a new one (a new episode) clears
+    /// the ring and the public dir of the old file.
+    fn sync_token(&mut self) -> bool {
         let Some(token) = read_token(&self.paths.token, self.uid) else {
             if self.cur_token.is_some() {
                 self.cur_token = None;
@@ -508,7 +524,7 @@ impl Live {
                 let r = self.hygiene(None);
                 self.note(r);
             }
-            return None;
+            return false;
         };
         if self.cur_token.as_deref() != Some(token.as_str()) {
             if self.cur_token.is_some() {
@@ -516,14 +532,17 @@ impl Live {
             }
             if let Err(e) = self.hygiene(Some(&token)) {
                 self.note(Err(e));
-                return None;
+                return false;
             }
-            self.cur_token = Some(token.clone());
+            self.cur_file = self.public_file(&token);
+            self.cur_token = Some(token);
         }
-        Some(token)
+        true
     }
 
-    fn write(&mut self, token: &str) {
+    /// Publishes under `cur_token` (only called right after `sync_token`
+    /// said one is current).
+    fn write(&mut self) {
         let head = Head {
             run: self.run,
             seq: self.seq,
@@ -533,8 +552,7 @@ impl Live {
             scan: self.last_scan,
         };
         let body = render_file(&head, &self.ring);
-        let path = self.public_file(token);
-        let r = self.ensure_public().and_then(|_| safefs::write_atomic(&path, body.as_bytes()));
+        let r = self.ensure_public().and_then(|_| safefs::write_atomic(&self.cur_file, body.as_bytes()));
         if r.is_ok() {
             self.pending = false;
         }
@@ -792,23 +810,25 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_keeps_sixteen_seq_grows_and_run_names_the_daemon_start() {
+    fn the_ring_keeps_thirty_two_seq_grows_and_run_names_the_daemon_start() {
         let d = dir("ring");
         let mut l = live(&d);
         l.start();
         std::fs::write(d.join("token"), TOK).unwrap();
         let b = bundle();
-        for _ in 0..20 {
+        assert_eq!(RING, 32);
+        for _ in 0..40 {
             l.on_sample(Tier::Aim, "up", 0, Some(&b));
         }
         let f = std::fs::read_to_string(d.join("pub").join(format!("{TOK}.json"))).unwrap();
         assert_eq!(f.matches("{\"seq\":").count(), RING, "{f}");
-        assert!(f.contains("\"seq\":20,\"period_ms\":200") && f.contains("{\"seq\":5,") && !f.contains("{\"seq\":4,"), "{f}");
+        assert!(f.contains("\"seq\":40,\"period_ms\":200") && f.contains("{\"seq\":9,") && !f.contains("{\"seq\":8,"), "{f}");
+        assert!(f.find("{\"seq\":9,").unwrap() < f.find("{\"seq\":40,").unwrap(), "oldest first: {f}");
         assert!(f.contains(&format!("\"run\":{},", l.run_id())));
         // A failed read pushes nothing; the header carries the new state.
         l.on_sample(Tier::Watch, "down", 1, None);
         let f = std::fs::read_to_string(d.join("pub").join(format!("{TOK}.json"))).unwrap();
-        assert!(f.contains("\"seq\":20,\"period_ms\":1000,\"qmi_state\":\"down\",\"ssr_count\":1"), "{f}");
+        assert!(f.contains("\"seq\":40,\"period_ms\":1000,\"qmi_state\":\"down\",\"ssr_count\":1"), "{f}");
         assert_eq!(f.matches("{\"seq\":").count(), RING);
         // A new token is a new episode: the ring restarts, seq keeps growing.
         std::fs::write(d.join("token"), TOK2).unwrap();
@@ -816,7 +836,7 @@ mod tests {
         assert_eq!(names(&d), ["fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210.json", "index.html"]);
         let f = std::fs::read_to_string(d.join("pub").join(format!("{TOK2}.json"))).unwrap();
         assert_eq!(f.matches("{\"seq\":").count(), 1);
-        assert!(f.contains("{\"seq\":21,"), "{f}");
+        assert!(f.contains("{\"seq\":41,"), "{f}");
         // A restarted daemon has a different run.
         std::thread::sleep(Duration::from_millis(3));
         let l2 = live(&d);

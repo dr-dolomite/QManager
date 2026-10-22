@@ -82,11 +82,16 @@ fn clear_temp(tmp: &str) {
 /// `qm_root_dir` does for the shell side: a symlink, file or someone else's
 /// directory at `dir` is removed first (unlink never follows a link). Err if
 /// it cannot be made trustworthy; the caller must then not write into it.
+/// Called before every publish, so the steady state is one lstat: an own
+/// directory is only chmodded when its mode is wrong.
 pub fn ensure_own_dir(dir: &str, mode: u32) -> io::Result<()> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     let euid = unsafe { libc::geteuid() };
     if let Ok(m) = std::fs::symlink_metadata(dir) {
         if m.file_type().is_dir() && m.uid() == euid {
+            if m.mode() & 0o7777 == mode {
+                return Ok(());
+            }
             return std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode));
         }
         if m.file_type().is_dir() {
@@ -202,6 +207,10 @@ mod tests {
         std::fs::write(format!("{d}/keep"), b"x").unwrap();
         ensure_own_dir(&d, 0o700).unwrap();
         assert!(std::path::Path::new(&format!("{d}/keep")).exists(), "a good dir is kept");
+        // A loosened mode is put back (the steady state skips the chmod).
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o777)).unwrap();
+        ensure_own_dir(&d, 0o700).unwrap();
+        assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o7777, 0o700);
         // A planted symlink is replaced, its target untouched.
         let victim = format!("{base}/victim");
         std::fs::create_dir(&victim).unwrap();
