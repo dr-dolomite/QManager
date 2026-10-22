@@ -1537,11 +1537,12 @@ install_frontend() {
     # do not reach the at_engine block in seed_uci_defaults, so restore it here
     # when the installed library already has the helper (a fresh install gets it
     # from that block once install_backend has placed the library).
+    # Subshell: on OTA this is still the previous release's library, and sourcing
+    # it here would set _AT_ENGINE_LOADED and shadow the new one in seed_uci_defaults.
     if [ -f "$LIB_DIR/at_engine.sh" ]; then
-        . "$LIB_DIR/at_engine.sh"
-        if command -v at_live_link >/dev/null 2>&1; then
-            at_live_link || warn "Could not link $WWW_ROOT/qmlive — real-time signal unavailable"
-        fi
+        ( . "$LIB_DIR/at_engine.sh"
+          command -v at_live_link >/dev/null 2>&1 || exit 0
+          at_live_link ) || warn "Could not link $WWW_ROOT/qmlive — real-time signal unavailable"
     fi
 }
 
