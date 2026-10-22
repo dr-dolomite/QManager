@@ -798,19 +798,26 @@ Scheduled tower lock changes (time-based).
 ```json
 {
   "success": true,
-  "operstate": "up",
-  "speed": 1000,
+  "link_status": "up",
+  "speed": "1000Mb/s",
   "duplex": "full",
-  "autoneg": "on",
-  "speed_limit": "auto"
+  "auto_negotiation": "on",
+  "speed_limit": "auto",
+  "supports_2500": true,
+  "aspm_supported": true,
+  "aspm_policy": "performance",
+  "aspm_configured": "performance"
 }
 ```
+`aspm_policy` is the kernel's live PCIe ASPM policy (the bracketed token in `/sys/module/pcie_aspm/parameters/policy`); `aspm_configured` is UCI `quecmanager.eth_link.aspm_policy`, applied at boot by `qmanager_eth_link` and seeded to `performance` by the installer when absent. Both are `""` when unsupported or unset. Without `eth0` the GET answers `{success:false, error:"interface_not_found"}`.
 
-**POST Request:**
+**POST Request** (at least one field):
 ```json
-{ "speed_limit": "auto" }
+{ "speed_limit": "auto", "aspm_policy": "performance" }
 ```
-Values: `"auto"`, `"10"`, `"100"`, `"1000"`
+`speed_limit`: `"auto"`, `"10"`, `"100"`, `"1000"`, `"2500"`. `aspm_policy`: `"default"`, `"performance"`, `"powersave"`, `"powersupersave"`.
+
+ASPM is written synchronously and read back; it never bounces the link. ASPM-only response: `{success:true, apply_in_progress:false, aspm_policy:"<active>"}`. With `speed_limit` the response is `{success:true, apply_in_progress:true, disconnect_window_seconds:5, speed_limit, aspm_policy?}` and the ethtool apply runs in the background (the link renegotiates). Errors: `missing_field`, `invalid_value`, `aspm_unsupported`, `aspm_apply_failed`, `save_failed`, `ethtool_missing`, `interface_not_found`.
 
 ### GET/POST `/network/ttl.sh`
 

@@ -545,7 +545,7 @@ result=$(qcmd 'AT+QENG="servingcell"')
 |---------|------|-------|--------|-------------|
 | `qmanager_atd` | procd | 98 | `qmanager_atd` | AT broker serving `qcmd`; reconciles the `qcmd` link and host AT ports at boot |
 | `qmanager` | procd | 99 | `qmanager_poller` + `qmanager_ping` | Main poller and ping daemon |
-| `qmanager_eth_link` | non-procd | 99 | — | Apply ethernet link speed on boot |
+| `qmanager_eth_link` | non-procd | 99 | — | Apply PCIe ASPM policy, then ethernet link speed, on boot |
 | `qmanager_ttl` | non-procd | 99 | — | Apply TTL/HL rules on boot (sources `/etc/firewall.user.ttl`) |
 | `qmanager_mtu` | non-procd | 99 | `qmanager_mtu_apply` | MTU application daemon |
 | `qmanager_imei_check` | non-procd | 99 | `qmanager_imei_check` | Boot-time IMEI check (one-shot, double-fork) |
@@ -665,7 +665,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 
 | Script | Method | Description |
 |--------|--------|-------------|
-| `ethernet.sh` | GET/POST | Link speed, duplex, auto-negotiation |
+| `ethernet.sh` | GET/POST | Link speed, duplex, auto-negotiation, PCIe ASPM policy |
 | `ttl.sh` | GET/POST | IPv4 TTL / IPv6 Hop Limit |
 | `mtu.sh` | GET/POST | MTU size |
 | `dns.sh` | GET/POST | Custom DNS override |

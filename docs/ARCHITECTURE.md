@@ -284,6 +284,7 @@ The apply process runs asynchronously via `qmanager_profile_apply` daemon. The f
 | MTU rules | `/etc/firewall.user.mtu` | Shell commands (ip link) |
 | Watchdog config | UCI `quecmanager.watchcat.*` | UCI |
 | Ethernet link speed | UCI `quecmanager.eth_link.speed_limit` | UCI |
+| PCIe ASPM policy | UCI `quecmanager.eth_link.aspm_policy` (seeded `performance`) | UCI |
 | System settings | UCI `quecmanager.settings.*` | UCI |
 | Timezone | UCI `system.@system[0].timezone/zonename` | UCI |
 | Auth password | `/etc/qmanager/auth.json` | SHA-256 hash + salt |
