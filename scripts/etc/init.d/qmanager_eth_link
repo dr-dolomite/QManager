@@ -1,10 +1,14 @@
 #!/bin/sh /etc/rc.common
 # =============================================================================
-# qmanager_eth_link — Init Script for Ethernet Link Speed Limit Persistence
+# qmanager_eth_link — Init Script for Ethernet Link Speed Limit + PCIe ASPM
 # =============================================================================
 # Applies the configured ethernet link speed limit at boot using ethtool.
 # Reads the limit from UCI (quecmanager.eth_link.speed_limit) and sets the
 # advertise mode accordingly.
+#
+# Also applies the PCIe ASPM policy (quecmanager.eth_link.aspm_policy) first,
+# via /sys/module/pcie_aspm/parameters/policy. This runs even when ethtool is
+# missing and never flaps the link.
 #
 # Non-procd: runs once at boot and exits.
 #
@@ -20,6 +24,30 @@ STOP=10
 ETH_INTERFACE="eth0"
 . /usr/lib/qmanager/ethtool_helper.sh
 
+# Apply the configured PCIe ASPM policy (quecmanager.eth_link.aspm_policy).
+# Runs after the vendor sdxpinn-patch (S14) because START=99, so ours wins.
+# Writing the policy does not touch the link. Silent when unset/invalid/
+# unsupported or already active.
+apply_aspm_policy() {
+    local policy_file
+    policy_file="/sys/module/pcie_aspm/parameters/policy"
+    local want
+    want=$(uci -q get quecmanager.eth_link.aspm_policy 2>/dev/null)
+
+    case "$want" in
+        default|performance|powersave|powersupersave) ;;
+        *) return 0 ;;
+    esac
+    [ -w "$policy_file" ] || return 0
+
+    local cur
+    cur=$(sed -n 's/.*\[\([a-z]*\)\].*/\1/p' "$policy_file" 2>/dev/null)
+    [ "$cur" = "$want" ] && return 0
+
+    echo "$want" > "$policy_file" 2>/dev/null
+    logger -t qmanager_eth_link "ASPM policy: ${cur:-unknown} -> $want"
+}
+
 # Build hex advertise mask from ethtool's "Supported link modes" output.
 # Maps mode names to bit positions (linux/ethtool.h), splits into hi/lo
 # 32-bit halves so awk handles bit 47+ (2500baseT/Full) correctly.
@@ -30,6 +58,10 @@ ETH_INTERFACE="eth0"
 # old logic unconditionally called `ethtool -r`), killing any SSH session
 # attached to the LAN port mid-install.
 start() {
+    # ASPM first: independent of ethtool and of the link, so it must not be
+    # skipped by the ethtool/interface guards below.
+    apply_aspm_policy
+
     # Guard: ethtool must be available
     command -v ethtool >/dev/null 2>&1 || return 1
 

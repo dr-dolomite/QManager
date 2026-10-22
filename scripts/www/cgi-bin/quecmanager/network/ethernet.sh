@@ -4,8 +4,10 @@
 # =============================================================================
 # ethernet.sh — CGI Endpoint: Ethernet Status & Link Speed Limit (GET + POST)
 # =============================================================================
-# GET:  Reads ethernet interface status via sysfs and ethtool.
-# POST: Sets link speed limit via ethtool and persists via UCI.
+# GET:  Reads ethernet interface status via sysfs and ethtool, plus the PCIe
+#       ASPM policy (live + configured).
+# POST: Sets link speed limit via ethtool and/or the PCIe ASPM policy, and
+#       persists via UCI.
 #
 # Data sources:
 #   /sys/class/net/eth0/operstate       -> link status (up/down)
@@ -13,8 +15,15 @@
 #   /sys/class/net/eth0/duplex          -> duplex mode (full/half)
 #   ethtool eth0                        -> auto-negotiation status
 #   UCI quecmanager.eth_link.speed_limit -> configured speed limit
+#   /sys/module/pcie_aspm/parameters/policy -> live ASPM policy (bracketed
+#                                              token is the active one)
+#   UCI quecmanager.eth_link.aspm_policy -> configured ASPM policy
 #
-# POST body: { "speed_limit": "auto"|"10"|"100"|"1000"|"2500" }
+# POST body (at least one field required):
+#   { "speed_limit": "auto"|"10"|"100"|"1000"|"2500",
+#     "aspm_policy": "default"|"performance"|"powersave"|"powersupersave" }
+# ASPM is applied synchronously and never bounces the link; speed_limit keeps
+# its async ethtool apply (link renegotiation).
 #
 # Ethtool advertise values (for restricted modes):
 #   0x003          = 10baseT Half+Full              (10 Mbps only)
@@ -34,6 +43,15 @@ cgi_headers
 cgi_handle_options
 
 ETH_INTERFACE="eth0"
+ASPM_POLICY_FILE="/sys/module/pcie_aspm/parameters/policy"
+
+# --- Helper: active ASPM policy ------------------------------------------------
+# File reads "default [performance] powersave powersupersave"; the bracketed
+# token is active. Prints nothing when unsupported.
+get_aspm_active() {
+    [ -r "$ASPM_POLICY_FILE" ] || return 0
+    sed -n 's/.*\[\([a-z]*\)\].*/\1/p' "$ASPM_POLICY_FILE" 2>/dev/null
+}
 
 # --- Helper: probe 2.5 Gbps support -------------------------------------------
 # Returns "true" if ethtool reports 2500baseT/Full as a Supported link mode.
@@ -165,6 +183,14 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     speed_limit=$(get_speed_limit)
     supports_2500=$(probe_supports_2500)
 
+    aspm_supported="false"
+    aspm_policy=""
+    if [ -r "$ASPM_POLICY_FILE" ]; then
+        aspm_supported="true"
+        aspm_policy=$(get_aspm_active)
+    fi
+    aspm_configured=$(uci -q get quecmanager.eth_link.aspm_policy 2>/dev/null)
+
     # Set defaults for missing values
     [ -z "$speed" ] && speed="Unknown"
     [ -z "$duplex" ] && duplex="Unknown"
@@ -179,6 +205,9 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --arg auto_negotiation "$auto_neg" \
         --arg speed_limit "$speed_limit" \
         --argjson supports_2500 "$supports_2500" \
+        --argjson aspm_supported "$aspm_supported" \
+        --arg aspm_policy "$aspm_policy" \
+        --arg aspm_configured "$aspm_configured" \
         '{
             success: true,
             link_status: $link_status,
@@ -186,7 +215,10 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             duplex: $duplex,
             auto_negotiation: $auto_negotiation,
             speed_limit: $speed_limit,
-            supports_2500: $supports_2500
+            supports_2500: $supports_2500,
+            aspm_supported: $aspm_supported,
+            aspm_policy: $aspm_policy,
+            aspm_configured: $aspm_configured
         }'
     exit 0
 fi
@@ -200,35 +232,88 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
     speed_limit=$(printf '%s' "$POST_DATA" | jq -r '.speed_limit // empty')
 
-    if [ -z "$speed_limit" ]; then
-        cgi_error "missing_field" "speed_limit field is required"
+    aspm_req=$(printf '%s' "$POST_DATA" | jq -r '.aspm_policy // empty')
+
+    if [ -z "$speed_limit" ] && [ -z "$aspm_req" ]; then
+        cgi_error "missing_field" "speed_limit or aspm_policy field is required"
         exit 0
     fi
 
-    # Validate speed_limit value
-    case "$speed_limit" in
-        auto|10|100|1000|2500) ;;
-        *)
-            cgi_error "invalid_value" "speed_limit must be: auto, 10, 100, 1000, or 2500"
+    if [ -n "$speed_limit" ]; then
+        case "$speed_limit" in
+            auto|10|100|1000|2500) ;;
+            *)
+                cgi_error "invalid_value" "speed_limit must be: auto, 10, 100, 1000, or 2500"
+                exit 0
+                ;;
+        esac
+    fi
+
+    if [ -n "$aspm_req" ]; then
+        case "$aspm_req" in
+            default|performance|powersave|powersupersave) ;;
+            *)
+                cgi_error "invalid_value" "aspm_policy must be: default, performance, powersave, or powersupersave"
+                exit 0
+                ;;
+        esac
+        if [ ! -w "$ASPM_POLICY_FILE" ]; then
+            cgi_error "aspm_unsupported" "PCIe ASPM policy is not supported on this device"
             exit 0
-            ;;
-    esac
+        fi
+    fi
+
+    if [ -n "$speed_limit" ]; then
+        if ! command -v ethtool >/dev/null 2>&1; then
+            qlog_error "ethtool not installed"
+            cgi_error "ethtool_missing" "ethtool is not installed on this device"
+            exit 0
+        fi
+
+        if ! ip link show "$ETH_INTERFACE" >/dev/null 2>&1; then
+            qlog_error "Interface $ETH_INTERFACE not found"
+            cgi_error "interface_not_found" "Ethernet interface not found"
+            exit 0
+        fi
+    fi
+
+    init_script="/etc/init.d/qmanager_eth_link"
+    aspm_active=""
+
+    # --- ASPM: synchronous, no link bounce ------------------------------------
+    if [ -n "$aspm_req" ]; then
+        qlog_info "Setting PCIe ASPM policy to: $aspm_req"
+
+        ensure_uci_section
+        uci set quecmanager.eth_link.aspm_policy="$aspm_req" 2>/dev/null
+        if ! uci commit quecmanager 2>/dev/null; then
+            qlog_error "uci commit failed for aspm_policy=$aspm_req"
+            cgi_error "save_failed" "Failed to persist ASPM policy"
+            exit 0
+        fi
+
+        if [ -x "$init_script" ]; then
+            "$init_script" enable 2>/dev/null
+        fi
+
+        echo "$aspm_req" > "$ASPM_POLICY_FILE" 2>/dev/null
+        aspm_active=$(get_aspm_active)
+        if [ "$aspm_active" != "$aspm_req" ]; then
+            qlog_error "ASPM apply mismatch: requested=$aspm_req active=${aspm_active:-unknown}"
+            cgi_error "aspm_apply_failed" "Kernel did not accept the ASPM policy"
+            exit 0
+        fi
+        qlog_info "ASPM policy applied: $aspm_active"
+    fi
+
+    # --- ASPM only: respond now -----------------------------------------------
+    if [ -z "$speed_limit" ]; then
+        jq -n --arg aspm_policy "$aspm_active" \
+            '{success: true, apply_in_progress: false, aspm_policy: $aspm_policy}'
+        exit 0
+    fi
 
     qlog_info "Setting link speed limit to: $speed_limit"
-
-    # Check if ethtool is available
-    if ! command -v ethtool >/dev/null 2>&1; then
-        qlog_error "ethtool not installed"
-        cgi_error "ethtool_missing" "ethtool is not installed on this device"
-        exit 0
-    fi
-
-    # Check if interface exists
-    if ! ip link show "$ETH_INTERFACE" >/dev/null 2>&1; then
-        qlog_error "Interface $ETH_INTERFACE not found"
-        cgi_error "interface_not_found" "Ethernet interface not found"
-        exit 0
-    fi
 
     # --- Persist to UCI BEFORE applying (cheap, no link bounce) --------------
     ensure_uci_section
@@ -241,7 +326,6 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # Setup boot persistence (cheap)
-    init_script="/etc/init.d/qmanager_eth_link"
     if [ -x "$init_script" ]; then
         "$init_script" enable 2>/dev/null
     fi
@@ -252,12 +336,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # ethtool -s / ethtool -r cause a 2-5 s link renegotiation that kills
     # in-flight HTTP responses. Send the JSON first, then background the
     # apply so the client never sees a spurious network error.
-    jq -n --arg speed_limit "$speed_limit" '{
+    jq -n --arg speed_limit "$speed_limit" --arg aspm_policy "$aspm_active" '{
         success: true,
         apply_in_progress: true,
         disconnect_window_seconds: 5,
         speed_limit: $speed_limit
-    }'
+    } + (if $aspm_policy != "" then {aspm_policy: $aspm_policy} else {} end)'
 
     # --- Fire-and-forget ethtool apply (double-fork) -------------------------
     # 1 s delay ensures HTTP bytes flush before the PHY bounce.

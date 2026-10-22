@@ -1357,6 +1357,19 @@ seed_uci_defaults() {
         info "quecmanager.metrics.freshness already set — preserving user choice"
     fi
 
+    # PCIe ASPM policy — applied at boot by qmanager_eth_link. The stock
+    # platform default (powersupersave) causes RTL8125 TX watchdog timeouts, so
+    # seed performance. Never overwrite an existing user choice.
+    if ! uci -q get quecmanager.eth_link >/dev/null 2>&1; then
+        uci set quecmanager.eth_link=eth_link
+    fi
+    if ! uci -q get quecmanager.eth_link.aspm_policy >/dev/null 2>&1; then
+        uci set quecmanager.eth_link.aspm_policy='performance'
+        info "Seeded quecmanager.eth_link.aspm_policy=performance"
+    else
+        info "quecmanager.eth_link.aspm_policy already set — preserving user choice"
+    fi
+
     uci commit quecmanager 2>/dev/null || warn "uci commit quecmanager failed"
 
     seed_web_port
