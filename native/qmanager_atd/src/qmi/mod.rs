@@ -8,11 +8,17 @@
 //! - `allow`: the read-only (service, message) allow-list, enforced here
 //!   because the broker socket is the trust boundary.
 //! - `error`: the typed error, mapped to the client vocabulary.
+//! - `codec`: typed decoders from a response `Msg` to plain structs, one
+//!   module per service (`nas`, `dms`, `uim`, `wds`, `dsd`).
+//! - `model`: the codec output normalised to QManager vocabulary (registration
+//!   gate, freshness tags, `Bundle`) and the JSON for each `qmi <read>`.
 //!
 //! Phase 0 groundwork: native/qmi_probe (qrtr.rs, main.rs WHITELIST).
 
 pub mod allow;
+pub mod codec;
 pub mod error;
+pub mod model;
 pub mod msg;
 pub mod registry;
 pub mod transport;
