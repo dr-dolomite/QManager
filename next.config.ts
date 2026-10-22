@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
   //       destination: "http://192.168.224.1/cgi-bin/:path*",
   //       basePath: false,
   //     },
+  //     {
+  //       source: "/qmlive/:path*",
+  //       //  live signal files are static, served from /www/qmlive (a symlink to the broker's tmpfs dir)
+  //       destination: "http://192.168.224.1/qmlive/:path*",
+  //       basePath: false,
+  //     },
   //   ];
   // },
 };
