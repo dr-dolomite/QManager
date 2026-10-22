@@ -1,21 +1,41 @@
-//! The broker: bind the socket, accept one request per connection and serve
-//! it (AT or SMS), serialised by the modem lock.
+//! The broker: bind the socket, accept connections, and route each request to
+//! its lane.
+//!
+//! - The acceptor (the main thread) hands every connection to a reader thread
+//!   from a bounded pool. While all readers are busy it stops accepting, so the
+//!   kernel backlog holds callers exactly as it did for the single-threaded
+//!   broker: nobody is turned away.
+//! - A reader validates the request exactly as before (peer uid, size caps,
+//!   exact length, 2 s read timeout, same refusals) and routes it by verb.
+//! - `REQ` and `SMS` go to the AT lane (`at_lane`): one worker, in-process
+//!   FIFO, today's `Executor` unchanged. Refusals are answered by the reader
+//!   itself. A future lane that needs no modem lock (QMI) plugs in as another
+//!   `Route` and answers on the reader thread, never behind the AT lane.
 
-use crate::at::exec::{self, Executor, Outcome};
+pub(crate) mod at_lane;
+
+use crate::at::exec;
 use crate::at::new_channel;
-use crate::at::channel::Channel;
 use crate::at::output::Code;
 use crate::common::lock::{self, LockFile};
 use crate::common::log::Logger;
-use crate::common::proto;
+use crate::common::proto::{self, Reply};
 use crate::sms;
+use at_lane::{AtLane, AtRequest, Job, ModemRunner};
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/// Readers that may run at once. A live client's request is read in
+/// microseconds; only stuck peers (2 s read timeout) occupy a reader for long.
+const MAX_READERS: usize = 16;
+/// Readers only decode a request of at most 64 KB into a heap buffer.
+const READER_STACK: usize = 128 * 1024;
+
 pub(crate) fn run_daemon() -> i32 {
-    let log = Logger::new("qmanager_atd");
+    let log = Arc::new(Logger::new("qmanager_atd"));
     let lock = match LockFile::open(lock::LOCK_FILE) {
         Ok(l) => l,
         Err(e) => {
@@ -52,18 +72,88 @@ pub(crate) fn run_daemon() -> i32 {
     }
     exec::clear_stale_long_flag(&lock, &log);
 
-    let mut ch = new_channel();
-    for conn in listener.incoming() {
-        match conn {
-            Ok(stream) => serve(stream, &mut ch, &lock, &log),
+    let modem = ModemRunner { ch: new_channel(), lock, log: log.clone() };
+    let at = match AtLane::spawn(modem, at_lane::QUEUE_CAP, log.clone(), true) {
+        Ok(l) => l,
+        Err(e) => {
+            log.error(&format!("cannot start the AT lane: {e}"));
+            return 1;
+        }
+    };
+    accept_loop(listener, Arc::new(Ctx { log, at, uid: 0 }))
+}
+
+/// What every reader shares.
+struct Ctx {
+    log: Arc<Logger>,
+    at: AtLane,
+    /// The only peer uid served: root in production.
+    uid: u32,
+}
+
+/// Counting semaphore over reader threads.
+struct Slots {
+    used: Mutex<usize>,
+    freed: Condvar,
+}
+
+struct Slot(Arc<Slots>);
+
+impl Slots {
+    /// Blocks while every reader is busy.
+    fn take(self: &Arc<Self>) -> Slot {
+        let mut n = self.used.lock().unwrap_or_else(|e| e.into_inner());
+        while *n >= MAX_READERS {
+            n = self.freed.wait(n).unwrap_or_else(|e| e.into_inner());
+        }
+        *n += 1;
+        Slot(self.clone())
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        *self.0.used.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        self.0.freed.notify_one();
+    }
+}
+
+/// Accepts forever. A free reader slot is taken *before* accepting, so with
+/// all readers busy the connection stays in the kernel backlog.
+fn accept_loop(listener: UnixListener, ctx: Arc<Ctx>) -> ! {
+    let slots = Arc::new(Slots { used: Mutex::new(0), freed: Condvar::new() });
+    loop {
+        let slot = slots.take();
+        let stream = match listener.accept() {
+            Ok((s, _)) => s,
             Err(e) => {
+                drop(slot);
                 // e.g. EMFILE: back off instead of spinning on the log.
-                log.warn(&format!("accept failed: {e}"));
+                ctx.log.warn(&format!("accept failed: {e}"));
                 std::thread::sleep(Duration::from_millis(100));
+                continue;
             }
+        };
+        // Kept so the request is still served (inline) if no thread can be
+        // started: the closure, and the stream in it, are dropped on failure.
+        let spare = stream.try_clone();
+        let c = ctx.clone();
+        let spawned = std::thread::Builder::new()
+            .name("atd-reader".into())
+            .stack_size(READER_STACK)
+            .spawn(move || {
+                let _slot = slot;
+                handle_conn(stream, &c);
+            });
+        match (spawned, spare) {
+            (Ok(_), _) => {}
+            (Err(e), Ok(stream)) => {
+                ctx.log.warn(&format!("cannot start a reader thread ({e}); reading inline"));
+                handle_conn(stream, &ctx);
+            }
+            (Err(e), Err(_)) => ctx.log.warn(&format!("cannot start a reader thread ({e}); connection dropped")),
         }
     }
-    0
 }
 
 /// Largest AT request accepted. An AT command is well under 1 KB.
@@ -83,7 +173,7 @@ pub(crate) fn peer_gone(stream: &UnixStream) -> bool {
 
 fn refuse(stream: &mut UnixStream, log: &Logger, why: &str) {
     log.warn(&format!("refused request: {why}"));
-    let _ = stream.write_all(&proto::encode_reply(&proto::Reply::Err(Code::CommandFailed)));
+    let _ = stream.write_all(&proto::encode_reply(&Reply::Err(Code::CommandFailed)));
 }
 
 /// The connecting peer's uid, from the kernel (cannot be spoofed by the peer).
@@ -102,20 +192,52 @@ fn peer_uid(stream: &UnixStream) -> Option<u32> {
     (r == 0).then_some(cred.uid)
 }
 
-fn serve(mut stream: UnixStream, ch: &mut Channel<std::fs::File>, lock: &LockFile, log: &Logger) {
+/// Where a validated request goes.
+enum Route {
+    /// The AT lane: `REQ` or `SMS`, with the client's send time.
+    At(AtRequest, u64),
+    /// Answered by the reader itself, without any lane.
+    Answer(Reply),
+    /// Refused and logged (`refused request: ...`), answered command_failed.
+    Refuse(&'static str),
+}
+
+/// Decodes a fully-read request and picks its lane. The checks and their
+/// answers are the single-threaded broker's, in the same order.
+fn route(buf: &[u8]) -> Route {
+    if buf.starts_with(b"SMS ") {
+        let req = match proto::decode_sms_request(buf) {
+            Some(r) => r,
+            None => return Route::Refuse("malformed or truncated SMS request"),
+        };
+        // Re-validated here: the socket is the trust boundary, not the client.
+        return match sms::parse_args(&req.args) {
+            Ok(op) => Route::At(AtRequest::Sms(op), req.sent_ms),
+            Err(e) => Route::Answer(Reply::Res(false, sms::error_json("bad_args", Some(&e)).into_bytes())),
+        };
+    }
+    match proto::decode_request(buf) {
+        Some(r) if !r.cmd.is_empty() => Route::At(AtRequest::Req(r.cmd.to_string()), r.sent_ms),
+        _ => Route::Refuse("malformed or truncated"),
+    }
+}
+
+/// One connection, on a reader thread: authenticate, read, route.
+fn handle_conn(mut stream: UnixStream, ctx: &Ctx) {
+    let log = &*ctx.log;
     // Defense in depth behind the 0600 socket: only root may drive the modem,
     // the same boundary /dev/smd11 itself enforces.
     match peer_uid(&stream) {
-        Some(0) => {}
+        Some(u) if u == ctx.uid => {}
         other => {
             log.warn(&format!("rejected AT request from non-root peer (uid {other:?})"));
-            let _ = stream.write_all(&proto::encode_reply(&proto::Reply::Err(Code::CommandFailed)));
+            let _ = stream.write_all(&proto::encode_reply(&Reply::Err(Code::CommandFailed)));
             return;
         }
     }
     // The client writes its whole request at once and half-closes, so a live
     // client is done in microseconds. A short timeout bounds how long a stuck
-    // peer can hold up everyone queued behind it.
+    // peer can hold a reader.
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let mut buf = Vec::new();
     let mut tmp = [0u8; 4096];
@@ -133,44 +255,92 @@ fn serve(mut stream: UnixStream, ch: &mut Channel<std::fs::File>, lock: &LockFil
             return refuse(&mut stream, log, "oversize");
         }
     }
-    if buf.starts_with(b"SMS ") {
-        return serve_sms(stream, &buf, ch, lock, log);
+    match route(&buf) {
+        Route::At(req, sent_ms) => ctx.at.submit(Job { stream, req, sent_ms }, log),
+        Route::Answer(reply) => {
+            let _ = stream.write_all(&proto::encode_reply(&reply));
+        }
+        Route::Refuse(why) => refuse(&mut stream, log, why),
     }
-    let (cmd, sent_ms) = match proto::decode_request(&buf) {
-        Some(r) if !r.cmd.is_empty() => (r.cmd.to_string(), r.sent_ms),
-        _ => return refuse(&mut stream, log, "malformed or truncated"),
-    };
-    if peer_gone(&stream) {
-        log.warn(&format!("caller gone before its turn, not run: {cmd}"));
-        return;
-    }
-    let waited = Duration::from_millis(proto::mono_ms().saturating_sub(sent_ms));
-    let reply = match (Executor { ch, lock, log }).run_after(&cmd, waited) {
-        Outcome::Ok(raw) => proto::Reply::Ok(raw),
-        Outcome::Err(code) => proto::Reply::Err(code),
-    };
-    let _ = stream.write_all(&proto::encode_reply(&reply));
 }
 
-fn serve_sms(mut stream: UnixStream, buf: &[u8], ch: &mut Channel<std::fs::File>, lock: &LockFile, log: &Logger) {
-    let req = match proto::decode_sms_request(buf) {
-        Some(r) => r,
-        None => return refuse(&mut stream, log, "malformed or truncated SMS request"),
-    };
-    // Re-validated here: the socket is the trust boundary, not the client.
-    let op = match sms::parse_args(&req.args) {
-        Ok(op) => op,
-        Err(e) => {
-            let body = sms::error_json("bad_args", Some(&e)).into_bytes();
-            let _ = stream.write_all(&proto::encode_reply(&proto::Reply::Res(false, body)));
-            return;
-        }
-    };
-    if peer_gone(&stream) {
-        log.warn(&format!("caller gone before its turn, not run: {}", op.label()));
-        return;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    /// A broker on a temp socket whose AT lane runs `runner`, serving this
+    /// test's own uid. The acceptor thread lives until the test process ends.
+    fn broker<R: at_lane::AtRunner + Send + 'static>(name: &str, runner: R) -> (String, Arc<Ctx>) {
+        let path = std::env::temp_dir().join(format!("qatd-{name}-{}.sock", std::process::id()));
+        let path = path.to_str().unwrap().to_string();
+        let _ = std::fs::remove_file(&path);
+        let listener = UnixListener::bind(&path).unwrap();
+        let log = Arc::new(Logger::new("test"));
+        let at = AtLane::spawn(runner, at_lane::QUEUE_CAP, log.clone(), false).unwrap();
+        let ctx = Arc::new(Ctx { log, at, uid: unsafe { libc::getuid() } });
+        let c = ctx.clone();
+        std::thread::spawn(move || accept_loop(listener, c));
+        (path, ctx)
     }
-    let waited = Duration::from_millis(proto::mono_ms().saturating_sub(req.sent_ms));
-    let (ok, json) = sms::run(&mut Executor { ch, lock, log }, &op, waited);
-    let _ = stream.write_all(&proto::encode_reply(&proto::Reply::Res(ok, json.into_bytes())));
+
+    /// One client exchange, the way qcmd/qsms do it: write, half-close, read.
+    fn call(path: &str, req: &[u8]) -> Vec<u8> {
+        let mut s = UnixStream::connect(path).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        s.write_all(req).unwrap();
+        s.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut v = Vec::new();
+        let _ = s.read_to_end(&mut v);
+        v
+    }
+
+    #[test]
+    fn requests_that_need_no_lane_answer_while_an_at_job_holds_it() {
+        let (started_tx, started) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let runner = move |r: &AtRequest, _w: Duration| {
+            let label = r.label();
+            if label == "AT+HOLD" {
+                let _ = started_tx.send(());
+                let _ = release_rx.recv();
+            }
+            Reply::Ok(label.into_bytes())
+        };
+        let (path, _ctx) = broker("route", runner);
+        let p2 = path.clone();
+        let held = std::thread::spawn(move || call(&p2, &proto::encode_request("AT+HOLD", proto::mono_ms())));
+        started.recv_timeout(Duration::from_secs(5)).expect("HOLD never reached the lane");
+        // A queued AT request waits its turn behind the held lane.
+        let p3 = path.clone();
+        let queued = std::thread::spawn(move || call(&p3, &proto::encode_request("AT+CSQ", proto::mono_ms())));
+
+        // Answered by the reader at once, not queued behind the AT job.
+        let t = Instant::now();
+        assert_eq!(call(&path, b"REQ 9 1\nAT"), b"ERR command_failed\n");
+        let bad_sms = proto::encode_sms_request(&["bogus".to_string()], proto::mono_ms());
+        let got = call(&path, &bad_sms);
+        assert!(got.starts_with(b"RES 1 "), "{:?}", String::from_utf8_lossy(&got));
+        assert!(String::from_utf8_lossy(&got).contains("\"bad_args\""));
+        assert!(t.elapsed() < Duration::from_millis(1000), "{:?}", t.elapsed());
+        assert!(!queued.is_finished() && !held.is_finished());
+
+        release_tx.send(()).unwrap();
+        assert_eq!(held.join().unwrap(), b"OK 7\nAT+HOLD");
+        assert_eq!(queued.join().unwrap(), b"OK 6\nAT+CSQ");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn route_keeps_the_single_threaded_checks() {
+        assert!(matches!(route(&proto::encode_request("AT+CSQ", 5)), Route::At(AtRequest::Req(ref c), 5) if c == "AT+CSQ"));
+        assert!(matches!(route(&proto::encode_request("", 5)), Route::Refuse("malformed or truncated")));
+        assert!(matches!(route(b"REQ 3 1\nAT"), Route::Refuse("malformed or truncated")));
+        let sms = proto::encode_sms_request(&["status".to_string()], 7);
+        assert!(matches!(route(&sms), Route::At(AtRequest::Sms(_), 7)));
+        assert!(matches!(route(b"SMS 9 1\nx"), Route::Refuse("malformed or truncated SMS request")));
+        let bad = proto::encode_sms_request(&["nope".to_string()], 7);
+        assert!(matches!(route(&bad), Route::Answer(Reply::Res(false, _))));
+    }
 }
