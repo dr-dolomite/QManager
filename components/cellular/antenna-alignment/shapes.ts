@@ -166,6 +166,31 @@ export const CONSOLE = {
   CAPTION: "text-xs text-on-surface-variant",
 } as const;
 
+/**
+ * The live lead: serving-cell RSRP from the live file, above the 2 s score.
+ *
+ * It takes the console's 52px numeral because it is the figure that moves as
+ * the antenna does (5 Hz). The composite score steps down to `SCORE_SECONDARY`
+ * while the lead is shown, so the card never carries two equal headline
+ * figures; when the lead is absent the console is exactly as it was.
+ */
+export const LIVE = {
+  BLOCK: "flex flex-col gap-2.5",
+  /** Wraps, so a long locale drops the chip to its own line instead of
+   *  pushing it out of the card (Italian runs ~370px at phone width). */
+  KEY_ROW: "flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1.5",
+  NUMERAL_ROW: "flex items-baseline gap-1.5",
+  UNIT: "text-base font-semibold text-on-surface-variant",
+  /** Muting rides opacity on the trace and the meter, never their hue. */
+  MUTABLE:
+    "transition-opacity duration-(--duration-standard) ease-standard",
+  MUTED: "opacity-45",
+  SPARK: "block h-12 w-full overflow-visible",
+  SCORE_SECONDARY: "text-[32px] font-semibold leading-none tabular-nums",
+  SCORE_BOX_SECONDARY: "h-8",
+  DIVIDER: "h-px bg-surface-container-high",
+} as const;
+
 // `CONSOLE.LEG_KEY` deliberately carries NO fixed width, even though a column
 // rule would align "RSRP" under "SINR". The weight annotation renders inside
 // the key element, so "RSRP 60%" would overflow any width narrow enough to be

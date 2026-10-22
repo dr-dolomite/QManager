@@ -1878,6 +1878,7 @@
     "aim": {
       "title": "Pengarahan Langsung",
       "description": "Rantai penerima utama, dinilai dengan skala yang sama seperti posisi yang Anda rekam.",
+      "description_live": "Sinyal sel layanan saat bergerak, lalu rantai utama dinilai dengan skala yang sama seperti posisi yang Anda rekam.",
       "score_label": "Skor pengarahan",
       "score_sr": "Skor pengarahan {{score}} dari 100",
       "no_reading": "Tidak ada skor pengarahan — rantai utama tidak melapor",
@@ -1887,7 +1888,23 @@
       "delta_down": "menurun sejak bacaan terakhir",
       "partial": "Hanya {{leg}}",
       "not_reported": "Tidak dilaporkan",
-      "primary_chain": "Main / PRX adalah rantai yang menjadi dasar skor"
+      "primary_chain": "Main / PRX adalah rantai yang menjadi dasar skor",
+      "score_cadence": "setiap 2 detik",
+      "live": {
+        "label": "RSRP sel layanan",
+        "hint_label": "Tentang RSRP sel layanan",
+        "hint": "Sinyal sel layanan di semua rantai penerima, beberapa kali per detik. Pada 5G NSA ini adalah anchor LTE, jadi bisa berbeda dari Main / PRX di bawah.",
+        "sr": "RSRP sel layanan {{value}} dBm",
+        "no_reading": "Tidak ada RSRP sel layanan yang dilaporkan",
+        "from_peak": "{{delta}} dB dari puncak",
+        "at_peak": "Di puncak",
+        "state": {
+          "live": "Langsung",
+          "stale": "Tidak diperbarui",
+          "paused": "Dijeda",
+          "connecting": "Menghubungkan"
+        }
+      }
     },
     "quality": {
       "excellent": "Sangat Baik",

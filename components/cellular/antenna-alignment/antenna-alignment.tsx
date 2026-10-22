@@ -24,6 +24,7 @@ import {
   WORK_COLUMN,
 } from "./shapes";
 import { AlignmentNoReadings, AlignmentSkeleton, AlignmentUnreachable } from "./states";
+import { useLiveLead } from "./use-live-lead";
 import { countReportingPorts, detectRadioMode } from "./utils";
 
 // =============================================================================
@@ -76,6 +77,8 @@ const SENTINEL_MARGIN = "-72px 0px 0px 0px";
 export default function AntennaAlignmentComponent() {
   const { t, i18n } = useTranslation("cellular");
   const { data, isLoading, isStale, error, refresh } = useModemStatus();
+  /** Serving-cell RSRP from the live file; null renders the console as before. */
+  const lead = useLiveLead();
 
   const spa = data?.signal_per_antenna ?? null;
   const mode = spa ? detectRadioMode(spa) : null;
@@ -142,7 +145,12 @@ export default function AntennaAlignmentComponent() {
           bar inside it crossfades. */}
       {showsConsole && spa && (
         <div className={CONDENSED.ROOT}>
-          <CondensedAim spa={spa} snapshotTs={data?.timestamp ?? null} shown={condensed} />
+          <CondensedAim
+            spa={spa}
+            snapshotTs={data?.timestamp ?? null}
+            shown={condensed}
+            lead={lead}
+          />
         </div>
       )}
 
@@ -182,6 +190,7 @@ export default function AntennaAlignmentComponent() {
                 spa={spa}
                 snapshotTs={data?.timestamp ?? null}
                 updatedAt={updatedAt}
+                lead={lead}
               />
             </div>
             {/* The tripwire for the pinned bar. Sits immediately below the

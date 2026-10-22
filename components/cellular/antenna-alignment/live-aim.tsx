@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -11,7 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MaterialSymbol } from "@/components/ui/material-symbol";
+import { HintIcon } from "@/components/ui/hint-icon";
+import {
+  MaterialSymbol,
+  type MaterialSymbolName,
+} from "@/components/ui/material-symbol";
 import { MetricBar } from "@/components/ui/metric-bar";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
@@ -28,7 +32,9 @@ import {
   qualityInkClass,
   qualityMeterTone,
 } from "../signal-quality-display";
-import { CONDENSED, CONSOLE, GLYPH } from "./shapes";
+import { LiveSparkline } from "./live-sparkline";
+import { CONDENSED, CONSOLE, GLYPH, LIVE } from "./shapes";
+import type { LiveLead } from "./use-live-lead";
 import { SCORE_WEIGHTS, normalizeValue, scoreLive } from "./utils";
 
 // =============================================================================
@@ -272,6 +278,167 @@ function LegRow({
 }
 
 // -----------------------------------------------------------------------------
+// The live lead
+// -----------------------------------------------------------------------------
+
+/**
+ * One chip per feed state, each with its own glyph. `live` is a FACT (the
+ * Fact-Is-Info Rule), shown only while it holds; the others say why the figure
+ * beside it has stopped moving. No two share a glyph.
+ */
+const LIVE_STATE_CHIP: Record<
+  LiveLead["state"],
+  { variant: BadgeVariant; glyph: MaterialSymbolName }
+> = {
+  live: { variant: "info", glyph: "graphic_eq" },
+  stale: { variant: "warning", glyph: "history" },
+  paused: { variant: "muted", glyph: "visibility_off" },
+  connecting: { variant: "muted", glyph: "progress_activity" },
+};
+
+function LiveStateChip({ state }: { state: LiveLead["state"] }) {
+  const { t } = useTranslation("cellular");
+  const chip = LIVE_STATE_CHIP[state];
+  return (
+    <Badge variant={chip.variant}>
+      <MaterialSymbol name={chip.glyph} size={GLYPH.CHIP} filled />
+      {t(`antenna_alignment.aim.live.state.${state}`)}
+    </Badge>
+  );
+}
+
+const fmtDb = (value: number) => value.toFixed(1);
+
+/**
+ * The serving-cell RSRP, five times a second, with its 30 s trace.
+ *
+ * This is a DIFFERENT measurement from the RSRP leg below, and the labelling
+ * keeps them apart: the lead is the serving cell as the modem reports it across
+ * all receive chains (the LTE anchor in NSA); the leg is Main / PRX alone, from
+ * the 2 s per-port snapshot. Neither is ever presented as the other.
+ *
+ * Stale, paused and connecting keep the last figure on screen in neutral ink,
+ * with the meter and trace dimmed, and a chip saying why. They never blank it:
+ * a field tech who glances back must still see where the reading was.
+ *
+ * `aria-live="off"`: the page shell is a polite live region, and a figure that
+ * changes five times a second inside it would be read out without end.
+ */
+function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) {
+  const { t } = useTranslation("cellular");
+  const muted = lead.state !== "live";
+  const reading = lead.rsrp;
+  const tone = qualityMeterTone(lead.quality);
+  const ink = muted ? "text-on-surface-variant" : qualityInkClass(lead.quality);
+  const peakPct =
+    lead.peak !== null ? signalToProgress(lead.peak, RSRP_THRESHOLDS) : null;
+
+  return (
+    <section aria-live="off" className={LIVE.BLOCK}>
+      <div className={LIVE.KEY_ROW}>
+        <span className={CONSOLE.EYEBROW}>
+          {t("antenna_alignment.aim.live.label")}
+        </span>
+        {/* The radio is named only when it differs from the score's: in NSA
+            the title says 5G NR and this figure is the LTE anchor. */}
+        {showTag && (
+          <Tag variant="lte" className="shrink-0">
+            {t("antenna_alignment.mode.lte")}
+          </Tag>
+        )}
+        <HintIcon label={t("antenna_alignment.aim.live.hint_label")}>
+          {t("antenna_alignment.aim.live.hint")}
+        </HintIcon>
+        <span className="ml-auto flex shrink-0">
+          <LiveStateChip state={lead.state} />
+        </span>
+      </div>
+
+      <div className={LIVE.NUMERAL_ROW}>
+        {/* Ramp ink is legal here because the meter sits directly beneath. No
+            value tick and no tween: the figure moves at 5 Hz and is watched
+            continuously, so any per-change gesture would be permanent. */}
+        <span
+          className={cn(CONSOLE.SCORE, CONSOLE.SCORE_BOX, ink)}
+          aria-label={
+            reading === null
+              ? t("antenna_alignment.aim.live.no_reading")
+              : `${t("antenna_alignment.aim.live.sr", {
+                  value: fmtDb(reading),
+                })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
+          }
+        >
+          {reading === null ? "—" : fmtDb(reading)}
+        </span>
+        {/* A unit beside a dash would label a reading that does not exist. */}
+        {reading !== null && (
+          <span className={LIVE.UNIT} aria-hidden="true">
+            dBm
+          </span>
+        )}
+      </div>
+
+      {/* Peak and distance-to-peak caption the meter, as on the score below. */}
+      {lead.peak !== null && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-x-4 gap-y-1",
+            CONSOLE.CAPTION,
+          )}
+        >
+          <span>
+            {t("antenna_alignment.aim.peak")}{" "}
+            <span className="font-semibold tabular-nums text-on-surface">
+              {fmtDb(lead.peak)} dBm
+            </span>
+          </span>
+          {lead.toPeak !== null && (
+            <span className="tabular-nums">
+              {lead.toPeak > -0.05
+                ? t("antenna_alignment.aim.live.at_peak")
+                : t("antenna_alignment.aim.live.from_peak", {
+                    delta: fmtDb(lead.toPeak),
+                  })}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className={cn(LIVE.MUTABLE, muted && LIVE.MUTED)}>
+        <div className={CONSOLE.METER_LANE}>
+          <div className="min-w-0 flex-1" aria-hidden="true">
+            <MetricBar
+              /* A missing reading is the track alone, never a zero fill. */
+              value={
+                reading === null || tone === null
+                  ? null
+                  : signalToProgress(reading, RSRP_THRESHOLDS)
+              }
+              max={100}
+              warnAt={101}
+              dangerAt={101}
+              colorOverride={tone}
+              track="surface-container-high"
+            />
+          </div>
+          {peakPct !== null && reading !== null && lead.peak! > reading && (
+            <span
+              aria-hidden="true"
+              className={CONSOLE.PEAK_TICK}
+              style={{ left: `calc(${peakPct}% - 1px)` }}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className={cn(LIVE.MUTABLE, muted && LIVE.MUTED)}>
+        <LiveSparkline points={lead.points} peak={lead.peak} inkClass={ink} />
+      </div>
+    </section>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // The console
 // -----------------------------------------------------------------------------
 
@@ -279,7 +446,10 @@ export function AimConsole({
   spa,
   snapshotTs,
   updatedAt,
+  lead,
 }: {
+  /** The live serving-cell lead, or null to render the console as before. */
+  lead: LiveLead | null;
   spa: SignalPerAntenna;
   /** The modem's own timestamp for this snapshot, in seconds. */
   snapshotTs: number | null;
@@ -318,11 +488,18 @@ export function AimConsole({
           )}
         </div>
         <CardDescription className={CONSOLE.DESCRIPTION}>
-          {t("antenna_alignment.aim.description")}
+          {t(
+            lead
+              ? "antenna_alignment.aim.description_live"
+              : "antenna_alignment.aim.description",
+          )}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-5 px-0">
+        {lead && <LiveLeadBlock lead={lead} showTag={radio !== "lte"} />}
+        {lead && <div className={LIVE.DIVIDER} aria-hidden="true" />}
+
         {/* --- Score, delta, peak ------------------------------------------- */}
         <div className="flex flex-col gap-2.5">
           <div className="flex items-end gap-4">
@@ -342,8 +519,8 @@ export function AimConsole({
                     would never be announced at all. */}
                 <span
                   className={cn(
-                    CONSOLE.SCORE,
-                    CONSOLE.SCORE_BOX,
+                    lead ? LIVE.SCORE_SECONDARY : CONSOLE.SCORE,
+                    lead ? LIVE.SCORE_BOX_SECONDARY : CONSOLE.SCORE_BOX,
                     qualityInkClass(overallQuality),
                   )}
                   aria-label={
@@ -426,6 +603,11 @@ export function AimConsole({
                 <span>
                   {t("antenna_alignment.aim.updated")}{" "}
                   <span className="tabular-nums">{updatedAt}</span>
+                  {/* Beside a 5 Hz lead the score's slower clock is said once,
+                      quietly, or its stillness reads as a stalled feed. */}
+                  {lead && (
+                    <> ({t("antenna_alignment.aim.score_cadence")})</>
+                  )}
                 </span>
               )}
             </div>
@@ -537,12 +719,15 @@ export function CondensedAim({
   spa,
   snapshotTs,
   shown,
+  lead,
 }: {
   spa: SignalPerAntenna;
   /** The modem's own timestamp for this snapshot, in seconds. */
   snapshotTs: number | null;
   /** True once the full console has scrolled out from under this bar. */
   shown: boolean;
+  /** The live lead; when present it is what pins, since it leads the card. */
+  lead: LiveLead | null;
 }) {
   const { t } = useTranslation("cellular");
   const { score, delta, overallQuality, overallTone, showDelta } = useAimReading(
@@ -551,6 +736,10 @@ export function CondensedAim({
   );
 
   const ink = qualityInkClass(overallQuality);
+
+  if (lead) {
+    return <CondensedLive lead={lead} shown={shown} />;
+  }
 
   return (
     // The shade is the opaque ground under the pill and across the gutter, and
@@ -621,6 +810,81 @@ export function CondensedAim({
                step, and a track the same tone as its ground is an invisible
                track — the empty-track signal for a missing reading would have
                been silently lost with it. */
+            track="muted"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The pinned pill while the live lead is shown: the same anatomy as the score
+ * pill (key, figure, glyph, lane), carrying the figure that leads the card.
+ *
+ * When the feed is not live the quality glyph gives way to the state's own
+ * glyph, in neutral ink, so a frozen figure on a pinned bar cannot pass as a
+ * current one. The lane dims with it, exactly as in the console.
+ */
+function CondensedLive({ lead, shown }: { lead: LiveLead; shown: boolean }) {
+  const { t } = useTranslation("cellular");
+  const muted = lead.state !== "live";
+  const reading = lead.rsrp;
+  const tone = qualityMeterTone(lead.quality);
+  const ink = muted ? "text-on-surface-variant" : qualityInkClass(lead.quality);
+
+  return (
+    <div
+      className={cn(CONDENSED.SHADE, shown ? CONDENSED.SHOWN : CONDENSED.HIDDEN)}
+      aria-hidden={!shown}
+    >
+      <div className={CONDENSED.BAR} aria-live="off">
+        <span className={CONDENSED.KEY}>
+          {t("antenna_alignment.aim.live.label")}
+        </span>
+
+        <span
+          className={cn(CONDENSED.SCORE, ink)}
+          aria-label={
+            reading === null
+              ? t("antenna_alignment.aim.live.no_reading")
+              : `${t("antenna_alignment.aim.live.sr", {
+                  value: fmtDb(reading),
+                })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
+          }
+        >
+          {reading === null ? "—" : fmtDb(reading)}
+        </span>
+
+        <MaterialSymbol
+          name={
+            muted ? LIVE_STATE_CHIP[lead.state].glyph : QUALITY_GLYPH[lead.quality]
+          }
+          size={GLYPH.INLINE}
+          filled
+          className={cn("shrink-0", ink)}
+          aria-hidden="true"
+        />
+        {muted && (
+          <span className="sr-only">
+            {t(`antenna_alignment.aim.live.state.${lead.state}`)}
+          </span>
+        )}
+
+        <div
+          className={cn(CONDENSED.LANE, LIVE.MUTABLE, muted && LIVE.MUTED)}
+          aria-hidden="true"
+        >
+          <MetricBar
+            value={
+              reading === null || tone === null
+                ? null
+                : signalToProgress(reading, RSRP_THRESHOLDS)
+            }
+            max={100}
+            warnAt={101}
+            dangerAt={101}
+            colorOverride={tone}
             track="muted"
           />
         </div>
