@@ -6,6 +6,12 @@ only AT path: the original shell gatekeeper and its `atcli_smd11` helper were
 removed on 2026-10-16. A separate, unrelated-in-speed toggle turns the vendor
 host AT bridge on or off.
 
+Since broker 0.3.0 the same binary also serves **read-only QMI over QRTR** to
+`/usr/bin/qmi`, on a lane of its own that never touches the modem lock. The
+QMI side (allow-list, field coverage, sidecars, SSR behaviour) is in
+[`qmi-lane.md`](qmi-lane.md); this doc covers the process model both lanes
+share.
+
 **UI:** System Settings: Host AT Ports card (On / Off) on **Hardware** (`/system-settings/hardware`).
 **Source:** `native/qmanager_atd/` (Rust crate). The prebuilt binary is
 `dependencies/qmanager_atd`. The build recipe is in `dependencies/README.md`.
@@ -14,9 +20,12 @@ host AT bridge on or off.
 
 - [Components](#components)
 - [The output contract is frozen](#the-output-contract-is-frozen)
+- [Lanes and threads](#lanes-and-threads)
 - [How an exchange works](#how-an-exchange-works)
 - [Client wait cap (`qcmd -t` and `QCMD_WAIT_MS`)](#client-wait-cap-qcmd--t-and-qcmd_wait_ms), [`--version`, the daemon-mode rule and the capability file](#version-the-daemon-mode-rule-and-the-capability-file-proto-2)
+- [The QMI verb](#the-qmi-verb-qmi-proto-3)
 - [Invariants (and why they exist)](#invariants-and-why-they-exist)
+- [Source layout and tests](#source-layout-and-tests)
 - [Host AT ports (`quecmanager.ports.host_at`)](#host-at-ports-quecmanagerportshost_at)
 - [Lifecycle](#lifecycle)
 - [Validated on the RM551E](#validated-on-the-rm551e-2026-10-16)
@@ -28,9 +37,11 @@ host AT bridge on or off.
 |---|---|---|
 | Rust multicall binary | `/usr/bin/qmanager_atd` | Run as `qmanager_atd` (or `--daemon`): it is the broker. Invoked through the `qcmd` name: it is the client. |
 | `qcmd` | `/usr/bin/qcmd` | A **symlink** to `qmanager_atd`, always. `install.sh` creates it and `/etc/init.d/qmanager_atd` re-asserts it at every broker start (`at_qcmd_link`). |
+| `qsms`, `qmi` | `/usr/bin/qsms`, `/usr/bin/qmi` | Symlinks to `qmanager_atd` (argv0 picks the client; both are always clients, whatever their arguments). `at_qsms_link` / `at_qmi_link`, same atomic repoint as `qcmd`. |
 | Broker socket | `/var/run/qmanager_atd.sock` | `0600` root. One request per connection. |
-| Capability file | `/var/run/qmanager_atd.proto` | `0644`, `proto=2` and `version=0.2.0` lines. Written by the running daemon after it binds; removed by `init.d/qmanager_atd` stop and by `uninstall.sh`. See [below](#version-the-daemon-mode-rule-and-the-capability-file-proto-2). |
+| Capability file | `/var/run/qmanager_atd.proto` | `0644`, `proto=3`, `version=0.3.0` and `qmi=1` lines (that order). Written by the running daemon after it binds; removed by `init.d/qmanager_atd` stop and by `uninstall.sh`. See [below](#version-the-daemon-mode-rule-and-the-capability-file-proto-2). |
 | Link and port library | `/usr/lib/qmanager/at_engine.sh` | `at_qcmd_link` (idempotent atomic repoint of `qcmd`), `at_broker_available`, `at_broker_running`, and the `host_at_*` port-bridge functions. The filename is historical. |
+| QMI sidecars | `/var/run/qmanager/qmi.env`, `/tmp/qmanager_qmi.json`, `/tmp/qmanager_qmi_live` | Published by the daemon's QMI sampler (nothing reads them yet). See [`qmi-lane.md`](qmi-lane.md#snapshot-sidecars-and-the-live-lease). |
 | Boot service | `/etc/init.d/qmanager_atd` | procd, `START=98` (before the poller at 99), `STOP=11`. |
 | CGI | `system/host_at_ports.sh` | GET and POST. See `docs/API-REFERENCE.md`. |
 | Hook and types | `use-host-at-ports.ts`, `types/at-engine.ts` (host-AT-port types only) | Pessimistic: state is taken from the POST read-back, never flipped locally. |
@@ -38,7 +49,7 @@ host AT bridge on or off.
 ## The output contract is frozen
 
 The broker reproduces the original shell `qcmd` exactly, because about 50
-callers parse its output. The on-device parity suite (18 commands) checks it, and so do the
+callers parse its output. The on-device parity suite ([`tools/atd-parity/`](../../tools/atd-parity/README.md), 50 cases) checks it, and so do the
 crate's unit tests:
 
 - **Raw mode:** atcli's bytes with all trailing `\n` stripped, then one `\n`
@@ -86,6 +97,62 @@ crate's unit tests:
   - While that flag exists, short commands fast-reject with `scan_in_progress`.
   - The classification matches the original shell `qcmd` exactly (case-sensitive substring).
 
+## Lanes and threads
+
+Until 0.2.0 the daemon was a single-threaded loop, and its kernel accept
+backlog was the queue. Since 0.3.0 it is **one process with independent lanes**
+(the AT behaviour below is unchanged; only its hosting moved):
+
+```
+acceptor (main thread)
+  └─ reader thread (pool of 16, 128 KiB stacks, 2 s read timeout)
+       uid check, size cap, exact length, route by verb
+       ├─ REQ / SMS ─► AT lane: bounded FIFO (64) ─► ONE worker ─► Executor ─► flock ─► Channel(/dev/smd11)
+       └─ QMI ───────► answered on the reader thread from the QMI registry (no lock, no queue)
+```
+
+- **Acceptor.** Takes a free reader slot *before* `accept()`. With all 16
+  readers busy it stops accepting and the kernel backlog holds callers, as it
+  did before. If a reader thread cannot be started the request is read inline.
+- **Reader.** Authenticates (`SO_PEERCRED`, uid 0), reads to EOF within 2 s,
+  applies the per-verb size cap (AT 8 KB, SMS 64 KB, QMI 1 KB), validates the
+  framing, then routes. A bad request is refused and logged on the reader
+  (`refused request: ...`, answered `command_failed`), never queued.
+- **AT lane** (`daemon/at_lane.rs`). A reader pushes a job (`stream`, request,
+  `sent_ms`) with `try_send`: it never blocks, so a slow modem cannot hold a
+  reader. **One worker thread** pops jobs in arrival order and runs exactly what
+  the single-threaded broker ran. A full queue (64) answers `modem_busy`
+  at once (`qcmd` gets `ERR modem_busy`; `qsms` gets the same `RES` envelope its
+  own lock budget produces) and logs `AT queue full`. If the worker ever stops,
+  the process exits so procd restarts it (otherwise the broker would accept
+  forever and answer nobody).
+- **QMI lane** (`daemon/qmi_lane.rs`). Built on a background thread
+  (`qmi-start`) after the AT lane is up, because the registry's name-server
+  lookup is bounded at 500 ms and AT serving must never wait on it. Until it
+  arrives a valid `QMI` request answers `modem_not_ready`. If the lane never
+  started, or 4 QMI requests are already in flight, a valid `QMI` request
+  answers `ERR command_failed` and the client reads in-process, so AT keeps at
+  least 12 of the 16 readers. Each QMI request has a 2.0 s overall deadline.
+  Details in [`qmi-lane.md`](qmi-lane.md#daemon-limits-cap-deadline-circuit).
+- **Logger** is thread-safe: one `Mutex` around write and rotate. The log file
+  is opened `O_NOFOLLOW` and `O_NONBLOCK`, and a line is dropped unless the
+  open object is a regular file, so a planted FIFO can never block an AT caller.
+
+**Why the AT invariants survive the move.** The queue is the old backlog
+in-process: still FIFO, still one request on the modem at a time.
+
+| Frozen AT behaviour | How the lane keeps it |
+|---|---|
+| The client's long-flag watch ("seeing the flag while waiting means still queued") | Only the single worker runs requests, so a queued short command never is the one running. A second AT worker would break this. |
+| Time queued is charged to the lock budget | The worker computes `waited = now - sent_ms` at dequeue, where `sent_ms` is the client's send time, so time in the lane queue counts. |
+| A caller that hung up is dropped | `peer_gone` is checked at dequeue, so a killed or capped caller's request never runs (`caller gone before its turn, not run`). |
+| A frozen broker is restarted by its clients | Unchanged (340 s reply timeout, see below). With lanes, a stuck AT worker leaves the acceptor, readers and QMI lane running: QMI keeps answering while AT callers queue and then get `modem_busy`. QMI clients never trigger the restart. |
+
+Order is arrival at the queue. Readers finish in parallel, so a peer that is
+slow to write goes after a fast one instead of holding it up for up to 2 s;
+each request's budget comes from its own `sent_ms`, so nobody is charged for
+another's delay.
+
 ## How an exchange works
 
 Both the daemon and the in-process fallback run the same `exec::Executor`, so
@@ -93,11 +160,11 @@ there is a single behaviour, not two:
 
 1. **Long-flag gate** (short commands only). The *client* checks it before
    it connects, so a short command answers `scan_in_progress` at once instead
-   of queueing behind a scan in the single-threaded broker. The executor
+   of queueing behind a scan in the AT lane. The executor
    checks it again when the request is served.
    - A short command that was **already queued** when a scan started keeps
      watching the flag while it waits (250 ms slices). Only a long command
-     raises the flag and the broker runs one request at a time, so seeing it
+     raises the flag and the AT lane runs one request at a time, so seeing it
      while waiting means "still queued, behind a scan": the client answers
      `scan_in_progress` and drops the socket, and the broker skips the request
      (`peer_gone`), so it never runs. Once reply bytes start arriving the
@@ -106,7 +173,7 @@ there is a single behaviour, not two:
    and the same 5 s (short) / 10 s (long) budgets as the original shell `qcmd`. It is also why
    any other opener that takes this lock (the retired `sms_tool` did) can
    still work beside the broker.
-   - The broker serves one request at a time, so waiting in its accept queue
+   - The AT lane serves one request at a time, so waiting in its queue
      *is* waiting for the modem. Each request carries its send time
      (`CLOCK_MONOTONIC`), and the queue time is taken off the lock budget: a
      caller never waits longer in total than the original shell `qcmd` did, and a
@@ -158,14 +225,15 @@ killing the caller can't abort the restart), and still answers
 created `O_EXCL`, allows one restart per 120 s however many clients time out
 together; an older marker is replaced.
 
-**Wire format** (`proto.rs`): `REQ <nbytes> <sent_ms>\n<command>`, reply
+**Wire format** (`src/common/proto.rs`): `REQ <nbytes> <sent_ms>\n<command>`, reply
 `OK <nbytes>\n<raw>` or `ERR <code>\n`. The broker reads the request to EOF
 within 2 s and refuses (`command_failed`, logged `refused request`) anything
 that times out, exceeds 8 KB, or whose body is not exactly `nbytes`, so a
 truncated command never reaches the modem. Client and daemon are one binary
 and `install.sh` stops the daemon before replacing it, so the format has no
 cross-version compatibility path; an old client against a new daemon is
-refused, not executed.
+refused, not executed. `SMS` and `QMI` are further verbs with the same
+framing rules (below).
 
 ## Client wait cap (`qcmd -t` and `QCMD_WAIT_MS`)
 
@@ -182,11 +250,11 @@ Since broker 0.2.0 (B5.29 Phase B) a read-only caller can limit how long `qcmd` 
 
 ## `--version`, the daemon-mode rule and the capability file (proto 2)
 
-- **`--version`.** `qmanager_atd --version` and `qcmd --version` (any invoked name) print `qmanager_atd 0.2.0 proto=2` and exit 0. This only exists in 0.2.0 or later: an older `qcmd` would send `--version` to the modem as a command, and an older `qmanager_atd` would start a second daemon (below). Scripts must not probe with it; they read the capability file.
+- **`--version`.** `qmanager_atd --version` and `qcmd --version` (any invoked name) print `qmanager_atd 0.3.0 proto=3` and exit 0. (`qmi --version` prints the same line.) This only exists in 0.2.0 or later: an older `qcmd` would send `--version` to the modem as a command, and an older `qmanager_atd` would start a second daemon (below). Scripts must not probe with it; they read the capability file.
 - **Daemon-mode rule.** Under a name containing `atd` (`qmanager_atd`), the daemon starts only with **no argument** or `-d` / `--daemon`. Any other argument prints a usage line on stderr and exits 2. **Why:** older binaries treated any invocation under an "atd" name as a request to start a daemon. A second daemon unlinked the live broker's socket and left it serving nobody while every client fell back to in-process. This happened for real on 2026-10-19 when `qmanager_atd --version` was run on a v0.1.32 binary. Under the `qcmd` name only an explicit `--daemon` starts the daemon, and `qsms` is always a client.
 - **Refuse to start if a broker is listening.** `run_daemon` connects to the socket first; if something answers, it logs `another broker is listening` and exits 1 without touching the socket. A stale socket file (nothing listening) is still replaced.
-- **Capability file `/var/run/qmanager_atd.proto`.** After the socket is bound, the daemon writes `proto=2` and `version=0.2.0` (mode 0644) to a `.new` temp file (`O_EXCL` plus `O_NOFOLLOW`, a leftover or planted temp is unlinked first) and renames it into place. It describes the **running daemon**, not the binary on disk. `/etc/init.d/qmanager_atd` `stop_service` and `uninstall.sh` remove it (and the `.new` temp), so a rolled-back binary that never writes it is not credited with a protocol it does not speak. Scripts read it with a builtin `read`; they never run the binary to ask.
-- **Protocol numbers.** 1 = `REQ` / `SMS` framing (v0.1.32, no capability file). 2 = the client wait cap and `--version` (client-side only, no wire change). 3 is reserved for a future `POLL` verb and is not planned: Phase D wiring was not built (decided 2026-10-19). Because the poller passes its cap through the environment variable, no current script depends on the capability file.
+- **Capability file `/var/run/qmanager_atd.proto`.** After the socket is bound, the daemon writes `proto=3`, `version=0.3.0` and `qmi=1`, one per line in that order (mode 0644), to a `.new` temp file (`O_EXCL` plus `O_NOFOLLOW`, a leftover or planted temp is unlinked first) and renames it into place. It describes the **running daemon**, not the binary on disk. `/etc/init.d/qmanager_atd` `stop_service` and `uninstall.sh` remove it (and the `.new` temp), so a rolled-back binary that never writes it is not credited with a protocol it does not speak. Scripts read it with a builtin `read`; they never run the binary to ask.
+- **Protocol numbers.** 1 = `REQ` / `SMS` framing (v0.1.32, no capability file). 2 = the client wait cap and `--version` (client-side only, no wire change). 3 = the `QMI` verb and the `qmi=1` capability line (0.3.0). Number 3 was once reserved for a `POLL` verb; that is parked (Phase D wiring was not built, decided 2026-10-19), so a future `POLL` would be **4**. A new capability is a new `name=value` line after the first two, never a reorder. Because the poller passes its cap through the environment variable, no current script depends on the capability file. The `qmi` client does: it uses the broker only when the file says `proto>=3` **and** `qmi=1` (`broker_serves_qmi`), else it runs in-process.
 
 ## SMS in the broker (`qsms`)
 
@@ -233,7 +301,7 @@ in [`sms.md`](sms.md), [`sms-forwarding.md`](sms-forwarding.md) and
   prompt (bytes, not a line, 10 s), write the hex + Ctrl-Z, read to the final
   code (60 s per part), so the `OK` after `+CMGS:` is consumed. No prompt:
   ESC cancels and the channel is resynced. Stops at the first failed part.
-- **Codec** (`pdu.rs`, 23.040/23.038): DELIVER only (stored SUBMITs and
+- **Codec** (`src/sms/pdu.rs`, 23.040/23.038): DELIVER only (stored SUBMITs and
   status reports from `AT+CMGL=4` are skipped and counted); sender never gets
   a `+` (consumers fingerprint on bare digits); timestamp `MM/DD/YY HH:MM:SS`
   sender-local, timezone ignored, exactly as `sms_tool`; GSM7 with the full
@@ -269,6 +337,14 @@ against 0.29 s for the two `sms_tool` reads. In-process fallback output is
 byte-identical. The 57 `qcmd` parity outputs (9 commands raw and `-j` with rc,
 no argument) are byte-identical to the previous broker. Send and delete are
 covered by fake-modem tests only (86 crate tests).
+
+## The QMI verb (`qmi`, proto 3)
+
+- **Client:** `/usr/bin/qmi` → `qmanager_atd`. `qmi <read> [<read>...]` prints one JSON line; rc 0 ok, rc 1 failure. Reads, envelope, error words and the allow-list are in [`qmi-lane.md`](qmi-lane.md).
+- **Wire format:** `QMI <nbytes> <sent_ms>\n` + the read names joined by NUL (cap 1 KB, same exact-length and uid rules). Reply `RES <0|1> <nbytes>\n<json>` (as SMS) or `ERR command_failed` for a refused frame. A bad read name is a normal `RES 1` answer (`bad_args`), not a refusal.
+- **No lock, no queue.** The reader thread answers it itself, in about a millisecond, even while the AT lane holds a 20 s command or a scan runs. That independence is the reason the lane exists; a test pins it (`a_qmi_read_answers_in_milliseconds_while_an_at_job_holds_the_lane`).
+- **Bounded on the reader pool.** At most 4 QMI requests run at once; over the cap the reader answers `ERR command_failed` immediately. A silent QMI service can hold a reader for at most about 2 s (the 2.0 s daemon deadline, plus the per-service circuit that fails requests at once after 2 timeouts). Limits and the circuit rules are in [`qmi-lane.md`](qmi-lane.md#daemon-limits-cap-deadline-circuit).
+- **Transport order:** broker (only if the capability file allows it), else the same reads in the client process on its own registry. QMI is read-only and lock-free, so unlike AT a retry or a duplicate is harmless; the client falls back if the broker hangs up, answers `ERR`, or says nothing within 3 s. It never restarts a frozen broker.
 
 ## Invariants (and why they exist)
 
@@ -326,6 +402,40 @@ covered by fake-modem tests only (86 crate tests).
   - `cleanup_legacy_scripts` skips `qmanager_atd` and `qcmd` explicitly; its
     glob never matches `qsms`.
 
+- **The AT lane has exactly one worker, and readers never block on it.**
+  - A second consumer would run two AT exchanges at once and break the
+    client-side long-flag watch and the one-exchange-per-lock contract.
+  - `submit` is `try_send`; a full queue answers `modem_busy` instead of
+    holding a reader (which would eventually stop `accept`).
+- **QMI never enters the AT queue and never takes `/var/lock/qmanager.lock`.**
+  Routing a QMI read through the AT lane would put it behind a 20 s to 300 s
+  exchange.
+- **The sourced QMI sidecar lives in a root-only directory.**
+  `/var/run/qmanager` is made `0700`, owned by the daemon's euid and verified
+  (`safefs::ensure_own_dir`: a planted symlink, file or foreign directory is
+  removed first) before every env write. **Why:** the poller will `source` this
+  file in Phase 2; a path under world-writable `/tmp` could be planted before
+  the first write. The JSON and the lease stay in `/tmp` (nothing sources them).
+
+## Source layout and tests
+
+`native/qmanager_atd/src/`:
+
+| Dir | Contents |
+|---|---|
+| `main.rs` | Role dispatch only (argv0: `qmanager_atd` daemon, `qcmd`, `qsms`, `qmi`). |
+| `common/` | `proto.rs` (wire format, capability file), `log.rs`, `lock.rs`, `safefs.rs` (no-follow writes, `write_atomic`, `ensure_own_dir`), `json.rs`. |
+| `at/` | `channel.rs`, `exec.rs`, `classify.rs`, `output.rs`: the AT path. |
+| `sms/` | `mod.rs`, `pdu.rs`. |
+| `daemon/` | `mod.rs` (bind, acceptor, readers, router), `at_lane.rs`, `qmi_lane.rs`, `qmi_snapshot.rs`. |
+| `client/` | `transport.rs` (socket-first, reply wait, frozen-broker restart), `qcmd.rs`, `qsms.rs`, `qmi.rs`. |
+| `qmi/` | `transport.rs`, `registry.rs`, `allow.rs`, `model.rs`, `query.rs`, `msg.rs`, `error.rs`, `codec/{nas,dms,uim,wds,dsd}.rs`. |
+| `poll/` | The parked B5.29 `POLL` parsers and env writer (`parse.rs`, `parse/ca.rs`, `envout.rs`). Compiled **only** with `--features poll` (off by default, so the shipped binary does not carry them). They are library code with host tests; no CLI entry point is wired to them. |
+
+The crate is `libc`-only (no async runtime, no other crates). `cargo test --release`
+runs **222** tests and `cargo test --release --features poll` runs **236**
+(WSL, 2026-10-22, working tree with the QMI limit and hardening tests).
+
 ## Host AT ports (`quecmanager.ports.host_at`)
 
 The vendor `/etc/init.d/port-bridged` (START=10) runs two `port-bridge`
@@ -362,8 +472,8 @@ Every path goes through `install.sh`; the OTA updater runs it too.
    leftover `qcmd.sh` / `atcli_smd11` / `sms_tool`.
 2. `seed_uci_defaults` seeds `ports.host_at` (no `at.engine`). On upgrade it
    deletes the retired `quecmanager.at` section, so a device that had chosen
-   Legacy moves to the broker. It then runs `at_qcmd_link` and
-   `at_qsms_link`.
+   Legacy moves to the broker. It then runs `at_qcmd_link`, `at_qsms_link`
+   and `at_qmi_link`.
 3. `start_services` starts `qmanager_atd` before the main service.
 4. `stop_services` already stops and kills `qmanager_*`.
 5. Firmware detection and the install smoke test run the client through
@@ -376,17 +486,19 @@ Every path goes through `install.sh`; the OTA updater runs it too.
    keeps the status-cache fallback (an old broker still running during an
    upgrade refuses the new client's request).
 
-`/etc/init.d/qmanager_atd` `start_service` always re-asserts the `qcmd` and
-`qsms` links (verified: a removed `qsms` link comes back on restart),
+`/etc/init.d/qmanager_atd` `start_service` always re-asserts the `qcmd`,
+`qsms` and `qmi` links (verified for `qsms`: a removed link comes back on
+restart),
 applies the host AT port setting, then starts the broker. It has no engine
 check. It has no procd reload trigger on purpose: many CGIs commit
 `quecmanager`.
 
 **`uninstall.sh`** restores host AT ports if needed, then removes:
-- the `qcmd` and `qsms` links (dangling-safe, via `-L`) and any
-  `.qcmd.*` / `.qsms.*` temp links;
+- the `qcmd`, `qsms` and `qmi` links (dangling-safe, via `-L`) and any
+  `.qcmd.*` / `.qsms.*` / `.qmi.*` temp links;
 - `qmanager_atd`, plus leftover `qcmd.sh` and `atcli_smd11` from old installs;
-- the socket, the capability file (`/var/run/qmanager_atd.proto` and its `.new` temp) and the init script.
+- the socket, the capability file (`/var/run/qmanager_atd.proto` and its `.new` temp), the forgotten `/var/run/qmanager_atd.restart` marker and the init script;
+- the QMI sidecars: `/var/run/qmanager/qmi.env` (+ `.new`), `/tmp/qmanager_qmi.json` (+ `.new`) and `/tmp/qmanager_qmi_live`. `init.d` `stop_service` removes the same files, so a stopped broker never leaves a sidecar that looks fresh by content.
 
 **`build.sh`** requires and packages `dependencies/qmanager_atd`.
 `.gitattributes` marks it `binary` so it never gets CRLF-converted.
@@ -458,7 +570,26 @@ deleted. The broker is the only AT path.
 frozen-broker restart (it needs a broker stuck for 340 s while every AT call
 waits). Both are covered by the crate's tests.
 
+## QMI Phase 1 on-device validation
+
+Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`), `qmanager_atd` 0.3.0 (md5 `dbe079d2964854d91eb23209f78a4c8a`) against 0.2.0 (`2aac2309…`). No reboot and no SSR during the run. The QMI reads and their timings are in [`qmi-lane.md`](qmi-lane.md#validation). The AT path results:
+
+| Check | Result |
+|---|---|
+| Parity suite ([`tools/atd-parity/`](../../tools/atd-parity/README.md)), daemon and in-process fallback | 42/50 byte-identical to 0.2.0. The 8 live cases that differ (QENG, QCAINFO, QTEMP, CCLK) also differ between two 0.2.0 runs |
+| Lock busy, lock held 8 s | `modem_busy` rc 1 at 5076 ms (0.2.0: 5073 ms) |
+| Queued caller gone before its turn | Skipped and logged on both binaries. A capped waiter (`-t 1000`) returned busy at 1007 ms |
+| Long flag (`scan_in_progress`) | 5–6 ms when raised before the call; 1018 ms when raised during a queued wait (0.2.0: 1030 ms) |
+| 20 simultaneous `qcmd` (10 `ATI`, 10 `AT+CSQ`) | 20/20 rc 0, no interleaving |
+| Daemon stopped (fallback) | `qmi bundle` rc 0 in 9 ms, same JSON paths as the daemon |
+| Lifecycle, old init.d on device | Socket and proto removed. `/tmp/qmanager_qmi.json` and `qmi.env` stay (the old script does not clean them); the repo `stop_service` does |
+
+Not run on device: install, OTA re-install and uninstall (static review only).
+
 ## Rollback
 
-There is no runtime switch. To go back to a pre-broker AT path, revert to a
+A previous release's binary (0.2.0) ignores `/usr/bin/qmi` and never writes
+`qmi=1`, so a dangling or inert `qmi` link is harmless; reinstalling re-asserts
+or removes it. Nothing in Phase 1 consumes the sidecars, so there is nothing to
+unwind. There is no runtime switch. To go back to a pre-broker AT path, revert to a
 previous release through Software Update or reinstall it.

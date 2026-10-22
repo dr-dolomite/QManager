@@ -61,7 +61,7 @@ The user picks where **new** messages go: **Modem** (`ME`, 255 slots, the defaul
 |---|---|
 | CGI | `GET/POST /cgi-bin/quecmanager/cellular/sms_storage.sh` |
 | Hook / UI | `hooks/use-sms-storage.ts`, the Message storage section of `components/cellular/sms/sms-settings-dialog.tsx` (header menu, SMS settings) |
-| Readers | `qmanager_atd` (`sms.rs` `PREF_FILE`, read at every restore), `qmanager_sms_storage` (boot), Config Backup section `sms_storage` |
+| Readers | `qmanager_atd` (`sms/mod.rs` `PREF_FILE`, read at every restore), `qmanager_sms_storage` (boot), Config Backup section `sms_storage` |
 
 - **GET** returns `{success, storage, routing, storages:[{storage,used,total}], storage_errors?}`. `storage` is the saved choice, `routing` the live mem3 from `AT+CPMS?` (`""` if the read failed). `qsms status all` fails as a whole when the SIM store is unusable, so the CGI then reads each store alone and names the failing one in `storage_errors`; the dialog disables the SIM option unless SIM is already saved.
 - **POST** `{storage:"ME"|"SM"}`: validates (`invalid_storage`), refuses SIM when `qsms status SM` fails (`sim_storage_unavailable`, or `modem_busy`), writes the file (`save_failed`), sets `AT+CPMS="X","X","X"` and reads mem3 back. On a mismatch it writes the previous choice back, re-applies it and answers `apply_failed`.

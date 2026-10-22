@@ -1,12 +1,16 @@
 [package]
 name = "qmanager_atd"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "QManager AT broker: owns /dev/smd11, serialises AT commands, and is the qcmd client"
 publish = false
 
 [dependencies]
 libc = "0.2"
+
+[features]
+# The parked B5.29 poll parsers + env writer (src/poll/), off by default.
+poll = []
 
 [profile.release]
 opt-level = "s"

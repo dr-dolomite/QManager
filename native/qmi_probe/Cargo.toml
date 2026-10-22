@@ -1,0 +1,16 @@
+[package]
+name = "qmi_probe"
+version = "0.1.0"
+edition = "2021"
+description = "Phase 0 read-only QMI-over-QRTR probe (NAS/DMS/UIM Get messages only)"
+publish = false
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
