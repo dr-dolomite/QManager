@@ -39,7 +39,7 @@ use crate::common::log::Logger;
 use crate::common::proto::{mono_ms, Reply};
 use super::qmi_snapshot;
 use crate::qmi::query;
-use crate::qmi::registry::{Registry, SvcState};
+use crate::qmi::registry::{Registry, SigConfig, SvcState};
 use crate::qmi::service_name;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, OnceLock};
@@ -56,6 +56,8 @@ const BUSY_LOG_EVERY_MS: u64 = 60_000;
 
 /// How often the monitor looks at the registry (five mutex reads).
 const MONITOR_EVERY: Duration = Duration::from_millis(500);
+/// Retry cadence for a signal config left unapplied with NAS up.
+const CFG_RETRY_EVERY: Duration = Duration::from_secs(30);
 
 pub(crate) struct QmiLane {
     registry: Arc<OnceLock<Arc<Registry>>>,
@@ -91,6 +93,10 @@ impl QmiLane {
             .spawn(move || {
                 let reg = Arc::new(Registry::start_qrtr());
                 let _ = c.set(reg.clone());
+                // Daemon lane only: hold the signal config so the modem's
+                // shared signal cache stays live. NAS not up yet is fine, the
+                // held config replays when it is found.
+                let _ = reg.hold_config();
                 // The snapshot sampler (poller sidecar + CGI json) shares the
                 // registry; a failure to start it costs the sidecar only.
                 if let Err(e) = qmi_snapshot::spawn(reg.clone(), qmi_snapshot::Paths::production(), log.clone()) {
@@ -207,11 +213,12 @@ impl QmiLane {
 pub(crate) struct Monitor {
     states: Vec<(u32, SvcState)>,
     ssr: u64,
+    sig: SigConfig,
 }
 
 impl Monitor {
     pub(crate) fn new() -> Monitor {
-        Monitor { states: Vec::new(), ssr: 0 }
+        Monitor { states: Vec::new(), ssr: 0, sig: SigConfig::Off }
     }
 
     /// Log lines (level, text) for what changed since the last call. The
@@ -234,6 +241,16 @@ impl Monitor {
                 out.push(("warn", format!("qmi ssr detected (episode {ssr})")));
             }
         }
+        let sig = reg.sig_config_state();
+        if sig != self.sig {
+            match sig {
+                SigConfig::Held => out.push(("info", "qmi nas signal config applied".to_string())),
+                SigConfig::Unsupported => out.push(("warn", "qmi nas signal config unsupported by the modem".to_string())),
+                SigConfig::Rejected(c) => out.push(("warn", format!("qmi nas signal config rejected (qmi {c:#06x})"))),
+                SigConfig::Off => {}
+            }
+            self.sig = sig;
+        }
         self.states = now;
         self.ssr = ssr;
         out
@@ -242,7 +259,17 @@ impl Monitor {
 
 fn monitor(reg: &Registry, log: &Logger) -> ! {
     let mut m = Monitor::new();
+    let mut last_cfg_retry = std::time::Instant::now();
     loop {
+        // A replay that timed out on a rebuilt socket leaves the config Off
+        // with NAS up; re-send it, at most every CFG_RETRY_EVERY.
+        if reg.sig_config_state() == SigConfig::Off
+            && reg.state(crate::qmi::SVC_NAS) == Some(SvcState::Up)
+            && last_cfg_retry.elapsed() >= CFG_RETRY_EVERY
+        {
+            last_cfg_retry = std::time::Instant::now();
+            let _ = reg.hold_config();
+        }
         for (lvl, line) in m.poll(reg) {
             match lvl {
                 "warn" => log.warn(&line),
