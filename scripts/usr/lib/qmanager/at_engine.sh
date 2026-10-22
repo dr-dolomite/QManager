@@ -86,8 +86,8 @@ at_qmi_link() {
 # Point /www/qmlive at the broker's public live-signal dir (served by uhttpd,
 # which follows the symlink). The target sits under the root-only run dir, never
 # /tmp: a world-writable parent would let a local user plant content served
-# same-origin. The broker owns and creates the target; this only manages the link. Idempotent. The frontend install wipes /www/*, so
-# install.sh re-runs this after install_frontend and the init script on every
+# same-origin. The broker owns and creates the target; this only manages the link. Idempotent.
+# The frontend install wipes /www/*, so install.sh re-runs this after install_frontend and the init script on every
 # start. Never writes through a real directory: that is refused (rc 1), and a
 # wrong symlink is removed first because mv onto a symlink-to-dir would move the
 # new link INTO the target.
