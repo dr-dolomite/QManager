@@ -96,7 +96,8 @@ Each doc holds invariants the code doesn't show. CGI / hook / type / reboot tabl
 - `adaptive-polling.md`: `qmanager_poller`, `system/adaptive_polling.sh`, `poller_tier`, `qmanager_force_tier2`, `write_cache`, `parse_at.sh` (parity gate `tools/poller-parity/`), `QC_WAIT_MS`, `status.json` composer, `*.env` sidecars
 - `data-used.md`: Dashboard Data Used + Storage rows, `data_used.sh` sampler, `data_used.json`, `network/data_used*.sh`, `system/storage.sh`, `use-data-used.ts` / `use-storage.ts`
 - `prometheus-metrics.md`: `/monitoring/prometheus`, `metrics/prometheus.sh`, `monitoring/prometheus.sh`, `api_auth.sh` (`qm_api_*` bearer auth), `quecmanager.metrics.*`, scrape hold
-- `at-broker.md`: `qcmd`, `qmanager_atd` (Rust, `native/qmanager_atd/`), `at_engine.sh`, `qmanager_atd.sock`, host AT ports (`system/host_at_ports.sh`), `qcmd -t` / `QCMD_WAIT_MS`
+- `at-broker.md`: `qcmd`, `qmanager_atd` (Rust, `native/qmanager_atd/`), lanes (acceptor, reader pool, single AT-lane worker, queue cap 64), proto 3 / `qmi=1`, `at_engine.sh`, `qmanager_atd.sock`, host AT ports (`system/host_at_ports.sh`), `qcmd -t` / `QCMD_WAIT_MS`
+- `qmi-lane.md`: `qmi` client (`/usr/bin/qmi`), `QMI` verb, read-only allow-list (18 pairs), `qmi/` registry + codecs, SSR semantics, `qmi.env` / `qmanager_qmi.json` sidecars (`/var/run/qmanager/`), live lease `/tmp/qmanager_qmi_live`; nothing consumes them until Phase 2
 - `ip-passthrough.md`: IPPT, `network/ip_passthrough.sh`, `ippt_config.json`, `parse_ippt_*`, Verizon lock, `network/lan_devices.sh`, `use-lan-devices.ts`
 - `ondemand-radio-details.md`: `cellular/radio_details.sh`, `ondemand_radio.sh`, `qmanager_ondemand.json`, `useRadioDetails`, `stale:true`
 - `custom-dns.md`: `network/dns.sh`, `dhcp.lan.dns`, odhcpd RDNSS, `use-dns-settings.ts`, `dns-providers.ts`, `dns_mode`

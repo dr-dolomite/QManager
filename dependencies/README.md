@@ -33,7 +33,8 @@ CRT objects and `rust-lld`, so no cross gcc is needed; the crate's
 ```sh
 rustup target add aarch64-unknown-linux-musl     # once
 cd native/qmanager_atd
-cargo test --release                             # host unit tests (86)
+cargo test --release                             # host unit tests (211)
+cargo test --release --features poll             # + the parked POLL parsers (225)
 cargo build --release --target aarch64-unknown-linux-musl
 cp target/aarch64-unknown-linux-musl/release/qmanager_atd ../../dependencies/qmanager_atd
 

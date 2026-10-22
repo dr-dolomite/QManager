@@ -24,12 +24,13 @@ Related canon: [`at-broker.md`](../features/at-broker.md),
 **Phases A, B and C are deployed on the RM551E and measured. Phase D wiring
 was not built (decided 2026-10-19).** A+B+C already meet the active gate, and
 D would save about 1-2 % in the active tier only. The Rust parsers and the env
-writer (`native/qmanager_atd/src/parse.rs`, `parse/`, `envout.rs`) stay in the
-tree with host parity tests, compiled but unwired, for a later row. The `POLL`
+writer (`native/qmanager_atd/src/poll/{parse.rs,parse/,envout.rs}`) stay in the
+tree with host parity tests, built only with the off-by-default `poll` cargo
+feature and unwired, for a later row. The `POLL`
 verb, the `qcmd --poll` client, the poller fallback and the `poll_legacy`
 marker of Section 14 were not built; Sections 4, 5 and the Phase D text
-describe a design that is not in the product. Proto number 3 stays reserved,
-not planned. The 12 h soak on this build passed (2026-10-19 10:22 to 2026-10-20
+describe a design that is not in the product. Proto number 3 is now the QMI lane
+(broker 0.3.0, see `docs/features/qmi-lane.md`); a `POLL` verb would be 4. The 12 h soak on this build passed (2026-10-19 10:22 to 2026-10-20
 01:30 PHT; see the Soak entry in Section 14 notes and the ledger row B5.29).
 
 Measured after A+B+C (poller CPU including children, one core):
@@ -57,8 +58,8 @@ Deviations from the plan:
   `QCMD_WAIT_MS=2500 qcmd <cmd>` per call. An older `qcmd` ignores an unknown
   variable, but would send `-t` to the modem as an AT command. As a result the
   `/var/run/qmanager_atd.proto` gate of Section 5.6 is not needed by the
-  poller; the file exists, and would matter only for a `POLL` verb (proto=3),
-  which is not planned.
+  poller; the file exists and now carries `proto=3` / `qmi=1` for the QMI lane; a
+  `POLL` verb (would be proto 4) is not planned.
 - **A per-cycle busy latch was added** after the lock-hold test. The cap bounds
   one read, so with the lock held for 15 s each of the four reads waited 2.5 s
   and a cycle took 12 s. Now the first busy read of a cycle sets a latch and
@@ -299,7 +300,7 @@ Order: **A → B → C → D**, each shippable and parity-gated on its own; E
      │ 1. long flag? → write qm_poll_rc=scan_in_progress, exit 1 (no connect)
      │ 2. socket: POLL request (named steps, cap)        ┌──────────────────┐
      │ 3. waits ≤ cap; on cap: drop socket, rc busy      │ fallback: run the │
-     │ 4. parse raw replies (parse.rs, panic-free)       │ same Session in-  │
+     │ 4. parse raw replies (poll/parse.rs, panic-free)       │ same Session in-  │
      │ 5. write poll.env.<pid> → rename (O_NOFOLLOW)     │ process if never  │
      ▼                                                   │ delivered         │
   qmanager_atd (daemon, unchanged loop)                  └──────────────────┘
@@ -320,7 +321,7 @@ Responsibilities after D:
 | Cycle clock, tiers, force flags, SIM-switch quiesce | poller (sh) | unchanged semantics |
 | Which AT steps run per tier | poller (sh) | passes step names; Invariants 6/7 enforced twice: the shell picks, the broker's closed table cannot express the forbidden commands |
 | AT strings, exchange, lock, deadlines | broker daemon | new `POLL` verb only |
-| Parsing AT replies | `qcmd --poll` client (Rust `parse.rs`) | bug-for-bug parity with `parse_at.sh` |
+| Parsing AT replies | `qcmd --poll` client (Rust `poll/parse.rs`) | bug-for-bug parity with `parse_at.sh` |
 | status.json write, `.mono`, `.timestamp`, `poller_tier` | poller (sh) | sole writer |
 | Events, alerts, reconcilers, histories | poller (sh) | unchanged |
 | `parse_at.sh` | stays | other callers (`radio_details.sh`, `apn_mgr.sh`, `ondemand_radio.sh`, `qmanager_profile_apply`) and the poller's fallback path |
@@ -404,7 +405,7 @@ qcmd --poll qeng,ca,cfun,sig [--cap 2500] --out /var/run/qmanager/poll.env
 - In-process fallback exactly as for `REQ`: only if the request never reached
   the daemon (no socket, `ECONNREFUSED`, failed write). It runs the same
   `Session` under the same lock.
-- Parses each `ok` step with `parse.rs` and writes the env file
+- Parses each `ok` step with `poll/parse.rs` and writes the env file
   (`poll.env.<pid>`, then `rename(2)`; `safefs` `O_NOFOLLOW`; directory
   `/var/run/qmanager` from `safe_tmp.sh`). Exit 0 **only** after a
   successful rename. A write error is rc 1 (unlike the raw mode, which
@@ -489,12 +490,12 @@ AT reply and how the poller reads its inputs.
 | `timestamp`, `last_successful_poll` | `date +%s` | poller | poller | 1 `date` fork per cycle (kept: step-safe) |
 | `mono` | `/proc/uptime` | `mono_now` (4 forks) | poller (`read` builtin, Phase A) | builtin |
 | `system_state`, `modem_reachable`, `errors` | poller logic | poller | poller (from `qm_step_*`) | builtin |
-| `network.type`, `lte.*`, `nr.*` (except `ta`) | `AT+QENG="servingcell"` | `parse_serving_cell` | `parse.rs` (`qeng`) | `poll.env` |
-| `network.ca_*`, `total_bandwidth_mhz`, `bandwidth_details`, `carrier_components` | `AT+QCAINFO` | `parse_ca_info` | `parse.rs` (`ca`) | `poll.env` |
-| `network.cfun` | `AT+CFUN?` | inline | `parse.rs` (`cfun`) | `poll.env` |
-| `signal_per_antenna` | `AT+QRSRP;+QRSRQ;+QSINR` | `parse_q*` | `parse.rs` (`sig`) | `poll.env` |
-| `network.carrier`, `sim_slot`, `device.phone_number`, SIM status | `COPS;QUIMSLOT;CNUM;CPIN` | `parse_carrier/sim_slot/sim_status` | `parse.rs` (`ident`) | `poll.env` |
-| `device.imsi`, `iccid` (refresh) | `CIMI;QCCID` | inline | `parse.rs` (`simid`) | `poll.env` |
+| `network.type`, `lte.*`, `nr.*` (except `ta`) | `AT+QENG="servingcell"` | `parse_serving_cell` | `poll/parse.rs` (`qeng`) | `poll.env` |
+| `network.ca_*`, `total_bandwidth_mhz`, `bandwidth_details`, `carrier_components` | `AT+QCAINFO` | `parse_ca_info` | `poll/parse.rs` (`ca`) | `poll.env` |
+| `network.cfun` | `AT+CFUN?` | inline | `poll/parse.rs` (`cfun`) | `poll.env` |
+| `signal_per_antenna` | `AT+QRSRP;+QRSRQ;+QSINR` | `parse_q*` | `poll/parse.rs` (`sig`) | `poll.env` |
+| `network.carrier`, `sim_slot`, `device.phone_number`, SIM status | `COPS;QUIMSLOT;CNUM;CPIN` | `parse_carrier/sim_slot/sim_status` | `poll/parse.rs` (`ident`) | `poll.env` |
+| `device.imsi`, `iccid` (refresh) | `CIMI;QCCID` | inline | `poll/parse.rs` (`simid`) | `poll.env` |
 | `network.service_status` | derived | `determine_service_status` | unchanged (shell) | builtin |
 | `device.firmware/model/imei/lte_category/…`, `ippt_*`, `supported_*_bands` | boot AT | `collect_boot_data` | unchanged (boot only, shell) | once |
 | `network.apn/wan_*/dns*`, `lte.ta`, `nr.ta`, `device.mimo` | on-demand cache | `load_ondemand_cache` (jq + 12 sed) | unchanged writer `ondemand_radio.sh` | `ondemand.env` sidecar, re-read on `-nt` |
@@ -616,7 +617,7 @@ existing 340 s frozen-broker rule; nothing restarts anything else.
 | Failure | What happens to AT | What the poller writes | Who recovers | Gate / test |
 |---|---|---|---|---|
 | **Broker panic** (`panic=abort`) mid-batch | client sees EOF → `command_failed`, not re-run | last-known radio values, `system_state` per today's QENG-failure rules after the cycle | procd respawns `qmanager_atd` (~5 s); next cycle uses the socket again, or in-process fallback if the socket is still missing | `kill -9` broker during active tier: mono age < 3 s, no poller restart |
-| **Parser panic** (bad modem text) | the batch already returned | `qcmd --poll` client aborts (rc 134); env not renamed, not sourced → degraded cycle | nothing to restart: the daemon never parses. Parsers are written panic-free (`clippy::unwrap_used`, `indexing_slicing` denied in `parse.rs`) and fuzzed on the host | hostile fixtures + fuzz corpus |
+| **Parser panic** (bad modem text) | the batch already returned | `qcmd --poll` client aborts (rc 134); env not renamed, not sourced → degraded cycle | nothing to restart: the daemon never parses. Parsers are written panic-free (`clippy::unwrap_used`, `indexing_slicing` denied in `poll/parse.rs`) and fuzzed on the host | hostile fixtures + fuzz corpus |
 | **Stuck request ahead in the queue** (D2: interactive command with no terminator, 20 s deadline) | poll client gives up at cap, drops socket; daemon skips it (`peer_gone`) | stale radio + `modem_busy` in `errors` for that cycle; heartbeat fresh | the stuck exchange times out, channel resyncs | lock-hold injection (`flock /var/lock/qmanager.lock sleep 15`): mono age < 6 s throughout |
 | **smd11 glink hang** (historic `atcli` 300 s) | reads are `poll()`-bounded; per-step deadline 3 s in `POLL`; writes/opens bounded 5 s on helper threads; channel marked dirty | as above; after 3 consecutive failed `qeng` steps `modem_reachable=false` (today's rule) | broker reopens + `AT`→`OK` resync; a wedged write abandons the fd (existing invariant) | crate fake-device tests; device: not injectable safely |
 | **Baseband SSR** (`ssr_hold`) | exchanges fail fast (`ENETRESET`/`EBUSY` → `not_ready`); an open can block ≤ 5 s → cap | degraded cycles for ~10–25 s | glink + broker reopen; watchcat's `ssr_hold` gate is independent (dmesg / remoteproc) | natural SSRs during soaks: poller pid unchanged, mono age < 6 s |
@@ -677,7 +678,7 @@ long anyone can be held up, not running things in parallel.
   later phase needs to read JSON, a hand-rolled reader of the few needed
   fields beats ~100–200 kB of `serde_json`.
 - Today: 521,200 bytes stripped static, RSS 280 kB (HWM 332 kB), 1 thread.
-- Estimated additions: `parse.rs` (QENG/QCAINFO/antenna/CFUN/ident parsers
+- Estimated additions: `poll/parse.rs` (QENG/QCAINFO/antenna/CFUN/ident parsers
   plus the env writer) ~40–80 kB; `POLL` in the daemon ~5 kB; netlink (E)
   ~10 kB.
 - **Ceilings (gates):** binary ≤ **640 kB**; daemon RSS ≤ **512 kB**
@@ -843,7 +844,7 @@ Nothing about what he asks the modem changes.
 **ELI5:** the clerk stops waiting behind a stuck customer: after 2.5 s he
 writes the board anyway and comes back next round.
 
-- **Files:** `native/qmanager_atd/src/{main.rs,proto.rs,exec.rs}` (client
+- **Files:** `native/qmanager_atd/src/{main.rs,common/proto.rs,at/exec.rs}` (client
   `-t <ms>` wait cap for `REQ`, `--version`, the `.proto` capability file,
   optional non-AT refusal), `scripts/etc/init.d/qmanager_atd` (remove the
   `.proto` file on stop), `dependencies/qmanager_atd`, `qmanager_poller`
@@ -902,8 +903,8 @@ a glance.
 asks all the questions in one go, and the clerk's reader turns the answers
 into a tidy list he reads in one gulp.
 
-- **Files:** `native/qmanager_atd/src/{main.rs,proto.rs,exec.rs}` (`POLL`,
-  `PRS`, step table, counters), new `parse.rs` and `envout.rs`,
+- **Files:** `native/qmanager_atd/src/{main.rs,common/proto.rs,at/exec.rs}` (`POLL`,
+  `PRS`, step table, counters), new `poll/parse.rs` and `poll/envout.rs`,
   `Cargo.toml` (dev-deps only), `dependencies/qmanager_atd`, `build.sh` (size
   ceiling), `qmanager_poller` (`poll_cycle` AT block → one `qcmd --poll`,
   fallback to the Phase A path when `proto<2` or on refusal),
@@ -923,7 +924,7 @@ into a tidy list he reads in one gulp.
   leave the binary and set the poller's fallback (a `/etc/qmanager/poll_legacy`
   marker, read once at start) to return to the shell parsers without a
   redeploy.
-- **Team:** Opus 5.5 medium for `POLL`, `parse.rs` eval-safety and the env
+- **Team:** Opus 5.5 medium for `POLL`, `poll/parse.rs` eval-safety and the env
   allowlist; Sonnet 5.5 High for test scaffolding and the poller wiring;
   orchestrator owns the parity verdict; validator for the device leg.
 

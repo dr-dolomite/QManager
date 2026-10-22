@@ -1,6 +1,6 @@
 # QMI Phase 1: broker architecture (qmanager_atd 0.3.0)
 
-Status: **PLAN, awaiting approval.** Inputs:
+Status: **APPROVED, built (not yet validated on device).** Built contract: [`qmi-lane.md`](../features/qmi-lane.md), [`at-broker.md`](../features/at-broker.md). Where the build differs from this plan (env sidecar in `/var/run/qmanager/`, `qmi_mono` is a boot-clock second, live rate 2 Hz), the feature docs win. Inputs:
 - [Phase 0 results](../research/qmi-phase0-results.md)
 - [at-broker.md](../features/at-broker.md)
 - `docs/architecture/poller-on-broker.md` (the parked `POLL` design)
