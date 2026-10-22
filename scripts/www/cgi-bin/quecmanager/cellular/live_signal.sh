@@ -64,7 +64,7 @@ lease_failed() {
 
 # The lock fd closes with the process, so every exit path releases it.
 # A failing exec redirect aborts an ash script, so probe the path first.
-: >> "$LIVE_RUN/qmi_live.lock" 2>/dev/null || lease_failed "lock unavailable"
+true >> "$LIVE_RUN/qmi_live.lock" 2>/dev/null || lease_failed "lock unavailable"
 exec 9>> "$LIVE_RUN/qmi_live.lock"
 # BusyBox flock has no -w: try non-blocking, retry for ~1 s (forks only on contention).
 tries=0
