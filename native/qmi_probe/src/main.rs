@@ -5,10 +5,16 @@
 //! Indication Register in `watch`, which is per-client and released when
 //! the socket closes; it changes no modem configuration.
 //!
+//! The one exception is NAS 0x006C Config Signal Info v2, sent only by
+//! `siginfo2` and only when `--allow-config` is given (see
+//! docs/research/qmi-signal-info-v2.md).
+//!
 //!   qmi_probe json [sig cell rf ca serving sysinfo ...]   one JSON line
 //!   qmi_probe get <svc>:<msg>                             hex dump (whitelisted)
 //!   qmi_probe bench <cmd> <n> [hz]                        latency / rate / CPU
 //!   qmi_probe watch <secs>                                NAS indications
+//!   qmi_probe [--allow-config] siginfo2 <secs> <hz> [live|tt=hex ..]
+//!                                                         0x0051 + polled 0x004F
 
 mod decode;
 mod qrtr;
@@ -49,8 +55,14 @@ const WHITELIST: &[(u32, u16)] = &[
     (SVC_DSD, 0x0024), // Get System Status
 ];
 
+/// Config writes, refused unless `--allow-config` is given.
+const CONFIG_WHITELIST: &[(u32, u16)] = &[
+    (SVC_NAS, 0x006C), // Config Signal Info v2
+];
+
 struct Svc {
     clients: HashMap<u32, Client>,
+    allow_config: bool,
 }
 
 impl Svc {
@@ -69,8 +81,10 @@ impl Svc {
     }
 
     fn call(&mut self, svc: u32, id: u16, tlvs: &[Tlv]) -> Result<(Msg, Duration), String> {
-        if !WHITELIST.contains(&(svc, id)) {
-            return Err(format!("refused {}:{:#06x} (not whitelisted)", svc, id));
+        let config = CONFIG_WHITELIST.contains(&(svc, id));
+        if !WHITELIST.contains(&(svc, id)) && !(config && self.allow_config) {
+            let why = if config { "config write, needs --allow-config" } else { "not whitelisted" };
+            return Err(format!("refused {}:{:#06x} ({})", svc, id, why));
         }
         self.get(svc).request(id, tlvs).map_err(|e| e.to_string())
     }
@@ -267,23 +281,147 @@ fn cmd_watch(s: &mut Svc, secs: u64) {
     println!("{{\"summary\":{{{}}}}}", items.join(","));
 }
 
+/// Config Signal Info v2 preset: 1 dB deltas (units of 0.1 dB) for LTE
+/// RSSI/SNR/RSRQ/RSRP and NR5G SNR/RSRP/RSRQ, LTE and NR5G report config
+/// {rate 1 s, averaging 1 s}.
+fn siginfo2_live() -> Vec<Tlv> {
+    let d = 10u16.to_le_bytes();
+    vec![
+        tlv(0x23, &d), // LTE RSSI delta
+        tlv(0x25, &d), // LTE SNR delta
+        tlv(0x27, &d), // LTE RSRQ delta
+        tlv(0x29, &d), // LTE RSRP delta
+        tlv(0x2A, &[1, 1]), // LTE report: rate, average period
+        tlv(0x34, &d), // NR5G SNR delta
+        tlv(0x36, &d), // NR5G RSRP delta
+        tlv(0x37, &[1, 1]), // NR5G report: rate, average period
+        tlv(0x39, &d), // NR5G RSRQ delta
+    ]
+}
+
+fn parse_tlv_args(args: &[String]) -> Vec<Tlv> {
+    let mut req = Vec::new();
+    for a in args {
+        let (t, h) = a.split_once('=').unwrap_or_else(|| die("bad tlv arg"));
+        let t = u8::from_str_radix(t, 16).unwrap_or_else(|_| die("bad tlv type"));
+        let v: Vec<u8> = (0..h.len() / 2)
+            .map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or_else(|_| die("bad hex")))
+            .collect();
+        req.push(tlv(t, &v));
+    }
+    req
+}
+
+fn emit_ind(m: &Msg, n: &mut usize, ch: &mut usize, last: &mut String) {
+    let body = decode::sig(m);
+    *n += 1;
+    if body != *last {
+        *ch += 1;
+        *last = body.clone();
+    }
+    println!("{{\"mono_ms\":{},\"ind\":\"{:#06x}\",\"data\":{}}}", mono_ms(), m.id, body);
+}
+
+/// Optionally apply Config Signal Info v2 on this process's NAS client,
+/// register for Signal Info indications, then for `secs` print every 0x0051
+/// indication and poll 0x004F at `hz` (0 = no polling), one NDJSON line each.
+fn cmd_siginfo2(s: &mut Svc, secs: u64, hz: f64, cfg: Option<Vec<Tlv>>) {
+    if let Some(t) = cfg {
+        match s.call(SVC_NAS, 0x006C, &t) {
+            Ok((m, rtt)) => {
+                let r = match m.result() {
+                    Ok(()) => "ok".to_string(),
+                    Err(ec) => format!("err_{:#06x}", ec),
+                };
+                println!("{{\"mono_ms\":{},\"config\":\"{}\",\"rtt_ms\":{:.2}}}", mono_ms(), r, ms(rtt));
+            }
+            Err(e) => die(&e),
+        }
+    }
+    let c = s.get(SVC_NAS);
+    match c.request(0x0003, &[tlv(0x19, &[1])]) {
+        Ok((m, _)) if m.result().is_ok() => {}
+        Ok((m, _)) => die(&format!("indication register failed: {:?}", m.result())),
+        Err(e) => die(&format!("indication register: {}", e)),
+    }
+    let period = if hz > 0.0 { Some(Duration::from_secs_f64(1.0 / hz)) } else { None };
+    let (mut n_ind, mut n_poll, mut ch_ind, mut ch_poll) = (0usize, 0usize, 0usize, 0usize);
+    let (mut last_ind, mut last_poll) = (String::new(), String::new());
+    let c0 = cpu_ms();
+    let t0 = Instant::now();
+    let end = t0 + Duration::from_secs(secs);
+    let mut k = 1u32;
+    let mut stop = false;
+    while !stop && Instant::now() < end {
+        let tick = match period {
+            Some(p) => (t0 + p * k).min(end),
+            None => end,
+        };
+        // Drain indications until the next poll tick.
+        loop {
+            let now = Instant::now();
+            if now >= tick {
+                break;
+            }
+            c.set_timeout((tick - now).max(Duration::from_millis(1)));
+            match c.next_indication() {
+                Ok(m) if m.id == 0x0051 => emit_ind(&m, &mut n_ind, &mut ch_ind, &mut last_ind),
+                Ok(_) => {}
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => break,
+                Err(e) => {
+                    println!("{{\"mono_ms\":{},\"error\":\"{}\"}}", mono_ms(), e);
+                    stop = true;
+                    break;
+                }
+            }
+        }
+        if stop || period.is_none() || Instant::now() >= end {
+            continue;
+        }
+        k += 1;
+        c.set_timeout(Duration::from_secs(3));
+        let mut pending = Vec::new();
+        match c.request_with(0x004F, &[], &mut |m| pending.push(m)) {
+            Ok((m, rtt)) => {
+                let body = decode::sig(&m);
+                n_poll += 1;
+                if body != last_poll {
+                    ch_poll += 1;
+                    last_poll = body.clone();
+                }
+                println!("{{\"mono_ms\":{},\"poll\":{:.2},\"data\":{}}}", mono_ms(), ms(rtt), body);
+            }
+            Err(e) => {
+                println!("{{\"mono_ms\":{},\"error\":\"{}\"}}", mono_ms(), e);
+                break;
+            }
+        }
+        for m in pending.iter().filter(|m| m.id == 0x0051) {
+            emit_ind(m, &mut n_ind, &mut ch_ind, &mut last_ind);
+        }
+    }
+    let wall = t0.elapsed();
+    let mut j = J::obj();
+    j.f1("wall_s", wall.as_secs_f64())
+        .num("ind", n_ind)
+        .num("ind_changes", ch_ind)
+        .num("poll", n_poll)
+        .num("poll_changes", ch_poll)
+        .num("cpu_ms", cpu_ms() - c0);
+    println!("{{\"summary\":{}}}", j.done());
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut s = Svc { clients: HashMap::new() };
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let allow_config = args.iter().any(|a| a == "--allow-config");
+    args.retain(|a| a != "--allow-config");
+    let mut s = Svc { clients: HashMap::new(), allow_config };
     match args.first().map(|x| x.as_str()) {
         Some("json") => cmd_json(&mut s, &args[1..]),
         Some("get") => {
             let (svc, id) = args.get(1).and_then(|a| parse_svcmsg(a)).unwrap_or_else(|| die("usage: get <svc>:<msg> [tt=hex ..]"));
             // Optional request TLVs as tt=hexbytes, e.g. 01=08000000.
-            let mut req = Vec::new();
-            for a in &args[2..] {
-                let (t, h) = a.split_once('=').unwrap_or_else(|| die("bad tlv arg"));
-                let t = u8::from_str_radix(t, 16).unwrap_or_else(|_| die("bad tlv type"));
-                let v: Vec<u8> = (0..h.len() / 2)
-                    .map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or_else(|_| die("bad hex")))
-                    .collect();
-                req.push(tlv(t, &v));
-            }
+            let req = parse_tlv_args(&args[2..]);
             match s.call(svc, id, &req) {
                 Ok((m, rtt)) => {
                     let tl: Vec<String> = m.tlvs.iter().map(|t| format!("{{\"t\":\"{:02x}\",\"hex\":\"{}\"}}", t.t, decode::hex(&t.v))).collect();
@@ -302,8 +440,18 @@ fn main() {
             let secs = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(30);
             cmd_watch(&mut s, secs);
         }
+        Some("siginfo2") => {
+            let secs = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(60);
+            let hz = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(0.0);
+            let cfg = match args.get(3).map(|x| x.as_str()) {
+                None => None,
+                Some("live") => Some(siginfo2_live()),
+                Some(_) => Some(parse_tlv_args(&args[3..])),
+            };
+            cmd_siginfo2(&mut s, secs, hz, cfg);
+        }
         _ => {
-            eprintln!("usage: qmi_probe json [cmd..] | get <svc>:<msg> | bench <cmd> <n> [hz] | watch <secs>");
+            eprintln!("usage: qmi_probe json [cmd..] | get <svc>:<msg> | bench <cmd> <n> [hz] | watch <secs> | [--allow-config] siginfo2 <secs> <hz> [live|tt=hex ..]");
             exit(2);
         }
     }
