@@ -33,7 +33,7 @@ ATE_BROKER_BIN="/usr/bin/qmanager_atd"
 ATE_LINK="/usr/bin/qcmd"
 ATE_SMS_LINK="/usr/bin/qsms"
 ATE_QMI_LINK="/usr/bin/qmi"
-ATE_LIVE_DIR="/tmp/qmanager_live"
+ATE_LIVE_DIR="/var/run/qmanager/live"
 ATE_LIVE_LINK="/www/qmlive"
 ATE_SOCK="/var/run/qmanager_atd.sock"
 PB_INIT="/etc/init.d/port-bridged"
@@ -84,7 +84,9 @@ at_qmi_link() {
 }
 
 # Point /www/qmlive at the broker's public live-signal dir (served by uhttpd,
-# which follows the symlink). Idempotent. The frontend install wipes /www/*, so
+# which follows the symlink). The target sits under the root-only run dir, never
+# /tmp: a world-writable parent would let a local user plant content served
+# same-origin. The broker owns and creates the target; this only manages the link. Idempotent. The frontend install wipes /www/*, so
 # install.sh re-runs this after install_frontend and the init script on every
 # start. Never writes through a real directory: that is refused (rc 1), and a
 # wrong symlink is removed first because mv onto a symlink-to-dir would move the

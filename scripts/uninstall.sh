@@ -232,7 +232,7 @@ stop_services() {
         # Live-signal channel: the /www/qmlive symlink (a real directory there is not
     # ours, leave it) and its public dir.
     [ -L "$WWW_ROOT/qmlive" ] && rm -f "$WWW_ROOT/qmlive"
-    rm -rf /tmp/qmanager_live
+    rm -rf /var/run/qmanager/live /tmp/qmanager_live
 
     for f in "$BIN_DIR"/qmanager_*; do
             [ -f "$f" ] || continue

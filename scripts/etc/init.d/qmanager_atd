@@ -7,7 +7,7 @@
 #
 # On every start it also reconciles these boot-time states:
 #   - /usr/bin/qcmd, qsms and qmi -> qmanager_atd (multicall clients)
-#   - /www/qmlive -> /tmp/qmanager_live (live-signal static dir; the frontend
+#   - /www/qmlive -> /var/run/qmanager/live (live-signal static dir under the run dir; the frontend
 #     install wipes /www/*)
 #   - port-bridge on/off (quecmanager.ports.host_at); a firmware update can
 #     re-enable the vendor service, so this re-applies the user's choice.
@@ -58,10 +58,12 @@ stop_service() {
     # the json and the lease are in /tmp. Atomic-write temps are "<path>.new".
     rm -f /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
         /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live
-    # Live-signal channel: public dir, per-tier lease stamps (+ CGI temps), the
-    # capability token and its lock. The /www/qmlive link stays (dangling is
-    # harmless and the next start re-asserts it).
-    rm -rf /tmp/qmanager_live
+    # Live-signal channel: the /www link (removed so it never dangles; a real
+    # directory there is not ours), the public dir, and any copy an earlier
+    # build left in world-writable /tmp. Then the per-tier lease stamps (+ CGI
+    # temps), the capability token and its lock.
+    [ -L /www/qmlive ] && rm -f /www/qmlive
+    rm -rf /var/run/qmanager/live /tmp/qmanager_live
     rm -f /var/run/qmanager/qmi_live_aim /var/run/qmanager/qmi_live_aim.* \
         /var/run/qmanager/qmi_live_watch /var/run/qmanager/qmi_live_watch.* \
         /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.* \
