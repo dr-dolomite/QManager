@@ -42,7 +42,7 @@ Lease response:
 - **L2. Many tabs.** One stamp per tier (no shared read-modify-write). The effective period is the fastest fresh tier, so `aim` beats `watch`. All authenticated tabs share one token per lease episode (single-admin device; the content is non-identifying).
 - **L3. Token = capability URL.** Exactly 64 lowercase hex, minted by the CGI (`qm_generate_token`) under the lock when absent or invalid, written atomically with a `$$` temp + `mv -f` (allowed only inside the root-only run dir, see [`safe-tmp.md`](../reference/safe-tmp.md)). The token **rotates per lease episode**: on expiry the broker try-locks the lock file (busy: retry next slice), re-checks the stamps under the lock, deletes the token, the public file and its `.new`, and clears its ring. The broker validates the token (64 hex) before it builds any path from it.
 - **L4. Public dir.** `/var/run/qmanager/live`, made a real `0755` directory by `safefs::ensure_own_dir` and verified before every publish. It always holds an **empty `index.html`**. Hygiene on start, on a token change and on expiry deletes everything except `index.html` and the current `<token>.json`. Files are written with `safefs::write_atomic`.
-- **L5. File format** (about 4 KB at a full ring, compact JSON, below).
+- **L5. File format** (about 4-5 KB at a full 32-sample ring, compact JSON, below).
 - **L6. Capability.** The CGI answers `available:false` unless `/usr/bin/qmi` is executable and the proto file has `qmi=1` **and** `live=1`. A rolled-back broker never writes `live=1`, so the UI falls back to the 2 s tier instead of looping on 404.
 - **L7. Phase 1's `/tmp/qmanager_qmi_live` mtime lease is retired.** The broker ignores it (world-writable `/tmp`, wall-clock based). `init.d` stop and `uninstall.sh` still remove the old path so an upgrade leaves nothing behind.
 
@@ -75,7 +75,7 @@ Lease response:
 Landed with this phase (0.4.0) after the device gate (plan section 4b):
 
 - **Samples run on a fixed deadline grid** (`next_deadline`), so `aim` delivers 5.0 Hz instead of drifting to ~4.75 Hz.
-- **`qmi.env` and `qmanager_qmi.json` are written at most every 2 s** whatever the tier (`sidecar_due`), and at once when `qmi_state` or the SSR count changes and on the first sample. Only the live file follows the lease rate. **Why:** three file writes per 200 ms sample cost the sampler 1.37 % of a core; the poller only needs the sidecar at most a few seconds old.
+- **`qmi.env` and `qmanager_qmi.json` are written every 2 s** whatever the tier (`sidecar_due`, with a 100 ms scheduling slack so jitter on the 200 ms grid cannot push a write to 2.2 s), and at once when `qmi_state` or the SSR count changes and on the first sample. Only the live file follows the lease rate. With no lease they are written every 2 s sample, as before. **Why:** three file writes per 200 ms sample cost the sampler 1.37 % of a core; the poller only needs the sidecar at most a few seconds old.
 - **Ring 16 -> 32** (about 6.4 s at 5 Hz) so a client request stalled for a few seconds still merges without loss.
 - The sampler re-checks the stamps every `min(period, 250 ms)`. Expiry is therefore at most about 11 s after the last renewal (whole-second stamps plus the 10 s TTL); measured 10.1-10.5 s.
 - **Re-read the boot clock before the expiry re-check.** A renewal can land between the slice's check and the lock, stamped with a later second than the slice's clock value; compared against that stale value it reads as "in the future" (not fresh) and would be deleted.
@@ -142,9 +142,15 @@ Thresholds that failed on the first build, and the response (plan section 4b, ap
 
 | Threshold | Result | Response |
 |---|---|---|
-| Broker <= 1.0 % | +1.17 % (three file writes per sample) | R1: sidecars at most every 2 s, fixed-deadline pacing (landed) |
-| Zero lost samples | 36 / 98 lost in 2 of 6 runs (client stalls beyond the 16-sample ring, two resets at SSRs) | R2: ring 32 plus the 2 s poll abort (landed); gate = no loss outside SSR / link-drop windows |
-| 1 h soak without SSR | 2 `remoteproc-mss` SSRs (`nr_rx_ctl_agc.c` RFG fault), the same signature as 4 earlier SSRs that boot with no lease | R3: not a UI blocker; longer A/B soak before merge |
-| System delta <= 3 % | +1.25 pp of 4 cores (+5.0 % of one core) | R4: read as the sum of uhttpd + CGI + broker <= 3 % of one core after R1; if still over, renew every 7 s with TTL 15 s |
+| Threshold | First build | Response | Re-measure after R1/R2 |
+|---|---|---|---|
+| Broker <= 1.0 % | +1.17 % (three file writes per sample) | R1: sidecars every 2 s, fixed-deadline pacing | **Pass**, +0.80 % (sampler thread 1.37 -> 0.87 %) |
+| Zero lost samples | 36 / 98 lost in 2 of 6 runs (client stalls beyond the 16-sample ring, two resets at SSRs) | R2: ring 32 plus the 2 s poll abort; gate = no loss outside SSR / link-drop windows | **Pass**, 5.00 Hz, 0 lost (3024 unique samples in 10 min) |
+| 1 h soak without SSR | 2 `remoteproc-mss` SSRs (`nr_rx_ctl_agc.c` RFG fault), the same signature as 4 earlier SSRs that boot with no lease | R3: not a UI blocker; longer A/B soak before merge | Not re-run |
+| System delta <= 3 % | +1.25 pp of 4 cores (+5.0 % of one core) | R4: read as the sum of uhttpd + CGI + broker <= 3 % of one core after R1 | **Pass**, 2.55 % of one core (uhttpd self 0.54 + CGI children 1.21 + broker 0.80); `renew_s` unchanged |
 
-**Open before merge:** the 3 h A/B soak (lease vs no lease) for SSR rate; if the rate rises with the lease, drop `aim` to 2-2.5 Hz (one constant in `live.rs`). The post-R1/R2 re-measurement of broker CPU and lost samples is not recorded in the plan yet.
+The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, plus the 2 s authenticated `fetch_data.sh` probe. Static GET p50 6.9 / p95 8.5 ms; `fetch_data.sh` p95 moved +0.2 ms against the same-session baseline; zero errors on other CGIs.
+
+**Not yet measured on device:** the `qmi.env` rewrite cadence while `aim` is leased (expected every 2 s; covered by the unit and thread tests only) and the poller's `lte.source=qmi` flip under a lease. Both need a short on-device check before the UI steps rely on them.
+
+**Open before merge:** the 3 h A/B soak (lease vs no lease) for SSR rate; if the rate rises with the lease, drop `aim` to 2-2.5 Hz (one constant in `live.rs`). Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
