@@ -335,6 +335,7 @@ impl Live {
         }
     }
 
+    #[cfg(test)]
     pub fn run_id(&self) -> u64 {
         self.run
     }

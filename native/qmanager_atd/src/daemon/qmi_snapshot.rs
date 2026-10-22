@@ -245,7 +245,8 @@ impl Sampler {
         Sampler { paths, last: None, last_mono: None, write_failed: false, log, live }
     }
 
-    /// One read and one publication, at the tier the stamps say now.
+    /// One read and one publication, at the tier the stamps say now (tests).
+    #[cfg(test)]
     pub fn sample(&mut self, reg: &Registry) {
         let tier = self.live.tier(boot_secs());
         self.sample_at(reg, tier);
