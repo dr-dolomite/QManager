@@ -238,6 +238,17 @@ The scrape CGI ([prometheus-metrics.md](prometheus-metrics.md)) writes `/var/run
 
 The poller also exports `.device.serving_read_mono` (set when a `poll_serving_cell` reply contains `+QENG:`) and `.device.ca_read_mono` (set after `parse_ca_info`). They let a consumer age the radio data, because the deep tier freezes CA values. Both are `_kN` integer keys in `_wc_compose_pf` and `--argjson` in `write_cache_jq`, so the two composers stay in parity; they default to `0`.
 
+### 13. The QMI overlay wraps the final `write_cache` only
+
+`scripts/usr/lib/qmanager/qmi_merge.sh` (sourced `[ -f ] && .`; `parse_at.sh` is untouched) gap-fills the LTE serving signal from the broker's `qmi.env` ([`qmi-lane.md`](qmi-lane.md)) on cycles where AT did not read the serving cell (idle/deep tiers between AT touches, a busy `QENG`). The poller calls `qmi_load` and `qmi_overlay_apply` right before the **final** `write_cache` of `poll_cycle` and `qmi_overlay_restore` right after it. Fallback stubs (`command -v qmi_load ... || qmi_load() { return 1; }`) make a missing lib mean AT only: **removing `qmi_merge.sh` disables the overlay on a device.**
+
+- **AT consumers never see QMI values.** `lte_rsrp/rsrq/rssi` are saved into `_qmo_*`, replaced for the write, and restored immediately, so `events.sh`, signal history, busy logic, `dump_globals` and the tower/band failover readers only ever see AT samples. **Why:** `events.sh` counts samples for its settle/churn logic; a QMI value would retune `ca_change`.
+- **Gates (all must hold):** no `+QENG:` reply parsed this cycle (`_QENG_PARSED`); no scan flag (`/tmp/qmanager_long_running`) and no SIM-switch flag; `system_state` is not `scan_in_progress` (a deep/idle tier keeps reporting it after a scan until its next AT read, so a lingering value must also block the overlay); a valid sidecar with `qmi_state=up` and `qmi_registered=1`; `_MONO_TOP - qmi_mono` in 0..5 s; QMI PCI and EARFCN equal the AT ones (or AT knows no serving cell), so a handover between AT reads is never merged; all three values integers. The scan/SIM-switch early-return `write_cache` gets no overlay.
+- **`qmi_load`** is `-nt`-gated against `/var/run/qmanager/qmi.stamp` (stamp backdated 1 s, forced re-read every 15 calls) and forks nothing. **`qmi.stamp` is owned by the poller** (`init.d/qmanager` stop removes it). The env is sourced through `_qmi_env_source`, stricter than `cq_env_source`: every line must be a single-quoted `qmi_*` assignment using only `[A-Za-z0-9_='-]`, ending with `qm_sidecar_end='1'`, so a sourced line can only set a `qmi_*` variable, never a poller global. **The broker must keep its values in that set.** The stamp touch uses `true`, not `:` (a failing redirect on `:` kills the shell).
+- **New `status.json` keys** (both composers, `_wc_compose_pf` and `write_cache_jq`, kept in parity): `lte.source` (`at|qmi`), `device.qmi_read_mono` (int, 0 = never), `device.qmi_state` (`""|up|down|unavailable`), `device.qmi_ssr_count` (int). All are optional in `types/modem-status.ts`.
+- **Not merged:** CA (`t2_carrier_components` carries per-carrier signal and the NR SCC QMI cannot supply, so there is no `network.ca_source`), NR, SINR and per-antenna values.
+- **Parity tooling:** `dump_globals.sh` learns `qmi_`/`_qmo_`; `sidecar_parity.sh` takes `qmi_merge.sh` as a 5th argument and covers valid, truncated, stray-line and older-than-stamp envs plus no fork; `status_parity.sh` covers the new keys. See `tools/poller-parity/README.md`.
+
 ---
 
 ## CGI Envelopes
@@ -317,7 +328,7 @@ Sidebar entry key: `adaptive_polling`. Available in all 5 shipped locales.
 
 ## status.json Surface
 
-The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11).
+The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11), and since QMI Phase 2 `.lte.source`, `.device.qmi_read_mono`, `.device.qmi_state` and `.device.qmi_ssr_count` (Invariant 13).
 
 The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"deep"` on every `write_cache` call. Consumers (the frontend tier badge, the CGI GET fallback) should treat the field as optional — it is absent on older builds and on the first write if the poller starts before the cache is populated.
 
