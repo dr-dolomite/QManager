@@ -41,6 +41,13 @@ pub struct Logger {
 const MAX_BYTES: u64 = 256 * 1024;
 const MAX_FILES: u32 = 2;
 
+/// Serialises rotate + write across every thread of the process (the broker's
+/// acceptor, readers and AT lane all log). Without it two threads could both
+/// see the file over the cap and rotate twice, losing `.1`, or interleave a
+/// write with the rename. One process-wide lock, not one per `Logger`, because
+/// every logger in the process shares the same file.
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// OpenWrt keeps the POSIX TZ string in /etc/TZ (e.g. "PHT-8") and BusyBox
 /// reads it; a static musl binary only honours $TZ. Without this, broker log
 /// lines are stamped UTC while qlog.sh lines are local time.
@@ -94,6 +101,9 @@ impl Logger {
         if level < self.min {
             return;
         }
+        // A panic while holding it (tests only: release aborts) must not
+        // silence every later line.
+        let _w = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         self.rotate();
         let line = format!(
             "[{}] {} [{}:{}] {}\n",
