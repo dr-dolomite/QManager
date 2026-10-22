@@ -165,6 +165,17 @@ Full gate measurements below are taken in step 2d.
 - Poller `measure.sh` active ≤ 10 % and within +0.5 pp of the 4.9 % baseline; period 2.0 ± 0.2 s.
 - 1 h soak at 5 Hz: no `remoteproc-mss` SSR in `dmesg`, `qmi_ssr_count` unchanged, broker fd/RSS/threads flat.
 
+### 4b. Gate outcome and re-plan (PROPOSED, awaiting OK)
+
+Every functional check passed; three thresholds failed and one is ambiguous (results above). Proposed response:
+
+| Threshold | Result | Diagnosis | Proposal |
+|---|---|---|---|
+| Broker ≤ 1.0 % | +1.17 % (sampler 2.9 ms/sample) | Each 5 Hz sample writes three files: live JSON, `qmi.env`, `qmanager_qmi.json` | **R1.** Write `qmi.env` + `qmanager_qmi.json` at most every 2 s (the poller only needs ≤ 2 s; `qmi.stamp` gate unchanged); only the live JSON goes at the live rate. Schedule samples against a fixed deadline (fixes the 210 ms drift). Re-measure; keep the 1.0 % gate. |
+| Zero lost samples | 36 / 98 lost in 2 of 6 runs | Server seq is contiguous; losses are client stalls > 3.4 s (16-sample ring): two 10 s keepalive timeouts, two connection resets at SSRs | **R2.** Ring 16 → 32 (~6.5 s at 5 Hz, ~4 KB file). The store's new 2 s poll abort already cuts the 10 s stalls. Gate becomes: no loss outside SSR / link-drop windows. |
+| 1 h soak, no SSR | 2 SSRs (`nr_rx_ctl_agc.c` RFG fault) | Same signature as 4 SSRs earlier this boot with no lease (gaps 1368–11991 s); 1 h can't tell. Broker rode through both, resources flat | **R3.** Not a blocker for building the UI; run a longer A/B soak (3 h lease vs 3 h no lease) before merge. If SSR rate rises with the lease, fall back to `aim` at 2–2.5 Hz (one constant). |
+| System Δ ≤ 3 % | +1.25 pp of 4 cores (+5.0 % of one core) | Lease renewals cost ~55 ms CPU each (≈ 1.1 % per tab at `renew_s` 5) | **R4.** Read the gate as the sum of components (uhttpd + CGI + broker) ≤ 3 % of one core after R1; if still over, renew every 7 s with TTL 15 s. |
+
 ## 5. Validation per step
 
 **Step 1 (on device):** `parse_at.sh` diff empty and `parity.sh` 216 fixtures PASS; `status_parity.sh all|live` 200/200 with new keys; `sidecar_parity.sh` qmi.env accept/reject + no fork; `measure.sh` gates. Live: deep tier flips `lte.source=qmi` on non-AT cycles with `mono - device.qmi_read_mono` ≤ 3; `lte.source=at` + frozen during a scan; no merge with broker stopped / `qmi_state=down` / unregistered / PCI-EARFCN mismatch; no spurious `events.sh` band/PCI/`ca_change` over 30 min; forced jq composer emits the same keys; `qmanager_tower_failover` reads fresh `.lte.rsrp` in deep.
