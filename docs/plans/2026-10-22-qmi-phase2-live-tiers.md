@@ -1,6 +1,6 @@
 # QMI Phase 2: live tiers (consumers of the Phase 1 lane)
 
-Status: **DRAFT, awaiting approval.** Branch `claude/qmi-phase2` (development-home tip with Phase 1 merged). Inputs: [Phase 1 plan](2026-10-22-qmi-phase1-broker-architecture.md) §2 / §2b (§2b rules already decided, carried into step 1), [`qmi-lane.md`](../features/qmi-lane.md), [`adaptive-polling.md`](../features/adaptive-polling.md), [`antenna-alignment.md`](../features/antenna-alignment.md), [`safe-tmp.md`](../reference/safe-tmp.md).
+Status: **APPROVED 2026-10-22** with the recommended D1–D5 (skip CA gap-fill, no live cell during scans, defer step 6, dashboard 1 Hz, step 7 optional); test-modem deploys incl. the broker binary swap approved, never reboot. Branch `claude/qmi-phase2` (development-home tip with Phase 1 merged). Inputs: [Phase 1 plan](2026-10-22-qmi-phase1-broker-architecture.md) §2 / §2b (§2b rules already decided, carried into step 1), [`qmi-lane.md`](../features/qmi-lane.md), [`adaptive-polling.md`](../features/adaptive-polling.md), [`antenna-alignment.md`](../features/antenna-alignment.md), [`safe-tmp.md`](../reference/safe-tmp.md).
 
 ## 0. Goal and the three tiers
 
