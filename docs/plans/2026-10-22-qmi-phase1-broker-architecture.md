@@ -70,6 +70,27 @@ The broker is also a monolith in one module namespace:
 - **No modem lock and no long-flag gate:** QMI never touches smd11. Reads keep working during scans, SIM-switch suppression and a held lock. This is the reason for the whole design.
 - **Concurrency:** a reader thread handles a QMI request directly through the shared registry. The registry uses a mutex per service socket, which is enough for reads under 1 ms. No async runtime and no new crates: still `libc` only.
 
+### QMI snapshot engine (the poller's and the live UI's source)
+- **Sampler thread** in the QMI lane. Every 2 s by default it reads the bundle (serving + cell + CA + RF: 4 requests, about 1.5 ms) and publishes two files atomically (O_NOFOLLOW temp file + rename, like the `.proto` file):
+  - **`/tmp/qmanager_qmi.env`**, for the poller. It follows the sidecar contract of `ping.env`/`dns.env`:
+    - every name comes from a compiled allow-list and every value is single-quoted;
+    - values are integer or empty, never a float or `N/A`, so the poller's `jq --argjson` fallback composer can't break;
+    - globals use the `qmi_*` prefix, never the poller's own `lte_*`/`t2_*`;
+    - the file ends with `qm_sidecar_end`.
+  - **`/tmp/qmanager_qmi.json`**, the same data for CGIs.
+  - Both carry:
+    - `qmi_mono`: monotonic seconds of the read;
+    - `qmi_state`: `up`, `down` or `unavailable`;
+    - `qmi_ssr_count`;
+    - registration;
+    - signal, which stays empty unless registered.
+- **Live lease.** A CGI touches `/tmp/qmanager_qmi_live` to raise the rate to 1–5 Hz for at most 10 s past its last renewal. This is the realtime path for the dashboard and antenna aiming; it costs ≤0.5 % CPU at 10 Hz, as measured in Phase 0.
+- **Why a sidecar and not `qmi bundle` from the poller:**
+  - Sourcing the sidecar adds **zero forks** to the poller: builtin `read`, gated by `-nt` like the other sidecars. A per-cycle `qmi` call would cost about 5 ms and one fork, against the 11.5 forks/s active budget in `tools/poller-parity/measure.sh`.
+  - The sampler's cadence is independent of the poller's tiers, so deep tier and AT suppression still get fresh LTE data.
+  - It is the place where indications plug in later, without consumer changes.
+- **During an SSR** the files keep their last values with `qmi_state=down` and an incremented `qmi_ssr_count`. They are never deleted, so readers never see a missing file.
+
 ### Client `qmi` (new argv0, `/usr/bin/qmi` → `qmanager_atd`)
 - **Commands:** `qmi <read> [<read>…]` where read ∈ `serving signal cell ca rf ids rev opmode time card slots profiles dsd`, plus `qmi bundle`. `bundle` is the poller-shaped read: serving + cell + CA + RF in one round trip, about 3 ms. Output is one JSON line on stdout; rc 0 ok, 1 failure.
 - **Envelope:** `{"v":1,"ok":true,"mono_ms":N,"ssr_count":N,"data":{"serving":{...},...}}`. On failure: `{"v":1,"ok":false,"error":"qmi_unavailable|modem_not_ready|not_supported|bad_args|command_failed"}`.
@@ -97,6 +118,59 @@ src/client/   transport.rs (try_broker_raw, await_reply, frozen restart) qcmd.rs
 
 `Logger` becomes thread-safe: one `Mutex` around write and rotate. Today it is only ever called from one thread.
 
+## 2b. How the poller integrates
+
+This is designed now so that the broker's outputs fit the poller. It is built in Phase 2. The source is a full map of `qmanager_poller` and `parse_at.sh`, plus the parked `docs/architecture/poller-on-broker.md`.
+
+**What the poller is today.**
+- A 2 s cycle. Adaptive tiers decide when AT is due:
+  - active: every cycle;
+  - idle: every 7th cycle, about 14 s;
+  - deep: every 30th, 60 s.
+- An AT-due cycle runs, in order:
+  - `QENG servingcell`;
+  - `QCAINFO` (not in deep);
+  - `CFUN?`;
+  - per-antenna `QRSRP;QRSRQ;QSINR` (not in deep);
+  - the active-only Tier 2 reads.
+- After that it runs `determine_service_status` and `events.sh`. `write_cache` composes `status.json`, by printf with a jq fallback.
+- While a scan or SIM switch runs, the poller returns early with **every radio field frozen**.
+
+**What QMI can and can't take over.**
+- `parse_serving_cell` owns every `lte_*`/`nr_*` field and the mode. In NSA it is still the only source of NR PCI/band/RSRP/RSRQ/SINR/SCS, of `lte_sinr`, and of the NSA/SA/LTE discrimination.
+- `QCAINFO` is the only source of per-carrier SINR and the NR SCC.
+
+So on this firmware **QMI cannot remove QENG or QCAINFO from AT-due cycles**. Its value to the poller is filling the gaps where AT is absent, which is where the user-visible staleness is:
+
+| Gap today | With QMI |
+|---|---|
+| Idle and deep tiers: radio fields up to 14 s or 60 s old; CA frozen in deep; tower failover reads 60 s-old RSRP | LTE identity, signal and CA are at most 2 s old in every tier |
+| Scan or SIM-switch suppression: all radio fields frozen | LTE stays live through the scan |
+| `QENG` busy streak (rc 3) | LTE stays live |
+| Browser open, active tier | AT stays authoritative, so status.json is unchanged |
+
+**Integration rules, fixed now:**
+1. **`parse_at.sh` stays byte-for-byte untouched**, which keeps it under the 216-fixture parity gate. A new `scripts/usr/lib/qmanager/qmi_merge.sh` (guarded `[ -f ] && .`) provides two functions:
+   - `qmi_load`: validate, then source the sidecar into `qmi_*` globals, gated by `-nt`;
+   - `qmi_merge`.
+2. **Precedence:** an AT reply from *this* cycle always wins for every field it owns. `qmi_merge` fills LTE fields only on cycles where `QENG` didn't run or answered rc 3, and fills CA only when `QCAINFO` didn't run. It runs only after the AT parse and the CA reconciliation, so it never fights `parse_serving_cell`'s reset. On those cycles the poller keeps today's last-known NR values and `lte_sinr`.
+3. **Fill conditions:** QMI fills only when `qmi_state=up`, its mono is under 5 s old, its registration says registered, **and** its LTE PCI and EARFCN match the last AT-known serving cell, or AT has no serving cell. A cell change between AT reads is not merged in; it waits for the next AT read. This avoids a mixed LTE/NR state across a handover.
+4. **Semantics stay AT's:**
+   - `modem_reachable` and `errors` still mean AT reachability;
+   - `serving_read_mono` and `ca_read_mono` still mean the last AT read;
+   - **`events.sh` is still fed only from AT samples.** Its settle and churn counters count samples, so a faster QMI cadence would silently retune `ca_change`.
+5. **New status.json keys,** added to both composers and covered by `status_parity.sh`:
+   - `lte.source` and `network.ca_source` (`"at"` or `"qmi"`);
+   - `device.qmi_read_mono`, `device.qmi_state`, `device.qmi_ssr_count`.
+6. **Parity tooling:** `dump_globals.sh` learns the `qmi_` prefix, `sidecar_parity.sh` covers `qmi.env` (asserting no fork), and `measure.sh` gates stay as they are: active ≤10 % CPU, period 2.0 ± 0.2 s.
+7. **The parked POLL design stays parked.** The QMI lane makes it even less worth building, because QMI already gives the cheap freshness POLL was chasing. Its Rust parsers move behind the off-by-default `poll` feature (§2).
+
+**Who gains:**
+- **Tower failover:** fresh `lte.rsrp` in deep, with no format change.
+- **The dashboard after a closed tab:** it reopens on fresh LTE values.
+- **The cell-scanner page:** the serving cell stays live during a scan.
+- **Prometheus:** gets ages per source.
+
 ## 3. Build order (each step is its own commit)
 
 1. **Pure module move.** No logic change. `cargo test` stays green with the same test count. Model: Opus.
@@ -117,6 +191,12 @@ src/client/   transport.rs (try_broker_raw, await_reply, frozen restart) qcmd.rs
    Model: Opus.
 4. **Codecs and model,** ported from `qmi_probe` with Phase 0 fixtures (pull a few raw TLV dumps per message, in both LTE-only and NSA CA layouts). Model: Sonnet High.
 5. **`qmi` client and the `QMI` verb,** proto 3, capability file, in-process fallback. Model: Sonnet High.
+5b. **Snapshot sampler.**
+   - `qmanager_qmi.env` and `.json` writers, following the sidecar contract in §2b and the env allow-list.
+   - The live lease.
+   - Fixture tests prove the env file passes the poller's validate-then-source rule.
+
+   Model: Sonnet High; Opus reviews.
 6. **Lifecycle in lockstep.** Model: Sonnet; validator audit by Haiku.
    - `at_engine.sh at_qmi_link`;
    - `init.d` re-asserts it;
@@ -129,7 +209,15 @@ src/client/   transport.rs (try_broker_raw, await_reply, frozen restart) qcmd.rs
    - New `docs/features/qmi-lane.md`: allow-list, field coverage table, freshness rules, SSR semantics.
    - Feature routing in CLAUDE.md and the features README.
 
-**No consumer changes in Phase 1.** The poller, CGIs and UI stay on AT. Phase 2 moves them one at a time behind `[ -x /usr/bin/qmi ]`.
+**No consumer changes in Phase 1.** The poller, CGIs and UI stay on AT; the sidecars exist, but nothing reads them yet.
+
+Phase 2 adopts them in order, each step behind a sidecar or capability check:
+1. `qmi_merge.sh` gap-fill in the poller (§2b), plus the new status keys.
+2. The live-lease CGI and the dashboard/antenna realtime view.
+3. `radio_details.sh` reads its network-type check from the sidecar instead of `QENG`.
+4. The cell-scanner live serving cell.
+
+**Lifecycle for the sidecars.** Uninstall and the stop path remove `/tmp/qmanager_qmi.env`, `/tmp/qmanager_qmi.json` and `/tmp/qmanager_qmi_live`.
 
 ## 4. Risks and mitigations
 
