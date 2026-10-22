@@ -176,6 +176,19 @@ Every functional check passed; three thresholds failed and one is ambiguous (res
 | 1 h soak, no SSR | 2 SSRs (`nr_rx_ctl_agc.c` RFG fault) | Same signature as 4 SSRs earlier this boot with no lease (gaps 1368–11991 s); 1 h can't tell. Broker rode through both, resources flat | **R3.** Not a blocker for building the UI; run a longer A/B soak (3 h lease vs 3 h no lease) before merge. If SSR rate rises with the lease, fall back to `aim` at 2–2.5 Hz (one constant). |
 | System Δ ≤ 3 % | +1.25 pp of 4 cores (+5.0 % of one core) | Lease renewals cost ~55 ms CPU each (≈ 1.1 % per tab at `renew_s` 5) | **R4.** Read the gate as the sum of components (uhttpd + CGI + broker) ≤ 3 % of one core after R1; if still over, renew every 7 s with TTL 15 s. |
 
+**R1/R2 re-measure (2026-10-22, RM551E, broker 0.4.0 `96cb55db…` from 92b2d457 + 9396e347; previous build backed up on the device as `/tmp/qmanager_atd.040a`).** Changes: `qmi.env` + `/tmp/qmanager_qmi.json` written at most every 2 s under a lease (at once on a `qmi_state` / SSR-count change and on the first sample; every sample without a lease, as before); samples on a fixed deadline grid (resync when more than a period late); one stamp read per sample instead of two; no per-sample chmod (`ensure_own_dir` skips it when the mode is right), cached public-file and index paths, no ring copy when rendering; ring 16 → 32. Same method as step 2d: one PC client at 5 Hz over HTTP keepalive renewing through the real lease CGI every 5 s, plus the 2 s authenticated `fetch_data.sh` probe; on device, 100 s `/proc` windows (6 windows aim, 3 windows baseline, same build).
+
+| Scenario | broker (sampler thread) | uhttpd self / CGI children | system (4 cores) | delivered (lost) | `fetch_data.sh` p50 / p95 | Pass? |
+|---|---|---|---|---|---|---|
+| Baseline, no lease, 5 min | 0.73 (0.19) | 0.11 / 3.27 | 4.04 % | — | 73.5 / 127.6 ms, 0 errors | — |
+| Aim 5 Hz, 1 client, 10 min | 1.53 (0.87): **Δ +0.80** | 0.65 / 4.48: Δ +0.54 / +1.21 | 5.09 % (+1.05 pp) | **5.00 Hz (0 lost)**, 3024 unique samples, 0 errors, 1 cold-lease 404 | 73.4 / 127.8 ms, 0 errors / 302 | **pass** |
+
+- Broker ≤ 1.0 %: **pass**, Δ +0.80 % (was +1.17); the sampler thread went 1.37 → 0.87 % (≈ 1.7 ms CPU per sample, was 2.9).
+- R4 gate (uhttpd self + CGI children + broker Δ ≤ 3 % of one core): **pass**, 0.54 + 1.21 + 0.80 = **2.55 %**. `renew_s` unchanged.
+- Delivered rate: 5.00 Hz (was 4.76); zero lost samples, static GET p50 6.9 / p95 8.5 ms (max 78.9).
+- Other CGIs: 0 errors / timeouts, `fetch_data.sh` p95 Δ +0.2 ms vs the same-session baseline.
+- **Not measured** (the session ended when the modem was disconnected): the `qmi.env` rewrite cadence while `aim` is leased (expected 2 s; covered by the unit and thread tests only) and the poller's `lte.source=qmi` flip with `mono - device.qmi_read_mono ≤ 3` under a lease. One idle read after the run showed `lte.source` `at` with no lease, which says nothing either way. Both need a short on-device check before the UI steps rely on them. The 3-client run and the soak were not repeated.
+
 ## 5. Validation per step
 
 **Step 1 (on device):** `parse_at.sh` diff empty and `parity.sh` 216 fixtures PASS; `status_parity.sh all|live` 200/200 with new keys; `sidecar_parity.sh` qmi.env accept/reject + no fork; `measure.sh` gates. Live: deep tier flips `lte.source=qmi` on non-AT cycles with `mono - device.qmi_read_mono` ≤ 3; `lte.source=at` + frozen during a scan; no merge with broker stopped / `qmi_state=down` / unregistered / PCI-EARFCN mismatch; no spurious `events.sh` band/PCI/`ca_change` over 30 min; forced jq composer emits the same keys; `qmanager_tower_failover` reads fresh `.lte.rsrp` in deep.
