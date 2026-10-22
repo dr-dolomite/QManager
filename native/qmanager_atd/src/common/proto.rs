@@ -41,6 +41,7 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// 2: `qcmd -t <ms>` / `QCMD_WAIT_MS` client wait cap, `--version`.
 /// 3: the `QMI` verb (answered by the QMI lane on the reader thread) and the
 ///    `qmi=1` capability line. (`POLL` was parked; it would be 4.)
+/// 0.4.0 adds `live=1` (the live signal file; no wire change, still 3).
 pub const PROTO_VERSION: u32 = 3;
 
 pub fn version_line() -> String {
@@ -50,7 +51,7 @@ pub fn version_line() -> String {
 /// The capability file's contents. `proto` and `version` stay the first two
 /// lines (the order every earlier reader saw); new capabilities follow.
 pub fn capability_body() -> String {
-    format!("proto={}\nversion={}\nqmi=1\n", PROTO_VERSION, env!("CARGO_PKG_VERSION"))
+    format!("proto={}\nversion={}\nqmi=1\nlive=1\n", PROTO_VERSION, env!("CARGO_PKG_VERSION"))
 }
 
 /// Writes the capability file as `<path>.new` (O_EXCL + O_NOFOLLOW, so a
@@ -64,16 +65,19 @@ pub fn write_proto_file(path: &str) -> std::io::Result<()> {
 pub struct Caps {
     pub proto: u32,
     pub qmi: bool,
+    /// The broker publishes the live signal file (0.4.0).
+    pub live: bool,
 }
 
 /// Parses a capability file: `key=value` lines, unknown keys ignored, an
 /// unparsable or missing `proto` reads as 0 (nothing is assumed).
 pub fn parse_capability(text: &str) -> Caps {
-    let mut caps = Caps { proto: 0, qmi: false };
+    let mut caps = Caps { proto: 0, qmi: false, live: false };
     for line in text.lines() {
         match line.split_once('=') {
             Some(("proto", v)) => caps.proto = v.parse().unwrap_or(0),
             Some(("qmi", v)) => caps.qmi = v == "1",
+            Some(("live", v)) => caps.live = v == "1",
             _ => {}
         }
     }
@@ -345,10 +349,12 @@ mod tests {
     }
 
     #[test]
-    fn capability_file_is_proto_version_then_qmi() {
-        assert_eq!(PROTO_VERSION, 3);
-        assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\n", env!("CARGO_PKG_VERSION")));
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.3.0");
+    fn capability_file_is_proto_version_then_qmi_and_live() {
+        assert_eq!(PROTO_VERSION, 3, "live=1 is no wire change");
+        assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\nlive=1\n", env!("CARGO_PKG_VERSION")));
+        assert_eq!(env!("CARGO_PKG_VERSION"), "0.4.0");
+        assert_eq!(parse_capability(&capability_body()), Caps { proto: 3, qmi: true, live: true });
+        assert!(!parse_capability("proto=3\nversion=0.3.0\nqmi=1\n").live, "0.3.0 has no live channel");
         // The shape every earlier reader saw is still the first two lines.
         let body = capability_body();
         let keys: Vec<&str> = body.lines().take(2).filter_map(|l| l.split('=').next()).collect();
