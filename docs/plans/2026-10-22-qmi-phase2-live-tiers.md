@@ -165,7 +165,7 @@ Full gate measurements below are taken in step 2d.
 - Poller `measure.sh` active ≤ 10 % and within +0.5 pp of the 4.9 % baseline; period 2.0 ± 0.2 s.
 - 1 h soak at 5 Hz: no `remoteproc-mss` SSR in `dmesg`, `qmi_ssr_count` unchanged, broker fd/RSS/threads flat.
 
-### 4b. Gate outcome and re-plan (PROPOSED, awaiting OK)
+### 4b. Gate outcome and re-plan (APPROVED 2026-10-22: R1–R4)
 
 Every functional check passed; three thresholds failed and one is ambiguous (results above). Proposed response:
 
