@@ -227,14 +227,14 @@ stop_services() {
         info "Stopped all init.d services"
     fi
 
-    # Kill every qmanager_* daemon present in /usr/bin
-    if [ -d "$BIN_DIR" ]; then
-        # Live-signal channel: the /www/qmlive symlink (a real directory there is not
+    # Live-signal channel: the /www/qmlive symlink (a real directory there is not
     # ours, leave it) and its public dir.
     [ -L "$WWW_ROOT/qmlive" ] && rm -f "$WWW_ROOT/qmlive"
     rm -rf /var/run/qmanager/live /tmp/qmanager_live
 
-    for f in "$BIN_DIR"/qmanager_*; do
+    # Kill every qmanager_* daemon present in /usr/bin
+    if [ -d "$BIN_DIR" ]; then
+        for f in "$BIN_DIR"/qmanager_*; do
             [ -f "$f" ] || continue
             killall "$(basename "$f")" 2>/dev/null || true
         done
