@@ -2070,6 +2070,7 @@ _wc_compose_pf() {
     _kN sinr "$lte_sinr" null
     _kN rssi "$lte_rssi" null
     _kN ta "$lte_ta" null
+    _kS source "${lte_source:-at}"
     _kE
     _kO nr
     _kS state "$nr_state"
@@ -2127,6 +2128,9 @@ _wc_compose_pf() {
     _kN serving_read_mono "$_SERVING_READ_MONO" 0
     _kN ca_read_mono "$_CA_READ_MONO" 0
     _kS poller_tier "${ap_tier:-active}"
+    _kN qmi_read_mono "$_QMI_READ_MONO" 0
+    _kS qmi_state "$_QMI_STATE"
+    _kN qmi_ssr_count "$_QMI_SSR" 0
     _kE
     _kO connectivity
     _kB internet_available "$conn_internet_available" null
@@ -2289,7 +2293,7 @@ write_cache_jq() {
         --arg ippt_dns  "$boot_ippt_dhcpv4dns" \
         --argjson sc_read_mono "${_SERVING_READ_MONO:-0}" \
         --argjson ca_read_mono "${_CA_READ_MONO:-0}" \
-        --arg ap_tier "${ap_tier:-active}" \
+        --arg ap_tier "${ap_tier:-active}"         --arg lte_src "${lte_source:-at}"         --argjson qmi_rmono "${_QMI_READ_MONO:-0}"         --arg qmi_st "$_QMI_STATE"         --argjson qmi_ssr "${_QMI_SSR:-0}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
         --argjson lat "${conn_latency:-null}" \
@@ -2367,7 +2371,8 @@ write_cache_jq() {
                 pci: $lte_pci, cell_id: $lte_cid,
                 enodeb_id: $lte_enb, sector_id: $lte_sec, tac: $lte_tac,
                 rsrp: $lte_rsrp, rsrq: $lte_rsrq,
-                sinr: $lte_sinr, rssi: $lte_rssi, ta: $lte_ta
+                sinr: $lte_sinr, rssi: $lte_rssi, ta: $lte_ta,
+                source: $lte_src
             },
             nr: {
                 state: $nr_st, band: $nr_b,
@@ -2405,7 +2410,10 @@ write_cache_jq() {
                 ippt_dhcpv4dns: $ippt_dns,
                 serving_read_mono: $sc_read_mono,
                 ca_read_mono: $ca_read_mono,
-                poller_tier: $ap_tier
+                poller_tier: $ap_tier,
+                qmi_read_mono: $qmi_rmono,
+                qmi_state: $qmi_st,
+                qmi_ssr_count: $qmi_ssr
             },
             connectivity: {
                 internet_available: $inet, status: $conn_st,
