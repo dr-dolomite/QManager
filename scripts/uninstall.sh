@@ -13,7 +13,7 @@
 # What it removes:
 #   - All init.d qmanager* services (stops, disables, deletes)
 #   - All qmanager_* daemons (incl. the qmanager_atd AT broker) + the qcmd
-#     and qsms symlinks to it + sms_tool + nfqws
+#     qsms and qmi symlinks to it + sms_tool + nfqws
 #     + legacy cleanup of the retired shell AT engine (qcmd.sh, atcli_smd11)
 #       and of the retired WebSocket bandwidth monitor
 #       (bridge_traffic_monitor_rm551 binary, websocat process) on older devices
@@ -193,7 +193,7 @@ confirm_uninstall() {
     printf "    ${DIM}${ICO_STEP}${NC}  Frontend files in %s\n" "$WWW_ROOT"
     printf "    ${DIM}${ICO_STEP}${NC}  CGI endpoints in %s\n" "$CGI_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Libraries in %s\n" "$LIB_DIR"
-    printf "    ${DIM}${ICO_STEP}${NC}  Daemons: %s/qmanager_*, qcmd, qsms, sms_tool\n" "$BIN_DIR"
+    printf "    ${DIM}${ICO_STEP}${NC}  Daemons: %s/qmanager_*, qcmd, qsms, qmi, sms_tool\n" "$BIN_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Init.d services: %s/qmanager*\n" "$INITD_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Runtime state in /tmp\n"
     printf "    ${DIM}${ICO_STEP}${NC}  UCI config (quecmanager.*)\n"
@@ -717,7 +717,7 @@ What is removed:
   /www/              Frontend files (original index.html restored if backed up)
   /www/cgi-bin/      QManager CGI endpoints
   /usr/lib/qmanager/ Shared libraries
-  /usr/bin/          qcmd, qsms, sms_tool, qmanager_* daemons
+  /usr/bin/          qcmd, qsms, qmi, sms_tool, qmanager_* daemons
   /etc/init.d/       qmanager* service scripts (stopped + disabled)
   /tmp/              Runtime JSON, logs, sessions, lock/PID files
   UCI                quecmanager.* config namespace
