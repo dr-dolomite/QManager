@@ -738,12 +738,14 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
             rev_json(m.as_deref(), r.as_deref())
         }
         Read::Signal => {
-            let serving = q(0).ok();
-            let cell = q(1).ok();
-            let info = q(2).ok();
-            if serving.is_none() && cell.is_none() && info.is_none() {
-                return Err(q(0).unwrap_err());
+            // Fetched exactly once each: re-fetching to recover the error
+            // could succeed the second time (NAS recovering) and must never
+            // be unwrapped.
+            let (serving, cell, info) = (q(0), q(1), q(2));
+            if let (Err(e), Err(_), Err(_)) = (&serving, &cell, &info) {
+                return Err(e.clone());
             }
+            let (serving, cell, info) = (serving.ok(), cell.ok(), info.ok());
             Bundle::build(&Inputs { serving: serving.as_ref(), cell: cell.as_ref(), sig_info: info.as_ref(), ..Inputs::default() })
                 .signal
                 .json()
@@ -757,11 +759,23 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
 /// one's error; a failed part is `None` / null.
 pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
     let r: Vec<Result<Msg, QmiError>> = Read::Bundle.requests().iter().map(|&(svc, id)| fetch(svc, id)).collect();
-    if r.iter().all(|x| x.is_err()) {
-        return Err(r.into_iter().next().unwrap().unwrap_err());
+    let mut first_err = None;
+    for x in &r {
+        match x {
+            Ok(_) => {
+                first_err = None;
+                break;
+            }
+            Err(e) if first_err.is_none() => first_err = Some(e.clone()),
+            Err(_) => {}
+        }
+    }
+    if let Some(e) = first_err {
+        return Err(e);
     }
     let m: Vec<Option<Msg>> = r.into_iter().map(|x| x.ok()).collect();
-    Ok(Bundle::build(&Inputs { serving: m[0].as_ref(), cell: m[1].as_ref(), ca: m[2].as_ref(), rf: m[3].as_ref(), sig_info: None }))
+    let part = |i: usize| m.get(i).and_then(|x| x.as_ref());
+    Ok(Bundle::build(&Inputs { serving: part(0), cell: part(1), ca: part(2), rf: part(3), sig_info: None }))
 }
 
 #[cfg(test)]
@@ -944,9 +958,9 @@ mod tests {
         assert_eq!(b.lte_band(), (None, None));
     }
 
-    /// Runs `read` against the r1 fixtures.
-    fn run_r1(read: Read) -> Result<String, QmiError> {
-        let f = |svc: u32, id: u16| -> Result<Msg, QmiError> {
+    /// One request answered from the r1 fixtures.
+    fn r1(svc: u32, id: u16) -> Result<Msg, QmiError> {
+        {
             let m = match (svc, id) {
                 (3, 0x0020) => fx!("r1_3_0x0020"),
                 (3, 0x0024) => fx!("r1_3_0x0024"),
@@ -966,8 +980,12 @@ mod tests {
                 _ => return Err(QmiError::NotSupported(None)),
             };
             m.into_result()
-        };
-        run(&f, read)
+        }
+    }
+
+    /// Runs `read` against the r1 fixtures.
+    fn run_r1(read: Read) -> Result<String, QmiError> {
+        run(&r1, read)
     }
 
     #[test]
@@ -1076,6 +1094,35 @@ mod tests {
             m.into_result()
         };
         assert_eq!(run(&g, Read::Serving).unwrap_err(), QmiError::NotSupported(Some(0x005E)));
+    }
+
+    #[test]
+    fn a_read_whose_fetch_recovers_after_failing_never_panics() {
+        // NAS recovering after an SSR: the first N fetches fail, the rest
+        // succeed. A read must fail with the first error, never re-fetch
+        // and unwrap a success as an error.
+        use std::cell::Cell as Count;
+        for fails in 1..=4 {
+            let n = Count::new(0u32);
+            let f = |svc: u32, id: u16| {
+                n.set(n.get() + 1);
+                if n.get() <= fails {
+                    return Err(if n.get() == 1 { QmiError::Timeout } else { QmiError::Unavailable });
+                }
+                r1(svc, id)
+            };
+            let reqs = |r: Read| r.requests().len() as u32;
+            for read in [Read::Signal, Read::Bundle, Read::Rev] {
+                n.set(0);
+                let got = run(&f, read);
+                if fails >= reqs(read) {
+                    assert_eq!(got.unwrap_err(), QmiError::Timeout, "{read:?} fails={fails}");
+                } else {
+                    assert!(got.is_ok(), "{read:?} fails={fails}");
+                }
+                assert_eq!(n.get(), reqs(read), "{read:?} fetches each request exactly once");
+            }
+        }
     }
 
     #[test]
