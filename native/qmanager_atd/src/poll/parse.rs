@@ -27,7 +27,7 @@
 
 pub mod ca;
 
-use crate::envout::PollMeta;
+use crate::poll::envout::PollMeta;
 
 /// The closed step table (design 5.1). Read-only queries only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1107,7 +1107,7 @@ pub fn parse_only_with(
     let mut state = State::new(prior);
     let src = run_step(&mut state, st, rc, &shell_capture(raw));
     let meta = PollMeta { rc: "ok", ms: 0 };
-    match crate::envout::write_env(&meta, &[(st, status, src)], &state, out) {
+    match crate::poll::envout::write_env(&meta, &[(st, status, src)], &state, out) {
         Ok(()) => 0,
         Err(_) => 1,
     }

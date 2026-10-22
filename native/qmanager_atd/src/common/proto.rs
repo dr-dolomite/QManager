@@ -20,7 +20,7 @@
 //! refusal rules as REQ. Reply: `RES <0|1> <nbytes>\n<json>`, the finished
 //! JSON envelope and whether it is a success; or `ERR <code>\n` as above.
 
-use crate::output::Code;
+use crate::at::output::Code;
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 
@@ -54,7 +54,7 @@ pub fn write_proto_file(path: &str) -> std::io::Result<()> {
         .write(true)
         .create_new(true)
         .mode(0o644)
-        .custom_flags(crate::safefs::NOFOLLOW)
+        .custom_flags(crate::common::safefs::NOFOLLOW)
         .open(&tmp)
         .and_then(|mut f| f.write_all(body.as_bytes()));
     if let Err(e) = written {

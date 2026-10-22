@@ -2,12 +2,12 @@
 //! Mirrors legacy qcmd: long-flag gate, warm-up for long commands, lock budgets,
 //! error-code mapping. Output framing is produced by the caller from `Outcome`.
 
-use crate::channel::{AtError, Channel, Device};
-use crate::classify;
-use crate::lock::LockFile;
-use crate::log::Logger;
-use crate::output::Code;
-use crate::safefs::{one_line, write_nofollow};
+use crate::at::channel::{AtError, Channel, Device};
+use crate::at::classify;
+use crate::common::lock::LockFile;
+use crate::common::log::Logger;
+use crate::at::output::Code;
+use crate::common::safefs::{one_line, write_nofollow};
 use std::time::{Duration, Instant};
 
 pub const LONG_FLAG: &str = "/tmp/qmanager_long_running";
@@ -94,7 +94,7 @@ fn map_error(log: &Logger, cmd: &str, e: AtError) -> Code {
             log.error(&format!("Channel lost during: {cmd} ({e:?})"));
             Code::ModemNotReady
         }
-        AtError::Io(e) if crate::channel::is_reset(&e) => {
+        AtError::Io(e) if crate::at::channel::is_reset(&e) => {
             log.error(&format!("Channel reset during: {cmd} ({e:?})"));
             Code::ModemNotReady
         }
@@ -159,7 +159,7 @@ impl<D: Device> Executor<'_, D> {
         f: impl FnOnce(&mut Session<'_, D>) -> T,
     ) -> Result<T, Code> {
         if long_running() {
-            self.log.log(crate::log::Level::Debug, "LOCK: Blocked by long command");
+            self.log.log(crate::common::log::Level::Debug, "LOCK: Blocked by long command");
             return Err(Code::ScanInProgress);
         }
         if waited > LOCK_WAIT_SHORT {
@@ -199,7 +199,7 @@ impl<D: Device> Executor<'_, D> {
         // A long command is in progress: short commands fast-reject, exactly
         // like legacy qcmd's LONG_FLAG branch.
         if !long && long_running() {
-            self.log.log(crate::log::Level::Debug, &format!("LOCK: Blocked by long command"));
+            self.log.log(crate::common::log::Level::Debug, &format!("LOCK: Blocked by long command"));
             return Outcome::Err(Code::ScanInProgress);
         }
 

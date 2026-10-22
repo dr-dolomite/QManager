@@ -14,10 +14,12 @@
 //!
 //! Message bodies and numbers never reach the log: inboxes hold one-time codes.
 
-use crate::channel::Device;
-use crate::exec::{Executor, Session};
-use crate::output::{json_escape, Code};
-use crate::pdu;
+mod pdu;
+
+use crate::at::channel::Device;
+use crate::at::exec::{Executor, Session};
+use crate::at::output::Code;
+use crate::common::json::json_escape;
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
@@ -497,7 +499,7 @@ fn fail_json(f: Fail, at_code: &str) -> String {
 
 /// An 8-bit concatenation reference that differs between sends.
 fn concat_ref() -> u8 {
-    (crate::proto::mono_ms() as u32 ^ std::process::id()) as u8
+    (crate::common::proto::mono_ms() as u32 ^ std::process::id()) as u8
 }
 
 /// Runs `op`. Returns (success, JSON envelope ending in a newline).
@@ -533,9 +535,9 @@ pub fn run<D: Device>(ex: &mut Executor<'_, D>, op: &Op, waited: Duration) -> (b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::channel::Channel;
-    use crate::lock::LockFile;
-    use crate::log::Logger;
+    use crate::at::channel::Channel;
+    use crate::common::lock::LockFile;
+    use crate::common::log::Logger;
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
     use std::sync::{Arc, Mutex};

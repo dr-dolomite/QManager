@@ -109,7 +109,7 @@ impl Logger {
             .create(true)
             .append(true)
             .mode(0o644)
-            .custom_flags(crate::safefs::NOFOLLOW)
+            .custom_flags(crate::common::safefs::NOFOLLOW)
             .open(&self.path)
         {
             let _ = f.write_all(line.as_bytes());

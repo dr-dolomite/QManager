@@ -32,7 +32,7 @@ impl LockFile {
             .truncate(false)
             .mode(0o644)
             // /var/lock is 1777 on the device: never follow a planted symlink.
-            .custom_flags(crate::safefs::NOFOLLOW)
+            .custom_flags(crate::common::safefs::NOFOLLOW)
             .open(path)?;
         Ok(LockFile { file })
     }

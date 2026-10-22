@@ -2,10 +2,10 @@
 //! robustness tests for the poll parsers and the env writer.
 
 use super::*;
-use crate::envout::{allowlist, is_allowed, render_failure, render_steps, sh_assign, write_env};
+use crate::poll::envout::{allowlist, is_allowed, render_failure, render_steps, sh_assign, write_env};
 use std::collections::BTreeMap;
 
-const EXPECTED: &str = include_str!("../../tests/parity/expected.txt");
+const EXPECTED: &str = include_str!("../../../tests/parity/expected.txt");
 
 /// Every global rx_expect.sh dumps (its RX_NAMES), all set to a sentinel.
 const DUMP_NAMES: &str = "lte_state lte_band lte_earfcn lte_bandwidth lte_pci lte_rsrp lte_rsrq lte_sinr lte_rssi lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_ta nr_state nr_band nr_arfcn nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_pci nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature t1_cfun t2_carrier t2_sim_status t2_sim_slot t2_ca_active t2_ca_count t2_nr_ca_active t2_nr_ca_count t2_total_bandwidth_mhz t2_bandwidth_details t2_carrier_components sig_lte_rsrp sig_lte_rsrq sig_lte_sinr sig_nr_rsrp sig_nr_rsrq sig_nr_sinr network_type service_status boot_phone_number boot_imsi boot_iccid errors";
