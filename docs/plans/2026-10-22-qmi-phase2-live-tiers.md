@@ -117,7 +117,20 @@ New `docs/features/live-signal.md` (L1–L7, format, states, invariants); update
 
 ## 4. Benchmark results (static file vs CGI polling)
 
-_Quick benchmark results: see below once filled. Full gate measurements are taken in step 2d._
+**Quick benchmark (2026-10-22, RM551E, ~870 B JSON rewritten every 200 ms, 60 s at 5 Hz from the PC over keepalive; test files removed afterwards):**
+
+| Method | p50 / p95 ms | Marginal CPU (uhttpd + CGI children) | Errors |
+|---|---|---|---|
+| Static file | 49.7 / 53.0 | ~0.25 % of one core (uhttpd 0.37 %, no forks) | 0 |
+| Minimal CGI (`cat`) | 49–65 / 66 | ~4–6 % of one core (+5–8 forks/s) | 0 |
+| CGI sourcing `cgi_base.sh` (auth skipped) | 65 / 71 | ~9 % of one core | 0 |
+
+- **Static wins on CPU by ~20×**, which matters more with several tabs; real authenticated CGIs would cost another ~5–10 ms and 3–5 forks per request (estimated).
+- **Contention:** 2 clients at 5 Hz (static or CGI) left an unauthenticated probe CGI unchanged (p50 ~65 ms, no 503s). A 6-client new-connection flood still gave no 503s but a ~1 s p95 tail (accept pressure).
+- **Keepalive latency floor ~40 ms** on reused connections for every request type (on-device curl: static 40.6 ms; fresh connection 1.7 ms). Likely Nagle + delayed ACK with uhttpd writing headers and body separately (unconfirmed). Harmless for a 200 ms cadence, but the "static GET p95 ≤ 30 ms" gate below is replaced by **≤ 80 ms**; investigating the floor is optional (step 2d).
+- **Caching:** uhttpd sends `ETag` (inode-size-mtime) + `Last-Modified`, no `Cache-Control`; ETag changes on every atomic rename. Client must use `cache:"no-store"` (or `?t=`). uhttpd follows a `/www` symlink into `/tmp` (confirmed).
+
+Full gate measurements below are taken in step 2d.
 
 | Scenario | uhttpd CPU | broker CPU | system CPU Δ | other-CGI 503s / timeouts | `fetch_data.sh` p95 Δ | delivered rate | Pass? |
 |---|---|---|---|---|---|---|---|
@@ -130,7 +143,7 @@ _Quick benchmark results: see below once filled. Full gate measurements are take
 **Acceptance thresholds** (all must hold):
 - Static 5 Hz, 1 client: uhttpd ≤ 1.5 %, broker sampler ≤ 1.0 %, system Δ ≤ 3 % (3 clients: ≤ 4 %).
 - Zero 503s/timeouts on other CGIs during 10 min of `aim`; `fetch_data.sh` p95 Δ ≤ +20 ms.
-- Static GET p95 ≤ 30 ms on LAN; delivered rate ≥ 4.5 Hz, zero lost samples after ring merge.
+- Static GET p95 ≤ 80 ms on LAN (keepalive floor ~40 ms, see above); delivered rate ≥ 4.5 Hz, zero lost samples after ring merge.
 - Poller `measure.sh` active ≤ 10 % and within +0.5 pp of the 4.9 % baseline; period 2.0 ± 0.2 s.
 - 1 h soak at 5 Hz: no `remoteproc-mss` SSR in `dmesg`, `qmi_ssr_count` unchanged, broker fd/RSS/threads flat.
 
