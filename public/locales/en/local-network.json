@@ -195,7 +195,7 @@
       "toast_success": "Link speed updated",
       "toast_error": "Failed to set link speed",
       "toast_confirm_error": "Couldn't confirm the new speed. Check the link.",
-      "apply": "Apply speed",
+      "apply": "Apply changes",
       "aspm_label": "PCIe power saving",
       "aspm_hint_aria": "About PCIe power saving",
       "aspm_hint": "Active State Power Management (ASPM) lets the PCIe link to the ethernet controller doze between packets. Performance keeps it awake.",

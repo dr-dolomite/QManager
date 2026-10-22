@@ -194,7 +194,7 @@
       "toast_success": "链路速度已更新",
       "toast_error": "设置链路速度失败",
       "toast_confirm_error": "无法确认新速度。请检查链路。",
-      "apply": "应用速度",
+      "apply": "应用更改",
       "aspm_label": "PCIe 节能",
       "aspm_hint_aria": "关于 PCIe 节能",
       "aspm_hint": "活动状态电源管理（ASPM）允许通往以太网控制器的 PCIe 链路在数据包之间休眠。性能模式让它保持唤醒。",

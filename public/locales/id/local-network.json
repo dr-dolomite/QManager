@@ -194,7 +194,7 @@
       "toast_success": "Kecepatan tautan diperbarui",
       "toast_error": "Gagal mengatur kecepatan tautan",
       "toast_confirm_error": "Tidak dapat mengonfirmasi kecepatan baru. Periksa tautan.",
-      "apply": "Terapkan kecepatan",
+      "apply": "Terapkan perubahan",
       "aspm_label": "Hemat daya PCIe",
       "aspm_hint_aria": "Tentang hemat daya PCIe",
       "aspm_hint": "Active State Power Management (ASPM) membiarkan tautan PCIe ke pengontrol ethernet tertidur di antara paket. Performa membuatnya tetap aktif.",

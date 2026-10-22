@@ -194,7 +194,7 @@
       "toast_success": "鏈路速度已更新",
       "toast_error": "設定鏈路速度失敗",
       "toast_confirm_error": "無法確認新速度。請檢查鏈路。",
-      "apply": "套用速度",
+      "apply": "套用變更",
       "aspm_label": "PCIe 節能",
       "aspm_hint_aria": "關於 PCIe 節能",
       "aspm_hint": "活動狀態電源管理（ASPM）允許通往乙太網路控制器的 PCIe 鏈路在封包之間休眠。效能模式讓它保持喚醒。",
