@@ -104,6 +104,16 @@ either: UBIFS can commit the rename before the temp's data. So:
   predictable temp. Do not copy it into `/tmp`. Readers parse defensively
   (digits only, no leading zero, at most 10 digits, uptime not in the future)
   and the stamp is read on the uptime clock.
+- The live-signal channel is the one place a **web-root symlink points at a
+  broker-written directory**: `/www/qmlive` -> `/var/run/qmanager/live`
+  (root `0755`, inside the `0700` run dir; the broker verifies it with
+  `ensure_own_dir` before every publish). It must never point into `/tmp`: a
+  link into the world-writable dir would let a local user plant the target and
+  have `uhttpd` (root) serve it. The directory always holds an empty
+  `index.html` because `uhttpd` directory listing is on and the capability URL
+  would otherwise be listed. The lease stamps, token and lock sit in the run
+  dir beside it and use the same `$$` temp + `mv -f` shortcut as the scrape
+  files above. See [`../features/live-signal.md`](../features/live-signal.md).
 - Fail closed: when the helper is missing, a feature refuses to download,
   execute, source or kill, rather than falling back to the old fixed path.
 - Not moved: lock files and their FD numbers (a flock target only needs to
