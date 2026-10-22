@@ -205,5 +205,7 @@
   "port_in_use": "Port tersebut sudah dipakai layanan lain.",
   "token_generation_failed": "Tidak dapat membuat token yang aman. Coba lagi.",
   "poller_not_running": "Layanan latar belakang tidak merespons, coba lagi sebentar lagi",
-  "reset_failed": "Tidak dapat mengatur ulang penghitung"
+  "reset_failed": "Tidak dapat mengatur ulang penghitung",
+  "bad_tier": "Kecepatan sinyal langsung tidak didukung.",
+  "lease_failed": "Tidak dapat memulai sinyal langsung. Coba lagi."
 }

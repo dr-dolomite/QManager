@@ -205,5 +205,7 @@
   "port_in_use": "Questa porta è già usata da un altro servizio.",
   "token_generation_failed": "Impossibile creare un token sicuro. Riprova.",
   "poller_not_running": "Il servizio in background non ha risposto, riprova tra poco",
-  "reset_failed": "Impossibile reimpostare il contatore"
+  "reset_failed": "Impossibile reimpostare il contatore",
+  "bad_tier": "Frequenza del segnale in tempo reale non supportata.",
+  "lease_failed": "Impossibile avviare il segnale in tempo reale. Riprova."
 }
