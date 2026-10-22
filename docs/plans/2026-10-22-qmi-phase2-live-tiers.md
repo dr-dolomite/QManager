@@ -32,7 +32,7 @@ Status: **APPROVED 2026-10-22** with the recommended D1–D5 (skip CA gap-fill, 
 - Expiry: when no stamp is fresh, the broker try-locks (`libc::flock` non-blocking; retry next slice), re-checks under the lock, deletes token, public file and its `.new`, clears its ring. Next lease mints a new token.
 - Broker validates the token (64 hex) before building a path. Optional: logout deletes the token under the lock.
 
-**L4. Public dir.** `/tmp/qmanager_live`, made with `safefs::ensure_own_dir(_, 0o755)` and verified before every publish. `/www/qmlive` → symlink to it. Always contains an empty `index.html` (validation: `GET /qmlive/` returns an empty body). Hygiene on start, token change and expiry: delete everything except `index.html` and the current `<token>.json`. Writes via `safefs::write_atomic`.
+**L4. Public dir.** `/var/run/qmanager/live` (changed from `/tmp/qmanager_live` after security review: a web-root link must not point into world-writable `/tmp`), made with `safefs::ensure_own_dir(_, 0o755)` and verified before every publish. `/www/qmlive` → symlink to it. Always contains an empty `index.html` (validation: `GET /qmlive/` returns an empty body). Hygiene on start, token change and expiry: delete everything except `index.html` and the current `<token>.json`. Writes via `safefs::write_atomic`.
 
 **L5. File format** (~2 KB, compact JSON):
 ```
