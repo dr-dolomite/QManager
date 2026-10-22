@@ -454,21 +454,29 @@ at_set; ov "broker stopped (no env)" at
 # process counter may only move by background noise (other processes).
 cp "$T/qmi.env.good" "$QMI_ENV"
 qmi_reset; qmi_load; at_set
+# Three trials, the quietest one counts: one fork per round would be >= 200 in
+# every trial, while other processes only add bursts.
 : > "$FORKS"
-_p0=""; while read -r _k _v; do [ "$_k" = processes ] && _p0="$_v"; done < /proc/stat
-_i=0
-while [ "$_i" -lt 200 ]; do
-    qmi_load; qmi_overlay_apply; qmi_overlay_restore
-    _i=$((_i + 1))
+_dmin=""
+_t=0
+while [ "$_t" -lt 3 ]; do
+    _p0=""; while read -r _k _v; do [ "$_k" = processes ] && _p0="$_v"; done < /proc/stat
+    _i=0
+    while [ "$_i" -lt 200 ]; do
+        qmi_load; qmi_overlay_apply; qmi_overlay_restore
+        _i=$((_i + 1))
+    done
+    _p1=""; while read -r _k _v; do [ "$_k" = processes ] && _p1="$_v"; done < /proc/stat
+    _d=$((_p1 - _p0))
+    { [ -z "$_dmin" ] || [ "$_d" -lt "$_dmin" ]; } && _dmin="$_d"
+    _t=$((_t + 1))
 done
-_p1=""; while read -r _k _v; do [ "$_k" = processes ] && _p1="$_v"; done < /proc/stat
 check "qmi path: no jq/date/touch/awk" "0" "$(count_forks)"
-_d=$((_p1 - _p0))
-if [ "$_d" -lt 30 ]; then
+if [ "$_dmin" -lt 20 ]; then
     ok
-    echo "qmi path: $_d system-wide forks over 200 rounds (background noise)"
+    echo "qmi path: $_dmin system-wide forks over 200 rounds (quietest of 3 trials, background noise)"
 else
-    bad "qmi path forked: $_d system-wide forks over 200 rounds"
+    bad "qmi path forked: $_dmin system-wide forks over 200 rounds (quietest of 3 trials)"
 fi
 check "qmi path still loaded" "1|-89" "$_QMI_OK|$qmi_lte_rsrp"
 fi
