@@ -114,15 +114,21 @@ impl Logger {
             msg
         );
         // /tmp is 1777 and rotation briefly leaves the path absent: never follow
-        // a symlink planted there.
+        // a symlink planted there. This runs under the process-wide lock every
+        // thread (the AT lane included) logs through, so it must never block:
+        // O_NONBLOCK makes a planted FIFO fail the open (ENXIO, no reader) or
+        // open without waiting, and anything but a regular file is refused,
+        // dropping the line. A regular file ignores O_NONBLOCK.
         if let Ok(mut f) = OpenOptions::new()
             .create(true)
             .append(true)
             .mode(0o644)
-            .custom_flags(crate::common::safefs::NOFOLLOW)
+            .custom_flags(crate::common::safefs::NOFOLLOW | libc::O_NONBLOCK)
             .open(&self.path)
         {
-            let _ = f.write_all(line.as_bytes());
+            if f.metadata().map_or(false, |m| m.file_type().is_file()) {
+                let _ = f.write_all(line.as_bytes());
+            }
         }
     }
 
@@ -188,5 +194,31 @@ mod tests {
         assert!(first.contains("] INFO  [atd:"), "{first}");
         assert!(s.contains("AT_CMD: AT → AT OK"), "{s}");
         let _ = std::fs::remove_file(p);
+    }
+
+    #[test]
+    fn a_planted_fifo_never_blocks_the_logger() {
+        let p = std::env::temp_dir().join(format!("qatd-log-fifo-{}", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        let c = std::ffi::CString::new(p.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o644) }, 0);
+        let l = Logger { component: "atd", min: Level::Debug, path: p.to_str().unwrap().into() };
+        // No reader: a blocking open would hang here forever.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            l.info("dropped");
+            let _ = tx.send(());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(2)).expect("logger blocked on a FIFO");
+        // With a reader attached the open succeeds, but the line is refused.
+        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK) };
+        assert!(fd >= 0);
+        let l = Logger { component: "atd", min: Level::Debug, path: p.to_str().unwrap().into() };
+        l.info("dropped too");
+        let mut buf = [0u8; 64];
+        let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        assert!(n <= 0, "nothing written to a non-regular file");
+        unsafe { libc::close(fd) };
+        let _ = std::fs::remove_file(&p);
     }
 }

@@ -44,13 +44,15 @@ pub fn write_nofollow(path: &str, contents: &[u8]) -> io::Result<()> {
 
 /// Replaces `path` with `contents` atomically: written to `<path>.new`
 /// (O_EXCL + O_NOFOLLOW, mode 0644), then renamed over `path`. A leftover or
-/// planted `.new` is unlinked first (unlink acts on a symlink itself), and
-/// rename replaces a symlink at `path` rather than following it. Readers see
-/// the old file or the whole new one, never a partial write; a failure removes
-/// the temp file.
+/// planted `.new` is unlinked first (unlink acts on a symlink itself; a
+/// planted directory is removed with its contents, never followed), and
+/// rename replaces a symlink at `path` rather than following it. A directory
+/// planted at `path` itself is refused (rename cannot replace it) and left
+/// alone. Readers see the old file or the whole new one, never a partial
+/// write; a failure removes the temp file.
 pub fn write_atomic(path: &str, contents: &[u8]) -> io::Result<()> {
     let tmp = format!("{path}.new");
-    let _ = std::fs::remove_file(&tmp);
+    clear_temp(&tmp);
     if let Err(e) = open_nofollow(&tmp, true).and_then(|mut f| f.write_all(contents)) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
@@ -59,6 +61,21 @@ pub fn write_atomic(path: &str, contents: &[u8]) -> io::Result<()> {
         let _ = std::fs::remove_file(&tmp);
         e
     })
+}
+
+/// Removes whatever sits at a temp path: a file or link is unlinked, a real
+/// directory (lstat, so never a link's target) removed recursively;
+/// `remove_dir_all` does not follow symlinks inside it.
+fn clear_temp(tmp: &str) {
+    match std::fs::symlink_metadata(tmp) {
+        Ok(m) if m.file_type().is_dir() => {
+            let _ = std::fs::remove_dir_all(tmp);
+        }
+        Ok(_) => {
+            let _ = std::fs::remove_file(tmp);
+        }
+        Err(_) => {}
+    }
 }
 
 /// Makes `dir` a real directory owned by the effective user with `mode`, as
@@ -152,6 +169,21 @@ mod tests {
         assert!(std::fs::symlink_metadata(&p).unwrap().file_type().is_file());
         assert_eq!(std::fs::read(&p).unwrap(), b"three\n");
         assert!(!std::path::Path::new(&format!("{p}.new")).exists());
+        // A directory planted at the temp name is removed, not written into.
+        std::fs::create_dir_all(format!("{p}.new/sub")).unwrap();
+        write_atomic(&p, b"four\n").unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"four\n");
+        assert!(!std::path::Path::new(&format!("{p}.new")).exists());
+        // A directory planted at the target is refused cleanly, left alone,
+        // and no temp file is left behind.
+        let d = tmp("atomic-dir");
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir(&d).unwrap();
+        std::fs::write(format!("{d}/keep"), b"k").unwrap();
+        assert!(write_atomic(&d, b"x").is_err());
+        assert!(std::path::Path::new(&format!("{d}/keep")).exists());
+        assert!(!std::path::Path::new(&format!("{d}.new")).exists());
+        let _ = std::fs::remove_dir_all(&d);
         // An unwritable directory fails cleanly and leaves nothing behind.
         assert!(write_atomic("/nonexistent-dir-qatd/x", b"x").is_err());
         let _ = std::fs::remove_file(&p);

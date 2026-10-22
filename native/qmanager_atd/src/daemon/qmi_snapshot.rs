@@ -288,12 +288,20 @@ impl Sampler {
         let v = View { mono_s: self.last_mono, state, ssr_count: reg.ssr_count(), bundle: self.last.as_ref() };
         let json = render_json(&v);
         let env = render_env(&v);
-        let r = safefs::write_atomic(&self.paths.json, json.as_bytes())
-            .and_then(|_| match &self.paths.run_dir {
-                Some(d) => safefs::ensure_own_dir(d, 0o700),
-                None => Ok(()),
-            })
-            .and_then(|_| safefs::write_atomic(&self.paths.env, env.as_bytes()));
+        // JSON first, then env, each on its own: a path planted in /tmp can
+        // cost the CGI json, never the poller's root-only sidecar.
+        let rj = safefs::write_atomic(&self.paths.json, json.as_bytes());
+        let re = match &self.paths.run_dir {
+            Some(d) => safefs::ensure_own_dir(d, 0o700),
+            None => Ok(()),
+        }
+        .and_then(|_| safefs::write_atomic(&self.paths.env, env.as_bytes()));
+        let r = match (rj, re) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(e), Ok(())) => Err(format!("{}: {e}", self.paths.json)),
+            (Ok(()), Err(e)) => Err(format!("{}: {e}", self.paths.env)),
+            (Err(a), Err(b)) => Err(format!("{}: {a}; {}: {b}", self.paths.json, self.paths.env)),
+        };
         match (r, self.write_failed) {
             (Err(e), false) => {
                 self.log.warn(&format!("cannot publish the qmi snapshot: {e}"));
@@ -675,6 +683,31 @@ mod tests {
         assert!(std::fs::read_dir(&victim).unwrap().next().is_none(), "nothing written through the link");
         assert_eq!(ENV_PATH, "/var/run/qmanager/qmi.env");
         assert!(Paths::production().json.starts_with("/tmp/") && Paths::production().live.starts_with("/tmp/"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_dir_planted_at_the_json_path_never_blocks_the_env() {
+        let d = dir("planted");
+        let p = paths(&d);
+        let (env_p, json_p) = (p.env.clone(), p.json.clone());
+        // Planted at both the JSON target and its temp name.
+        std::fs::create_dir_all(format!("{json_p}/x")).unwrap();
+        std::fs::create_dir_all(format!("{json_p}.new/y")).unwrap();
+        let reg = start_registry(&r1_net());
+        let mut s = Sampler::new(p, log());
+        s.sample(&reg);
+        let env = std::fs::read_to_string(&env_p).unwrap();
+        assert_eq!(violation(&env), None, "{env}");
+        assert_eq!(get(&pairs(&env[..env.len() - 19]), "qmi_state"), "up");
+        assert!(s.write_failed, "the json failure is still reported");
+        assert!(std::fs::symlink_metadata(&json_p).unwrap().is_dir(), "the planted target is left alone");
+        assert!(!std::path::Path::new(&format!("{json_p}.new")).exists(), "the planted temp dir is cleared");
+        // Once the target is free again, both files publish.
+        std::fs::remove_dir_all(&json_p).unwrap();
+        s.sample(&reg);
+        assert!(!s.write_failed);
+        assert!(std::fs::read_to_string(&json_p).unwrap().contains("\"qmi_state\":\"up\""));
         let _ = std::fs::remove_dir_all(&d);
     }
 
