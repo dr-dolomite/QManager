@@ -14,7 +14,7 @@
 #   qmi_live.token    64 lowercase hex, the capability URL token
 #   qmi_live.lock     flock target shared with the broker's expiry path
 #
-# Forks per renewal: flock, mv (+ head/openssl/awk only when minting).
+# Forks per renewal: flock -n, mv (+ head/openssl/awk only when minting).
 #
 # Endpoint: POST /cgi-bin/quecmanager/cellular/live_signal.sh?tier=aim|watch
 # Install location: /www/cgi-bin/quecmanager/cellular/live_signal.sh
@@ -66,7 +66,13 @@ lease_failed() {
 # A failing exec redirect aborts an ash script, so probe the path first.
 : >> "$LIVE_RUN/qmi_live.lock" 2>/dev/null || lease_failed "lock unavailable"
 exec 9>> "$LIVE_RUN/qmi_live.lock"
-flock -w 1 9 || lease_failed "lock busy"
+# BusyBox flock has no -w: try non-blocking, retry for ~1 s (forks only on contention).
+tries=0
+until flock -n 9; do
+    tries=$((tries + 1))
+    [ "$tries" -ge 10 ] && lease_failed "lock busy"
+    sleep 0.1
+done
 
 up=""
 read -r up _rest < /proc/uptime
