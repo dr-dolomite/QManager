@@ -3,7 +3,10 @@
 #
 # Runs ONE parser (with the poller's pre-processing) over ONE fixture in a
 # fresh shell process and prints the resulting globals:
-#   set | grep -E '^(lte_|nr_|t1_|t2_|sig_|network_type=|service_status=|_cid_)' | sort
+#   set | grep -E '^(lte_|nr_|t1_|t2_|sig_|qmi_|_qmo_|network_type=|service_status=|_cid_)' | sort
+#
+# qmi_ / _qmo_ (QMI gap-fill, qmi_merge.sh) are listed so a parser that ever
+# touched them would show; parse_at.sh sets none of them.
 #
 # parser: serving_cell qrsrp qrsrq qsinr signal ca_info carrier sim_slot
 #         sim_status tier2 temperature helpers
@@ -52,7 +55,7 @@ pp_dump() {
     # instead of byte-wise, so pretty vs compact output of the same array is
     # equal. An empty value (old jq tonumber failure) stays empty.
     if [ "${PARITY_CC_NORMALIZE:-0}" = "1" ]; then
-        set | grep -E '^(lte_|nr_|t1_|t2_|sig_|network_type=|service_status=|_cid_)' | grep -v '^t2_carrier_components=' | sort
+        set | grep -E '^(lte_|nr_|t1_|t2_|sig_|qmi_|_qmo_|network_type=|service_status=|_cid_)' | grep -v '^t2_carrier_components=' | sort
         printf '%s\n' '--- t2_carrier_components (jq -cS) ---'
         if [ -n "$t2_carrier_components" ]; then
             # Not JSON (e.g. the SENT_ sentinel left untouched): compare raw.
@@ -63,7 +66,7 @@ pp_dump() {
         fi
         return
     fi
-    set | grep -E '^(lte_|nr_|t1_|t2_|sig_|network_type=|service_status=|_cid_)' | sort
+    set | grep -E '^(lte_|nr_|t1_|t2_|sig_|qmi_|_qmo_|network_type=|service_status=|_cid_)' | sort
     # The grep above is line-oriented (as in the poller's tap), so the multi-line
     # pretty-printed jq value of t2_carrier_components is cut after its first line.
     # Emit the full value too so fixtures compare the real JSON byte-for-byte.
