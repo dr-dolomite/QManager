@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { authFetch } from "@/lib/auth-fetch";
 import {
   createLiveSignalStore,
   INITIAL_LIVE_SNAPSHOT,
   type LiveFileResult,
+  type LiveSignalSubscription,
 } from "@/lib/live-signal-store";
 import type {
   LiveFile,
@@ -67,12 +68,25 @@ async function lease(tier: LiveTier): Promise<LiveLeaseResult> {
   };
 }
 
-async function fetchFile(url: string): Promise<LiveFileResult> {
+async function fetchFile(
+  url: string,
+  signal: AbortSignal,
+): Promise<LiveFileResult> {
   // Static file behind a capability url: no cookies, never cached.
-  const response = await fetch(url, { cache: "no-store", credentials: "omit" });
+  const response = await fetch(url, {
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
   if (!response.ok) return { status: response.status, file: null };
   try {
-    return { status: response.status, file: (await response.json()) as LiveFile };
+    const body: unknown = await response.json();
+    const valid =
+      typeof body === "object" &&
+      body !== null &&
+      (body as { v?: unknown }).v === 1 &&
+      Array.isArray((body as { samples?: unknown }).samples);
+    return { status: response.status, file: valid ? (body as LiveFile) : null };
   } catch {
     return { status: response.status, file: null };
   }
@@ -132,11 +146,25 @@ export function useLiveSignal({
     getServerSnapshot,
   );
 
+  // One subscription per `enabled`: a tier change must not reset the ring.
+  const subscriptionRef = useRef<LiveSignalSubscription | null>(null);
+  const tierRef = useRef(tier);
+  useEffect(() => {
+    tierRef.current = tier;
+    subscriptionRef.current?.setTier(tier);
+  }, [tier]);
+
   useEffect(() => {
     if (!enabled) return;
-    const subscription = liveSignalStore.subscribe(tier);
-    return () => subscription.unsubscribe();
-  }, [tier, enabled]);
+    const subscription = liveSignalStore.subscribe(tierRef.current);
+    subscriptionRef.current = subscription;
+    return () => {
+      subscription.unsubscribe();
+      if (subscriptionRef.current === subscription) {
+        subscriptionRef.current = null;
+      }
+    };
+  }, [enabled]);
 
   return {
     state: snapshot.state,

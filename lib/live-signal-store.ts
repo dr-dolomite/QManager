@@ -35,6 +35,10 @@ export const LIVE_RING_SIZE = 150;
 export const LIVE_RETRY_DELAYS_MS = [0, 1000, 2000, 5000] as const;
 /** `aim` becomes `watch` after this long without input. */
 export const LIVE_IDLE_DEMOTE_MS = 10 * 60 * 1000;
+/** A poll that has not settled after max(this, 4 periods) is a failure. */
+export const LIVE_POLL_MIN_TIMEOUT_MS = 2000;
+/** A fresh url may 404 for 2 periods plus this while the broker publishes. */
+export const LIVE_PUBLISH_GRACE_EXTRA_MS = 500;
 /** A file with no new seq for this many periods is stale. */
 export const LIVE_STALE_PERIODS = 3;
 
@@ -46,7 +50,8 @@ export interface LiveFileResult {
 
 export interface LiveSignalStoreDeps {
   lease: (tier: LiveTier) => Promise<LiveLeaseResult>;
-  fetchFile: (url: string) => Promise<LiveFileResult>;
+  /** `signal` aborts when the store gives up on the request (timeout/stop). */
+  fetchFile: (url: string, signal: AbortSignal) => Promise<LiveFileResult>;
   now: () => number;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (handle: unknown) => void;
@@ -58,6 +63,8 @@ export interface LiveSignalStoreDeps {
 }
 
 export interface LiveSignalSubscription {
+  /** Change this subscriber's tier without a reset or a new subscription. */
+  setTier: (tier: LiveTier) => void;
   unsubscribe: () => void;
 }
 
@@ -90,6 +97,12 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
   let leaseInFlight = false;
   let leasePending = false;
   let pollInFlight = false;
+  let pollToken = 0;
+  let pollAbort: AbortController | null = null;
+  let pollDeadline: unknown = null;
+  let graceUntilMs = 0; // 404s before this on an unconfirmed url are "not yet"
+  let lastUrl: string | null = null; // last url a lease returned
+  let urlConfirmed = false; // a 200 has landed on the current url
   let failures = 0;
   let leasedTier: LiveTier | null = null;
 
@@ -151,9 +164,16 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
 
   // ---- data ----------------------------------------------------------------
 
-  const merge = (file: LiveFile) => {
-    if (file.v !== 1 || typeof file.run !== "number") return;
-    if (!Array.isArray(file.samples)) return;
+  const merge = (file: LiveFile): boolean => {
+    if (
+      typeof file !== "object" ||
+      file === null ||
+      file.v !== 1 ||
+      typeof file.run !== "number" ||
+      !Array.isArray(file.samples)
+    ) {
+      return false;
+    }
     if (run !== file.run) {
       run = file.run;
       ring = [];
@@ -192,6 +212,7 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
       meta = next;
       dataVersion += 1;
     }
+    return true;
   };
 
   const resetData = () => {
@@ -201,6 +222,8 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     lastNewAtMs = null;
     meta = { qmiState: null, scan: false, ssrCount: 0, periodMs: null };
     url = null;
+    lastUrl = null;
+    urlConfirmed = false;
     dataVersion += 1;
   };
 
@@ -219,13 +242,23 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     idleTimer = null;
   };
 
+  /** Drop the in-flight poll (timeout, abort) so a late result is ignored. */
+  const endPoll = () => {
+    pollToken += 1;
+    pollInFlight = false;
+    if (pollDeadline !== null) deps.clearTimeout(pollDeadline);
+    pollDeadline = null;
+    pollAbort?.abort();
+    pollAbort = null;
+  };
+
   const stopLoops = () => {
     epoch += 1;
     clearLease();
     clearPoll();
     leaseInFlight = false;
     leasePending = false;
-    pollInFlight = false;
+    endPoll();
     leasedTier = null;
   };
 
@@ -252,7 +285,14 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
       return;
     }
     clearLease();
-    leaseTimer = deps.setTimeout(leaseNow, LIVE_RETRY_DELAYS_MS[failures - 1]);
+    // A lease already in flight supersedes the retry: its result brings a
+    // fresh url, so arming a timer here would only be clobbered or orphaned.
+    if (!leaseInFlight) {
+      leaseTimer = deps.setTimeout(
+        leaseNow,
+        LIVE_RETRY_DELAYS_MS[failures - 1],
+      );
+    }
     emit();
   };
 
@@ -267,20 +307,46 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
   const pollNow = () => {
     if (!running || url === null || pollInFlight) return;
     pollInFlight = true;
-    const ep = epoch;
+    const token = ++pollToken;
     const target = url;
-    deps.fetchFile(target).then(
+    const abort = new AbortController();
+    pollAbort = abort;
+    pollDeadline = deps.setTimeout(
+      () => {
+        pollDeadline = null;
+        if (token !== pollToken) return;
+        endPoll(); // aborts the request; a late result is ignored
+        onFailure();
+      },
+      Math.max(LIVE_POLL_MIN_TIMEOUT_MS, 4 * periodMs),
+    );
+    const settled = (): boolean => {
+      if (token !== pollToken) return false;
+      pollInFlight = false;
+      if (pollDeadline !== null) deps.clearTimeout(pollDeadline);
+      pollDeadline = null;
+      pollAbort = null;
+      return true;
+    };
+    deps.fetchFile(target, abort.signal).then(
       (res) => {
-        if (ep !== epoch) return;
-        pollInFlight = false;
+        if (!settled()) return;
         if (target !== url) {
           // Re-leased onto a new url while this was in flight.
           if (url !== null) pollNow();
           return;
         }
-        if (res.status === 200 && res.file !== null) {
+        if (res.status === 200 && res.file !== null && merge(res.file)) {
           failures = 0;
-          merge(res.file);
+          urlConfirmed = true;
+          schedulePoll();
+          emit();
+        } else if (
+          res.status === 404 &&
+          !urlConfirmed &&
+          deps.now() < graceUntilMs
+        ) {
+          // Fresh url, broker has not published it yet: keep polling.
           schedulePoll();
           emit();
         } else {
@@ -288,9 +354,11 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
         }
       },
       () => {
-        if (ep !== epoch) return;
-        pollInFlight = false;
-        if (target !== url) return;
+        if (!settled()) return;
+        if (target !== url) {
+          if (url !== null) pollNow();
+          return;
+        }
         onFailure();
       },
     );
@@ -322,7 +390,15 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
       url = res.url;
       if (res.periodMs > 0) periodMs = res.periodMs;
       if (res.renewS > 0) renewMs = res.renewS * 1000;
+      if (res.url !== lastUrl) {
+        // A new url: the broker may not have published it yet.
+        lastUrl = res.url;
+        urlConfirmed = false;
+        graceUntilMs =
+          deps.now() + 2 * periodMs + LIVE_PUBLISH_GRACE_EXTRA_MS;
+      }
       if (pollTimer === null && !pollInFlight) pollNow();
+      clearLease();
       if (leasePending) {
         leasePending = false;
         leaseNow();
@@ -412,6 +488,12 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     emit();
 
     return {
+      setTier: (next: LiveTier) => {
+        if (!subs.has(sub) || sub.tier === next) return;
+        sub.tier = next;
+        armIdle();
+        retier();
+      },
       unsubscribe: () => {
         if (!subs.delete(sub)) return;
         if (subs.size === 0) {
