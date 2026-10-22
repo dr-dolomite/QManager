@@ -25,6 +25,8 @@ mod at;
 mod client;
 mod common;
 mod daemon;
+#[allow(dead_code)] // QMI lane: nothing calls it yet (phase 1 step 3).
+mod qmi;
 #[cfg(feature = "poll")]
 mod poll;
 mod sms;
