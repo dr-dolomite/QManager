@@ -43,7 +43,7 @@ readelf -l ../../dependencies/qmanager_atd | grep -i INTERP   # -> (nothing)
 file ../../dependencies/qmanager_atd   # ELF 64-bit LSB executable, ARM aarch64, statically linked
 ```
 
-Shipped build: **0.4.0** (live signal sampler, `live=1`), size and md5 `TBD` (see the build commit; the binary is rebuilt from `native/qmanager_atd/` and verified static as above). The previous build was 0.3.0, 634472 bytes, md5 `dbe079d2964854d91eb23209f78a4c8a`.
+Shipped build: **0.4.0** (live signal sampler, `live=1`), 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656` (the binary is rebuilt from `native/qmanager_atd/` and verified static as above). The previous build was 0.3.0, 634472 bytes, md5 `dbe079d2964854d91eb23209f78a4c8a`.
 
 Build on a Linux filesystem (e.g. copy the crate into `~/`), not across
 `/mnt/<drive>`, and commit the binary together with any source change.
