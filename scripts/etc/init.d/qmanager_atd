@@ -51,9 +51,10 @@ stop_service() {
     # here so a rolled-back binary, which never writes it, is not credited
     # with a protocol it does not speak.
     rm -f /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new
-    # QMI sidecars + lease. Atomic-write temps assumed "<path>.new" (like .proto);
-    # the narrow glob covers any suffix.
-    rm -f /tmp/qmanager_qmi.env /tmp/qmanager_qmi.json /tmp/qmanager_qmi_live /tmp/qmanager_qmi.*
+    # QMI sidecars + lease. The sourced env lives in the root-only run dir;
+    # the json and the lease are in /tmp. Atomic-write temps are "<path>.new".
+    rm -f /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
+        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live
 }
 
 # No reload trigger on purpose: many CGIs commit the quecmanager config, and

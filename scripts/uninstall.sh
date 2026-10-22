@@ -317,8 +317,8 @@ remove_backend() {
         fi
     done
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
-        /var/run/qmanager_atd.restart /tmp/qmanager_qmi.env /tmp/qmanager_qmi.json \
-        /tmp/qmanager_qmi_live /tmp/qmanager_qmi.* \
+        /var/run/qmanager_atd.restart /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
+        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live \
         "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* "$BIN_DIR"/.qmi.* 2>/dev/null || true
 
     for f in "$BIN_DIR"/qmanager_*; do

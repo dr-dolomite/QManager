@@ -7,7 +7,8 @@
 //! JSON first and env right after it so the env is never older than the JSON
 //! it mirrors:
 //!
-//! - `/tmp/qmanager_qmi.env` follows the sidecar contract of `ping.env` and
+//! - `/var/run/qmanager/qmi.env` (root-only dir, made 0700 and verified before
+//!   each write; the poller sources it) follows the sidecar contract of `ping.env` and
 //!   `ondemand.env` (`cq_env_source`): every line a single-quoted assignment,
 //!   the last line `qm_sidecar_end='1'`, names from the compiled `NAMES` list
 //!   (all `qmi_`-prefixed, never the poller's `lte_*` / `t2_*`), every value
@@ -51,7 +52,11 @@ use crate::qmi::SVC_NAS;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
-pub const ENV_PATH: &str = "/tmp/qmanager_qmi.env";
+/// The sourced sidecar lives in the root-only run dir (a world-writable /tmp
+/// path could be planted before the first write and then sourced by the
+/// poller). Same dir as ping.env / ondemand.env.
+pub const RUN_DIR: &str = "/var/run/qmanager";
+pub const ENV_PATH: &str = "/var/run/qmanager/qmi.env";
 pub const JSON_PATH: &str = "/tmp/qmanager_qmi.json";
 pub const LIVE_PATH: &str = "/tmp/qmanager_qmi_live";
 
@@ -65,6 +70,9 @@ pub const LEASE_TTL: Duration = Duration::from_secs(10);
 const SLICE: Duration = Duration::from_millis(250);
 
 pub struct Paths {
+    /// Made root-only (0700, own, not a link) before each env write; None
+    /// skips it (tests on a plain temp dir).
+    pub run_dir: Option<String>,
     pub env: String,
     pub json: String,
     pub live: String,
@@ -72,7 +80,7 @@ pub struct Paths {
 
 impl Paths {
     pub fn production() -> Paths {
-        Paths { env: ENV_PATH.into(), json: JSON_PATH.into(), live: LIVE_PATH.into() }
+        Paths { run_dir: Some(RUN_DIR.into()), env: ENV_PATH.into(), json: JSON_PATH.into(), live: LIVE_PATH.into() }
     }
 }
 
@@ -281,6 +289,10 @@ impl Sampler {
         let json = render_json(&v);
         let env = render_env(&v);
         let r = safefs::write_atomic(&self.paths.json, json.as_bytes())
+            .and_then(|_| match &self.paths.run_dir {
+                Some(d) => safefs::ensure_own_dir(d, 0o700),
+                None => Ok(()),
+            })
             .and_then(|_| safefs::write_atomic(&self.paths.env, env.as_bytes()));
         match (r, self.write_failed) {
             (Err(e), false) => {
@@ -338,7 +350,7 @@ mod tests {
 
     fn paths(d: &std::path::Path) -> Paths {
         let p = |n: &str| d.join(n).to_str().unwrap().to_string();
-        Paths { env: p("q.env"), json: p("q.json"), live: p("q_live") }
+        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live: p("q_live") }
     }
 
     fn log() -> Arc<Logger> {
@@ -640,6 +652,29 @@ mod tests {
         assert_eq!(violation(&env), None);
         assert_eq!(get(&pairs(&env[..env.len() - 19]), "qmi_state"), "unavailable");
         assert!(std::path::Path::new(&paths(&d).json).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_env_goes_into_a_root_only_dir_that_is_made_trustworthy() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = dir("rundir");
+        let run = d.join("run");
+        // A planted symlink where the dir should be must not receive the file.
+        let victim = d.join("victim");
+        std::fs::create_dir(&victim).unwrap();
+        std::os::unix::fs::symlink(&victim, &run).unwrap();
+        let mut p = paths(&d);
+        p.run_dir = Some(run.to_str().unwrap().to_string());
+        p.env = run.join("qmi.env").to_str().unwrap().to_string();
+        let env_p = p.env.clone();
+        let reg = start_registry(&r1_net());
+        Sampler::new(p, log()).sample(&reg);
+        assert!(std::fs::read_to_string(&env_p).unwrap().ends_with("qm_sidecar_end='1'\n"));
+        assert_eq!(std::fs::metadata(&run).unwrap().permissions().mode() & 0o777, 0o700);
+        assert!(std::fs::read_dir(&victim).unwrap().next().is_none(), "nothing written through the link");
+        assert_eq!(ENV_PATH, "/var/run/qmanager/qmi.env");
+        assert!(Paths::production().json.starts_with("/tmp/") && Paths::production().live.starts_with("/tmp/"));
         let _ = std::fs::remove_dir_all(&d);
     }
 

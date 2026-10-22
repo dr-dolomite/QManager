@@ -61,6 +61,33 @@ pub fn write_atomic(path: &str, contents: &[u8]) -> io::Result<()> {
     })
 }
 
+/// Makes `dir` a real directory owned by the effective user with `mode`, as
+/// `qm_root_dir` does for the shell side: a symlink, file or someone else's
+/// directory at `dir` is removed first (unlink never follows a link). Err if
+/// it cannot be made trustworthy; the caller must then not write into it.
+pub fn ensure_own_dir(dir: &str, mode: u32) -> io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let euid = unsafe { libc::geteuid() };
+    if let Ok(m) = std::fs::symlink_metadata(dir) {
+        if m.file_type().is_dir() && m.uid() == euid {
+            return std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode));
+        }
+        if m.file_type().is_dir() {
+            std::fs::remove_dir_all(dir)?;
+        } else {
+            std::fs::remove_file(dir)?;
+        }
+    }
+    std::fs::create_dir(dir)?;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode))?;
+    let m = std::fs::symlink_metadata(dir)?;
+    if m.file_type().is_dir() && m.uid() == euid {
+        Ok(())
+    } else {
+        Err(io::Error::new(io::ErrorKind::PermissionDenied, "run dir not trustworthy"))
+    }
+}
+
 /// Command text for a state file: one line, no CR/LF injection.
 pub fn one_line(s: &str) -> String {
     s.chars().filter(|&c| c != '\n' && c != '\r').collect()
@@ -129,6 +156,34 @@ mod tests {
         assert!(write_atomic("/nonexistent-dir-qatd/x", b"x").is_err());
         let _ = std::fs::remove_file(&p);
         let _ = std::fs::remove_file(&victim);
+    }
+
+    #[test]
+    fn ensure_own_dir_replaces_links_files_and_keeps_a_good_dir() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = tmp("owndir");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir(&base).unwrap();
+        let d = format!("{base}/run");
+        ensure_own_dir(&d, 0o700).unwrap();
+        assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
+        std::fs::write(format!("{d}/keep"), b"x").unwrap();
+        ensure_own_dir(&d, 0o700).unwrap();
+        assert!(std::path::Path::new(&format!("{d}/keep")).exists(), "a good dir is kept");
+        // A planted symlink is replaced, its target untouched.
+        let victim = format!("{base}/victim");
+        std::fs::create_dir(&victim).unwrap();
+        std::fs::remove_dir_all(&d).unwrap();
+        symlink(&victim, &d).unwrap();
+        ensure_own_dir(&d, 0o700).unwrap();
+        assert!(std::fs::symlink_metadata(&d).unwrap().file_type().is_dir());
+        assert!(std::path::Path::new(&victim).exists());
+        // A planted file is replaced.
+        std::fs::remove_dir_all(&d).unwrap();
+        std::fs::write(&d, b"f").unwrap();
+        ensure_own_dir(&d, 0o700).unwrap();
+        assert!(std::fs::symlink_metadata(&d).unwrap().file_type().is_dir());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
