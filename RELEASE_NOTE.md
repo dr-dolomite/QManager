@@ -1,10 +1,11 @@
-# 🚀 QManager BETA v0.1.34
+# 🚀 QManager BETA v0.1.35
 
-v0.1.34 is a hotfix for v0.1.33 with one fix: modems on RM551E R01A04 firmware no longer keep dropping their connection. There are no new features, and nothing else changes from v0.1.33.
+v0.1.35 adds one new setting: PCIe power saving for the ethernet port, which now defaults to Performance. Modems that shipped with aggressive power saving on the ethernet controller can see dropouts and extra latency on the LAN port, and QManager now keeps that controller fully awake unless you choose otherwise.
 
-## ✅ Improvements
+## ✨ New Features
 
-- **Fixed repeated disconnects on RM551E R01A04 firmware.** QManager left the modem's extended carrier-aggregation reporting switched on all the time, which made R01A04 drop the connection again and again. It is now switched on only for the moment each reading is taken, so 5G carrier details still show in full. Thanks to No_way for testing the patch first.
+- **PCIe power saving for the ethernet port.** The Ethernet Status page's speed card is now **Ethernet Port** and gains a **PCIe power saving** setting: Performance (recommended), Kernel default, Power saving or Max power saving. Changing it never drops the link, and your choice is reapplied on every boot.
+- **Performance by default.** New installs and upgrades set PCIe power saving to Performance, since the platform's own default can cause ethernet dropouts and added latency. If you have already picked a setting, it is kept.
 
 ## 📥 Installation
 
@@ -14,9 +15,9 @@ v0.1.34 is a hotfix for v0.1.33 with one fix: modems on RM551E R01A04 firmware n
 curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
 ```
 
-### Upgrading from v0.1.33
+### Upgrading from v0.1.34
 
-**System Settings → Software Update.** No migration steps needed.
+**System Settings → Software Update.** No migration steps needed. The new Performance default takes effect after the next reboot, or right away if you apply it from the Ethernet Port card.
 
 ## 💙 Thank You
 
