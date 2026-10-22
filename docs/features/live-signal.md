@@ -64,7 +64,7 @@ Lease response:
 | `qmi_state` | `up`, `down` (SSR window, modem not ready) or `unavailable` (no QRTR/NAS). A failed read pushes no sample. |
 | `ssr_count` | The daemon's SSR episode counter. |
 | `scan` | `true` while the long/scan flag is up. |
-| `samples[]` | Up to 32, oldest first. `t` is boot-clock ms (not comparable to the browser clock). Signals are integers x10 (`-955` = -95.5 dB), no floats; every serving field is `null` unless registered and while `scan` is true. `ca` lists SCCs only. |
+| `samples[]` | Up to 32, oldest first. `t` is boot-clock ms (not comparable to the browser clock). Signals are integers x10 (`-955` = -95.5 dB), no floats; signals (`rsrp`/`rsrq`/`rssi`) are `null` unless registered; `pci`/`earfcn`/`band`/`bw` can still name the last camped cell while `reg:false` (the client treats `reg:false` as stale); every serving field is `null` while `scan` is true. `ca` lists SCCs only. |
 
 **The file never contains** cell ID, TAC, eNodeB/sector, MCC/MNC, operator, IMSI or any other identifier; a unit test asserts their absence. **Why:** the URL is unauthenticated (anyone who knows the token can fetch it), so the renderer is an allow-list. The full bundle stays in `/tmp/qmanager_qmi.json`, never under `/www`.
 
