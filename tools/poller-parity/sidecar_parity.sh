@@ -431,6 +431,7 @@ at_set; lte_pci=""; lte_earfcn=""; ov "AT has no serving cell" qmi
 at_set; lte_pci=""; lte_earfcn=""; nr_pci=45; ov "AT on SA (NR cell only)" at
 at_set; : > "$QMI_SCAN_FLAG"; ov "scan flag up" at; rm -f "$QMI_SCAN_FLAG"
 at_set; : > "$QMI_SIMSW_FLAG"; ov "SIM switch flag up" at; rm -f "$QMI_SIMSW_FLAG"
+at_set; system_state=scan_in_progress; ov "scan_in_progress until the next AT read" at; system_state=normal
 _MONO_TOP=$((_UP + 5)); at_set; ov "age 5 s" qmi
 _MONO_TOP=$((_UP + 6)); at_set; ov "age 6 s" at
 _MONO_TOP=$((_UP - 1)); at_set; ov "mono in the future" at

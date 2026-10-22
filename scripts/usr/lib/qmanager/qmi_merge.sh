@@ -126,7 +126,8 @@ qmi_load() {
 # qmi_overlay_apply: fill lte_rsrp / lte_rsrq / lte_rssi from QMI for the next
 # write_cache when every gate holds; sets lte_source to qmi or at.
 #   - AT did not parse a serving-cell reply this cycle (_QENG_PARSED != 1);
-#   - no scan or SIM switch is flagged (D2);
+#   - no scan or SIM switch is flagged, and system_state is not still
+#     scan_in_progress from one (D2);
 #   - a valid sidecar, qmi_state=up, registered;
 #   - read age (uptime clock) 0..QMI_MAX_AGE s;
 #   - QMI LTE PCI and EARFCN equal the AT ones, or AT knows no serving cell
@@ -141,6 +142,9 @@ qmi_overlay_apply() {
     [ "$qmi_registered" = "1" ] || return 1
     [ -f "$QMI_SCAN_FLAG" ] && return 1
     [ -f "$QMI_SIMSW_FLAG" ] && return 1
+    # After a scan the deep/idle tier keeps reporting scan_in_progress until its
+    # next AT read; stay AT-only until then so the snapshot stays coherent.
+    [ "$system_state" = "scan_in_progress" ] && return 1
     case "${_MONO_TOP:-0}" in ''|0|*[!0-9]*) return 1 ;; esac
     [ "$_QMI_READ_MONO" -gt 0 ] || return 1
     [ "$_MONO_TOP" -ge "$_QMI_READ_MONO" ] || return 1
