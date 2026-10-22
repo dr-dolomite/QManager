@@ -43,6 +43,7 @@ impl Source {
     }
 
     /// True when the modem computed the value at request time.
+    #[allow(dead_code)] // freshness helper for consumers of the tags
     pub fn is_live(self) -> bool {
         self == Source::CellLocation
     }
@@ -315,6 +316,7 @@ impl Ca {
         self.carriers.len()
     }
 
+    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn pcc(&self) -> Option<&Carrier> {
         self.carriers.first().filter(|c| c.kind == "PCC")
     }
@@ -437,6 +439,7 @@ impl Bundle {
         }
     }
 
+    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn registered(&self) -> bool {
         self.signal.registration == Registration::Registered
     }
@@ -444,6 +447,7 @@ impl Bundle {
     /// Band and bandwidth of the serving LTE carrier: the RF entry on the
     /// serving EARFCN (else the first LTE entry), falling back to the CA
     /// PCC when RF info is missing.
+    #[allow(dead_code)] // wired by the snapshot sampler
     pub fn lte_band(&self) -> (Option<String>, Option<u32>) {
         let earfcn = self.cell.as_ref().and_then(|c| c.lte.as_ref()).map(|l| l.earfcn);
         if let Some(rf) = &self.rf {
@@ -747,22 +751,20 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
                 .signal
                 .json()
         }
-        Read::Bundle => {
-            let r: Vec<Result<Msg, QmiError>> = (0..4).map(q).collect();
-            if r.iter().all(|x| x.is_err()) {
-                return Err(r.into_iter().next().unwrap().unwrap_err());
-            }
-            let m: Vec<Option<Msg>> = r.into_iter().map(|x| x.ok()).collect();
-            Bundle::build(&Inputs {
-                serving: m[0].as_ref(),
-                cell: m[1].as_ref(),
-                ca: m[2].as_ref(),
-                rf: m[3].as_ref(),
-                sig_info: None,
-            })
-            .json()
-        }
+        Read::Bundle => bundle(fetch)?.json(),
     })
+}
+
+/// The poller-shaped read as a struct (the snapshot sampler needs the values,
+/// not only the JSON). Fails only if all four requests fail, with the first
+/// one's error; a failed part is `None` / null.
+pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
+    let r: Vec<Result<Msg, QmiError>> = Read::Bundle.requests().iter().map(|&(svc, id)| fetch(svc, id)).collect();
+    if r.iter().all(|x| x.is_err()) {
+        return Err(r.into_iter().next().unwrap().unwrap_err());
+    }
+    let m: Vec<Option<Msg>> = r.into_iter().map(|x| x.ok()).collect();
+    Ok(Bundle::build(&Inputs { serving: m[0].as_ref(), cell: m[1].as_ref(), ca: m[2].as_ref(), rf: m[3].as_ref(), sig_info: None }))
 }
 
 #[cfg(test)]

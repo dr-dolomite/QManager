@@ -54,6 +54,7 @@ pub const THREAD_STACK: usize = 128 * 1024;
 /// bytes at most).
 pub const MAX_REQUEST_BODY: usize = 1024;
 /// Undelivered indications per subscriber before new ones are dropped.
+#[allow(dead_code)] // consumed by the phase 2 indication path
 pub const SUB_QUEUE: usize = 64;
 const RECV_BUF: usize = 65536;
 
@@ -540,6 +541,7 @@ impl Registry {
     /// Internal only: NAS Indication Register on the registry's own NAS
     /// socket. Remembered and replayed on every rebuilt socket, since a
     /// registration dies with its client socket.
+    #[allow(dead_code)] // consumed by the phase 2 indication path
     pub fn register_indications(&self, svc: u32, tlvs: &[Tlv]) -> Result<(), QmiError> {
         let msg_id = allow::NAS_INDICATION_REGISTER;
         if svc != SVC_NAS || !allow::internal_allowed(svc, msg_id) {
@@ -552,6 +554,7 @@ impl Registry {
 
     /// Indications from `svc`, from now on (across socket rebuilds). A
     /// subscriber that falls `SUB_QUEUE` behind loses the newest ones.
+    #[allow(dead_code)] // consumed by the phase 2 indication path
     pub fn subscribe(&self, svc: u32) -> Option<Receiver<Msg>> {
         let i = self.shared.idx(svc)?;
         let (tx, rx) = mpsc::sync_channel(SUB_QUEUE);
@@ -559,6 +562,7 @@ impl Registry {
         Some(rx)
     }
 
+    #[allow(dead_code)] // consumed by the phase 2 indication path
     pub fn state(&self, svc: u32) -> Option<SvcState> {
         let i = self.shared.idx(svc)?;
         Some(lock(&self.shared.services[i].inner).state)
@@ -574,6 +578,7 @@ impl Registry {
     }
 
     /// CLOCK_MONOTONIC ms of the last SSR episode's first loss.
+    #[allow(dead_code)] // consumed by the phase 2 indication path
     pub fn last_ssr_mono_ms(&self) -> Option<u64> {
         match self.shared.last_ssr_ms.load(SeqCst) {
             0 => None,

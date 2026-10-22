@@ -34,13 +34,16 @@ pub const CLIENT_ALLOWED: &[(u32, u16)] = &[
 /// NAS Indication Register: per-client state on our own socket (released
 /// when it closes), changes no modem configuration. Reachable only through
 /// the registry's internal API, never from a client request.
+#[allow(dead_code)] // consumed by the phase 2 indication path
 pub const NAS_INDICATION_REGISTER: u16 = 0x0003;
+#[allow(dead_code)] // consumed by the phase 2 indication path
 pub const INTERNAL_ONLY: &[(u32, u16)] = &[(SVC_NAS, NAS_INDICATION_REGISTER)];
 
 pub fn client_allowed(svc: u32, msg: u16) -> bool {
     CLIENT_ALLOWED.contains(&(svc, msg))
 }
 
+#[allow(dead_code)] // consumed by the phase 2 indication path
 pub fn internal_allowed(svc: u32, msg: u16) -> bool {
     client_allowed(svc, msg) || INTERNAL_ONLY.contains(&(svc, msg))
 }

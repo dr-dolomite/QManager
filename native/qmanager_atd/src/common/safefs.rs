@@ -42,6 +42,25 @@ pub fn write_nofollow(path: &str, contents: &[u8]) -> io::Result<()> {
     f.write_all(contents)
 }
 
+/// Replaces `path` with `contents` atomically: written to `<path>.new`
+/// (O_EXCL + O_NOFOLLOW, mode 0644), then renamed over `path`. A leftover or
+/// planted `.new` is unlinked first (unlink acts on a symlink itself), and
+/// rename replaces a symlink at `path` rather than following it. Readers see
+/// the old file or the whole new one, never a partial write; a failure removes
+/// the temp file.
+pub fn write_atomic(path: &str, contents: &[u8]) -> io::Result<()> {
+    let tmp = format!("{path}.new");
+    let _ = std::fs::remove_file(&tmp);
+    if let Err(e) = open_nofollow(&tmp, true).and_then(|mut f| f.write_all(contents)) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e
+    })
+}
+
 /// Command text for a state file: one line, no CR/LF injection.
 pub fn one_line(s: &str) -> String {
     s.chars().filter(|&c| c != '\n' && c != '\r').collect()
@@ -85,6 +104,31 @@ mod tests {
         assert_eq!(std::fs::read(&flag).unwrap(), b"attacker text");
         let _ = std::fs::remove_file(&victim);
         let _ = std::fs::remove_file(&flag);
+    }
+
+    #[test]
+    fn write_atomic_replaces_whole_and_leaves_no_temp() {
+        let p = tmp("atomic");
+        write_atomic(&p, b"one\n").unwrap();
+        write_atomic(&p, b"two\n").unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"two\n");
+        assert!(!std::path::Path::new(&format!("{p}.new")).exists());
+        // A planted link at the target is replaced, not written through; a
+        // planted link at the temp name is unlinked, not followed.
+        let victim = tmp("atomic-victim");
+        std::fs::write(&victim, b"SECRET").unwrap();
+        std::fs::remove_file(&p).unwrap();
+        symlink(&victim, &p).unwrap();
+        symlink(&victim, format!("{p}.new")).unwrap();
+        write_atomic(&p, b"three\n").unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"SECRET");
+        assert!(std::fs::symlink_metadata(&p).unwrap().file_type().is_file());
+        assert_eq!(std::fs::read(&p).unwrap(), b"three\n");
+        assert!(!std::path::Path::new(&format!("{p}.new")).exists());
+        // An unwritable directory fails cleanly and leaves nothing behind.
+        assert!(write_atomic("/nonexistent-dir-qatd/x", b"x").is_err());
+        let _ = std::fs::remove_file(&p);
+        let _ = std::fs::remove_file(&victim);
     }
 
     #[test]

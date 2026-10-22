@@ -28,6 +28,7 @@ impl<'a> Rd<'a> {
         Rd { b }
     }
 
+    #[allow(dead_code)] // cursor API kept whole
     pub fn left(&self) -> usize {
         self.b.len()
     }

@@ -262,3 +262,57 @@ impl Datagram for FakeSock {
         self.net.cv.notify_all();
     }
 }
+
+// ------------------------------------------------- shared whole-lane fixtures
+
+use super::registry::{Config, Registry};
+use super::{SERVICES, SVC_DMS, SVC_DSD, SVC_NAS, SVC_UIM, SVC_WDS};
+
+/// A network with every service up whose responder answers each allow-listed
+/// read with the committed `r1` device capture (LTE B1, PCI 295, EARFCN 150,
+/// registered). Replies arrive immediately, as on the device.
+pub fn r1_net() -> Arc<FakeNet> {
+    use crate::qmi::codec::testfix::fx;
+    let net = FakeNet::new();
+    for (i, svc) in SERVICES.iter().enumerate() {
+        net.add_server(*svc, 0, 0x40 + i as u32);
+    }
+    net.set_responder(|svc, m| {
+        let r = match (svc, m.id) {
+            (SVC_NAS, 0x0020) => fx!("r1_3_0x0020"),
+            (SVC_NAS, 0x0024) => fx!("r1_3_0x0024"),
+            (SVC_NAS, 0x0031) => fx!("r1_3_0x0031"),
+            (SVC_NAS, 0x0043) => fx!("r1_3_0x0043"),
+            (SVC_NAS, 0x004F) => fx!("r1_3_0x004F"),
+            (SVC_NAS, 0x00AC) => fx!("r1_3_0x00AC"),
+            (SVC_DMS, 0x0022) => fx!("r1_2_0x0022"),
+            (SVC_DMS, 0x0023) => fx!("r1_2_0x0023"),
+            (SVC_DMS, 0x0025) => fx!("r1_2_0x0025"),
+            (SVC_DMS, 0x002D) => fx!("r1_2_0x002D"),
+            (SVC_DMS, 0x002F) => fx!("r1_2_0x002F"),
+            (SVC_UIM, 0x002F) => fx!("r1_11_0x002F"),
+            (SVC_UIM, 0x0047) => fx!("r1_11_0x0047"),
+            (SVC_WDS, 0x002A) => fx!("r1_1_0x002A"),
+            (SVC_DSD, 0x0024) => fx!("r1_42_0x0024"),
+            _ => return None,
+        };
+        Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &r.tlvs))
+    });
+    net
+}
+
+/// Fast timings for tests (the defaults wait whole seconds).
+pub fn fast_config() -> Config {
+    Config {
+        request_timeout: Duration::from_millis(500),
+        lookup_timeout: Duration::from_millis(100),
+        backoff_min: Duration::from_millis(5),
+        backoff_max: Duration::from_millis(20),
+        tick: Duration::from_millis(5),
+        ssr_merge: Duration::ZERO,
+    }
+}
+
+pub fn start_registry(net: &Arc<FakeNet>) -> Arc<Registry> {
+    Arc::new(Registry::start(Box::new(net.transport()), fast_config()))
+}

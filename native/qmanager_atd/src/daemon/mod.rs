@@ -9,10 +9,13 @@
 //!   exact length, 2 s read timeout, same refusals) and routes it by verb.
 //! - `REQ` and `SMS` go to the AT lane (`at_lane`): one worker, in-process
 //!   FIFO, today's `Executor` unchanged. Refusals are answered by the reader
-//!   itself. A future lane that needs no modem lock (QMI) plugs in as another
-//!   `Route` and answers on the reader thread, never behind the AT lane.
+//!   itself.
+//! - `QMI` goes to the QMI lane (`qmi_lane`): no modem lock, answered on the
+//!   reader thread from the shared service registry, never behind the AT
+//!   lane.
 
 pub(crate) mod at_lane;
+pub(crate) mod qmi_lane;
 
 use crate::at::exec;
 use crate::at::new_channel;
@@ -22,6 +25,7 @@ use crate::common::log::Logger;
 use crate::common::proto::{self, Reply};
 use crate::sms;
 use at_lane::{AtLane, AtRequest, Job, ModemRunner};
+use qmi_lane::QmiLane;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -80,13 +84,17 @@ pub(crate) fn run_daemon() -> i32 {
             return 1;
         }
     };
-    accept_loop(listener, Arc::new(Ctx { log, at, uid: 0 }))
+    // After the AT lane, off this thread: the registry's startup lookup is
+    // bounded at 500 ms and AT serving must never wait on it.
+    let qmi = QmiLane::start(log.clone());
+    accept_loop(listener, Arc::new(Ctx { log, at, qmi, uid: 0 }))
 }
 
 /// What every reader shares.
 struct Ctx {
     log: Arc<Logger>,
     at: AtLane,
+    qmi: QmiLane,
     /// The only peer uid served: root in production.
     uid: u32,
 }
@@ -160,6 +168,8 @@ fn accept_loop(listener: UnixListener, ctx: Arc<Ctx>) -> ! {
 const MAX_REQUEST: usize = 8192;
 /// Largest SMS request: 255 parts of 67 UTF-16 units is ~51 KB of UTF-8.
 const MAX_SMS_REQUEST: usize = 64 * 1024;
+/// Largest QMI request: a handful of read names.
+const MAX_QMI_REQUEST: usize = 1024;
 
 /// True once the client closed its end completely (not just its write half),
 /// i.e. nobody is waiting for this reply any more: the caller was killed while
@@ -196,6 +206,8 @@ fn peer_uid(stream: &UnixStream) -> Option<u32> {
 enum Route {
     /// The AT lane: `REQ` or `SMS`, with the client's send time.
     At(AtRequest, u64),
+    /// The QMI lane: `QMI`, with its arguments. Answered by the reader.
+    Qmi(Vec<String>),
     /// Answered by the reader itself, without any lane.
     Answer(Reply),
     /// Refused and logged (`refused request: ...`), answered command_failed.
@@ -214,6 +226,14 @@ fn route(buf: &[u8]) -> Route {
         return match sms::parse_args(&req.args) {
             Ok(op) => Route::At(AtRequest::Sms(op), req.sent_ms),
             Err(e) => Route::Answer(Reply::Res(false, sms::error_json("bad_args", Some(&e)).into_bytes())),
+        };
+    }
+    if buf.starts_with(b"QMI ") {
+        // The reads are validated by the lane (bad_args is a normal answer);
+        // only framing is checked here.
+        return match proto::decode_qmi_request(buf) {
+            Some(r) => Route::Qmi(r.args),
+            None => Route::Refuse("malformed or truncated QMI request"),
         };
     }
     match proto::decode_request(buf) {
@@ -250,13 +270,23 @@ fn handle_conn(mut stream: UnixStream, ctx: &Ctx) {
             Err(e) => return refuse(&mut stream, log, &format!("incomplete read ({e})")),
         }
         // The kind is known from the first bytes; an AT request keeps its cap.
-        let cap = if buf.starts_with(b"SMS ") { MAX_SMS_REQUEST } else { MAX_REQUEST };
+        let cap = if buf.starts_with(b"SMS ") {
+            MAX_SMS_REQUEST
+        } else if buf.starts_with(b"QMI ") {
+            MAX_QMI_REQUEST
+        } else {
+            MAX_REQUEST
+        };
         if buf.len() > cap {
             return refuse(&mut stream, log, "oversize");
         }
     }
     match route(&buf) {
         Route::At(req, sent_ms) => ctx.at.submit(Job { stream, req, sent_ms }, log),
+        // No modem lock and no queue: answered here, on the reader thread.
+        Route::Qmi(args) => {
+            let _ = stream.write_all(&proto::encode_reply(&ctx.qmi.answer(&args)));
+        }
         Route::Answer(reply) => {
             let _ = stream.write_all(&proto::encode_reply(&reply));
         }
@@ -273,13 +303,17 @@ mod tests {
     /// A broker on a temp socket whose AT lane runs `runner`, serving this
     /// test's own uid. The acceptor thread lives until the test process ends.
     fn broker<R: at_lane::AtRunner + Send + 'static>(name: &str, runner: R) -> (String, Arc<Ctx>) {
+        broker_with(name, runner, QmiLane::starting())
+    }
+
+    fn broker_with<R: at_lane::AtRunner + Send + 'static>(name: &str, runner: R, qmi: QmiLane) -> (String, Arc<Ctx>) {
         let path = std::env::temp_dir().join(format!("qatd-{name}-{}.sock", std::process::id()));
         let path = path.to_str().unwrap().to_string();
         let _ = std::fs::remove_file(&path);
         let listener = UnixListener::bind(&path).unwrap();
         let log = Arc::new(Logger::new("test"));
         let at = AtLane::spawn(runner, at_lane::QUEUE_CAP, log.clone(), false).unwrap();
-        let ctx = Arc::new(Ctx { log, at, uid: unsafe { libc::getuid() } });
+        let ctx = Arc::new(Ctx { log, at, qmi, uid: unsafe { libc::getuid() } });
         let c = ctx.clone();
         std::thread::spawn(move || accept_loop(listener, c));
         (path, ctx)
@@ -330,6 +364,85 @@ mod tests {
         assert_eq!(held.join().unwrap(), b"OK 7\nAT+HOLD");
         assert_eq!(queued.join().unwrap(), b"OK 6\nAT+CSQ");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_qmi_read_answers_in_milliseconds_while_an_at_job_holds_the_lane() {
+        use crate::qmi::fake::{r1_net, start_registry};
+        let (started_tx, started) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let runner = move |r: &AtRequest, _w: Duration| {
+            let label = r.label();
+            if label == "AT+HOLD" {
+                let _ = started_tx.send(());
+                let _ = release_rx.recv();
+            }
+            Reply::Ok(label.into_bytes())
+        };
+        let lane = QmiLane::with_registry(start_registry(&r1_net()));
+        let (path, _ctx) = broker_with("qmi", runner, lane);
+        let p2 = path.clone();
+        let held = std::thread::spawn(move || call(&p2, &proto::encode_request("AT+HOLD", proto::mono_ms())));
+        started.recv_timeout(Duration::from_secs(5)).expect("HOLD never reached the lane");
+        let p3 = path.clone();
+        let queued = std::thread::spawn(move || call(&p3, &proto::encode_request("AT+CSQ", proto::mono_ms())));
+
+        // The headline invariant: QMI is not behind the AT lane. Warm the
+        // connection path once, then time the real thing.
+        let bundle = proto::encode_qmi_request(&["bundle".to_string()], proto::mono_ms());
+        let _ = call(&path, &bundle);
+        let t = Instant::now();
+        let got = call(&path, &bundle);
+        let el = t.elapsed();
+        assert!(el < Duration::from_millis(100), "QMI behind a held AT lane took {el:?}");
+        assert!(!held.is_finished() && !queued.is_finished(), "the AT lane must still be held");
+        let reply = match proto::decode_reply(&got).unwrap() {
+            Reply::Res(true, b) => String::from_utf8(b).unwrap(),
+            _ => panic!("expected RES 0: {:?}", String::from_utf8_lossy(&got)),
+        };
+        assert!(got.starts_with(b"RES 0 "));
+        assert!(reply.starts_with("{\"v\":1,\"ok\":true,\"mono_ms\":"), "{reply}");
+        assert!(reply.contains("\"pci\":295") && reply.contains("\"band\":\"B1\""), "{reply}");
+
+        // A bad read is a normal failure answer, not a refusal.
+        let bad = proto::encode_qmi_request(&["nope".to_string()], proto::mono_ms());
+        let got = call(&path, &bad);
+        assert!(got.starts_with(b"RES 1 "), "{:?}", String::from_utf8_lossy(&got));
+        assert!(String::from_utf8_lossy(&got).contains("\"error\":\"bad_args\""));
+
+        release_tx.send(()).unwrap();
+        assert_eq!(held.join().unwrap(), b"OK 7\nAT+HOLD");
+        assert_eq!(queued.join().unwrap(), b"OK 6\nAT+CSQ");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn qmi_requests_obey_the_framing_and_size_rules() {
+        let (path, _ctx) = broker("qmi-frame", |r: &AtRequest, _w: Duration| Reply::Ok(r.label().into_bytes()));
+        // A lane whose registry has not arrived: valid -> modem_not_ready.
+        let ok = proto::encode_qmi_request(&["serving".to_string()], 1);
+        let got = String::from_utf8(call(&path, &ok)).unwrap();
+        assert!(got.starts_with("RES 1 ") && got.contains("modem_not_ready"), "{got}");
+        // Truncated, padded and oversize requests are refused, never answered.
+        assert_eq!(call(&path, &ok[..ok.len() - 1]), b"ERR command_failed\n");
+        let mut padded = ok.clone();
+        padded.push(b'x');
+        assert_eq!(call(&path, &padded), b"ERR command_failed\n");
+        let big = proto::encode_qmi_request(&["x".repeat(MAX_QMI_REQUEST + 1)], 1);
+        assert_eq!(call(&path, &big), b"ERR command_failed\n");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn route_decodes_qmi_and_refuses_it_malformed() {
+        let args = vec!["serving".to_string(), "ca".to_string()];
+        assert!(matches!(route(&proto::encode_qmi_request(&args, 3)), Route::Qmi(ref a) if *a == args));
+        assert!(matches!(route(&proto::encode_qmi_request(&[], 3)), Route::Qmi(ref a) if a.is_empty()));
+        for bad in [&b"QMI 9 1\nx"[..], b"QMI x 1\nab", b"QMI 1 x\na", b"QMI 1 1 1\na", b"QMI 2 1\na\xff"] {
+            assert!(matches!(route(bad), Route::Refuse("malformed or truncated QMI request")), "{bad:?}");
+        }
+        // A QMI body is never run as an AT command, nor the reverse.
+        assert!(matches!(route(&proto::encode_request("QMI", 1)), Route::At(AtRequest::Req(_), 1)));
     }
 
     #[test]

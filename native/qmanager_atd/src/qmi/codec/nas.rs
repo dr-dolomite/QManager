@@ -477,11 +477,13 @@ pub fn signal_info(m: &Msg) -> SignalInfo {
 /// the strongest RAT; the model does not use it for LTE (0x0043 and 0x004F
 /// carry more).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // decoded, not yet rendered by any read
 pub struct SignalStrength {
     pub dbm: i8,
     pub rat: Rat,
 }
 
+#[allow(dead_code)] // decoded, not yet rendered by any read
 pub fn signal_strength(m: &Msg) -> Option<SignalStrength> {
     let mut r = Rd::new(m.tlv(0x01)?);
     Some(SignalStrength { dbm: r.i8()?, rat: Rat::from_u8(r.u8()?) })

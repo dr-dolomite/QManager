@@ -21,6 +21,7 @@ pub struct Tlv {
 }
 
 impl Tlv {
+    #[allow(dead_code)] // request builder for the indication registration
     pub fn new(t: u8, v: &[u8]) -> Tlv {
         Tlv { t, v: v.to_vec() }
     }
@@ -121,6 +122,7 @@ pub fn parse(b: &[u8]) -> Option<Msg> {
 }
 
 /// A result TLV: success (None), or failure with error code `ec`.
+#[allow(dead_code)] // response builder used by the fakes
 pub fn result_tlv(ec: Option<u16>) -> Tlv {
     let (st, ec) = match ec {
         None => (0u16, 0u16),

@@ -15,6 +15,10 @@
 //! the transport level, fall back to running the exchange in-process (same
 //! code the daemon runs), so AT never depends on the daemon being up.
 //!
+//! Invoked as `qmi`: read-only QMI reads (serving, cell, CA, ...), one JSON line
+//! on stdout. Broker first when its capability file says `proto>=3` and
+//! `qmi=1`, else the same reads in-process (see client/qmi.rs).
+//!
 //! Invoked as `qsms`: the SMS client (list / status / send / delete, JSON on
 //! stdout, see sms.rs), with the same socket-first, never-run-twice transport.
 //!
@@ -25,13 +29,13 @@ mod at;
 mod client;
 mod common;
 mod daemon;
-#[allow(dead_code)] // QMI lane: nothing calls it yet (phase 1 step 3).
 mod qmi;
 #[cfg(feature = "poll")]
 mod poll;
 mod sms;
 
 use client::qcmd::run_qcmd;
+use client::qmi::run_qmi;
 use client::qsms::run_qsms;
 use common::proto;
 use daemon::run_daemon;
@@ -45,10 +49,12 @@ fn main() {
         .unwrap_or("qcmd")
         .to_string();
 
-    // qsms is always a client: its arguments are message text, which may well
-    // be "-d" or "--daemon".
-    if base == "qsms" {
-        std::process::exit(run_qsms(&args[1..]));
+    // qsms and qmi are always clients: qsms's arguments are message text,
+    // which may well be "-d" or "--daemon", and qmi never starts a daemon.
+    match fixed_client(&base) {
+        Some(FixedClient::Qsms) => std::process::exit(run_qsms(&args[1..])),
+        Some(FixedClient::Qmi) => std::process::exit(run_qmi(&args[1..])),
+        None => {}
     }
 
     match mode(&base, args.get(1..).unwrap_or(&[])) {
@@ -65,6 +71,21 @@ fn main() {
         }
         Mode::Daemon => std::process::exit(run_daemon()),
         Mode::Client => std::process::exit(run_qcmd(&args)),
+    }
+}
+
+/// Names that are a client whatever their arguments say.
+#[derive(Debug, PartialEq)]
+enum FixedClient {
+    Qsms,
+    Qmi,
+}
+
+fn fixed_client(base: &str) -> Option<FixedClient> {
+    match base {
+        "qsms" => Some(FixedClient::Qsms),
+        "qmi" => Some(FixedClient::Qmi),
+        _ => None,
     }
 }
 
@@ -123,6 +144,22 @@ mod tests {
         assert_eq!(mode("qcmd", &sv(&["-t", "2500", "AT+CSQ"])), Mode::Client);
         assert_eq!(mode("qcmd", &sv(&["-d"])), Mode::Client);
         assert_eq!(mode("qcmd", &sv(&["--daemon"])), Mode::Daemon);
+    }
+
+    #[test]
+    fn qsms_and_qmi_are_fixed_clients_and_nothing_else_is() {
+        assert_eq!(fixed_client("qmi"), Some(FixedClient::Qmi));
+        assert_eq!(fixed_client("qsms"), Some(FixedClient::Qsms));
+        // The dispatch sees the basename: /usr/bin/qmi, and a stray .qmi.tmp
+        // link name, resolve as the code in main does.
+        let base = |a0: &str| a0.rsplit('/').next().unwrap().to_string();
+        assert_eq!(fixed_client(&base("/usr/bin/qmi")), Some(FixedClient::Qmi));
+        for other in ["qcmd", "qmanager_atd", "qmi2", "Qmi", "qmi.exe", ""] {
+            assert_eq!(fixed_client(other), None, "{other}");
+        }
+        // The daemon rule is untouched: an argument under the atd name is usage,
+        // and `qmi` never reaches `mode` at all.
+        assert_eq!(mode("qmanager_atd", &sv(&["serving"])), Mode::Usage);
     }
 
 }

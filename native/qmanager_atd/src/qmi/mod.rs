@@ -20,11 +20,12 @@ pub mod codec;
 pub mod error;
 pub mod model;
 pub mod msg;
+pub mod query;
 pub mod registry;
 pub mod transport;
 
 #[cfg(test)]
-mod fake;
+pub(crate) mod fake;
 
 pub const SVC_WDS: u32 = 1;
 pub const SVC_DMS: u32 = 2;

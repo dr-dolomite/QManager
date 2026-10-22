@@ -19,10 +19,13 @@
 //! message text (newlines, quotes, emoji) round-trips unambiguously. Same
 //! refusal rules as REQ. Reply: `RES <0|1> <nbytes>\n<json>`, the finished
 //! JSON envelope and whether it is a success; or `ERR <code>\n` as above.
+//!
+//! QMI request (qmi): `QMI <nbytes> <sent_ms>\n` then exactly nbytes of the
+//! reads joined by NUL, same refusal rules. Reply: `RES <0|1> <nbytes>\n<json>`
+//! like SMS. Only sent to a broker whose capability file says `proto>=3` and
+//! `qmi=1`: an older broker would refuse the unknown verb.
 
 use crate::at::output::Code;
-use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
 
 pub const SOCKET_PATH: &str = "/var/run/qmanager_atd.sock";
 
@@ -36,32 +39,55 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// What the running broker and its `qcmd` understand.
 /// 1: `REQ` / `SMS` (v0.1.32, no capability file).
 /// 2: `qcmd -t <ms>` / `QCMD_WAIT_MS` client wait cap, `--version`.
-pub const PROTO_VERSION: u32 = 2;
+/// 3: the `QMI` verb (answered by the QMI lane on the reader thread) and the
+///    `qmi=1` capability line. (`POLL` was parked; it would be 4.)
+pub const PROTO_VERSION: u32 = 3;
 
 pub fn version_line() -> String {
     format!("qmanager_atd {} proto={}", env!("CARGO_PKG_VERSION"), PROTO_VERSION)
 }
 
+/// The capability file's contents. `proto` and `version` stay the first two
+/// lines (the order every earlier reader saw); new capabilities follow.
+pub fn capability_body() -> String {
+    format!("proto={}\nversion={}\nqmi=1\n", PROTO_VERSION, env!("CARGO_PKG_VERSION"))
+}
+
 /// Writes the capability file as `<path>.new` (O_EXCL + O_NOFOLLOW, so a
 /// planted link is never followed) and renames it over `path`.
 pub fn write_proto_file(path: &str) -> std::io::Result<()> {
-    let tmp = format!("{path}.new");
-    // A leftover (or planted) tmp is removed, not followed: unlink acts on a
-    // symlink itself.
-    let _ = std::fs::remove_file(&tmp);
-    let body = format!("proto={}\nversion={}\n", PROTO_VERSION, env!("CARGO_PKG_VERSION"));
-    let written = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o644)
-        .custom_flags(crate::common::safefs::NOFOLLOW)
-        .open(&tmp)
-        .and_then(|mut f| f.write_all(body.as_bytes()));
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(e);
+    crate::common::safefs::write_atomic(path, capability_body().as_bytes())
+}
+
+/// What a capability file says the running broker speaks.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Caps {
+    pub proto: u32,
+    pub qmi: bool,
+}
+
+/// Parses a capability file: `key=value` lines, unknown keys ignored, an
+/// unparsable or missing `proto` reads as 0 (nothing is assumed).
+pub fn parse_capability(text: &str) -> Caps {
+    let mut caps = Caps { proto: 0, qmi: false };
+    for line in text.lines() {
+        match line.split_once('=') {
+            Some(("proto", v)) => caps.proto = v.parse().unwrap_or(0),
+            Some(("qmi", v)) => caps.qmi = v == "1",
+            _ => {}
+        }
     }
-    std::fs::rename(&tmp, path)
+    caps
+}
+
+/// True only if the running broker serves the `QMI` verb: `proto>=3` AND
+/// `qmi=1`. No file (no daemon, or a 0.1.x one), an unreadable one, or a proto
+/// 2 file all mean no.
+pub fn broker_serves_qmi(caps_text: Option<&str>) -> bool {
+    caps_text.map_or(false, |t| {
+        let c = parse_capability(t);
+        c.proto >= 3 && c.qmi
+    })
 }
 
 pub enum Reply {
@@ -111,24 +137,49 @@ pub fn decode_request(buf: &[u8]) -> Option<Request<'_>> {
     Some(Request { cmd: std::str::from_utf8(body).ok()?, sent_ms })
 }
 
-pub fn encode_sms_request(args: &[String], sent_ms: u64) -> Vec<u8> {
+/// `<VERB> <nbytes> <sent_ms>\n` then the arguments joined by NUL.
+fn encode_args_request(verb: &str, args: &[String], sent_ms: u64) -> Vec<u8> {
     let body = args.join("\0");
-    let mut v = format!("SMS {} {}\n", body.len(), sent_ms).into_bytes();
+    let mut v = format!("{verb} {} {}\n", body.len(), sent_ms).into_bytes();
     v.extend_from_slice(body.as_bytes());
     v
 }
 
-pub struct SmsRequest {
+pub struct ArgsRequest {
     pub args: Vec<String>,
     pub sent_ms: u64,
 }
 
+pub type SmsRequest = ArgsRequest;
+
+pub fn encode_sms_request(args: &[String], sent_ms: u64) -> Vec<u8> {
+    encode_args_request("SMS", args, sent_ms)
+}
+
+pub fn encode_qmi_request(args: &[String], sent_ms: u64) -> Vec<u8> {
+    encode_args_request("QMI", args, sent_ms)
+}
+
 /// SMS counterpart of `decode_request`, with the same exact-length rule.
 pub fn decode_sms_request(buf: &[u8]) -> Option<SmsRequest> {
+    decode_args_request(buf, "SMS")
+}
+
+/// QMI counterpart: an empty body is no reads at all (not one empty read).
+pub fn decode_qmi_request(buf: &[u8]) -> Option<ArgsRequest> {
+    let mut r = decode_args_request(buf, "QMI")?;
+    if r.args.len() == 1 && r.args[0].is_empty() {
+        r.args.clear();
+    }
+    Some(r)
+}
+
+/// The same exact-length rule as `decode_request`, for NUL-joined arguments.
+fn decode_args_request(buf: &[u8], verb: &str) -> Option<ArgsRequest> {
     let nl = buf.iter().position(|&b| b == b'\n')?;
     let header = std::str::from_utf8(&buf[..nl]).ok()?;
     let mut it = header.split(' ');
-    if it.next()? != "SMS" {
+    if it.next()? != verb {
         return None;
     }
     let len: usize = it.next()?.parse().ok()?;
@@ -141,7 +192,7 @@ pub fn decode_sms_request(buf: &[u8]) -> Option<SmsRequest> {
         return None;
     }
     let body = std::str::from_utf8(body).ok()?;
-    Some(SmsRequest { args: body.split('\0').map(str::to_string).collect(), sent_ms })
+    Some(ArgsRequest { args: body.split('\0').map(str::to_string).collect(), sent_ms })
 }
 
 pub fn encode_reply(reply: &Reply) -> Vec<u8> {
@@ -291,6 +342,49 @@ mod tests {
         write_proto_file(p).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), got);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn capability_file_is_proto_version_then_qmi() {
+        assert_eq!(PROTO_VERSION, 3);
+        assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\n", env!("CARGO_PKG_VERSION")));
+        assert_eq!(env!("CARGO_PKG_VERSION"), "0.3.0");
+        // The shape every earlier reader saw is still the first two lines.
+        let body = capability_body();
+        let keys: Vec<&str> = body.lines().take(2).filter_map(|l| l.split('=').next()).collect();
+        assert_eq!(keys, ["proto", "version"]);
+    }
+
+    #[test]
+    fn capability_gate_needs_proto_3_and_qmi_1() {
+        assert!(broker_serves_qmi(Some(&capability_body())));
+        assert!(broker_serves_qmi(Some("proto=4\nversion=9\nqmi=1\n")));
+        // A 0.2.0 daemon's file, an old one's absence, and every half-way case.
+        assert!(!broker_serves_qmi(Some("proto=2\nversion=0.2.0\n")));
+        assert!(!broker_serves_qmi(Some("proto=2\nversion=0.2.0\nqmi=1\n")));
+        assert!(!broker_serves_qmi(Some("proto=3\nversion=0.3.0\n")));
+        assert!(!broker_serves_qmi(Some("proto=3\nqmi=0\n")));
+        assert!(!broker_serves_qmi(Some("proto=x\nqmi=1\n")));
+        assert!(!broker_serves_qmi(Some("")));
+        assert!(!broker_serves_qmi(None));
+    }
+
+    #[test]
+    fn qmi_request_round_trips_and_is_its_own_verb() {
+        let args = vec!["serving".to_string(), "ca".to_string()];
+        let r = encode_qmi_request(&args, 11);
+        let d = decode_qmi_request(&r).unwrap();
+        assert_eq!((d.args, d.sent_ms), (args, 11));
+        assert!(decode_request(&r).is_none() && decode_sms_request(&r).is_none());
+        assert!(decode_qmi_request(&encode_sms_request(&["status".into()], 1)).is_none());
+        // Exact length: truncated and padded bodies are refused.
+        assert!(decode_qmi_request(&r[..r.len() - 1]).is_none());
+        let mut padded = r.clone();
+        padded.push(b'x');
+        assert!(decode_qmi_request(&padded).is_none());
+        // No reads at all stays empty (the lane then answers bad_args).
+        assert!(decode_qmi_request(&encode_qmi_request(&[], 1)).unwrap().args.is_empty());
+        assert!(decode_qmi_request(b"QMI 1 2 3\nx").is_none());
     }
 
     #[test]
