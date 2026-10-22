@@ -314,6 +314,8 @@ pub struct Live {
     last_period: Duration,
     write_failed: bool,
     log: std::sync::Arc<Logger>,
+    /// The boot clock, re-read under the lock (a seam for tests).
+    clock: fn() -> u64,
 }
 
 impl Live {
@@ -332,6 +334,7 @@ impl Live {
             last_period: IDLE_PERIOD,
             write_failed: false,
             log,
+            clock: crate::daemon::qmi_snapshot::boot_secs,
         }
     }
 
@@ -476,7 +479,10 @@ impl Live {
                 return;
             }
         };
-        // A renewal may have landed between the check and the lock.
+        // A renewal may have landed between the check and the lock, stamped
+        // with a later second than the slice's `now_s` (which would read as
+        // "in the future"): re-check on a fresh reading of the clock.
+        let now_s = (self.clock)().max(now_s);
         if self.tier(now_s) != Tier::None {
             return;
         }
@@ -877,6 +883,32 @@ mod tests {
         std::fs::write(d.join("token"), TOK2).unwrap();
         l.tick(Tier::None, now);
         assert!(!d.join("token").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_renewal_stamped_after_the_slice_second_still_holds_the_lease() {
+        let d = dir("renew-next-sec");
+        let mut l = live(&d);
+        l.start();
+        let now = now_s();
+        std::fs::write(d.join("token"), TOK).unwrap();
+        stamp(&d, "aim", now);
+        l.on_sample(Tier::Aim, "up", 0, Some(&bundle()));
+        let pubf = d.join("pub").join(format!("{TOK}.json"));
+        assert!(pubf.exists());
+        // The slice read `now`; the CGI renews in the next second before
+        // the broker takes the lock. The re-check must use the clock as it
+        // reads under the lock, not the slice's `now`.
+        std::fs::remove_file(d.join("aim")).unwrap();
+        stamp(&d, "watch", now + 1);
+        fn next_second() -> u64 {
+            crate::daemon::qmi_snapshot::boot_secs() + 1
+        }
+        l.clock = next_second;
+        l.tick(Tier::None, now);
+        assert!(pubf.exists() && d.join("token").exists(), "the fresh lease survives");
+        assert_eq!(l.cur_token.as_deref(), Some(TOK));
         let _ = std::fs::remove_dir_all(&d);
     }
 
