@@ -33,8 +33,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-/// Readers that may run at once. A live client's request is read in
-/// microseconds; only stuck peers (2 s read timeout) occupy a reader for long.
+/// Readers that may run at once. A live client's AT or SMS request is read
+/// and handed to the AT lane in microseconds; a stuck peer holds a reader for
+/// up to its 2 s read timeout. A QMI request is answered on its reader, for
+/// up to the QMI lane's deadline (2 s), but at most `qmi_lane::MAX_IN_FLIGHT`
+/// at once: the rest of the pool is always free for AT.
 const MAX_READERS: usize = 16;
 /// Readers only decode a request of at most 64 KB into a heap buffer.
 const READER_STACK: usize = 128 * 1024;
@@ -414,6 +417,39 @@ mod tests {
         release_tx.send(()).unwrap();
         assert_eq!(held.join().unwrap(), b"OK 7\nAT+HOLD");
         assert_eq!(queued.join().unwrap(), b"OK 6\nAT+CSQ");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn qmi_requests_against_a_silent_service_never_starve_at_of_readers() {
+        use crate::qmi::fake::silent_registry;
+        assert!(qmi_lane::MAX_IN_FLIGHT + 8 <= MAX_READERS);
+        // Every in-cap QMI request holds its reader for the whole deadline.
+        let lane = QmiLane::with_registry(silent_registry(500, 0)).limits(qmi_lane::MAX_IN_FLIGHT, Duration::from_secs(1));
+        let (path, ctx) = broker_with("qmi-starve", |r: &AtRequest, _w: Duration| Reply::Ok(r.label().into_bytes()), lane);
+        let n = MAX_READERS * 2;
+        let mut qmi = Vec::new();
+        for _ in 0..n {
+            let p = path.clone();
+            qmi.push(std::thread::spawn(move || call(&p, &proto::encode_qmi_request(&["bundle".to_string()], proto::mono_ms()))));
+        }
+        let end = Instant::now() + Duration::from_secs(2);
+        while ctx.qmi.in_flight() < qmi_lane::MAX_IN_FLIGHT && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(ctx.qmi.in_flight(), qmi_lane::MAX_IN_FLIGHT);
+        // AT is served at once while the QMI requests are still held.
+        let t = Instant::now();
+        assert_eq!(call(&path, &proto::encode_request("AT+CSQ", proto::mono_ms())), b"OK 6\nAT+CSQ");
+        let el = t.elapsed();
+        assert!(el < Duration::from_millis(300), "AT behind QMI took {el:?}");
+        assert!(ctx.qmi.in_flight() > 0, "the QMI requests must still be in flight");
+        let replies: Vec<Vec<u8>> = qmi.into_iter().map(|h| h.join().unwrap()).collect();
+        let fallback = replies.iter().filter(|r| r.as_slice() == b"ERR command_failed\n").count();
+        let answered = replies.iter().filter(|r| r.starts_with(b"RES 1 ")).count();
+        assert_eq!(fallback + answered, n, "{replies:?}");
+        assert!(answered >= qmi_lane::MAX_IN_FLIGHT && fallback >= n - 2 * qmi_lane::MAX_IN_FLIGHT, "{answered} {fallback}");
+        assert_eq!(ctx.qmi.peak(), qmi_lane::MAX_IN_FLIGHT);
         let _ = std::fs::remove_file(&path);
     }
 

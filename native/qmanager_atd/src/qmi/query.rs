@@ -20,6 +20,7 @@ use super::model::{self, Fetch, Read};
 use super::registry::Registry;
 use crate::common::json::J;
 use crate::common::proto::mono_ms;
+use std::time::Instant;
 
 /// Arguments accepted in one request (there are 14 reads; the rest is noise).
 pub const MAX_ARGS: usize = 16;
@@ -70,7 +71,7 @@ pub fn execute(fetch: Fetch, reads: &[Read], mono_ms: u64, ssr_count: u64) -> (b
                 any_ok = true;
                 if r == Read::Bundle {
                     // `{...}` -> its members, spliced into `data`.
-                    slots.push(json[1..json.len() - 1].to_string());
+                    slots.push(json.get(1..json.len().saturating_sub(1)).unwrap_or("").to_string());
                 } else {
                     slots.push(format!("\"{}\":{}", r.name(), json));
                 }
@@ -95,13 +96,19 @@ pub fn execute(fetch: Fetch, reads: &[Read], mono_ms: u64, ssr_count: u64) -> (b
 /// still starting: valid requests answer `modem_not_ready`, bad ones still
 /// `bad_args`.
 pub fn answer(reg: Option<&Registry>, args: &[String]) -> (bool, String) {
+    answer_by(reg, args, None)
+}
+
+/// `answer`, bounded: no request is sent past `deadline` and no response is
+/// waited for past it; the reads left fail `modem_not_ready`.
+pub fn answer_by(reg: Option<&Registry>, args: &[String], deadline: Option<Instant>) -> (bool, String) {
     let reads = match parse_reads(args) {
         Ok(r) => r,
         Err(_) => return (false, fail_envelope("bad_args")),
     };
     match reg {
         Some(reg) => {
-            let fetch = |svc: u32, id: u16| reg.request(svc, id, &[]);
+            let fetch = |svc: u32, id: u16| reg.request_by(svc, id, &[], deadline);
             execute(&fetch, &reads, mono_ms(), reg.ssr_count())
         }
         None => (false, fail_envelope("modem_not_ready")),

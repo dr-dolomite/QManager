@@ -14,7 +14,18 @@
 //!
 //! Requests run on the caller's thread: allocate a txn and register a waiter
 //! under the service mutex, send, release, then wait on a private channel
-//! for at most the request timeout (1 s).
+//! for at most the request timeout (1 s), or less if the caller's deadline
+//! (`request_by`) comes first.
+//!
+//! Fast-fail circuit. A service that is listed but silent (NAS wedged after
+//! an SSR, a modem that stopped answering) would make every request wait the
+//! full timeout. After `circuit_after` consecutive timeouts (no response
+//! within the full request timeout, or a send that timed out) the circuit
+//! opens: requests fail at once with `modem_not_ready`, except one probe let
+//! through at most every `probe_every` (half-open). Any response on the
+//! current link (success or a QMI error), and every link rebuild (NEW_SERVER,
+//! a backoff re-lookup), closes it. The snapshot sampler's 2 s cadence is
+//! what normally probes a recovering service.
 //!
 //! Locking. Three kinds of mutex: `Service.inner` (state, current link, txn
 //! counter), `Link.pending` (txn -> waiter) and `Service.subs`. The only
@@ -71,6 +82,10 @@ pub struct Config {
     pub tick: Duration,
     /// Service losses closer together than this are one SSR.
     pub ssr_merge: Duration,
+    /// Consecutive timeouts that open the fast-fail circuit (0 = never).
+    pub circuit_after: u32,
+    /// While open, one probe request is let through at most this often.
+    pub probe_every: Duration,
 }
 
 impl Default for Config {
@@ -82,6 +97,8 @@ impl Default for Config {
             backoff_max: Duration::from_secs(2),
             tick: Duration::from_millis(250),
             ssr_merge: Duration::from_secs(2),
+            circuit_after: 2,
+            probe_every: Duration::from_secs(1),
         }
     }
 }
@@ -145,6 +162,18 @@ struct Inner {
     /// Internal indication registration, replayed on every rebuilt socket
     /// (registrations are per client socket and die with it).
     ind_reg: Option<(u16, Vec<Tlv>)>,
+    /// Consecutive timeouts on the current link (the circuit is open at
+    /// `circuit_after`).
+    timeouts: u32,
+    /// While open: the earliest moment the next probe may go out.
+    probe_at: Option<Instant>,
+}
+
+impl Inner {
+    fn close_circuit(&mut self) {
+        self.timeouts = 0;
+        self.probe_at = None;
+    }
 }
 
 struct Service {
@@ -200,17 +229,33 @@ impl Shared {
         self.services.iter().position(|s| s.id == svc)
     }
 
-    fn call(self: &Arc<Self>, i: usize, msg_id: u16, tlvs: &[Tlv]) -> Result<Msg, QmiError> {
+    fn call(self: &Arc<Self>, i: usize, msg_id: u16, tlvs: &[Tlv], deadline: Option<Instant>) -> Result<Msg, QmiError> {
         if msg::tlvs_len(tlvs) > MAX_REQUEST_BODY {
             return Err(QmiError::BadArgs(None));
         }
-        let svc = &self.services[i];
+        let svc = self.services.get(i).ok_or(QmiError::Unavailable)?;
         let mut g = lock(&svc.inner);
         let link = match (g.state, &g.link) {
             (SvcState::Up, Some(l)) => l.clone(),
             (SvcState::Unavailable, _) => return Err(QmiError::Unavailable),
             _ => return Err(QmiError::ModemNotReady(None)),
         };
+        // The caller's budget, checked before anything is sent.
+        let wait = match deadline {
+            Some(d) => d.saturating_duration_since(Instant::now()).min(self.cfg.request_timeout),
+            None => self.cfg.request_timeout,
+        };
+        if wait.is_zero() {
+            return Err(QmiError::ModemNotReady(None));
+        }
+        if self.cfg.circuit_after > 0 && g.timeouts >= self.cfg.circuit_after {
+            let now = Instant::now();
+            match g.probe_at {
+                Some(t) if now < t => return Err(QmiError::ModemNotReady(None)),
+                // Half-open: this request is the probe; the next one waits.
+                _ => g.probe_at = Some(now + self.cfg.probe_every),
+            }
+        }
         let (tx, rx) = mpsc::sync_channel(1);
         let txn = {
             let mut p = lock(&link.pending);
@@ -219,16 +264,18 @@ impl Shared {
             txn
         };
         let sent = link.sock.send_to(link.node, link.port, &msg::encode(KIND_REQ, txn, msg_id, tlvs));
-        drop(g);
         if let Err(e) = sent {
             lock(&link.pending).remove(&txn);
             if transport::is_timeout(&e) {
+                self.note_timeout(&mut g, &link);
                 return Err(QmiError::Timeout);
             }
+            drop(g);
             self.mark_down(i, Lost::Link(&link));
             return Err(QmiError::ModemNotReady(None));
         }
-        let r = match rx.recv_timeout(self.cfg.request_timeout) {
+        drop(g);
+        let r = match rx.recv_timeout(wait) {
             Ok(r) => r,
             Err(RecvTimeoutError::Timeout) => {
                 if lock(&link.pending).remove(&txn).is_some() {
@@ -240,7 +287,36 @@ impl Shared {
             }
             Err(RecvTimeoutError::Disconnected) => Err(QmiError::ModemNotReady(None)),
         };
+        match &r {
+            // A response, whatever its result TLV says: the service is alive.
+            Ok(_) => {
+                let mut g = lock(&svc.inner);
+                if g.link.as_ref().map_or(false, |l| Arc::ptr_eq(l, &link)) {
+                    g.close_circuit();
+                }
+            }
+            // Only a full-length wait is evidence of a silent service; a wait
+            // the caller's deadline cut short says nothing.
+            Err(QmiError::Timeout) if wait >= self.cfg.request_timeout => {
+                let mut g = lock(&svc.inner);
+                self.note_timeout(&mut g, &link);
+            }
+            Err(_) => {}
+        }
         r.and_then(Msg::into_result)
+    }
+
+    /// One more consecutive timeout on `link`, if it is still the current one
+    /// (a rebuilt link starts with a closed circuit).
+    fn note_timeout(&self, g: &mut Inner, link: &Arc<Link>) {
+        if !g.link.as_ref().map_or(false, |l| Arc::ptr_eq(l, link)) {
+            return;
+        }
+        g.timeouts = g.timeouts.saturating_add(1);
+        if self.cfg.circuit_after > 0 && g.timeouts >= self.cfg.circuit_after {
+            // Opened, or a probe failed: the next probe is a full period away.
+            g.probe_at = Some(Instant::now() + self.cfg.probe_every);
+        }
     }
 
     /// The name server lists `svc` at (node, port): bring it up there.
@@ -278,10 +354,11 @@ impl Shared {
             g.state = SvcState::Up;
             g.retry_at = None;
             g.backoff = self.cfg.backoff_min;
+            g.close_circuit();
             g.ind_reg.clone()
         };
         if let Some((msg_id, tlvs)) = replay {
-            let _ = self.call(i, msg_id, &tlvs);
+            let _ = self.call(i, msg_id, &tlvs, None);
         }
     }
 
@@ -296,8 +373,12 @@ impl Shared {
         if !hit {
             return;
         }
-        let link = g.link.take().expect("checked above");
+        let link = match g.link.take() {
+            Some(l) => l,
+            None => return,
+        };
         g.state = SvcState::Down;
+        g.close_circuit();
         g.backoff = self.cfg.backoff_min;
         g.retry_at = Some(Instant::now() + g.backoff);
         link.close();
@@ -416,8 +497,9 @@ fn demux(shared: Arc<Shared>, i: usize, link: Arc<Link>) {
                     KIND_RESP => {
                         let mut p = lock(&link.pending);
                         if p.get(&m.txn).map(|w| w.msg) == Some(m.id) {
-                            let w = p.remove(&m.txn).expect("checked above");
-                            let _ = w.tx.try_send(Ok(m));
+                            if let Some(w) = p.remove(&m.txn) {
+                                let _ = w.tx.try_send(Ok(m));
+                            }
                         }
                     }
                     KIND_IND => shared.services[i].publish(&m),
@@ -500,6 +582,8 @@ impl Registry {
                     retry_at: None,
                     backoff: cfg.backoff_min,
                     ind_reg: None,
+                    timeouts: 0,
+                    probe_at: None,
                 }),
                 subs: Mutex::new(Vec::new()),
             })
@@ -533,9 +617,16 @@ impl Registry {
     /// allow-list; otherwise the successful response, or the typed error
     /// (including a failing result TLV).
     pub fn request(&self, svc: u32, msg_id: u16, tlvs: &[Tlv]) -> Result<Msg, QmiError> {
+        self.request_by(svc, msg_id, tlvs, None)
+    }
+
+    /// `request`, but never waiting past `deadline`: past it the request
+    /// fails `modem_not_ready` without being sent, and the response wait is
+    /// cut to what is left.
+    pub fn request_by(&self, svc: u32, msg_id: u16, tlvs: &[Tlv], deadline: Option<Instant>) -> Result<Msg, QmiError> {
         allow::check_client(svc, msg_id)?;
         let i = self.shared.idx(svc).ok_or(QmiError::Unavailable)?;
-        self.shared.call(i, msg_id, tlvs)
+        self.shared.call(i, msg_id, tlvs, deadline)
     }
 
     /// Internal only: NAS Indication Register on the registry's own NAS
@@ -549,7 +640,7 @@ impl Registry {
         }
         let i = self.shared.idx(svc).ok_or(QmiError::Unavailable)?;
         lock(&self.shared.services[i].inner).ind_reg = Some((msg_id, tlvs.to_vec()));
-        self.shared.call(i, msg_id, tlvs).map(|_| ())
+        self.shared.call(i, msg_id, tlvs, None).map(|_| ())
     }
 
     /// Indications from `svc`, from now on (across socket rebuilds). A
@@ -624,6 +715,8 @@ mod tests {
             backoff_max: Duration::from_millis(20),
             tick: Duration::from_millis(5),
             ssr_merge: Duration::ZERO,
+            circuit_after: 2,
+            probe_every: Duration::from_millis(200),
         }
     }
 
@@ -914,6 +1007,110 @@ mod tests {
         let r = regs();
         assert_ne!(r[0].sock, r[1].sock);
         assert_eq!(r[1].msg.tlvs, tlvs.to_vec());
+    }
+
+    #[test]
+    fn the_circuit_opens_after_two_timeouts_probes_and_closes_on_a_response() {
+        let net = net_all_up();
+        let answer = Arc::new(AtomicBool::new(false));
+        let a = answer.clone();
+        net.set_responder(move |svc, m| if a.load(SeqCst) { Some(ok_reply(svc, m)) } else { None });
+        let mut c = cfg();
+        c.request_timeout = Duration::from_millis(50);
+        c.probe_every = Duration::from_millis(300);
+        let reg = start(&net, c);
+        let nas_sent = || net.sent().iter().filter(|s| s.svc == SVC_NAS).count();
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::Timeout);
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::Timeout);
+        // Open: fails at once, nothing sent.
+        let t0 = Instant::now();
+        for _ in 0..5 {
+            assert_eq!(reg.request(SVC_NAS, 0x0043, &[]).unwrap_err(), QmiError::ModemNotReady(None));
+        }
+        assert!(t0.elapsed() < Duration::from_millis(40), "{:?}", t0.elapsed());
+        assert_eq!(nas_sent(), 2);
+        // Other services are not affected.
+        answer.store(true, SeqCst);
+        assert!(reg.request(SVC_DMS, 0x0025, &[]).is_ok());
+        answer.store(false, SeqCst);
+        // Half-open: one probe after the period; it times out, the circuit
+        // stays open for another full period.
+        thread::sleep(Duration::from_millis(320));
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::Timeout);
+        assert_eq!(nas_sent(), 3);
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::ModemNotReady(None));
+        assert_eq!(nas_sent(), 3);
+        // The service recovers: the next probe gets a response and closes it.
+        answer.store(true, SeqCst);
+        thread::sleep(Duration::from_millis(320));
+        assert!(reg.request(SVC_NAS, 0x0024, &[]).is_ok());
+        assert!(reg.request(SVC_NAS, 0x0043, &[]).is_ok());
+        assert!(reg.request(SVC_NAS, 0x0031, &[]).is_ok());
+        assert_eq!(nas_sent(), 6);
+    }
+
+    #[test]
+    fn a_qmi_error_response_closes_the_circuit_too() {
+        let net = net_all_up();
+        let answer = Arc::new(AtomicBool::new(false));
+        let a = answer.clone();
+        net.set_responder(move |_, m| a.load(SeqCst).then(|| encode(KIND_RESP, m.txn, m.id, &[result_tlv(Some(0x0003))])));
+        let mut c = cfg();
+        c.request_timeout = Duration::from_millis(30);
+        c.probe_every = Duration::from_millis(50);
+        let reg = start(&net, c);
+        reg.request(SVC_NAS, 0x0024, &[]).unwrap_err();
+        reg.request(SVC_NAS, 0x0024, &[]).unwrap_err();
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::ModemNotReady(None));
+        answer.store(true, SeqCst);
+        thread::sleep(Duration::from_millis(70));
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::CommandFailed(Some(0x0003)));
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::CommandFailed(Some(0x0003)));
+    }
+
+    #[test]
+    fn a_link_rebuild_closes_an_open_circuit() {
+        let net = net_all_up();
+        let answer = Arc::new(AtomicBool::new(false));
+        let a = answer.clone();
+        net.set_responder(move |svc, m| if a.load(SeqCst) { Some(ok_reply(svc, m)) } else { None });
+        let mut c = cfg();
+        c.request_timeout = Duration::from_millis(30);
+        c.probe_every = Duration::from_secs(60);
+        let reg = start(&net, c);
+        reg.request(SVC_NAS, 0x0024, &[]).unwrap_err();
+        reg.request(SVC_NAS, 0x0024, &[]).unwrap_err();
+        answer.store(true, SeqCst);
+        assert_eq!(reg.request(SVC_NAS, 0x0024, &[]).unwrap_err(), QmiError::ModemNotReady(None));
+        // NEW_SERVER at a new port (the post-SSR rebuild): closed at once.
+        net.add_server(SVC_NAS, 0, 0x61);
+        assert!(wait_until(|| reg.request(SVC_NAS, 0x0024, &[]).is_ok()));
+    }
+
+    #[test]
+    fn a_deadline_cuts_the_wait_and_fails_later_requests_unsent() {
+        let net = net_all_up();
+        let mut c = cfg();
+        c.request_timeout = Duration::from_secs(2);
+        c.circuit_after = 0;
+        let reg = start(&net, c);
+        let t0 = Instant::now();
+        let dl = Some(t0 + Duration::from_millis(80));
+        assert_eq!(reg.request_by(SVC_NAS, 0x0024, &[], dl).unwrap_err(), QmiError::Timeout);
+        let el = t0.elapsed();
+        assert!(el >= Duration::from_millis(75) && el < Duration::from_millis(500), "{el:?}");
+        assert_eq!(reg.request_by(SVC_NAS, 0x0024, &[], dl).unwrap_err(), QmiError::ModemNotReady(None));
+        assert_eq!(net.sent().len(), 1);
+        // A cut-short wait is not counted as a timeout by the circuit.
+        let mut c = cfg();
+        c.request_timeout = Duration::from_millis(500);
+        let net = net_all_up();
+        let reg = start(&net, c);
+        for _ in 0..3 {
+            let dl = Some(Instant::now() + Duration::from_millis(10));
+            assert_eq!(reg.request_by(SVC_NAS, 0x0024, &[], dl).unwrap_err(), QmiError::Timeout);
+        }
+        assert_eq!(net.sent().len(), 3);
     }
 
     #[test]

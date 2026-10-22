@@ -310,9 +310,24 @@ pub fn fast_config() -> Config {
         backoff_max: Duration::from_millis(20),
         tick: Duration::from_millis(5),
         ssr_merge: Duration::ZERO,
+        circuit_after: 2,
+        probe_every: Duration::from_millis(200),
     }
 }
 
 pub fn start_registry(net: &Arc<FakeNet>) -> Arc<Registry> {
     Arc::new(Registry::start(Box::new(net.transport()), fast_config()))
+}
+
+/// Every service listed, none answering. `circuit` 0 disables the registry's
+/// fast-fail circuit, so every read waits its full timeout.
+pub fn silent_registry(timeout_ms: u64, circuit: u32) -> Arc<Registry> {
+    let net = FakeNet::new();
+    for (i, svc) in SERVICES.iter().enumerate() {
+        net.add_server(*svc, 0, 0x40 + i as u32);
+    }
+    let mut c = fast_config();
+    c.request_timeout = Duration::from_millis(timeout_ms);
+    c.circuit_after = circuit;
+    Arc::new(Registry::start(Box::new(net.transport()), c))
 }
