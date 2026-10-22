@@ -1,10 +1,13 @@
 import type { TFunction } from "i18next";
 
+import { useLiveSignal } from "@/hooks/use-live-signal";
+import { sampleDb } from "@/types/live-signal";
 import type { LteStatus, NrStatus } from "@/types/modem-status";
 import {
   RSRP_THRESHOLDS,
   RSRQ_THRESHOLDS,
   SINR_THRESHOLDS,
+  normalizeSignalValue,
 } from "@/types/modem-status";
 
 import { ABSENT } from "./shapes";
@@ -78,6 +81,52 @@ function fmt(value: number | null | undefined, unit: string): string {
   return `${value} ${unit}`;
 }
 
+// -----------------------------------------------------------------------------
+// The live overlay: LTE RSRP / RSRQ / RSSI at 1 Hz
+// -----------------------------------------------------------------------------
+
+/** LTE serving values from the live file, in dB at 0.1 resolution. */
+export interface LiveLteOverlay {
+  rsrp: number | null;
+  rsrq: number | null;
+  rssi: number | null;
+}
+
+/**
+ * The live LTE serving values, or null whenever the 2 s snapshot should stand.
+ *
+ * Holds the `watch` lease (1 s, decision D4) only while an LTE card is on
+ * screen. The overlay applies ONLY while the feed is `live` AND the sample's
+ * PCI and EARFCN equal the snapshot's: a mismatch is a handover in progress,
+ * and showing one cell's power beside another cell's identifiers would be a
+ * reading of nothing. Silent by design: no toasts, no state chip, and the
+ * card's geometry is identical either way.
+ */
+export function useLiveLteOverlay(
+  lte: LteStatus | null,
+  enabled: boolean,
+): LiveLteOverlay | null {
+  const { state, latest } = useLiveSignal({ tier: "watch", enabled });
+  if (!enabled || state !== "live" || !latest || !lte) return null;
+  if (latest.pci === null || latest.earfcn === null) return null;
+  if (latest.pci !== lte.pci || latest.earfcn !== lte.earfcn) return null;
+  const db = sampleDb(latest);
+  return {
+    rsrp: normalizeSignalValue(db.rsrp, "rsrp"),
+    rsrq: normalizeSignalValue(db.rsrq, "rsrq"),
+    rssi: db.rssi,
+  };
+}
+
+/**
+ * Whole dB, like every other figure on the card. The live value moves at
+ * 1 Hz; a tenth-of-a-dB column would also widen "-105 dBm" past the fixed
+ * value slot and shift the row the moment a handover drops back to the 2 s
+ * integers. Quality ink and the bar still read the unrounded value.
+ */
+const wholeDb = (value: number | null) =>
+  value === null ? null : Math.round(value);
+
 export function buildSignalRows(
   family: "nr",
   data: NrStatus | null,
@@ -87,11 +136,13 @@ export function buildSignalRows(
   family: "lte",
   data: LteStatus | null,
   t: TFunction,
+  live?: LiveLteOverlay | null,
 ): SignalCardModel;
 export function buildSignalRows(
   family: RadioFamily,
   data: NrStatus | LteStatus | null,
   t: TFunction,
+  live?: LiveLteOverlay | null,
 ): SignalCardModel {
   // The overloads above are what the call sites see, and they are what keeps
   // `family` and `data` from being mixed up. Inside the implementation the
@@ -104,22 +155,28 @@ export function buildSignalRows(
   // reads it as a property of the row, never of the reading; that split is the
   // whole of the no-reading state. A row with no `thresholds` is an identifier
   // and must never be tinted, gauged or announced with a quality word.
+  // `liveRsrp` / `liveRsrq` mark a row as fed by the 1 Hz overlay, which the
+  // card reads to skip the value tick (it would never finish dipping).
   const measurements = (source: {
     rsrp: number | null;
     rsrq: number | null;
     sinr: number | null;
+    liveRsrp?: boolean;
+    liveRsrq?: boolean;
   }): SignalStatusRow[] => [
     {
       label: t("signal_status.rsrp"),
-      value: fmt(source.rsrp, "dBm"),
+      value: fmt(source.liveRsrp ? wholeDb(source.rsrp) : source.rsrp, "dBm"),
       rawValue: source.rsrp,
       thresholds: RSRP_THRESHOLDS,
+      live: source.liveRsrp,
     },
     {
       label: t("signal_status.rsrq"),
-      value: fmt(source.rsrq, "dB"),
+      value: fmt(source.liveRsrq ? wholeDb(source.rsrq) : source.rsrq, "dB"),
       rawValue: source.rsrq,
       thresholds: RSRQ_THRESHOLDS,
+      live: source.liveRsrq,
     },
     {
       label: t("signal_status.sinr"),
@@ -129,13 +186,12 @@ export function buildSignalRows(
     },
   ];
 
-  const trio = measurements({
-    rsrp: data?.rsrp ?? null,
-    rsrq: data?.rsrq ?? null,
-    sinr: data?.sinr ?? null,
-  });
-
   if (family === "nr") {
+    const trio = measurements({
+      rsrp: data?.rsrp ?? null,
+      rsrq: data?.rsrq ?? null,
+      sinr: data?.sinr ?? null,
+    });
     const nr = data as NrStatus | null;
     return {
       title: t("signal_status.nr_primary_title"),
@@ -163,10 +219,23 @@ export function buildSignalRows(
   }
 
   const lte = data as LteStatus | null;
+  // Per field: a live value that came back null falls back to the snapshot's
+  // rather than blanking a row the 2 s feed can still fill. SINR is never live.
+  const liveRsrp = live?.rsrp != null;
+  const liveRsrq = live?.rsrq != null;
+  const liveRssi = live?.rssi != null;
+  const rsrp = liveRsrp ? live!.rsrp : (lte?.rsrp ?? null);
+  const trio = measurements({
+    rsrp,
+    rsrq: liveRsrq ? live!.rsrq : (lte?.rsrq ?? null),
+    sinr: lte?.sinr ?? null,
+    liveRsrp,
+    liveRsrq,
+  });
   return {
     title: t("signal_status.lte_primary_title"),
     state: lte?.state ?? "unknown",
-    rsrp: lte?.rsrp ?? null,
+    rsrp,
     rows: [
       { label: t("signal_status.band"), value: band, asIdentity: true },
       {
@@ -184,7 +253,11 @@ export function buildSignalRows(
       // has no good-or-bad reading on its own — a strong RSSI beside a weak
       // RSRQ is a congested cell, not a healthy one. Untinted, ungauged, and
       // announced with no quality word.
-      { label: t("signal_status.rssi"), value: fmt(lte?.rssi, "dBm") },
+      {
+        label: t("signal_status.rssi"),
+        value: fmt(liveRssi ? wholeDb(live!.rssi) : lte?.rssi, "dBm"),
+        live: liveRssi,
+      },
       ...trio.slice(2),
     ],
   };

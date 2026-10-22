@@ -100,6 +100,8 @@ export interface SignalStatusRow {
   /** Render the value as an identity-toned pill rather than plain ink. Used for
    *  the band, which is an identifier rather than a measurement. */
   asIdentity?: boolean;
+  /** Fed by the 1 Hz live overlay: rendered without the value tick. */
+  live?: boolean;
 }
 
 interface SignalStatusCardProps {
@@ -391,7 +393,14 @@ export function SignalStatusCard({
                           of a dB every poll and format to the same text, and a dip
                           on an unchanged reading is the tick announcing nothing.
                           `tabular-nums` is baked into TickingValue. */}
-                      <TickingValue value={row.value}>{row.value}</TickingValue>
+                      {/* A 1 Hz live row skips the tick: a 1.4s dip
+                          retargeted every second would never return to full
+                          opacity, which is dimming, not acknowledgement. */}
+                      {row.live ? (
+                        <span className="tabular-nums">{row.value}</span>
+                      ) : (
+                        <TickingValue value={row.value}>{row.value}</TickingValue>
+                      )}
                     </span>
                     {/* The third channel. The bar and the ink both fail in
                         greyscale-plus-low-vision together, and neither reaches a
