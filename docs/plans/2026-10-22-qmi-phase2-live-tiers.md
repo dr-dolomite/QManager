@@ -132,13 +132,31 @@ New `docs/features/live-signal.md` (L1–L7, format, states, invariants); update
 
 Full gate measurements below are taken in step 2d.
 
-| Scenario | uhttpd CPU | broker CPU | system CPU Δ | other-CGI 503s / timeouts | `fetch_data.sh` p95 Δ | delivered rate | Pass? |
+**Step 2d device gate (2026-10-22, RM551E, broker 0.4.0 `00d20766…` from a9a4372e, init.d 43cf2d94, lease CGI 948fbcf8).** Method: PC clients (.NET HttpClient, keepalive, LAN) that behave like a tab: renew the lease every 5 s through the real authenticated CGI, poll the static file at the tier rate, merge samples by `(run, seq)`. A second PC client GETs authenticated `at_cmd/fetch_data.sh` every 2 s throughout. On device, `/proc/<pid>/stat` utime+stime (+cutime+cstime for uhttpd's reaped CGI children) and `/proc/stat` over 100 s windows. CPU is % of one core; "system" is % of all 4 cores (one-core equivalent in brackets). Baseline and 1-client HTTP are averages of four windows across 10-min runs; HTTPS and 3-client are one 100 s window in a 130 s run.
+
+| Scenario | uhttpd CPU (self / CGI children) | broker CPU | system CPU Δ | other-CGI 503s / timeouts | `fetch_data.sh` p95 Δ | delivered rate (lost) | Pass? |
 |---|---|---|---|---|---|---|---|
-| Baseline (no live) | TBD | TBD | 0 | TBD | 0 | — | — |
-| Static 5 Hz, 1 client (HTTP) | TBD | TBD | TBD | TBD | TBD | TBD | |
-| Static 5 Hz, 1 client (HTTPS) | TBD | TBD | TBD | TBD | TBD | TBD | |
-| Static 2×5 Hz + 1×1 Hz | TBD | TBD | TBD | TBD | TBD | TBD | |
-| CGI polling 5 Hz, 1 client (reference) | TBD | TBD | TBD | TBD | TBD | TBD | expected fail |
+| Baseline (no live) | 3.46 (0.11 / 3.34, the 2 s probe) | 0.73 | 0 (4.99 % abs) | 0 / 295 | 0 (p95 128.6, p50 74.2 ms) | — | — |
+| Static 5 Hz, 1 client (HTTP), 10 min | 5.09 (0.61 / 4.48): Δ self +0.50, Δ children +1.14 (renewals) | 1.91 (Δ +1.17; `qmi-sampler` thread 1.37) | +1.25 pp (+5.0 one-core) | 0 / 295 | −0.8 ms | 4.76 Hz (36 lost, see below) | **fail** (broker; lost) |
+| Static 5 Hz, 1 client (HTTPS) | 5.14 (0.84 / 4.30): Δ self +0.73 | 1.90 | +0.61 pp (+2.4) | 0 / 65 | −22 ms (short run) | 4.76 Hz (0) | **fail** (broker) |
+| Static 2×5 Hz + 1×1 Hz | 7.71 (1.26 / 6.45): Δ self +1.15, Δ children +3.11 | 1.86 | +1.61 pp (+6.4) | 0 / 65 | −16 ms (short run) | 4.78 / 4.79 / 4.79 Hz (0) | **fail** (broker) |
+| 1 h soak, 5 Hz, 1 client | 4.51–5.18 | 1.47–1.93 | +0.4 to +1.4 pp (one 12.8 pp window from unrelated load) | 2 / 1800 (untimed; max 3.09 s) | −0.5 ms (p95 128.1) | 4.73 Hz (98 lost) | **fail** (2 SSRs) |
+| CGI polling 5 Hz, 1 client (reference) | not re-run (optional): quick benchmark above, ~4–9 % of one core | | | | | | expected fail |
+
+**Per threshold:**
+- uhttpd ≤ 1.5 %: **pass** for the uhttpd process itself (0.61 % abs, Δ +0.50; 3 clients Δ +1.15). The lease renewals are CGI children and add ~1.1 % per tab (≈55 ms CPU per renewal at `renew_s` 5); counted in, 1 client is Δ +1.63 %, which the budget did not include.
+- Broker sampler ≤ 1.0 %: **FAIL.** Δ +1.17 % (absolute 1.90 %, stable across all runs and the soak); per-thread, `qmi-sampler` alone is 1.37 % at 5 Hz, ≈ 2.9 ms CPU per sample, with no fsync in `write_atomic` (no strace/perf on device to break it down further).
+- System Δ ≤ 3 % (3 clients ≤ 4 %): **pass** if read as % of all cores (+1.25 / +1.61 pp); **fail** if read as one core (+5.0 / +6.4 %). The one-core reading matches how uhttpd + broker budgets sum (2.5 ≤ 3), so treat as unresolved.
+- Zero 503s/timeouts on other CGIs during 10 min of aim: **pass** (0 / 295 in both 10-min runs, both builds). The 1 h soak had 2 `fetch_data.sh` failures (untimed, max 3.09 s), most likely in the two SSR windows.
+- `fetch_data.sh` p95 Δ ≤ +20 ms: **pass** (−0.8 ms over 10 min; a short 3-min baseline read 87.7 ms, so only the 10-min pair is comparable).
+- Static GET p95 ≤ 80 ms: **pass** (p50 6.6–7.2, p95 8.3–8.9 ms HTTP and HTTPS; the ~40 ms keepalive floor seen in the quick benchmark did not reproduce from these clients).
+- Delivered ≥ 4.5 Hz: **pass** (4.73–4.79 Hz; the aim period is 208–212 ms, not 200, because the sleep follows the sample). Zero lost: **fail** in 2 of 6 PC runs. Server seq is contiguous; every loss is a client request stalling longer than the 16-sample ring (~3.4 s): one 10 s request timeout in each of two runs (the 10-min run on this build, untimed, and 15:03 in the soak; no device-side trace, the log ring had wrapped; the 10-min run on the earlier b74f1eee build had 0 errors and 0 lost) and two "connection forcibly closed" errors that coincide with the two SSRs.
+- Poller `measure.sh`: **pass.** 5.96 % with aim leased vs 5.73 % same-session baseline (+0.23 pp; +0.40 vs this morning's 5.56 %); period 2.01 s (1.93–2.23).
+- 1 h soak: **FAIL as written.** 2 `remoteproc-mss` SSRs (crash #5 at uptime 26397 s, #6 at 29427 s), `qmi_ssr_count` 0 → 2. Both are `nr_rx_ctl_agc.c:7563 RXCTL_IUSS: RFG 0 rx 0 state is wrong`, the same NR RX AGC fault as crashes #1–#4 earlier in this boot, which happened with no live lease (uptime 1047, 2415, 8455, 20446 s; intervals 1368 / 6040 / 11991 / 5951 s, then 3030 s during the soak). Attribution to 5 Hz QMI reads is neither shown nor excluded by 1 h. The broker rode both SSRs (no restart, `qmi_state` back to `up`, live file kept publishing). fd 12–13, RSS 524–612 kB, threads 10: flat.
+
+**Functional checks (all pass):** proto `proto=3 version=0.4.0 qmi=1 live=1`; `/www/qmlive` → `/var/run/qmanager/live` (root 0755, empty `index.html`) under the 0700 run dir; `GET /qmlive/` 200 with an empty body (HTTP and HTTPS); `/qmlive/../cgi-bin/` 403; wrong token 404; unauthenticated lease 401 and no stamp written; aim lease → file 40–190 ms after the CGI returns (5 trials); aim ≈ 4.77 Hz, watch-only 1004–1012 ms, aim+watch 203–216 ms; expiry: token and file gone 10.08 s and 10.54 s after the last renewal (integer-second stamps, so worst case is ~11.2 s), then `qmi.env` back to every 2 s; scan flag → `"scan":true` with every serving field `null`, recovers on the next sample; `kill -9` → procd respawn in ~5 s, same token, new `run`, seq restarts; keys are `v run seq period_ms qmi_state ssr_count scan` + per sample `seq t reg rsrp rsrq rssi pci earfcn band bw ca` (no cell id / TAC / MCC / MNC / operator; CA list was empty on this cell, so CA keys are covered by unit tests only); `tools/atd-parity`: 50 cases, only the 8 expected live cases (31–34, 37–40) differ from both the 0.2.0 and 0.3.0 runs; init.d `stop` (43cf2d94) → broker gone, `live/`, `qmi.env`, stamps, token, lock, `/www/qmlive`, proto and `/tmp/qmanager_qmi.json` absent and still absent 6 s later; `start` → link and `live/index.html` back; `qmanager` stop removes `qmi.stamp`; rollback to 0.3.0 → lease answers `{"success":true,"available":false}` with no stamp written.
+
+**Notes for the next steps:** a lease minted cold returns before the first file exists, so a client that fetches immediately gets one 404 (seen in 5 of 6 PC runs): the store should wait one period before its first fetch, or not count that 404. With a rolled-back 0.3.0 the new init.d still creates `/www/qmlive` (dangling, harmless 404). uhttpd here runs `-n 3` (3 concurrent CGIs), and each tab's renewal takes a slot every 5 s.
 
 **Acceptance thresholds** (all must hold):
 - Static 5 Hz, 1 client: uhttpd ≤ 1.5 %, broker sampler ≤ 1.0 %, system Δ ≤ 3 % (3 clients: ≤ 4 %).
