@@ -310,7 +310,7 @@ function LiveStateChip({ state }: { state: LiveLead["state"] }) {
 const fmtDb = (value: number) => value.toFixed(1);
 
 /**
- * The serving-cell RSRP, five times a second, with its 30 s trace.
+ * The serving-cell RSRP, every second, with its 30 s trace.
  *
  * This is a DIFFERENT measurement from the RSRP leg below, and the labelling
  * keeps them apart: the lead is the serving cell as the modem reports it across
@@ -322,7 +322,7 @@ const fmtDb = (value: number) => value.toFixed(1);
  * a field tech who glances back must still see where the reading was.
  *
  * `aria-live="off"`: the page shell is a polite live region, and a figure that
- * changes five times a second inside it would be read out without end.
+ * changes every second inside it would be read out without end.
  */
 function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) {
   const { t } = useTranslation("cellular");
@@ -356,7 +356,7 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
 
       <div className={LIVE.NUMERAL_ROW}>
         {/* Ramp ink is legal here because the meter sits directly beneath. No
-            value tick and no tween: the figure moves at 5 Hz and is watched
+            value tick and no tween: the figure moves every second and is watched
             continuously, so any per-change gesture would be permanent. */}
         <span
           className={cn(CONSOLE.SCORE, CONSOLE.SCORE_BOX, ink)}
@@ -603,7 +603,7 @@ export function AimConsole({
                 <span>
                   {t("antenna_alignment.aim.updated")}{" "}
                   <span className="tabular-nums">{updatedAt}</span>
-                  {/* Beside a 5 Hz lead the score's slower clock is said once,
+                  {/* Beside a 1 Hz lead the score's slower clock is said once,
                       quietly, or its stillness reads as a stalled feed. */}
                   {lead && (
                     <> ({t("antenna_alignment.aim.score_cadence")})</>

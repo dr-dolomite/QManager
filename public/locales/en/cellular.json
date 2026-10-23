@@ -1893,7 +1893,7 @@
       "live": {
         "label": "Serving RSRP",
         "hint_label": "About serving RSRP",
-        "hint": "The serving cell's signal across all receive chains, several times a second. In 5G NSA it is the LTE anchor, so it can differ from Main / PRX below.",
+        "hint": "The serving cell's signal across all receive chains, every second. In 5G NSA it is the LTE anchor, so it can differ from Main / PRX below.",
         "sr": "Serving RSRP {{value}} dBm",
         "no_reading": "No serving RSRP reported",
         "from_peak": "{{delta}} dB from peak",

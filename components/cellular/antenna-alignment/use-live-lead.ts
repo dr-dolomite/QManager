@@ -19,7 +19,7 @@ import {
 // The live lead: serving-cell RSRP from the broker's live file
 // =============================================================================
 // The console's composite score is built from the PER-PORT snapshot, which
-// lands every ~2 s. The live file is faster (5 Hz on the `aim` tier) but it
+// lands every ~2 s. The live file is faster (1 Hz on either tier) but it
 // carries something different: the SERVING cell's RSRP as the modem reports it
 // across all receive chains (the LTE anchor in NSA). It is not Main / PRX, and
 // nothing here pretends it is; the two readings sit side by side and are
@@ -29,7 +29,7 @@ import {
 // pill, so the pinned readout and the card can never disagree about the peak.
 // =============================================================================
 
-/** The sparkline's window, matching the store's 150-sample ring at 5 Hz. */
+/** The sparkline's window (the store's 150-sample ring covers it at up to 5 Hz). */
 export const LIVE_WINDOW_MS = 30_000;
 
 /** A sample gap longer than this breaks the line instead of bridging it. */

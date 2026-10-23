@@ -1893,7 +1893,7 @@
       "live": {
         "label": "RSRP cella servente",
         "hint_label": "Informazioni su RSRP cella servente",
-        "hint": "Il segnale della cella servente su tutte le catene di ricezione, più volte al secondo. In 5G NSA è l'ancora LTE, quindi può differire da Main / PRX qui sotto.",
+        "hint": "Il segnale della cella servente su tutte le catene di ricezione, ogni secondo. In 5G NSA è l'ancora LTE, quindi può differire da Main / PRX qui sotto.",
         "sr": "RSRP cella servente {{value}} dBm",
         "no_reading": "Nessun RSRP della cella servente riportato",
         "from_peak": "{{delta}} dB dal picco",

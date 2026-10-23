@@ -29,7 +29,7 @@ import type {
 //     visibility, input and `now` are injected (pattern: modem-status-store).
 // =============================================================================
 
-/** Client ring size: 30 s at 5 Hz. */
+/** Client ring size: 30 s at the parked 5 Hz (150 s at today's 1 Hz). */
 export const LIVE_RING_SIZE = 150;
 /** Re-lease delays after consecutive failures: now, then 1 / 2 / 5 s. */
 export const LIVE_RETRY_DELAYS_MS = [0, 1000, 2000, 5000] as const;

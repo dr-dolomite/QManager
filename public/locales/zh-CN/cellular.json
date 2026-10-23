@@ -1893,7 +1893,7 @@
       "live": {
         "label": "服务小区 RSRP",
         "hint_label": "关于服务小区 RSRP",
-        "hint": "服务小区在所有接收链路上的信号，每秒刷新数次。在 5G NSA 下这是 LTE 锚点，因此可能与下方的 Main / PRX 不同。",
+        "hint": "服务小区在所有接收链路上的信号，每秒刷新一次。在 5G NSA 下这是 LTE 锚点，因此可能与下方的 Main / PRX 不同。",
         "sr": "服务小区 RSRP {{value}} dBm",
         "no_reading": "未上报服务小区 RSRP",
         "from_peak": "距峰值 {{delta}} dB",

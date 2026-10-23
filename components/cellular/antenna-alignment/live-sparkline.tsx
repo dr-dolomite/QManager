@@ -8,7 +8,7 @@ import { LIVE } from "./shapes";
 // =============================================================================
 // The 30 s trace under the live lead
 // =============================================================================
-// A plain SVG polyline, not recharts: it redraws five times a second on a phone
+// A plain SVG polyline, not recharts: it redraws every second on a phone
 // held at a mast, so it carries no axes, no tooltip, no animation and no layout
 // work beyond one `points` string. The x axis is the modem's own sample clock
 // (never the browser's), anchored at the right edge on the newest sample.
