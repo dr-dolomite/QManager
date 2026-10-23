@@ -175,7 +175,8 @@ No further soak was run: the user skipped phase C (a 1 h 1 Hz lease) and took 1 
 
 Lease at 1 Hz: the CGI answers `period_ms:1000` for `aim`; the file advanced exactly 1 `seq` per second (2 -> 12 over 11 s) with `period_ms:1000`; status `lte.source=qmi`, age 1 s; the token and file were gone about 10 s after the last renewal and the URL then 404s. Broker CPU 0.43 % of one core with no lease vs 0.57 % under an `aim` lease (+0.14 %, against +0.80 % at 5 Hz); RSS 528 kB, 10 threads, 12 fds; no new SSR.
 
-<!-- BROWSER-E2E: Antenna Alignment + dashboard results go here -->
-**Open before merge:** the browser check of Antenna Alignment and the dashboard.
+Browser check (desktop app browser, same build): Antenna Alignment shows the live lead (Serving RSRP, peak and delta) and polls `/qmlive/` every 1.0 s (10 gaps of 0.73-1.02 s); the dashboard polls every 1.01-1.03 s with `watch` renewals about every 5 s and shows whole-dB LTE values; closing the tab let the lease lapse 11 s after the last renewal, leaving only `index.html`. Antenna Alignment leased `watch` until the first pointer/keyboard input, then `aim` (see the idle-demotion follow-up); at 1 Hz both tiers have the same period, so nothing visible changes.
+
+**Follow-up (only matters if 5 Hz returns):** on a freshly loaded Antenna Alignment tab with no input, the store leased `watch` and renewed 4 times in 10 s instead of `aim` every 5 s; one synthetic input switched it to `aim`. Check the idle-demotion / mount ordering in `lib/live-signal-store.ts` before un-parking 5 Hz.
 
 Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
