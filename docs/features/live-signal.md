@@ -161,13 +161,13 @@ Evidence (RM551E, one boot `0aa7bf6b`, the same `remoteproc-mss` / `nr_rx_ctl_ag
 |---|---|---|---|
 | Boot to 09:20:53 PHT (uptime 0-7456) | none (no tab) | ~124 min | 0 |
 | Phase A, 09:20:53-10:23:00 | `aim` 5 Hz | 62 min | **5** (uptime 8241, 8302, 9992, 10141, 10168) |
-| Phase B, from 10:23:15 | none | ~54 min read so far | 0 |
+| Phase B, 10:23:15-11:23:15 | none | 60 min | 0 |
 
 Earlier unleased baseline on this unit: 4 SSRs in one boot with no lease (gaps 1368/6040/11991/5951 s), so SSRs do happen without our reads. The broker survived all five phase A SSRs with flat RSS, threads and fds. This **suggests a rate effect, it does not prove one**: SSRs on this unit cluster, and one hour per arm is short.
 
-<!-- SOAK-RESULT: phase B final numbers and phase C (1 h `watch` 1 Hz lease, ~11:23-12:23 PHT, /usrdata/qm_soak/soak_c.log) -->
-**Phase C (1 Hz `watch` lease, 1 h from ~11:23 PHT, broker 0.4.0):** _TBD: SSR count, boot id unchanged, `live_seq` about +1/s._ If phase C shows SSRs, 1 Hz is not a fix either.
+No further soak was run: the user skipped phase C (a 1 h 1 Hz lease) and took 1 Hz on this evidence, so 1 Hz is not soak-proven on its own.
 
-**Open before merge:** phase C result; deploy broker 0.4.1 and a short lease soak on it if wanted; the install / OTA / uninstall runs and the browser check.
+<!-- DEVICE-0.4.1: lifecycle + browser results go here -->
+**Open before merge:** deploy broker 0.4.1; the install / OTA / uninstall runs and the browser check.
 
 Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
