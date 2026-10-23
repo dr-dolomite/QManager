@@ -7,6 +7,8 @@ scripts/etc/init.d/* text eol=lf
 scripts/etc/qmanager/* text eol=lf
 scripts/etc/sysctl.d/* text eol=lf
 scripts/usr/bin/* text eol=lf
+# procd init files under tools/ (dev-only services) are shell scripts too:
+*.init text eol=lf
 
 # Parser parity data embedded by the qmanager_atd tests (include_str!): keep
 # byte-exact so a Windows checkout cannot turn it into CRLF.
