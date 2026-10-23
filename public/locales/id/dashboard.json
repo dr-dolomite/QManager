@@ -81,6 +81,8 @@
     "high_cpu_warning": "CPU Tinggi",
     "memory_usage": "Penggunaan Memori",
     "storage_label": "Penyimpanan",
+    "data_used_label": "Data Terpakai",
+    "data_used_partial_hint": "Dihitung di perangkat itu sendiri, sehingga lalu lintas yang diteruskan modem langsung ke perangkat terhubung tidak termasuk dan angka ini bisa lebih rendah.",
     "cell_distance": "Jarak Sel",
     "cell_distance_short": "Jarak",
     "lte_distance_tooltip": "Ini hanya perkiraan berdasarkan nilai LTE Timing Advance sebesar {{ta}}.",

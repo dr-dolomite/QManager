@@ -33,6 +33,20 @@
 //!   avoids the RSRP-while-searching trap.
 //! - CA is the PCC plus up to four SCCs, 5 fields each; the contract is flat
 //!   names, so the list is fixed. A fifth SCC is not published.
+//! - Data Used (0.6.0): `qmi_wds_ok`, `qmi_wds_rx_bytes`, `qmi_wds_tx_bytes`,
+//!   `qmi_wds_mux` are the default call's ok byte counters from WDS Get
+//!   Packet Statistics on the registry's two internal, bound WDS clients
+//!   (IPv4 + IPv6, summed). Read once per sidecar write (the 2 s cadence,
+//!   never the lease rate) and only when this cycle's bundle read succeeded.
+//!   They describe this cycle only and are **never republished**: with
+//!   `qmi_state` down / unavailable, no call (`data_call`), no `rmnet_ipa0`,
+//!   or no WDS service, `qmi_wds_ok` and the bytes are empty. `qmi_wds_ok`
+//!   is `1` when at least one family read ok (a family out of call, QMI
+//!   0x000F, adds 0) and `0` when a read was tried and none did, or when a
+//!   family that read ok last cycle failed now (its bytes would be missing
+//!   from the sum, which a delta consumer would see as a counter reset). The
+//!   bytes are empty unless `qmi_wds_ok` is `1`. `qmi_wds_mux` is the mux id
+//!   of the default call whenever one is detected.
 //!
 //! Cadence. Every 2 s, or faster while the live channel (`live.rs`) holds a
 //! lease: 1 s for both `watch` and `aim` (aim's 5 Hz is parked, see
@@ -50,10 +64,12 @@
 use crate::common::json::J;
 use crate::common::log::Logger;
 use crate::common::safefs;
+use crate::qmi::codec::wds::ERR_OUT_OF_CALL;
 use crate::qmi::error::QmiError;
 use crate::qmi::model::{self, Bundle, Registration};
-use crate::qmi::registry::{Registry, SvcState, THREAD_STACK};
+use crate::qmi::registry::{BindTarget, IpFamily, Registry, SvcState, WdsBind, THREAD_STACK};
 use crate::qmi::SVC_NAS;
+use super::data_call;
 use super::live::{self, Live, LivePaths, Tier};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -72,11 +88,22 @@ pub struct Paths {
     pub env: String,
     pub json: String,
     pub live: LivePaths,
+    /// `/proc/net/route` (the default call's mux id).
+    pub route: String,
+    /// `/sys/class/net/rmnet_ipa0` (the bind endpoint's presence check).
+    pub ipa_dev: String,
 }
 
 impl Paths {
     pub fn production() -> Paths {
-        Paths { run_dir: Some(RUN_DIR.into()), env: ENV_PATH.into(), json: JSON_PATH.into(), live: LivePaths::production() }
+        Paths {
+            run_dir: Some(RUN_DIR.into()),
+            env: ENV_PATH.into(),
+            json: JSON_PATH.into(),
+            live: LivePaths::production(),
+            route: data_call::ROUTE_PATH.into(),
+            ipa_dev: data_call::IPA_DEV_PATH.into(),
+        }
     }
 }
 
@@ -155,7 +182,21 @@ pub const NAMES: &[&str] = &[
     "qmi_scc4_band",
     "qmi_scc4_bw_mhz",
     "qmi_scc4_active",
+    "qmi_wds_ok",
+    "qmi_wds_rx_bytes",
+    "qmi_wds_tx_bytes",
+    "qmi_wds_mux",
 ];
+
+/// This cycle's WDS packet statistics (Data Used). All None: not read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WdsView {
+    /// Some(true) = counters valid, Some(false) = read tried and failed.
+    pub ok: Option<bool>,
+    pub rx: Option<u64>,
+    pub tx: Option<u64>,
+    pub mux: Option<u8>,
+}
 
 /// What one publication shows.
 pub struct View<'a> {
@@ -165,6 +206,7 @@ pub struct View<'a> {
     pub ssr_count: u64,
     /// The broker-held NAS signal config (`SigConfig::as_str`): JSON only.
     pub sig: &'static str,
+    pub wds: WdsView,
     pub bundle: Option<&'a Bundle>,
 }
 
@@ -225,6 +267,13 @@ fn values(v: &View) -> Vec<String> {
         out.push(num(s.and_then(|c| c.bandwidth_mhz)));
         out.push(num(s.map(|c| c.active as u8)));
     }
+    // Bytes only alongside ok=1, whatever the view says.
+    let w = v.wds;
+    let valid = w.ok == Some(true);
+    out.push(num(w.ok.map(|o| o as u8)));
+    out.push(num(w.rx.filter(|_| valid)));
+    out.push(num(w.tx.filter(|_| valid)));
+    out.push(num(w.mux));
     debug_assert_eq!(out.len(), NAMES.len());
     out
 }
@@ -257,6 +306,15 @@ pub fn render_json(v: &View) -> String {
         Some(b) => j.raw("data", &b.json()),
         None => j.null("data"),
     };
+    let w = v.wds;
+    let valid = w.ok == Some(true);
+    let wds = J::obj()
+        .opt_bool("ok", w.ok)
+        .opt_num("rx_bytes", w.rx.filter(|_| valid))
+        .opt_num("tx_bytes", w.tx.filter(|_| valid))
+        .opt_num("mux", w.mux)
+        .done();
+    j.raw("wds", &wds);
     let mut s = j.done();
     s.push('\n');
     s
@@ -284,6 +342,12 @@ pub struct Sampler {
     side_ssr: u64,
     /// Sidecar publications so far (tests count them).
     side_writes: u64,
+    /// Per family (`IpFamily::ALL` order): read ok last cycle.
+    wds_prev_ok: [bool; 2],
+    /// Per family: the bind state last logged.
+    wds_logged: [WdsBind; 2],
+    /// A call without the IPA endpoint was logged (once until it changes).
+    wds_no_ep_logged: bool,
 }
 
 impl Sampler {
@@ -301,6 +365,90 @@ impl Sampler {
             side_state: "",
             side_ssr: 0,
             side_writes: 0,
+            wds_prev_ok: [false; 2],
+            wds_logged: [WdsBind::Unbound; 2],
+            wds_no_ep_logged: false,
+        }
+    }
+
+    /// This cycle's Data Used counters (see the module doc). Never fails.
+    fn read_wds(&mut self, reg: &Registry) -> WdsView {
+        let call = data_call::discover(&self.paths.route, &self.paths.ipa_dev);
+        let mux = match call.mux {
+            Some(m) => m,
+            None => {
+                self.wds_prev_ok = [false; 2];
+                return WdsView::default();
+            }
+        };
+        let ep = match call.ep {
+            Some(ep) => {
+                self.wds_no_ep_logged = false;
+                ep
+            }
+            None => {
+                if !self.wds_no_ep_logged {
+                    self.log.warn("qmi wds: no rmnet_ipa0 endpoint, packet stats not bound");
+                    self.wds_no_ep_logged = true;
+                }
+                self.wds_prev_ok = [false; 2];
+                return WdsView { mux: Some(mux), ..WdsView::default() };
+            }
+        };
+        let t = BindTarget { ep, mux };
+        let (mut rx, mut tx) = (0u64, 0u64);
+        let mut any_ok = false;
+        let mut lost_ok = false;
+        let mut now_ok = [false; 2];
+        for (k, fam) in IpFamily::ALL.iter().enumerate() {
+            let was_ok = self.wds_prev_ok.get(k).copied().unwrap_or(false);
+            match reg.wds_packet_bytes(*fam, t) {
+                Ok(b) => {
+                    any_ok = true;
+                    if let Some(s) = now_ok.get_mut(k) {
+                        *s = true;
+                    }
+                    rx = rx.saturating_add(b.rx);
+                    tx = tx.saturating_add(b.tx);
+                }
+                Err(e) if e.qmi_code() == Some(ERR_OUT_OF_CALL) => {}
+                // No WDS service (or no internal clients): not attempted.
+                Err(QmiError::Unavailable) => {
+                    self.wds_prev_ok = [false; 2];
+                    return WdsView { mux: Some(mux), ..WdsView::default() };
+                }
+                Err(_) => lost_ok |= was_ok,
+            }
+            self.log_bind(reg, k, *fam);
+        }
+        self.wds_prev_ok = now_ok;
+        let ok = any_ok && !lost_ok;
+        WdsView { ok: Some(ok), rx: ok.then_some(rx), tx: ok.then_some(tx), mux: Some(mux) }
+    }
+
+    /// Logs a change of family `k`'s bind state (state changes only).
+    fn log_bind(&mut self, reg: &Registry, k: usize, fam: IpFamily) {
+        let now = reg.wds_bind_state(fam);
+        let prev = match self.wds_logged.get_mut(k) {
+            Some(p) => p,
+            None => return,
+        };
+        if *prev == now {
+            return;
+        }
+        *prev = now;
+        match now {
+            WdsBind::Bound { mux, subs_ok: true } => self.log.info(&format!("qmi {} bound to mux {mux}", fam.tag())),
+            WdsBind::Bound { mux, subs_ok: false } => {
+                self.log.warn(&format!("qmi {} bound to mux {mux} (bind subscription failed, ignored)", fam.tag()))
+            }
+            WdsBind::Failed { mux, code: Some(c) } => {
+                self.log.warn(&format!("qmi {} bind to mux {mux} failed (qmi {c:#06x})", fam.tag()))
+            }
+            WdsBind::Failed { mux, code: None } => {
+                self.log.warn(&format!("qmi {} bind to mux {mux} failed (no response)", fam.tag()))
+            }
+            WdsBind::Unbound => {}
         }
     }
 
@@ -333,7 +481,15 @@ impl Sampler {
         let now = Instant::now();
         let changed = state != self.side_state || ssr != self.side_ssr;
         if sidecar_due(tier, self.side_at, now, changed) {
-            self.write_sidecars(state, ssr, reg.sig_config_state().as_str());
+            // Data Used: on the sidecar cadence only, and only with a fresh
+            // bundle (no binds or stats reads into an SSR window).
+            let wds = if fresh {
+                self.read_wds(reg)
+            } else {
+                self.wds_prev_ok = [false; 2];
+                WdsView::default()
+            };
+            self.write_sidecars(state, ssr, reg.sig_config_state().as_str(), wds);
             self.side_at = Some(now);
             self.side_state = state;
             self.side_ssr = ssr;
@@ -342,9 +498,9 @@ impl Sampler {
         self.live.on_sample(tier, state, ssr, fresh_bundle);
     }
 
-    fn write_sidecars(&mut self, state: &'static str, ssr_count: u64, sig: &'static str) {
+    fn write_sidecars(&mut self, state: &'static str, ssr_count: u64, sig: &'static str, wds: WdsView) {
         self.side_writes += 1;
-        let v = View { mono_s: self.last_mono, state, ssr_count, sig, bundle: self.last.as_ref() };
+        let v = View { mono_s: self.last_mono, state, ssr_count, sig, wds, bundle: self.last.as_ref() };
         let json = render_json(&v);
         let env = render_env(&v);
         // JSON first, then env, each on its own: a path planted in /tmp can
@@ -437,7 +593,8 @@ mod tests {
             public_dir: p("pub"),
             long_flag: p("long"),
         };
-        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live }
+        // No route file and no rmnet_ipa0 here: no call, nothing bound.
+        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live, route: p("route"), ipa_dev: p("rmnet_ipa0") }
     }
 
     fn log() -> Arc<Logger> {
@@ -530,7 +687,7 @@ mod tests {
     #[test]
     fn a_registered_lte_bundle_fills_every_identity_and_signal_name() {
         let b = bundle("registered");
-        let env = render_env(&View { mono_s: Some(4242), state: "up", ssr_count: 3, sig: "off", bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(4242), state: "up", ssr_count: 3, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!(get(&p, "qmi_mono"), "4242");
@@ -561,7 +718,7 @@ mod tests {
     #[test]
     fn not_registered_keeps_identity_but_empties_the_signal() {
         let b = bundle("searching");
-        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!(get(&p, "qmi_registered"), "0");
@@ -571,14 +728,14 @@ mod tests {
         assert_eq!(get(&p, "qmi_lte_pci"), "295", "identity is not gated");
         // Serving unreadable: registration unknown -> empty, signal empty.
         let b = Bundle::build(&Inputs { cell: Some(&fx!("r1_3_0x0043")), ..Inputs::default() });
-        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!((get(&p, "qmi_registered"), get(&p, "qmi_lte_rsrp")), ("", ""));
     }
 
     #[test]
     fn nothing_read_yet_is_all_empty_but_state_and_counters() {
-        let env = render_env(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", bundle: None });
+        let env = render_env(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: None });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         for (n, v) in &p {
@@ -588,14 +745,14 @@ mod tests {
                 _ => assert_eq!(v, "", "{n}"),
             }
         }
-        let j = render_json(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", bundle: None });
-        assert_eq!(j, "{\"v\":1,\"qmi_mono\":null,\"qmi_state\":\"unavailable\",\"qmi_ssr_count\":0,\"qmi_sig_config\":\"off\",\"registered\":null,\"data\":null}\n");
+        let j = render_json(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: None });
+        assert_eq!(j, "{\"v\":1,\"qmi_mono\":null,\"qmi_state\":\"unavailable\",\"qmi_ssr_count\":0,\"qmi_sig_config\":\"off\",\"registered\":null,\"data\":null,\"wds\":{\"ok\":null,\"rx_bytes\":null,\"tx_bytes\":null,\"mux\":null}}\n");
     }
 
     #[test]
     fn the_json_carries_the_freshness_fields_and_the_bundle() {
         let b = bundle("registered");
-        let j = render_json(&View { mono_s: Some(7), state: "down", ssr_count: 2, sig: "off", bundle: Some(&b) });
+        let j = render_json(&View { mono_s: Some(7), state: "down", ssr_count: 2, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
         assert!(j.starts_with("{\"v\":1,\"qmi_mono\":7,\"qmi_state\":\"down\",\"qmi_ssr_count\":2,\"qmi_sig_config\":\"off\",\"registered\":true,\"data\":{\"serving\":{"), "{j}");
         assert!(j.ends_with("}}\n") && j.matches('\n').count() == 1, "{j}");
         assert!(j.contains("\"rsrp\":{\"value\":-90"), "{j}");
@@ -608,7 +765,7 @@ mod tests {
         for base in crate::qmi::codec::testfix::all() {
             for m in crate::qmi::codec::testfix::mangled(&base) {
                 let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m) });
-                let env = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
+                let env = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
                 assert_eq!(violation(&env), None, "{env}");
             }
         }
@@ -637,14 +794,14 @@ mod tests {
         };
         let b = bundle("registered");
         let good = d.join("good.env");
-        std::fs::write(&good, render_env(&View { mono_s: Some(99), state: "up", ssr_count: 1, sig: "off", bundle: Some(&b) })).unwrap();
+        std::fs::write(&good, render_env(&View { mono_s: Some(99), state: "up", ssr_count: 1, sig: "off", wds: WdsView::default(), bundle: Some(&b) })).unwrap();
         assert_eq!(run(&good), "SOURCED mono=99 state=up reg=1 pci=295 rsrp=-90 ca=3 scc2=41 end=1");
         // Empty values source as empty strings.
         let empty = d.join("empty.env");
-        std::fs::write(&empty, render_env(&View { mono_s: None, state: "down", ssr_count: 4, sig: "off", bundle: None })).unwrap();
+        std::fs::write(&empty, render_env(&View { mono_s: None, state: "down", ssr_count: 4, sig: "off", wds: WdsView::default(), bundle: None })).unwrap();
         assert_eq!(run(&empty), "SOURCED mono= state=down reg= pci= rsrp= ca= scc2= end=1");
         // A file cut short (no terminator) or with a stray line is rejected.
-        let full = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
+        let full = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
         let cut = d.join("cut.env");
         std::fs::write(&cut, &full[..full.len() - "qm_sidecar_end='1'\n".len()]).unwrap();
         assert_eq!(run(&cut), "REJECTED");
@@ -805,8 +962,8 @@ mod tests {
     }
 
     #[test]
-    fn the_env_contract_is_unchanged_38_names_in_order() {
-        assert_eq!(NAMES.len(), 38);
+    fn the_env_contract_is_42_names_in_order() {
+        assert_eq!(NAMES.len(), 42);
         let mut want: Vec<String> = ["qmi_mono", "qmi_state", "qmi_ssr_count", "qmi_registered"].iter().map(|s| s.to_string()).collect();
         for f in ["pci", "earfcn", "tac", "cell_id", "band", "bw_mhz", "rsrp", "rsrq", "rssi"] {
             want.push(format!("qmi_lte_{f}"));
@@ -820,7 +977,223 @@ mod tests {
                 want.push(format!("qmi_scc{i}_{f}"));
             }
         }
+        // 0.6.0 appends Data Used, still before the terminator.
+        for f in ["ok", "rx_bytes", "tx_bytes", "mux"] {
+            want.push(format!("qmi_wds_{f}"));
+        }
         assert_eq!(NAMES, want.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice());
+    }
+
+    // ------------------------------------------------------ Data Used (0.6.0)
+
+    use crate::qmi::fake::{start_registry_wds, wds_net};
+    use std::sync::atomic::Ordering::SeqCst;
+
+    /// A test dir with a default route on rmnet_data<n> (None: no route
+    /// file) and, when `ipa`, an rmnet_ipa0 entry.
+    fn call_dir(name: &str, n: Option<u8>, ipa: bool) -> (PathBuf, Paths) {
+        let d = dir(name);
+        let p = paths(&d);
+        if let Some(n) = n {
+            set_route(&p, n);
+        }
+        if ipa {
+            std::fs::create_dir_all(&p.ipa_dev).unwrap();
+        }
+        (d, p)
+    }
+
+    fn set_route(p: &Paths, n: u8) {
+        let r = format!(
+            "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\nrmnet_data{n}\t00000000\t0100000A\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"
+        );
+        std::fs::write(&p.route, r).unwrap();
+    }
+
+    fn env_of(path: &str) -> Vec<(String, String)> {
+        let env = std::fs::read_to_string(path).unwrap();
+        assert_eq!(violation(&env), None, "{env}");
+        pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()])
+    }
+
+    fn wds_vals(p: &[(String, String)]) -> [String; 4] {
+        ["qmi_wds_ok", "qmi_wds_rx_bytes", "qmi_wds_tx_bytes", "qmi_wds_mux"].map(|n| get(p, n).to_string())
+    }
+
+    #[test]
+    fn the_wds_lines_sit_last_before_the_terminator_integer_or_empty() {
+        let w = WdsView { ok: Some(true), rx: Some(730_344_017), tx: Some(41_000_123), mux: Some(1) };
+        let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: w, bundle: None });
+        assert_eq!(violation(&env), None, "{env}");
+        assert!(env.ends_with(
+            "qmi_scc4_active=''\nqmi_wds_ok='1'\nqmi_wds_rx_bytes='730344017'\nqmi_wds_tx_bytes='41000123'\nqmi_wds_mux='1'\nqm_sidecar_end='1'\n"
+        ), "{env}");
+        // ok=0 or unknown: never bytes, even if the view carried some.
+        for ok in [Some(false), None] {
+            let w = WdsView { ok, rx: Some(1), tx: Some(2), mux: Some(3) };
+            let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: w, bundle: None });
+            assert_eq!(violation(&env), None, "{env}");
+            let p = pairs(&env[..env.len() - 19]);
+            let okv = if ok == Some(false) { "0" } else { "" };
+            assert_eq!(wds_vals(&p), [okv.to_string(), String::new(), String::new(), "3".to_string()]);
+        }
+        // A full u64 stays an integer.
+        let w = WdsView { ok: Some(true), rx: Some(u64::MAX), tx: Some(0), mux: Some(16) };
+        let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: w, bundle: None });
+        assert_eq!(violation(&env), None, "{env}");
+        let j = render_json(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: w, bundle: None });
+        assert!(j.ends_with(",\"wds\":{\"ok\":true,\"rx_bytes\":18446744073709551615,\"tx_bytes\":0,\"mux\":16}}\n"), "{j}");
+    }
+
+    #[test]
+    fn a_call_publishes_the_summed_counters_of_the_bound_clients() {
+        let (d, p) = call_dir("wds-sum", Some(0), true);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.rx4.store(730_328_803, SeqCst);
+        md.tx4.store(41_000_123, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        // IPv6 out of call (0x000F): adds nothing, ok stays 1.
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "730328803", "41000123", "1"].map(String::from));
+        // A v6 call too: the sum.
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(1_000, SeqCst);
+        md.tx6.store(10, SeqCst);
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "730329803", "41000133", "1"].map(String::from));
+        assert!(std::fs::read_to_string(paths(&d).json).unwrap().contains("\"wds\":{\"ok\":true,\"rx_bytes\":730329803"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn no_call_publishes_empty_values_and_binds_nothing() {
+        for (name, n, ipa, mux) in [("wds-nocall", None, true, ""), ("wds-noipa", Some(2), false, "3")] {
+            let (d, p) = call_dir(name, n, ipa);
+            let env_p = p.env.clone();
+            let (net, _md) = wds_net();
+            let reg = start_registry_wds(&net);
+            let mut s = Sampler::new(p, log());
+            s.sample_at(&reg, Tier::None);
+            let pr = env_of(&env_p);
+            assert_eq!(get(&pr, "qmi_state"), "up");
+            assert_eq!(wds_vals(&pr), ["", "", "", mux].map(String::from), "{name}");
+            assert!(net.sent().iter().all(|x| x.svc != crate::qmi::SVC_WDS), "{name}: nothing sent to WDS");
+            let _ = std::fs::remove_dir_all(&d);
+        }
+    }
+
+    #[test]
+    fn a_mux_change_rebinds_and_the_new_mux_is_published() {
+        let (d, p) = call_dir("wds-mux", Some(0), true);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.rx4.store(5, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(get(&env_of(&env_p), "qmi_wds_mux"), "1");
+        set_route(&paths(&d), 5);
+        s.sample_at(&reg, Tier::None);
+        let pr = env_of(&env_p);
+        assert_eq!((get(&pr, "qmi_wds_ok"), get(&pr, "qmi_wds_mux")), ("1", "6"));
+        let binds: Vec<u8> = net
+            .sent()
+            .iter()
+            .filter(|x| x.svc == crate::qmi::SVC_WDS && x.msg.id == 0x00A2)
+            .filter_map(|x| x.msg.tlv(0x11).and_then(|v| v.first().copied()))
+            .collect();
+        assert_eq!(binds, vec![1, 1, 6, 6], "both clients bound to mux 1, then both to mux 6");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_failed_read_is_ok_0_and_a_lost_family_never_shrinks_the_sum() {
+        let (d, p) = call_dir("wds-fail", Some(0), true);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.rx4.store(100, SeqCst);
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(50, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(get(&env_of(&env_p), "qmi_wds_rx_bytes"), "150");
+        // The v6 client stops answering 0x0024 with a real error: ok=0 this
+        // cycle (a v4-only sum would look like a counter drop).
+        let v6_sock = net.sent().iter().rev().find(|x| x.msg.id == 0x004D).unwrap().sock;
+        let model = md.clone();
+        net.set_responder_by_sock(move |sock, svc, m| {
+            if sock == v6_sock && m.id == 0x0024 {
+                use crate::qmi::msg::{encode, result_tlv, KIND_RESP};
+                return Some(encode(KIND_RESP, m.txn, m.id, &[result_tlv(Some(0x0003))]));
+            }
+            match (svc, m.id) {
+                (crate::qmi::SVC_WDS, 0x00A2 | 0x00AF | 0x004D | 0x0024) => model.reply(sock, m),
+                _ => crate::qmi::fake::r1_reply(svc, m),
+            }
+        });
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["0", "", "", "1"].map(String::from));
+        // Still failing next cycle: no longer a fresh loss, v4 alone is published.
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "100", "0", "1"].map(String::from));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_down_cycle_blanks_the_wds_values_and_reads_nothing() {
+        let (d, p) = call_dir("wds-down", Some(0), true);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.rx4.store(9, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(get(&env_of(&env_p), "qmi_wds_ok"), "1");
+        for (svc, _) in reg.states() {
+            net.del_server(svc);
+        }
+        let end = Instant::now() + Duration::from_secs(2);
+        while reg.states().iter().any(|(_, st)| *st == SvcState::Up) && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let before = net.sent().len();
+        s.sample_at(&reg, Tier::None);
+        let pr = env_of(&env_p);
+        assert_eq!(get(&pr, "qmi_state"), "down");
+        assert_eq!(get(&pr, "qmi_lte_pci"), "295", "the bundle is republished");
+        assert_eq!(wds_vals(&pr), ["", "", "", ""].map(String::from), "WDS values are never republished");
+        assert_eq!(net.sent().len(), before);
+        // Back up: the rebuilt clients are bound again before the next read.
+        for (i, svc) in crate::qmi::SERVICES.iter().enumerate() {
+            net.add_server(*svc, 0, 0xA0 + i as u32);
+        }
+        let end = Instant::now() + Duration::from_secs(2);
+        let bound = |f| matches!(reg.wds_bind_state(f), crate::qmi::registry::WdsBind::Bound { mux: 1, .. });
+        while !(reg.states().iter().all(|(_, st)| *st == SvcState::Up) && bound(IpFamily::V4) && bound(IpFamily::V6))
+            && Instant::now() < end
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "9", "0", "1"].map(String::from));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn wds_stats_follow_the_sidecar_cadence_not_the_lease_rate() {
+        let (d, p) = call_dir("wds-rate", Some(0), true);
+        let (net, _md) = wds_net();
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        for _ in 0..5 {
+            s.sample_at(&reg, Tier::Aim);
+        }
+        let reads = || net.sent().iter().filter(|x| x.svc == crate::qmi::SVC_WDS && x.msg.id == 0x0024).count();
+        assert_eq!(reads(), 2, "one read per family for the one sidecar write");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

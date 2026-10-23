@@ -81,6 +81,8 @@
     "high_cpu_warning": "Alto CPU",
     "memory_usage": "Utilizzo della memoria",
     "storage_label": "Archiviazione",
+    "data_used_label": "Consumo dati",
+    "data_used_partial_hint": "Conteggiato sul dispositivo stesso: il traffico che il modem inoltra direttamente ai dispositivi connessi non è incluso, quindi il valore può essere più basso.",
     "cell_distance": "Distanza cella",
     "cell_distance_short": "Distanza",
     "lte_distance_tooltip": "Questa è solo un'approssimazione basata sul valore LTE Timing Advance di {{ta}}.",

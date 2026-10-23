@@ -91,7 +91,9 @@ impl QmiLane {
             .name("qmi-start".into())
             .stack_size(crate::qmi::registry::THREAD_STACK)
             .spawn(move || {
-                let reg = Arc::new(Registry::start_qrtr());
+                // The daemon's registry adds the two internal WDS clients the
+                // sampler binds for Data Used; the client fallback never has them.
+                let reg = Arc::new(Registry::start_qrtr_daemon());
                 let _ = c.set(reg.clone());
                 // Daemon lane only: hold the signal config so the modem's
                 // shared signal cache stays live. NAS not up yet is fine, the

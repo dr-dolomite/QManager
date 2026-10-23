@@ -1,6 +1,6 @@
 # QMI Lane (`qmi`, QMI sidecars)
 
-The broker `qmanager_atd` (0.5.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Nothing else calls `qmi` or reads the sidecars yet.
+The broker `qmanager_atd` (0.6.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Data Used is a third consumer: the poller's `data_used.sh` reads the `qmi_wds_*` keys of `qmi.env` ([`data-used.md`](data-used.md)). Nothing else calls `qmi` or reads the sidecars yet.
 
 Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Field verdicts behind the table below: [`../research/qmi-phase0-results.md`](../research/qmi-phase0-results.md). Design: [`../plans/2026-10-22-qmi-phase1-broker-architecture.md`](../plans/2026-10-22-qmi-phase1-broker-architecture.md).
 
@@ -40,8 +40,28 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 
 - **NAS `0x0003` Indication Register is internal only** (`INTERNAL_ONLY`, reachable through the registry's own API, never from a request). It is per-client state on the daemon's socket, replayed after a rebuilt socket. Nothing calls it in Phase 1.
 - **Config Signal Info v2 (NAS `0x006C`) is never client-allowed.** It is a config write, held by the broker itself (see [Signal config hold](#signal-config-hold-nas-0x006c-broker-050)). It sits in `BROKER_CONFIG` only, never in `CLIENT_ALLOWED` or `INTERNAL_ONLY`, so the `QMI` verb, `qcmd` and the in-process fallback client can never send it.
-- WDS `0x0024` (packet stats) and `0x002D` (current settings) are excluded: they fail without data-session ownership (Phase 0), and Data Used is parked.
+- **WDS packet stats are broker-only (0.6.0).** `0x0024` (Get Packet Statistics) answers `0x0046` (invalid client / no session) for a client that is not bound to the data call, which is what Phase 0 saw. The broker's own bound clients can read it, so it sits in `BROKER_READ`, with the bind messages in `BROKER_CONFIG`; none are in `CLIENT_ALLOWED` or `INTERNAL_ONLY`, so the `QMI` verb, `qcmd` and the fallback client can never send them. WDS `0x002D` (current settings) stays excluded. See [WDS packet statistics](#wds-packet-statistics-broker-060).
 - Four allow-listed messages (NAS `0x0020`, `0x0034`, `0x004D`, `0x005A`) are not used by any named read. A client can only run the named reads, never an arbitrary `(service, message)`.
+
+### WDS packet statistics (broker 0.6.0)
+
+Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi/registry.rs` (clients), `daemon/qmi_snapshot.rs` (publishing). Consumer: Data Used.
+
+| Constant | Where | Messages |
+|---|---|---|
+| `BROKER_CONFIG` | `qmi/allow.rs` | NAS `0x006C`; WDS `0x00A2` Bind Mux Data Port, `0x00AF` Bind Subscription, `0x004D` Set Client IP Family |
+| `BROKER_READ` | `qmi/allow.rs` | WDS `0x0024` Get Packet Statistics |
+
+- **Two clients.** One IPv4 and one IPv6 WDS client, both broker-internal. Each is bound with `0x00A2` {ep_type 4 embedded, iface_id 1} plus the mux id, then `0x00AF` Bind Subscription (1 = primary; a failure is tolerated, as Qualcomm's `dsi` does). The v6 client also sends `0x004D` with IP family 6.
+- **Read.** `0x0024` mask `0x00C0`; TLV `0x19` = tx_ok_bytes, `0x1A` = rx_ok_bytes (u64 each). Read on the 2 s sidecar cadence only. `0x0086` Reset Statistics is never sent. An unbound client answers `0x0046`.
+- **Endpoint (4, 1).** From Qualcomm's `ds_get_epid` static name table (`rmnet_ipa*` maps to (4, 1)). The bind is attempted only while `/sys/class/net/rmnet_ipa0` exists.
+- **Mux id.** N + 1 of the `rmnet_data<N>` that holds the IPv4 default route in `/proc/net/route` (verified live: `rmnet_data0..5` map to mux 1..6, `rmnet_data15` to 16).
+- **Lifecycle.** A mux change rebinds on a fresh socket. Binds are replayed after an SSR or a socket rebuild. A refused bind is retried at most every 30 s.
+- **Sum rule.** v4 + v6. `0x000F` (out of call) adds 0. `ok` is 1 if any family read ok. A family that read ok last cycle and now fails with anything but `0x000F` makes `ok` 0 for that cycle, so the sum never shrinks (a shrink would look like a counter restart to the consumer).
+- **Known gap.** An IPv6-only call (no IPv4 default route) has no mux, so it is treated as no call; Data Used falls back to the netdev counter.
+- **Counter lifetime.** Restarts from 0 with each data call and after an SSR; the consumer's `cur < prev` rule handles it.
+
+> ⚠️ WARNING: Do not move the WDS bind messages or `0x0024` into `CLIENT_ALLOWED`. **Why:** the binds are writes on broker-owned clients, the same rule as `0x006C`: only the daemon may send them. The allow-list test pins both constants.
 
 ## Reads and envelope
 
@@ -80,7 +100,8 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 | NR PCI / band (NSA) | not available | TLV `0x2F` absent in NSA. Expected in SA, **untested**; `cell.nr.pci` is `null` until seen. |
 | Per-antenna RSRP/RSRQ/SINR | not available | `0x005A` answers `QMI_ERR_NOT_SUPPORTED` on this firmware. Stays AT. |
 | LTE timing advance | not available | No TLV tracked AT consistently. Stays AT (on-demand radio details). |
-| WDS packet stats / current settings | not available | Need data-session ownership. |
+| WDS packet stats | GO (0.6.0, broker-only) | Needs a client bound to the data call; the broker binds its own (above). Matches `QCMAP_CLI` within one read. Not reachable by the `qmi` verb. |
+| WDS current settings | not available | Needs data-session ownership; `0x002D` stays excluded. |
 | IDs, revision, op mode, time, card, slots, profiles, DSD | GO candidates | Answer in 0.1-0.6 ms; not compared field by field. |
 
 In NSA, QMI cannot replace `QENG servingcell` or `QCAINFO`: it fills the gaps where AT is absent (idle/deep tiers, scan and SIM-switch suppression, busy streaks).
@@ -133,14 +154,16 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 
 | File | For | Contents |
 |---|---|---|
-| `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 38 `name='value'` lines, then `qm_sidecar_end='1'` |
-| `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","qmi_sig_config","registered","data":<bundle>}` |
+| `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 42 `name='value'` lines, then `qm_sidecar_end='1'` |
+| `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","qmi_sig_config","registered","data":<bundle>,"wds":{"ok","rx_bytes","tx_bytes","mux"}}` |
 
 **Env contract** (same as `ping.env` / `ondemand.env`, validated and sourced by `cq_env_source`):
 - Every line is a single-quoted assignment; the last line is exactly `qm_sidecar_end='1'`.
 - Names come from a compiled list, all `qmi_`-prefixed (never the poller's `lte_*`, `t2_*`, `nr_*`).
 - Every value is an integer or empty, except `qmi_state` (`up|down|unavailable`). Never a float, `N/A` or `null`. The poller's `_qmi_env_source` is stricter than `cq_env_source`: it accepts only `qmi_*` assignments whose line is made of `[A-Za-z0-9_='-]`, so keep every value inside that set.
 - Names (in file order): `qmi_mono`, `qmi_state`, `qmi_ssr_count`, `qmi_registered` (`1`/`0`, empty = unknown), `qmi_lte_{pci,earfcn,tac,cell_id,band,bw_mhz,rsrp,rsrq,rssi}`, `qmi_ca_count`, `qmi_pcc_{pci,earfcn,band,bw_mhz}`, `qmi_scc{1..4}_{pci,earfcn,band,bw_mhz,active}`. Bands are the LTE number (`41`, not `B41`); signals are whole dBm/dB, empty unless registered. Only the PCC and up to four SCCs are published; a fifth SCC is dropped.
+- **WDS keys (0.6.0)** are the last four names, appended before `qm_sidecar_end`: `qmi_wds_ok` (`1`, `0` or empty), `qmi_wds_rx_bytes`, `qmi_wds_tx_bytes` (both empty unless ok is 1), `qmi_wds_mux`. They are **current-cycle only** (not republished from an older read) and blank when `qmi_state` is `down` or `unavailable`. The JSON gains a trailing `"wds":{"ok","rx_bytes","tx_bytes","mux"}` object. The capability file is unchanged (`proto=3`, `qmi=1`, `live=1`); detect 0.6.0 by the keys.
+- **A second env reader.** Besides `qmi_merge.sh`, the poller's `data_used.sh` reads this file. It **parses the lines and never sources them**, so it cannot clobber the `qmi_*` globals the overlay owns. It requires `qm_sidecar_end`, `qmi_state=up`, `qmi_wds_ok=1` and a `qmi_mono` within 30 s of `/proc/uptime`.
 
 **Semantics:**
 - **`qmi_mono` is a `CLOCK_BOOTTIME` second** (the clock of `/proc/uptime`, which the poller compares against) of the last **successful** read: it shows the data's age, not the sampler's heartbeat (that is the file's mtime). Empty until the first success. This is a different clock from the envelope's `mono_ms`.
@@ -172,7 +195,9 @@ These keep a silent QMI service from starving AT of reader threads. Constants: `
 
 ## Invariants a future editor must not break
 
-- **Keep the allow-list read-only and exact (18 pairs).** The test `exactly_the_read_only_gets` pins it. Adding a write, a client path to `0x006C`, or a client path to `0x0003` needs explicit approval. `0x006C` stays in `BROKER_CONFIG` only.
+- **Keep the client allow-list read-only and exact (18 pairs).** The test `exactly_the_read_only_gets` pins it. Adding a write, a client path to `0x006C`, or a client path to `0x0003` needs explicit approval. `0x006C` stays in `BROKER_CONFIG` only. The WDS binds stay in `BROKER_CONFIG` and `0x0024` in `BROKER_READ`; the test pins both lists and that they are disjoint from the client list.
+- **Never send WDS `0x0086` (Reset Statistics).** Data Used relies on a monotonic counter.
+- **The WDS sum never shrinks.** A family that read ok and then fails (not `0x000F`) forces `ok=0` for the cycle rather than dropping its bytes.
 - **Keep the signal config daemon-only and compiled-in.** Only the daemon lane calls `hold_config()`, with the seven delta TLVs from `sig_config_tlvs()`. Replay order is config first, then `ind_reg`.
 - **QMI never goes through the AT lane or the modem lock.** That independence is the feature.
 - **Signal values stay gated by registration**, and cached (`signal_info`) values stay tagged.
@@ -205,7 +230,7 @@ Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`, 5G-NSA: B1 20 MHz PC
 
 Lifecycle on device (2026-10-22, init.d + at_engine.sh from development-home): start re-creates `/usr/bin/qmi` (also over a regular file), restarts are idempotent with no `.qmi.*` temps, stop removes qmi.env, qmanager_qmi.json, the lease, socket and capability file while leaving the rest of `/var/run/qmanager` alone, and the env passes `cq_env_source` after restart. Full install, OTA re-install and uninstall were not run (uninstall reviewed statically).
 
-Host: `cargo test --release` 222 tests (236 with `--features poll`), including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
+Host: `cargo test --release` 222 tests (236 with `--features poll`) at 0.3.0; 267 (281 with `--features poll`) at 0.6.0, including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
 
 ## Gotchas for Phase 2 consumers
 

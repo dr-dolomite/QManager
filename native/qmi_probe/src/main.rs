@@ -58,6 +58,9 @@ const WHITELIST: &[(u32, u16)] = &[
 /// Config writes, refused unless `--allow-config` is given.
 const CONFIG_WHITELIST: &[(u32, u16)] = &[
     (SVC_NAS, 0x006C), // Config Signal Info v2
+    (SVC_WDS, 0x004D), // Set Client IP Family (client-local)
+    (SVC_WDS, 0x00A2), // Bind Mux Data Port (client-local)
+    (SVC_WDS, 0x00AF), // Bind Subscription (client-local)
 ];
 
 struct Svc {
@@ -411,6 +414,44 @@ fn cmd_siginfo2(s: &mut Svc, secs: u64, hz: f64, cfg: Option<Vec<Tlv>>) {
     println!("{{\"summary\":{}}}", j.done());
 }
 
+/// Bind this process's WDS client to the rmnet_ipa (embedded, EPID 1) mux
+/// `mux`, optionally set the client IP family, then read Packet Statistics
+/// `n` times, `gap` seconds apart. Binds are client-local; released on close.
+fn cmd_wds_bound(s: &mut Svc, mux: u8, fam: u8, n: u32, gap: u64) {
+    let mut ep = Vec::new();
+    ep.extend_from_slice(&4u32.to_le_bytes());
+    ep.extend_from_slice(&1u32.to_le_bytes());
+    let mut steps: Vec<(&str, u16, Vec<Tlv>)> = vec![
+        ("bind_mux", 0x00A2, vec![tlv(0x10, &ep), tlv(0x11, &[mux])]),
+        ("bind_subs", 0x00AF, vec![tlv(0x01, &1u32.to_le_bytes())]),
+    ];
+    if fam != 0 {
+        steps.push(("ip_family", 0x004D, vec![tlv(0x01, &[fam])]));
+    }
+    for (name, id, t) in steps {
+        match s.call(SVC_WDS, id, &t) {
+            Ok((m, _)) => println!("{{\"{}\":\"{}\"}}", name, match m.result() {
+                Ok(()) => "ok".to_string(),
+                Err(ec) => format!("err_{:#06x}", ec),
+            }),
+            Err(e) => die(&e),
+        }
+    }
+    for i in 0..n {
+        if i > 0 {
+            std::thread::sleep(Duration::from_secs(gap));
+        }
+        // Mask: tx/rx packets, tx/rx bytes, tx/rx drops (QCMAP's 0x3C3).
+        match s.call(SVC_WDS, 0x0024, &[tlv(0x01, &0x0000_03c3u32.to_le_bytes())]) {
+            Ok((m, rtt)) => {
+                let tl: Vec<String> = m.tlvs.iter().map(|t| format!("{{\"t\":\"{:02x}\",\"hex\":\"{}\"}}", t.t, decode::hex(&t.v))).collect();
+                println!("{{\"mono_ms\":{},\"rtt_ms\":{:.2},\"tlvs\":{}}}", mono_ms(), ms(rtt), arr(&tl));
+            }
+            Err(e) => die(&e),
+        }
+    }
+}
+
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let allow_config = args.iter().any(|a| a == "--allow-config");
@@ -449,6 +490,13 @@ fn main() {
                 Some(_) => Some(parse_tlv_args(&args[3..])),
             };
             cmd_siginfo2(&mut s, secs, hz, cfg);
+        }
+        Some("wds-bound") if s.allow_config => {
+            let mux = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(1);
+            let fam = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(0);
+            let n = args.get(3).and_then(|x| x.parse().ok()).unwrap_or(1);
+            let gap = args.get(4).and_then(|x| x.parse().ok()).unwrap_or(1);
+            cmd_wds_bound(&mut s, mux, fam, n, gap);
         }
         _ => {
             eprintln!("usage: qmi_probe json [cmd..] | get <svc>:<msg> | bench <cmd> <n> [hz] | watch <secs> | [--allow-config] siginfo2 <secs> <hz> [live|tt=hex ..]");
