@@ -204,8 +204,6 @@
   "ports_equal": "HTTP and HTTPS need different ports.",
   "port_in_use": "That port is already used by another service.",
   "token_generation_failed": "Couldn't create a secure token. Try again.",
-  "poller_not_running": "The background service did not respond, try again in a moment",
-  "reset_failed": "Could not reset the counter",
   "bad_tier": "Unsupported live signal rate.",
   "lease_failed": "Couldn't start the live signal. Try again."
 }

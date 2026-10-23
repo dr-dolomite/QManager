@@ -1,8 +1,8 @@
 // =============================================================================
 // data-used.ts: types for the Data Used counter and the storage CGI
 // =============================================================================
-// Mirrors network/data_used.sh, network/data_used_reset.sh and
-// system/storage.sh (docs/features/data-used.md).
+// Mirrors network/data_used.sh and system/storage.sh
+// (docs/features/data-used.md).
 // =============================================================================
 
 /** GET network/data_used.sh. `available` is false before the first sample. */
@@ -11,11 +11,11 @@ export type DataUsedResponse =
   | {
       success: true;
       available: true;
-      /** Download bytes since the last reset. */
+      /** Download bytes since install. */
       rx_bytes: number;
-      /** Upload bytes since the last reset. */
+      /** Upload bytes since install. */
       tx_bytes: number;
-      /** Epoch seconds of the last reset; 0 when the clock read 1970. */
+      /** Epoch seconds counting began; 0 when the clock read 1970. */
       since: number;
       /** Epoch seconds of the last sample; 0 when the clock read 1970. */
       updated: number;
@@ -41,13 +41,6 @@ export interface DataUsed {
   since: number | null;
   stale: boolean;
   source: DataUsedSource;
-}
-
-/** Result of a reset: the backend error code on failure, for the toast. */
-export interface DataUsedResetResult {
-  success: boolean;
-  error?: string;
-  detail?: string;
 }
 
 /** GET system/storage.sh */

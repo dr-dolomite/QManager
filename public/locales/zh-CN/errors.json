@@ -204,8 +204,6 @@
   "ports_equal": "HTTP 和 HTTPS 需要使用不同的端口。",
   "port_in_use": "该端口已被其他服务占用。",
   "token_generation_failed": "无法创建安全令牌。请重试。",
-  "poller_not_running": "后台服务未响应，请稍后重试",
-  "reset_failed": "无法重置计数器",
   "bad_tier": "不支持的实时信号速率。",
   "lease_failed": "无法启动实时信号，请重试。"
 }

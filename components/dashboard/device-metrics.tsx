@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -22,30 +22,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
 
 import type { DeviceStatus, LteStatus, NrStatus } from "@/types/modem-status";
 import {
   calculateLteDistance,
   calculateNrDistance,
-  formatBytes,
   formatDistance,
   formatTemperature,
 } from "@/types/modem-status";
 import { useDataUsed } from "@/hooks/use-data-used";
-import { useStorage } from "@/hooks/use-storage";
-import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import { useUnitPreferences } from "@/hooks/use-system-settings";
 import { useSpeedtest, type SpeedtestPhase } from "@/hooks/use-speedtest";
 import { formatSpeed, type SpeedtestProgressLine } from "@/types/speedtest";
@@ -217,7 +202,7 @@ function MeterRow({
 }
 
 /**
- * Skeleton (Skeleton-Mirror Rule): four meter groups, the Data Used and shared
+ * Skeleton (Skeleton-Mirror Rule): three meter groups, the Data Used and shared
  * cell-distance pills and the pinned speed-test tile, i.e. the exact geometry
  * of the loaded body at the exact same heights.
  *
@@ -227,7 +212,7 @@ function MeterRow({
 function MetricsSkeleton() {
   return (
     <div className="flex flex-1 flex-col gap-3.5">
-      {Array.from({ length: 4 }).map((_, i) => (
+      {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="flex flex-col gap-1.5">
           <div className="flex h-5 items-center justify-between gap-2">
             <Skeleton className="h-4 w-32" />
@@ -255,8 +240,7 @@ const DeviceMetricsComponent = ({
   liveLteTa,
   liveNrTa,
 }: DeviceMetricsComponentProps) => {
-  const { t, i18n } = useTranslation("dashboard");
-  const { t: tc } = useTranslation("common");
+  const { t } = useTranslation("dashboard");
   const unitPrefs = useUnitPreferences();
   const temp = deviceData?.temperature ?? null;
   const cpu = deviceData?.cpu_usage ?? null;
@@ -275,43 +259,11 @@ const DeviceMetricsComponent = ({
   const isCpuHigh = cpu !== null && cpu >= CPU_WARN;
   const memPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
 
-  // Persistent Data Used counter (sampled every 30 s off the poller's hot
-  // path) and the writable volume's usage; each has its own CGI and poll.
-  const {
-    data: dataUsed,
-    isResetting,
-    reset: resetDataUsed,
-  } = useDataUsed();
-  const { data: storage } = useStorage();
-  const storagePct = storage ? (storage.usedKb / storage.totalKb) * 100 : null;
+  // Persistent Data Used total (sampled every 30 s off the poller's hot path,
+  // counted from install, no reset); its own CGI and poll.
+  const { data: dataUsed } = useDataUsed();
   // A counter the sampler stopped refreshing is a photograph: show absence.
   const dataUsedLive = dataUsed && !dataUsed.stale ? dataUsed : null;
-
-  const [resetOpen, setResetOpen] = useState(false);
-  const handleReset = useCallback(async () => {
-    const result = await resetDataUsed();
-    setResetOpen(false);
-    if (result.success) {
-      toast.success(t("metrics.reset_success"));
-    } else {
-      toast.error(
-        resolveErrorMessage(
-          t,
-          result.error,
-          result.detail,
-          t("metrics.reset_error"),
-        ),
-      );
-    }
-  }, [resetDataUsed, t]);
-  const sinceText =
-    dataUsedLive?.since != null
-      ? new Date(dataUsedLive.since * 1000).toLocaleDateString(i18n.language, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })
-      : null;
 
   const [speedtestOpen, setSpeedtestOpen] = useState(false);
   // One watching instance: a run started elsewhere shows up here too. The
@@ -378,10 +330,9 @@ const DeviceMetricsComponent = ({
   // it ever talks to the modem. Blanking them would be inventing an outage this
   // box is not having.
   //
-  // NOT GATED either: Storage (a df of /usrdata) and Data Used (the broker's
-  // QMI WDS counter, or the kernel netdev fallback) are read on this box, not
-  // over AT. They were dropped in U4.10 for want of a backend and restored by
-  // U4.22 (B5.21 / B5.22).
+  // NOT GATED either: Data Used (the broker's QMI WDS counter, or the kernel
+  // netdev fallback) is read on this box, not over AT. It took the Storage
+  // row's place.
   //
   // ABSENT rather than the formatters' own "-": both return a hyphen-minus for
   // a null reading, which beside a column of figures reads as a minus sign
@@ -514,30 +465,7 @@ const DeviceMetricsComponent = ({
           </span>
         </MeterRow>
 
-        {/* ── Storage (/usrdata, the one writable volume) ───────────────── */}
-        <MeterRow
-          label={t("metrics.storage_label")}
-          bar={
-            <MetricBar
-              value={storagePct}
-              max={100}
-              warnAt={80}
-              dangerAt={95}
-              track="surface-container-high"
-              index={3}
-            />
-          }
-        >
-          <span className={VALUE_CLASS}>
-            <TickingValue value={storage?.usedKb ?? null}>
-              {storage
-                ? `${formatBytes(storage.usedKb * 1024)} / ${formatBytes(storage.totalKb * 1024)}`
-                : ABSENT}
-            </TickingValue>
-          </span>
-        </MeterRow>
-
-        {/* ── Data Used (the modem's per-call counter since the last reset) ── */}
+        {/* ── Data Used (total since install, in Storage's old slot) ─────── */}
         <PillRow
           label={
             <>
@@ -549,46 +477,6 @@ const DeviceMetricsComponent = ({
                   {t("metrics.data_used_partial_hint")}
                 </HintIcon>
               )}
-              <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-5 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                    aria-label={t("metrics.reset_counter_aria")}
-                    disabled={isResetting || !dataUsedLive}
-                  >
-                    <MaterialSymbol name="restart_alt" size={14} />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("metrics.reset_confirm_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("metrics.reset_confirm_desc")}
-                      {sinceText &&
-                        ` ${t("metrics.counting_since", { date: sinceText })}`}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isResetting}>
-                      {tc("actions.cancel")}
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={isResetting}
-                      onClick={(e) => {
-                        // Stay open until the backend answers; the handler closes.
-                        e.preventDefault();
-                        void handleReset();
-                      }}
-                    >
-                      {t("metrics.reset_confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </>
           }
         >
