@@ -1,5 +1,7 @@
 # Config Signal Info v2 integration (broker 0.5.0)
 
+> **Status (2026-10-23):** built in 0.5.0. Deviations taken: design point 3 (polled `0x004F` feed, not indications) and point 5 (state in `qmi_sig_config` in the JSON sidecar; the capability file stays `proto=3 version=0.5.0 qmi=1 live=1`, no `sig2=1`). Device validation is pending; the checks in the Validation section still apply. Feature doc: [`qmi-lane.md`](../features/qmi-lane.md#signal-config-hold-nas-0x006c-broker-050).
+
 Implements the GO verdict in [`../research/qmi-signal-info-v2.md`](../research/qmi-signal-info-v2.md). Branch `claude/qmi-siginfo-v2-build` in its own worktree `.claude/worktrees/qmi-siginfo-v2-build` (Phase 2 tip + the evaluation merged from `development-home`). Phase 2 is still being tested in parallel; new Phase 2 commits get merged in, and conflicts in `qmi_snapshot.rs` / `live.rs` are resolved with that session.
 
 ## What recon found
