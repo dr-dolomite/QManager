@@ -135,8 +135,8 @@ Each build step is a separate revertable commit. Reinstalling the previous relea
 - `uhttpd` runs `-n 3` (3 concurrent CGIs device-wide) and every open tab spends a slot for about 55 ms every 5 s. Do not add per-tick CGI calls.
 - `uhttpd` follows a `/www` symlink into the run dir today. A future `uhttpd` that stops following links turns the feed into 404 -> `unavailable` (the 2 s tier keeps working); the fallback design would be a tmpfs mount at `/www/qmlive`, not built.
 - Signal values are integers x10; the dashboard rounds to whole dB only at display (`wholeDb`), the antenna lead keeps 0.1 dB.
-- RSRQ/RSSI from QMI differ slightly from AT (90 % / 95 % within tolerance). LTE SINR and NR values come from QMI only since 0.5.0; their agreement with AT is not measured on the device yet. Per-antenna values never come from QMI.
-- **The dashboard and Antenna Alignment do not read the new fields yet.** Both still show AT SINR and NR. Live LTE SINR on the dashboard waits for an on-device QMI-vs-AT comparison.
+- RSRQ/RSSI from QMI differ slightly from AT (90 % / 95 % within tolerance). LTE SINR from QMI matches `AT+QCAINFO` RSSNR (see [SINR comparison](#qmi-vs-at-sinr-2026-10-23-broker-050)). Per-antenna values never come from QMI.
+- **The dashboard overlays live LTE SINR** (`useLiveLteOverlay`, same PCI/EARFCN gate and per-field fallback as RSRP/RSRQ/RSSI). **NR stays on the 2 s snapshot:** QMI's `nr_*` values are the RX-chain mean and QENG's are not (NR SINR about 1.2 dB below QENG), so overlaying them would shift the reading by a quantity change, not a signal change. Antenna Alignment reads only RSRP.
 
 ## Device gate (2026-10-22, RM551E, broker 0.4.0)
 
@@ -162,11 +162,25 @@ Host-tested (245 crate tests, 259 with `--features poll`) and deployed to the RM
 - **Capability:** `/var/run/qmanager_atd.proto` reads `proto=3 version=0.5.0 qmi=1 live=1`, the same four lines as 0.4.1.
 - **Apply:** `qmi nas signal config applied` logged at broker start; `qmi_sig_config` in `/tmp/qmanager_qmi.json` reads `held`; `qcmd AT` still answers.
 - **Signal Info is live:** 40 reads at 2 s, `qmi signal` vs `AT+QENG`. Under 0.4.1 (config not held) NR RSRP sat at -86.0 dBm for all 40 reads while AT moved -79 to -81. Under 0.5.0 NR RSRP changed on 24 of 39 steps (-82 to -84). It reads 1-3 dB below QENG because it is the chain mean. LTE SINR moves in both (27 and 26 changes), as the research found.
-- **LTE SINR vs AT:** QMI 20.8-25.6 dB vs QENG 20-22 dB in the same window, about 2-4 dB higher. This is why the dashboard does not overlay live SINR yet; it needs a longer comparison first.
+- **LTE SINR vs AT:** QMI 20.8-25.6 dB vs QENG 20-22 dB in the same window, about 2-4 dB higher. Superseded by the [paired comparison](#qmi-vs-at-sinr-2026-10-23-broker-050): QENG's LTE `<SINR>` is a raw index (dB = 2X - 20), and converted it agrees.
 - **Live file:** under a `watch` lease the file runs at `period_ms:1000` with `sinr`, `nr_rsrp`, `nr_rsrq`, `nr_sinr` filled (e.g. `sinr:246, nr_rsrp:-820, nr_rsrq:-110, nr_sinr:315`) and no identifier keys; it was removed once the lease lapsed.
 - **CPU:** 0.40 % of one core with no lease (0.4.1: 0.43 %) and 0.55 % under an `aim` lease (0.4.1: 0.57 %); RSS 592 kB (0.4.1: 528 kB), 10 threads, 12 fds.
 - **Re-apply after SSR:** passed. SSR #6 (uptime 23794 s, 41 min after the deploy, the usual `nr_rx_ctl_agc.c:7563` RFG fault) took every QMI service down; the broker logged `qmi ssr detected (episode 1)`, the services came back, it logged `qmi nas signal config applied` again, `qmi_sig_config` read `held` with `qmi_ssr_count:1`, and NR RSRP kept moving.
 - **SSR watch (open):** count SSRs per hour for 24 h against the history (5 SSRs in the 6.0 h of 0.4.1 on this boot, crashes #3 to #5 clustered at 2.8 h). If the rate rises, roll back to 0.4.1. The count runs in the dev-only watcher [`tools/ssr-watch/`](../../tools/ssr-watch/README.md), installed 2026-10-23 at uptime 24086 s: it survives reboots and keeps the 0.4.1 rollback binary on flash at `/usrdata/ssr_watch/qmanager_atd.041`. It records SSR #6 only as history (`event=start ssr_boot=6`), so add it to the 0.5.0 count by hand.
+
+## QMI vs AT SINR (2026-10-23, broker 0.5.0)
+
+90 paired reads at 2 s on the RM551E (single cell, B1 PCI 295, NSA n41), each pairing `qmi signal` with one `AT+QENG="servingcell";+QCAINFO;+QSINR` and the poller's `status.json`.
+
+| Comparison | Bias (QMI - AT) | Mean abs diff |
+|---|---|---|
+| LTE vs `QCAINFO` PCC RSSNR (1 dB steps) | +0.24 dB | 0.91 dB (81 % within 1.5 dB) |
+| LTE vs `QSINR` best LTE port | +0.19 dB | 0.92 dB |
+| LTE vs `QENG` converted (2X - 20, 2 dB steps) | +0.72 dB | 1.08 dB |
+| LTE vs `status.json` `lte.sinr` (2 s, cached) | +1.41 dB | 1.61 dB |
+| NR vs `QENG` NSA SINR | -1.22 dB | 1.23 dB (76 % within 1.5 dB) |
+
+LTE SINR from QMI is the same quantity as RSSNR at 0.1 dB, so the dashboard overlays it. NR SINR tracks the mean of the NR chains (e.g. `QSINR` 32/31 -> QMI 31.0) while QENG reports the strongest, the same split as `nr_rsrp`, so NR stays on AT. Caveat: QMI LTE SINR spanned only 22.8-26.0 dB in this window; low-SINR agreement is not measured.
 
 ## Cadence decision (2026-10-23)
 
