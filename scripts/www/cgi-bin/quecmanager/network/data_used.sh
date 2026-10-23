@@ -7,9 +7,12 @@
 # (docs/features/data-used.md). Read-only; the poller is the only writer.
 #
 # GET → {"success":true,"available":true,"rx_bytes":N,"tx_bytes":N,
-#        "since":EPOCH|0,"updated":EPOCH|0,"iface_present":BOOL,"stale":BOOL}
+#        "since":EPOCH|0,"updated":EPOCH|0,"iface_present":BOOL,
+#        "source":"wds"|"netdev","stale":BOOL}
 #       {"success":true,"available":false} before the poller's first sample.
 # rx = download, tx = upload. since/updated are 0 while the clock reads 1970.
+# source = the counter of the last sample: the modem's QMI WDS counter, or the
+# rmnet_ipa0 fallback (also for mirrors written before the field existed).
 # stale = the mirror has not been rewritten for STALE_SECONDS (poller stopped).
 #
 # Endpoint: GET /cgi-bin/quecmanager/network/data_used.sh
@@ -47,6 +50,7 @@ out=$(jq -c --argjson stale "$stale" '{
     since: (.since // 0),
     updated: (.updated // 0),
     iface_present: (.iface_present // false),
+    source: (if .source == "wds" then "wds" else "netdev" end),
     stale: $stale
 }' "$MIRROR" 2>/dev/null)
 
