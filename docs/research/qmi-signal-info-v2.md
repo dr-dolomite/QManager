@@ -1,5 +1,7 @@
 # NAS 0x006C Config Signal Info v2: evaluation (RM551E, 2026-10-22)
 
+> **Status (2026-10-23):** implemented in `qmanager_atd` 0.5.0 ([`qmi-lane.md`](../features/qmi-lane.md#signal-config-hold-nas-0x006c-broker-050)). Two deviations from the recommendation below: the feed polls `0x004F` instead of consuming `0x0051` indications, and the signal config state is `qmi_sig_config` in the JSON sidecar instead of `sig2=1` in the capability file. Device validation is pending.
+
 Follow-up to [`qmi-phase0-results.md`](qmi-phase0-results.md), which found NAS `0x004F` Get Signal Info cached when polled. The question was whether `0x006C` makes it live, and whether that is safe to hold for the long run. The user approved the write conditionally ("I approve it now if its good for the long run").
 
 **Verdict: GO (green-lit by the user, 2026-10-22).** The config is not persisted, the indication stream is per-client, and the only global side effect is benign and volatile. The user waived the proposed 24 h pre-integration soak, so the SSR rate becomes a watch item (see [Risk](#risk-one-ssr-during-the-test)).

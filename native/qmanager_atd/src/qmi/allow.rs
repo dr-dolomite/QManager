@@ -5,7 +5,9 @@
 //! From qmi_probe's WHITELIST minus WDS 0x0024 (Get Packet Statistics) and
 //! WDS 0x002D (Get Current Settings): both fail without data-session
 //! ownership, and Data Used is parked. NAS 0x006C (Config Signal Info v2) is
-//! a config write and stays out until separately approved.
+//! a config write: it is broker-internal (`BROKER_CONFIG`, user-approved
+//! 2026-10-22), applied by the daemon with compiled-in TLVs only, and never
+//! reachable through the `QMI` verb / qcmd or the in-process fallback client.
 
 use super::error::QmiError;
 use super::{SVC_DMS, SVC_DSD, SVC_NAS, SVC_UIM, SVC_WDS};
@@ -38,6 +40,14 @@ pub const CLIENT_ALLOWED: &[(u32, u16)] = &[
 pub const NAS_INDICATION_REGISTER: u16 = 0x0003;
 #[allow(dead_code)] // consumed by the phase 2 indication path
 pub const INTERNAL_ONLY: &[(u32, u16)] = &[(SVC_NAS, NAS_INDICATION_REGISTER)];
+
+/// NAS Config Signal Info v2: sets the report deltas that keep the modem's
+/// shared signal cache (read by Get Signal Info 0x004F) live. Not persisted
+/// by the modem (an SSR wipes it), so the registry replays it per socket.
+pub const NAS_CONFIG_SIG_INFO2: u16 = 0x006C;
+/// The only config write the broker itself may send; never in `CLIENT_ALLOWED`
+/// or `INTERNAL_ONLY`, so no request path can reach it.
+pub const BROKER_CONFIG: &[(u32, u16)] = &[(SVC_NAS, NAS_CONFIG_SIG_INFO2)];
 
 pub fn client_allowed(svc: u32, msg: u16) -> bool {
     CLIENT_ALLOWED.contains(&(svc, msg))
@@ -89,6 +99,9 @@ mod tests {
         }
         assert!(internal_allowed(SVC_NAS, NAS_INDICATION_REGISTER));
         assert!(!internal_allowed(SVC_NAS, 0x006C));
+        assert_eq!(BROKER_CONFIG, &[(SVC_NAS, 0x006C)]);
+        assert!(!CLIENT_ALLOWED.contains(&BROKER_CONFIG[0]));
+        assert!(!INTERNAL_ONLY.contains(&BROKER_CONFIG[0]));
         assert!(!internal_allowed(SVC_DMS, NAS_INDICATION_REGISTER));
     }
 }

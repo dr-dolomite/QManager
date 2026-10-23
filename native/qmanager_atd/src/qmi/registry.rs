@@ -113,6 +113,38 @@ pub enum SvcState {
     Unavailable,
 }
 
+/// Outcome of the broker-held signal config (NAS 0x006C), last apply/replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SigConfig {
+    /// Not held, not yet applied on the current socket, or NAS is down.
+    Off,
+    /// Applied on the current socket.
+    Held,
+    /// The modem refused it with this QMI error code.
+    Rejected(u16),
+    /// The modem does not implement it (invalid cmd / not supported).
+    Unsupported,
+}
+
+impl SigConfig {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SigConfig::Off => "off",
+            SigConfig::Held => "held",
+            SigConfig::Rejected(_) => "rejected",
+            SigConfig::Unsupported => "unsupported",
+        }
+    }
+}
+
+/// The delta-only Config Signal Info v2 TLVs (units 0.1 dB, u16 LE 10 = 1.0
+/// dB): LTE RSSI/SNR/RSRQ/RSRP (0x23/0x25/0x27/0x29) and NR5G SNR/RSRP/RSRQ
+/// (0x34/0x36/0x39). No report-config TLVs (0x2A/0x37). See
+/// docs/research/qmi-signal-info-v2.md.
+pub fn sig_config_tlvs() -> Vec<Tlv> {
+    [0x23u8, 0x25, 0x27, 0x29, 0x34, 0x36, 0x39].iter().map(|&t| Tlv::new(t, &[0x0A, 0x00])).collect()
+}
+
 impl SvcState {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -162,6 +194,10 @@ struct Inner {
     /// Internal indication registration, replayed on every rebuilt socket
     /// (registrations are per client socket and die with it).
     ind_reg: Option<(u16, Vec<Tlv>)>,
+    /// Broker-held NAS signal config (0x006C), replayed on every rebuilt
+    /// socket before `ind_reg`: the modem forgets it on an SSR.
+    cfg_hold: Option<(u16, Vec<Tlv>)>,
+    cfg_state: SigConfig,
     /// Consecutive timeouts on the current link (the circuit is open at
     /// `circuit_after`).
     timeouts: u32,
@@ -355,10 +391,34 @@ impl Shared {
             g.retry_at = None;
             g.backoff = self.cfg.backoff_min;
             g.close_circuit();
-            g.ind_reg.clone()
+            (g.cfg_hold.clone(), g.ind_reg.clone())
         };
-        if let Some((msg_id, tlvs)) = replay {
+        // Order matters: signal config first, then the indication register.
+        let (cfg, ind) = replay;
+        if let Some((msg_id, tlvs)) = cfg {
+            let r = self.call(i, msg_id, &tlvs, None);
+            self.note_cfg(i, &r);
+        }
+        if let Some((msg_id, tlvs)) = ind {
             let _ = self.call(i, msg_id, &tlvs, None);
+        }
+    }
+
+    /// Records the outcome of a config apply. A failure with no QMI code
+    /// (timeout, link lost) leaves the state alone: the config stays held and
+    /// the next rebuilt socket replays it.
+    fn note_cfg(&self, i: usize, r: &Result<Msg, QmiError>) {
+        let st = match r {
+            Ok(_) => SigConfig::Held,
+            Err(QmiError::NotSupported(_)) => SigConfig::Unsupported,
+            Err(e) => match e.qmi_code() {
+                Some(c) => SigConfig::Rejected(c),
+                None => return,
+            },
+        };
+        let mut g = lock(&self.services[i].inner);
+        if g.cfg_hold.is_some() {
+            g.cfg_state = st;
         }
     }
 
@@ -378,6 +438,7 @@ impl Shared {
             None => return,
         };
         g.state = SvcState::Down;
+        g.cfg_state = SigConfig::Off;
         g.close_circuit();
         g.backoff = self.cfg.backoff_min;
         g.retry_at = Some(Instant::now() + g.backoff);
@@ -582,6 +643,8 @@ impl Registry {
                     retry_at: None,
                     backoff: cfg.backoff_min,
                     ind_reg: None,
+                    cfg_hold: None,
+                    cfg_state: SigConfig::Off,
                     timeouts: 0,
                     probe_at: None,
                 }),
@@ -641,6 +704,31 @@ impl Registry {
         let i = self.shared.idx(svc).ok_or(QmiError::Unavailable)?;
         lock(&self.shared.services[i].inner).ind_reg = Some((msg_id, tlvs.to_vec()));
         self.shared.call(i, msg_id, tlvs, None).map(|_| ())
+    }
+
+    /// Internal only: holds NAS Config Signal Info v2 with the compiled-in
+    /// delta TLVs on the registry's own NAS socket, and sends it now. The
+    /// held config is replayed on every rebuilt socket (the modem does not
+    /// persist it), so an initial failure (NAS not up yet) is harmless. Only
+    /// the daemon lane calls this; the in-process fallback client never does.
+    pub fn hold_config(&self) -> Result<(), QmiError> {
+        let msg_id = allow::NAS_CONFIG_SIG_INFO2;
+        if !allow::BROKER_CONFIG.contains(&(SVC_NAS, msg_id)) {
+            return Err(QmiError::Refused { svc: SVC_NAS, msg: msg_id });
+        }
+        let i = self.shared.idx(SVC_NAS).ok_or(QmiError::Unavailable)?;
+        let tlvs = sig_config_tlvs();
+        lock(&self.shared.services[i].inner).cfg_hold = Some((msg_id, tlvs.clone()));
+        let r = self.shared.call(i, msg_id, &tlvs, None);
+        self.shared.note_cfg(i, &r);
+        r.map(|_| ())
+    }
+
+    pub fn sig_config_state(&self) -> SigConfig {
+        match self.shared.idx(SVC_NAS) {
+            Some(i) => lock(&self.shared.services[i].inner).cfg_state,
+            None => SigConfig::Off,
+        }
     }
 
     /// Indications from `svc`, from now on (across socket rebuilds). A
@@ -1111,6 +1199,83 @@ mod tests {
             assert_eq!(reg.request_by(SVC_NAS, 0x0024, &[], dl).unwrap_err(), QmiError::Timeout);
         }
         assert_eq!(net.sent().len(), 3);
+    }
+
+    fn cfg_sent(net: &Arc<FakeNet>) -> Vec<super::super::fake::Sent> {
+        net.sent().into_iter().filter(|s| s.svc == SVC_NAS && s.msg.id == 0x006C).collect()
+    }
+
+    #[test]
+    fn hold_config_sends_exactly_the_seven_delta_tlvs() {
+        let net = net_all_up();
+        echo(&net);
+        let reg = start(&net, cfg());
+        assert_eq!(reg.sig_config_state(), SigConfig::Off);
+        reg.hold_config().unwrap();
+        let s = cfg_sent(&net);
+        assert_eq!(s.len(), 1);
+        let want: Vec<(u8, Vec<u8>)> = [0x23u8, 0x25, 0x27, 0x29, 0x34, 0x36, 0x39].iter().map(|&t| (t, vec![0x0A, 0x00])).collect();
+        let got: Vec<(u8, Vec<u8>)> = s[0].msg.tlvs.iter().map(|t| (t.t, t.v.clone())).collect();
+        assert_eq!(got, want);
+        assert_eq!(reg.sig_config_state(), SigConfig::Held);
+    }
+
+    #[test]
+    fn held_config_replays_before_ind_reg_on_a_rebuilt_socket() {
+        let net = net_all_up();
+        echo(&net);
+        let reg = start(&net, cfg());
+        reg.hold_config().unwrap();
+        reg.register_indications(SVC_NAS, &[Tlv::new(0x13, &[1])]).unwrap();
+        net.del_server(SVC_NAS);
+        assert!(wait_until(|| reg.state(SVC_NAS) == Some(SvcState::Down)));
+        assert_eq!(reg.sig_config_state(), SigConfig::Off);
+        net.add_server(SVC_NAS, 0, 0x71);
+        let ids = || net.sent().into_iter().filter(|s| s.svc == SVC_NAS).map(|s| s.msg.id).collect::<Vec<_>>();
+        assert!(wait_until(|| ids().len() == 4));
+        assert_eq!(ids(), vec![0x006C, 0x0003, 0x006C, 0x0003]);
+        assert!(wait_until(|| reg.sig_config_state() == SigConfig::Held));
+    }
+
+    #[test]
+    fn a_rejected_config_sets_state_and_is_not_retried() {
+        for (code, want) in [(0x0047u16, SigConfig::Unsupported), (0x0030, SigConfig::Rejected(0x0030))] {
+            let net = net_all_up();
+            net.set_responder(move |_, m| {
+                let r = if m.id == 0x006C { result_tlv(Some(code)) } else { result_tlv(None) };
+                Some(encode(KIND_RESP, m.txn, m.id, &[r]))
+            });
+            let reg = start(&net, cfg());
+            assert!(reg.hold_config().is_err());
+            assert_eq!(reg.sig_config_state(), want);
+            thread::sleep(Duration::from_millis(40));
+            assert_eq!(cfg_sent(&net).len(), 1);
+            assert_eq!(reg.state(SVC_NAS), Some(SvcState::Up));
+        }
+    }
+
+    #[test]
+    fn clients_are_still_refused_the_signal_config() {
+        let net = net_all_up();
+        echo(&net);
+        let reg = start(&net, cfg());
+        let e = reg.request(SVC_NAS, 0x006C, &sig_config_tlvs()).unwrap_err();
+        assert_eq!(e, QmiError::Refused { svc: SVC_NAS, msg: 0x006C });
+        assert!(cfg_sent(&net).is_empty());
+    }
+
+    #[test]
+    fn without_hold_config_nothing_is_ever_written() {
+        let net = net_all_up();
+        echo(&net);
+        let reg = start(&net, cfg());
+        net.del_server(SVC_NAS);
+        assert!(wait_until(|| reg.state(SVC_NAS) == Some(SvcState::Down)));
+        net.add_server(SVC_NAS, 0, 0x72);
+        assert!(wait_until(|| reg.state(SVC_NAS) == Some(SvcState::Up)));
+        assert!(reg.request(SVC_NAS, 0x0024, &[]).is_ok());
+        assert!(cfg_sent(&net).is_empty());
+        assert_eq!(reg.sig_config_state(), SigConfig::Off);
     }
 
     #[test]
