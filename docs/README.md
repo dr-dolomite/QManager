@@ -20,6 +20,7 @@ QManager is a modern web-based GUI for managing Quectel cellular modems on OpenW
 | [Design reference](reference/color-system.md) | Colour roles and measurements ([color-system](reference/color-system.md)), [icon-system](reference/icon-system.md), [motion-preference](reference/motion-preference.md), [toast-confirmation](reference/toast-confirmation.md), [tailwind-prose-hazard](reference/tailwind-prose-hazard.md) |
 | [Design System (superseded)](DESIGN-SYSTEM.md) | The earlier target design (Manrope, Signal Indigo); kept as a record until the code migrates |
 | [Deployment Guide](DEPLOYMENT.md) | Building, installing, and deploying to OpenWRT devices |
+| [Security Review](security/2026-10-23-security-review-findings.md) | External security review findings (SDXLEMUR / RM520N / RM551E) |
 
 ---
 
