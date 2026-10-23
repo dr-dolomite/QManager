@@ -32,8 +32,7 @@ export interface LiveSample {
   rssi: number | null;
   /**
    * Broker 0.5.0+ (absent from older brokers). LTE SINR, and NR (NSA) from
-   * Get Signal Info: 
-r_rsrp is the mean of the NR RX chains, not the
+   * Get Signal Info: `nr_rsrp` is the mean of the NR RX chains, not the
    * strongest chain the AT path reports.
    */
   sinr?: number | null;
