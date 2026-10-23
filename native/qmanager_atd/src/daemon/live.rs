@@ -6,8 +6,9 @@
 //! one stamp file per tier into the root-only run dir
 //! (`/var/run/qmanager/qmi_live_{aim,watch}`), each holding one line: the
 //! CLOCK_BOOTTIME second (`/proc/uptime`'s integer part) of the renewal. The
-//! broker maps the fastest fresh tier to a compiled period (aim 200 ms,
-//! watch 1 s, none 2 s). A stamp counts only if it is a regular file owned by
+//! broker maps the fastest fresh tier to a compiled period (aim 1 s,
+//! watch 1 s, none 2 s; aim's 5 Hz is parked, see `AIM_PERIOD`). A stamp
+//! counts only if it is a regular file owned by
 //! the broker's euid, opened without following a link, holding digits only
 //! (no leading zero, at most 10), not in the future and at most 10 s old. No
 //! wall clock is involved, so NTP / NITZ steps cannot hold a lease up.
@@ -31,7 +32,7 @@
 //! the public file and its `.new`, and clears its ring. The next lease mints
 //! a new token.
 //!
-//! Ring. Up to 32 samples (about 6.4 s at 5 Hz), each with a `seq` that only
+//! Ring. Up to 32 samples (about 32 s at 1 Hz), each with a `seq` that only
 //! grows within one daemon run (`run` = the daemon's start, CLOCK_BOOTTIME ms; it changes on
 //! a restart, which tells a client to reset). A failed read pushes no sample
 //! (the file's `qmi_state` says why nothing new arrived). While the long /
@@ -59,11 +60,14 @@ pub const RUN_DIR: &str = "/var/run/qmanager";
 pub const PUBLIC_DIR: &str = "/var/run/qmanager/live";
 pub const INDEX: &str = "index.html";
 
-pub const AIM_PERIOD: Duration = Duration::from_millis(200);
+/// 1 s, the same as `watch`, since 2026-10-23: a leased 5 Hz soak coincided
+/// with a higher baseband SSR rate. 5 Hz is parked, not removed: 200 ms here
+/// and in `MIN_PERIOD` brings it back.
+pub const AIM_PERIOD: Duration = Duration::from_millis(1000);
 pub const WATCH_PERIOD: Duration = Duration::from_millis(1000);
 pub const IDLE_PERIOD: Duration = Duration::from_secs(2);
-/// Floor of any period: 5 Hz.
-pub const MIN_PERIOD: Duration = Duration::from_millis(200);
+/// Floor of any period: 1 Hz.
+pub const MIN_PERIOD: Duration = Duration::from_millis(1000);
 /// The longest the sampler sleeps before it looks at the stamps again.
 pub const MAX_SLICE: Duration = Duration::from_millis(250);
 /// A stamp older than this (seconds on the boot clock) is no lease.
@@ -662,13 +666,13 @@ mod tests {
 
     #[test]
     fn tiers_map_to_compiled_periods_and_aim_beats_watch() {
-        assert_eq!(period_for(Tier::Aim), Duration::from_millis(200));
+        assert_eq!(period_for(Tier::Aim), Duration::from_millis(1000));
         assert_eq!(period_for(Tier::Watch), Duration::from_millis(1000));
         assert_eq!(period_for(Tier::None), Duration::from_secs(2));
         for t in [Tier::None, Tier::Watch, Tier::Aim] {
-            assert!(period_for(t) >= MIN_PERIOD, "5 Hz floor");
+            assert!(period_for(t) >= MIN_PERIOD, "1 Hz floor");
         }
-        assert_eq!(slice_for(period_for(Tier::Aim)), Duration::from_millis(200));
+        assert_eq!(slice_for(period_for(Tier::Aim)), Duration::from_millis(250));
         assert_eq!(slice_for(period_for(Tier::Watch)), Duration::from_millis(250));
         assert_eq!(slice_for(period_for(Tier::None)), Duration::from_millis(250));
 
@@ -822,7 +826,7 @@ mod tests {
         }
         let f = std::fs::read_to_string(d.join("pub").join(format!("{TOK}.json"))).unwrap();
         assert_eq!(f.matches("{\"seq\":").count(), RING, "{f}");
-        assert!(f.contains("\"seq\":40,\"period_ms\":200") && f.contains("{\"seq\":9,") && !f.contains("{\"seq\":8,"), "{f}");
+        assert!(f.contains("\"seq\":40,\"period_ms\":1000") && f.contains("{\"seq\":9,") && !f.contains("{\"seq\":8,"), "{f}");
         assert!(f.find("{\"seq\":9,").unwrap() < f.find("{\"seq\":40,").unwrap(), "oldest first: {f}");
         assert!(f.contains(&format!("\"run\":{},", l.run_id())));
         // A failed read pushes nothing; the header carries the new state.
