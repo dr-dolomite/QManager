@@ -155,15 +155,17 @@ The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, 
 
 **Sidecars under a lease (2026-10-23, RM551E, broker 0.4.0, `aim` leased):** `qmi.env` and `qmanager_qmi.json` are rewritten together every 2 s (mtimes stepped +2 s on every sample over 6 s), and the poller's status shows `lte.source=qmi` with `mono - device.qmi_read_mono = 2` on every one of five 2 s samples.
 
-## Config signal hold (0.5.0, device validation pending)
+## Config signal hold (0.5.0, device gate 2026-10-23)
 
-Built and host-tested only (245 crate tests, 259 with `--features poll`). The sampler reads Signal Info as part of the bundle and the broker holds the NAS signal config; see [`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050). The device checks still to run after deploy:
+Host-tested (245 crate tests, 259 with `--features poll`) and deployed to the RM551E (boot `0aa7bf6b`, uptime 6.0 h at deploy, 5 SSRs before it). The sampler reads Signal Info as part of the bundle and the broker holds the NAS signal config; see [`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050).
 
-- `/var/run/qmanager_atd.proto` reads `version=0.5.0`, with the same four lines as 0.4.1 (no new capability line).
-- `qmi_sig_config` in `/tmp/qmanager_qmi.json` reads `held`, and LTE RSRP/SINR and the NR fields change across live samples (not frozen as before).
-- The config is re-applied after the next natural SSR (`qmi_sig_config` back to `held`).
-- Broker CPU stays within the 0.4.1 budget (0.57 % of one core under an `aim` lease at 1 Hz).
-- **SSR watch:** count SSRs per hour for 24 h against this boot's history. If the rate rises, roll back to 0.4.1.
+- **Capability:** `/var/run/qmanager_atd.proto` reads `proto=3 version=0.5.0 qmi=1 live=1`, the same four lines as 0.4.1.
+- **Apply:** `qmi nas signal config applied` logged at broker start; `qmi_sig_config` in `/tmp/qmanager_qmi.json` reads `held`; `qcmd AT` still answers.
+- **Signal Info is live:** 40 reads at 2 s, `qmi signal` vs `AT+QENG`. Under 0.4.1 (config not held) NR RSRP sat at -86.0 dBm for all 40 reads while AT moved -79 to -81. Under 0.5.0 NR RSRP changed on 24 of 39 steps (-82 to -84). It reads 1-3 dB below QENG because it is the chain mean. LTE SINR moves in both (27 and 26 changes), as the research found.
+- **LTE SINR vs AT:** QMI 20.8-25.6 dB vs QENG 20-22 dB in the same window, about 2-4 dB higher. This is why the dashboard does not overlay live SINR yet; it needs a longer comparison first.
+- **Live file:** under a `watch` lease the file runs at `period_ms:1000` with `sinr`, `nr_rsrp`, `nr_rsrq`, `nr_sinr` filled (e.g. `sinr:246, nr_rsrp:-820, nr_rsrq:-110, nr_sinr:315`) and no identifier keys; it was removed once the lease lapsed.
+- **CPU:** 0.40 % of one core with no lease (0.4.1: 0.43 %) and 0.55 % under an `aim` lease (0.4.1: 0.57 %); RSS 592 kB (0.4.1: 528 kB), 10 threads, 12 fds.
+- **Still open:** re-apply after the next natural SSR (`qmi_sig_config` back to `held`), and the **SSR watch**: count SSRs per hour for 24 h against this boot's history; if the rate rises, roll back to 0.4.1 (kept on the device at `/tmp/qm_atd_041` until reboot).
 
 ## Cadence decision (2026-10-23)
 
