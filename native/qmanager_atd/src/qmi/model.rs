@@ -412,8 +412,9 @@ pub struct Inputs<'a> {
     pub sig_info: Option<&'a Msg>,
 }
 
-/// The poller-shaped read: serving + cell + CA + RF, plus the signal block
-/// derived from them (and from Signal Info when supplied).
+/// The poller-shaped read: serving + cell + CA + RF + Signal Info, plus the
+/// signal block derived from them (Signal Info adds SINR and NR; it is live
+/// while the broker holds the NAS signal config).
 #[derive(Clone, Debug)]
 pub struct Bundle {
     pub serving: Option<ServingSystem>,
@@ -698,7 +699,7 @@ impl Read {
             Read::Slots => &[(SVC_UIM, 0x0047)],
             Read::Profiles => &[(SVC_WDS, 0x002A)],
             Read::Dsd => &[(SVC_DSD, 0x0024)],
-            Read::Bundle => &[(SVC_NAS, 0x0024), (SVC_NAS, 0x0043), (SVC_NAS, 0x00AC), (SVC_NAS, 0x0031)],
+            Read::Bundle => &[(SVC_NAS, 0x0024), (SVC_NAS, 0x0043), (SVC_NAS, 0x00AC), (SVC_NAS, 0x0031), (SVC_NAS, 0x004F)],
         }
     }
 }
@@ -755,7 +756,7 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
 }
 
 /// The poller-shaped read as a struct (the snapshot sampler needs the values,
-/// not only the JSON). Fails only if all four requests fail, with the first
+/// not only the JSON). Fails only if all five requests fail, with the first
 /// one's error; a failed part is `None` / null.
 pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
     let r: Vec<Result<Msg, QmiError>> = Read::Bundle.requests().iter().map(|&(svc, id)| fetch(svc, id)).collect();
@@ -775,7 +776,7 @@ pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
     }
     let m: Vec<Option<Msg>> = r.into_iter().map(|x| x.ok()).collect();
     let part = |i: usize| m.get(i).and_then(|x| x.as_ref());
-    Ok(Bundle::build(&Inputs { serving: part(0), cell: part(1), ca: part(2), rf: part(3), sig_info: None }))
+    Ok(Bundle::build(&Inputs { serving: part(0), cell: part(1), ca: part(2), rf: part(3), sig_info: part(4) }))
 }
 
 #[cfg(test)]

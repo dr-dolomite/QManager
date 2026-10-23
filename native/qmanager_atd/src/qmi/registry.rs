@@ -127,7 +127,6 @@ pub enum SigConfig {
 }
 
 impl SigConfig {
-    #[allow(dead_code)] // surfaced in the snapshot JSON
     pub fn as_str(self) -> &'static str {
         match self {
             SigConfig::Off => "off",

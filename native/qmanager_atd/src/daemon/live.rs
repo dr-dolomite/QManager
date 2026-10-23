@@ -246,8 +246,15 @@ pub fn render_sample(seq: u64, t_ms: u64, b: Option<&Bundle>, scan: bool) -> Str
     let sig = b.filter(|b| b.registered()).and_then(|b| b.signal.lte);
     j.opt_num("rsrp", sig.and_then(|s| s.rsrp).map(|r| r.x10))
         .opt_num("rsrq", sig.and_then(|s| s.rsrq).map(|r| r.x10))
-        .opt_num("rssi", sig.and_then(|s| s.rssi).map(|r| r.x10));
-    let lte = b.and_then(|b| b.cell.as_ref()).and_then(|c| c.lte.as_ref());
+        .opt_num("rssi", sig.and_then(|s| s.rssi).map(|r| r.x10))
+        .opt_num("sinr", sig.and_then(|s| s.sinr).map(|r| r.x10));
+    // NR (NSA) from Get Signal Info: RSRP is the mean of the NR RX chains,
+    // not QENG's strongest chain.
+    let nr = b.filter(|b| b.registered()).and_then(|b| b.signal.nr);
+    j.opt_num("nr_rsrp", nr.and_then(|s| s.rsrp).map(|r| r.x10))
+        .opt_num("nr_rsrq", nr.and_then(|s| s.rsrq).map(|r| r.x10))
+        .opt_num("nr_sinr", nr.and_then(|s| s.sinr).map(|r| r.x10));
+    let lte =b.and_then(|b| b.cell.as_ref()).and_then(|c| c.lte.as_ref());
     j.opt_num("pci", lte.map(|l| l.pci)).opt_num("earfcn", lte.map(|l| l.earfcn));
     let (band, bw) = b.map_or((None, None), |b| b.lte_band());
     j.opt_str("band", band.as_deref()).opt_num("bw", bw);
@@ -605,7 +612,7 @@ mod tests {
             cell: Some(&fx!("r1_3_0x0043")),
             ca: Some(&fx!("ca_0x15_two_scells")),
             rf: Some(&fx!("r1_3_0x0031")),
-            sig_info: None,
+            sig_info: Some(&fx!("r1_3_0x004F")),
         })
     }
 
@@ -747,7 +754,7 @@ mod tests {
         let s = render_sample(7, 123456, Some(&b), false);
         assert_eq!(
             s,
-            "{\"seq\":7,\"t\":123456,\"reg\":true,\"rsrp\":-900,\"rsrq\":-74,\"rssi\":-628,\"pci\":295,\"earfcn\":150,\"band\":\"B1\",\"bw\":20,\
+            "{\"seq\":7,\"t\":123456,\"reg\":true,\"rsrp\":-900,\"rsrq\":-74,\"rssi\":-628,\"sinr\":264,\"nr_rsrp\":-890,\"nr_rsrq\":-110,\"nr_sinr\":250,\"pci\":295,\"earfcn\":150,\"band\":\"B1\",\"bw\":20,\
              \"ca\":[{\"band\":\"B1\",\"earfcn\":150,\"pci\":295,\"bw\":20,\"active\":false},{\"band\":\"B41\",\"earfcn\":39965,\"pci\":295,\"bw\":15,\"active\":false}]}",
         );
         let mut ring = VecDeque::new();
@@ -784,13 +791,13 @@ mod tests {
             cell: Some(&fx!("r1_3_0x0043")),
             ca: None,
             rf: Some(&fx!("r1_3_0x0031")),
-            sig_info: None,
+            sig_info: Some(&fx!("r1_3_0x004F")),
         });
         let s = render_sample(1, 2, Some(&b), false);
-        assert!(s.contains("\"reg\":false,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"pci\":295"), "{s}");
+        assert!(s.contains("\"reg\":false,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"sinr\":null,\"nr_rsrp\":null,\"nr_rsrq\":null,\"nr_sinr\":null,\"pci\":295"), "{s}");
         assert!(s.ends_with("\"ca\":null}"), "{s}");
         let s = render_sample(3, 4, Some(&bundle()), true);
-        assert_eq!(s, "{\"seq\":3,\"t\":4,\"reg\":null,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"pci\":null,\"earfcn\":null,\"band\":null,\"bw\":null,\"ca\":null}");
+        assert_eq!(s, "{\"seq\":3,\"t\":4,\"reg\":null,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"sinr\":null,\"nr_rsrp\":null,\"nr_rsrq\":null,\"nr_sinr\":null,\"pci\":null,\"earfcn\":null,\"band\":null,\"bw\":null,\"ca\":null}");
     }
 
     #[test]

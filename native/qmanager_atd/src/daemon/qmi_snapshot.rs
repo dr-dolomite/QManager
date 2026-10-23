@@ -163,6 +163,8 @@ pub struct View<'a> {
     pub mono_s: Option<u64>,
     pub state: &'static str,
     pub ssr_count: u64,
+    /// The broker-held NAS signal config (`SigConfig::as_str`): JSON only.
+    pub sig: &'static str,
     pub bundle: Option<&'a Bundle>,
 }
 
@@ -249,6 +251,7 @@ pub fn render_json(v: &View) -> String {
         .opt_num("qmi_mono", v.mono_s)
         .str("qmi_state", v.state)
         .num("qmi_ssr_count", v.ssr_count)
+        .str("qmi_sig_config", v.sig)
         .opt_bool("registered", v.bundle.and_then(registered));
     match v.bundle {
         Some(b) => j.raw("data", &b.json()),
@@ -330,7 +333,7 @@ impl Sampler {
         let now = Instant::now();
         let changed = state != self.side_state || ssr != self.side_ssr;
         if sidecar_due(tier, self.side_at, now, changed) {
-            self.write_sidecars(state, ssr);
+            self.write_sidecars(state, ssr, reg.sig_config_state().as_str());
             self.side_at = Some(now);
             self.side_state = state;
             self.side_ssr = ssr;
@@ -339,9 +342,9 @@ impl Sampler {
         self.live.on_sample(tier, state, ssr, fresh_bundle);
     }
 
-    fn write_sidecars(&mut self, state: &'static str, ssr_count: u64) {
+    fn write_sidecars(&mut self, state: &'static str, ssr_count: u64, sig: &'static str) {
         self.side_writes += 1;
-        let v = View { mono_s: self.last_mono, state, ssr_count, bundle: self.last.as_ref() };
+        let v = View { mono_s: self.last_mono, state, ssr_count, sig, bundle: self.last.as_ref() };
         let json = render_json(&v);
         let env = render_env(&v);
         // JSON first, then env, each on its own: a path planted in /tmp can
@@ -527,7 +530,7 @@ mod tests {
     #[test]
     fn a_registered_lte_bundle_fills_every_identity_and_signal_name() {
         let b = bundle("registered");
-        let env = render_env(&View { mono_s: Some(4242), state: "up", ssr_count: 3, bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(4242), state: "up", ssr_count: 3, sig: "off", bundle: Some(&b) });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!(get(&p, "qmi_mono"), "4242");
@@ -558,7 +561,7 @@ mod tests {
     #[test]
     fn not_registered_keeps_identity_but_empties_the_signal() {
         let b = bundle("searching");
-        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!(get(&p, "qmi_registered"), "0");
@@ -568,14 +571,14 @@ mod tests {
         assert_eq!(get(&p, "qmi_lte_pci"), "295", "identity is not gated");
         // Serving unreadable: registration unknown -> empty, signal empty.
         let b = Bundle::build(&Inputs { cell: Some(&fx!("r1_3_0x0043")), ..Inputs::default() });
-        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, bundle: Some(&b) });
+        let env = render_env(&View { mono_s: Some(10), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         assert_eq!((get(&p, "qmi_registered"), get(&p, "qmi_lte_rsrp")), ("", ""));
     }
 
     #[test]
     fn nothing_read_yet_is_all_empty_but_state_and_counters() {
-        let env = render_env(&View { mono_s: None, state: "unavailable", ssr_count: 0, bundle: None });
+        let env = render_env(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", bundle: None });
         assert_eq!(violation(&env), None, "{env}");
         let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
         for (n, v) in &p {
@@ -585,15 +588,15 @@ mod tests {
                 _ => assert_eq!(v, "", "{n}"),
             }
         }
-        let j = render_json(&View { mono_s: None, state: "unavailable", ssr_count: 0, bundle: None });
-        assert_eq!(j, "{\"v\":1,\"qmi_mono\":null,\"qmi_state\":\"unavailable\",\"qmi_ssr_count\":0,\"registered\":null,\"data\":null}\n");
+        let j = render_json(&View { mono_s: None, state: "unavailable", ssr_count: 0, sig: "off", bundle: None });
+        assert_eq!(j, "{\"v\":1,\"qmi_mono\":null,\"qmi_state\":\"unavailable\",\"qmi_ssr_count\":0,\"qmi_sig_config\":\"off\",\"registered\":null,\"data\":null}\n");
     }
 
     #[test]
     fn the_json_carries_the_freshness_fields_and_the_bundle() {
         let b = bundle("registered");
-        let j = render_json(&View { mono_s: Some(7), state: "down", ssr_count: 2, bundle: Some(&b) });
-        assert!(j.starts_with("{\"v\":1,\"qmi_mono\":7,\"qmi_state\":\"down\",\"qmi_ssr_count\":2,\"registered\":true,\"data\":{\"serving\":{"), "{j}");
+        let j = render_json(&View { mono_s: Some(7), state: "down", ssr_count: 2, sig: "off", bundle: Some(&b) });
+        assert!(j.starts_with("{\"v\":1,\"qmi_mono\":7,\"qmi_state\":\"down\",\"qmi_ssr_count\":2,\"qmi_sig_config\":\"off\",\"registered\":true,\"data\":{\"serving\":{"), "{j}");
         assert!(j.ends_with("}}\n") && j.matches('\n').count() == 1, "{j}");
         assert!(j.contains("\"rsrp\":{\"value\":-90"), "{j}");
     }
@@ -605,7 +608,7 @@ mod tests {
         for base in crate::qmi::codec::testfix::all() {
             for m in crate::qmi::codec::testfix::mangled(&base) {
                 let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m) });
-                let env = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, bundle: Some(&b) });
+                let env = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
                 assert_eq!(violation(&env), None, "{env}");
             }
         }
@@ -634,14 +637,14 @@ mod tests {
         };
         let b = bundle("registered");
         let good = d.join("good.env");
-        std::fs::write(&good, render_env(&View { mono_s: Some(99), state: "up", ssr_count: 1, bundle: Some(&b) })).unwrap();
+        std::fs::write(&good, render_env(&View { mono_s: Some(99), state: "up", ssr_count: 1, sig: "off", bundle: Some(&b) })).unwrap();
         assert_eq!(run(&good), "SOURCED mono=99 state=up reg=1 pci=295 rsrp=-90 ca=3 scc2=41 end=1");
         // Empty values source as empty strings.
         let empty = d.join("empty.env");
-        std::fs::write(&empty, render_env(&View { mono_s: None, state: "down", ssr_count: 4, bundle: None })).unwrap();
+        std::fs::write(&empty, render_env(&View { mono_s: None, state: "down", ssr_count: 4, sig: "off", bundle: None })).unwrap();
         assert_eq!(run(&empty), "SOURCED mono= state=down reg= pci= rsrp= ca= scc2= end=1");
         // A file cut short (no terminator) or with a stray line is rejected.
-        let full = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, bundle: Some(&b) });
+        let full = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", bundle: Some(&b) });
         let cut = d.join("cut.env");
         std::fs::write(&cut, &full[..full.len() - "qm_sidecar_end='1'\n".len()]).unwrap();
         assert_eq!(run(&cut), "REJECTED");
