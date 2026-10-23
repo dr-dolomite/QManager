@@ -45,12 +45,29 @@
 //! when the last `Arc<Link>` drops: the demux thread's on exit, an in-flight
 //! request's on return (bounded by the request timeout). New requests see
 //! state Down and fail fast without touching any socket.
+//!
+//! Internal WDS clients (broker 0.6.0, `Config::wds_stats`, daemon only).
+//! Two more service slots for WDS (IPv4 and IPv6), after the five public
+//! ones, each with its own socket, demux thread and circuit. They follow
+//! NEW_SERVER / DEL_SERVER / re-lookups exactly like the public WDS slot, but
+//! no client request can reach them (`request` only ever resolves the public
+//! slot) and they are left out of `states()`. Each holds a bind target (the
+//! data endpoint and mux id of the default call): `wds_packet_bytes` binds
+//! the slot's current socket to it (0x00A2, 0x00AF, and 0x004D family 6 for
+//! the IPv6 slot) before the first stats read, and every rebuilt socket
+//! (SSR, NEW_SERVER, re-lookup) replays the bind before its first stats read.
+//! A bind is per client and dies with the socket, so a new target (the mux
+//! moved) or a retry after a failed bind always uses a fresh socket to the
+//! same endpoint; the old one is closed. Every call of a bind or a stats read
+//! is pinned to the link it was meant for: a link replaced meanwhile makes it
+//! fail `modem_not_ready` rather than reach an unbound socket.
 
 use super::allow;
+use super::codec::wds::{self, Endpoint, PktBytes};
 use super::error::QmiError;
 use super::msg::{self, Msg, Tlv, KIND_IND, KIND_REQ, KIND_RESP};
 use super::transport::{self, Ctrl, Datagram, QrtrTransport, Transport, QRTR_PORT_CTL};
-use super::{service_name, SERVICES, SVC_NAS};
+use super::{service_name, SERVICES, SVC_NAS, SVC_WDS};
 use crate::common::proto::mono_ms;
 use std::collections::HashMap;
 use std::io;
@@ -86,6 +103,12 @@ pub struct Config {
     pub circuit_after: u32,
     /// While open, one probe request is let through at most this often.
     pub probe_every: Duration,
+    /// Adds the two internal WDS client slots (the daemon only; a one-shot
+    /// client registry never opens them).
+    pub wds_stats: bool,
+    /// A bind the modem refused (a QMI error code) is retried at most this
+    /// often, each time on a fresh socket.
+    pub bind_retry: Duration,
 }
 
 impl Default for Config {
@@ -99,8 +122,64 @@ impl Default for Config {
             ssr_merge: Duration::from_secs(2),
             circuit_after: 2,
             probe_every: Duration::from_secs(1),
+            wds_stats: false,
+            bind_retry: Duration::from_secs(30),
         }
     }
+}
+
+/// The IP family of an internal WDS client.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IpFamily {
+    V4,
+    V6,
+}
+
+impl IpFamily {
+    pub const ALL: [IpFamily; 2] = [IpFamily::V4, IpFamily::V6];
+
+    pub fn tag(self) -> &'static str {
+        match self {
+            IpFamily::V4 => "wds4",
+            IpFamily::V6 => "wds6",
+        }
+    }
+}
+
+/// What an internal WDS client is bound to: the data endpoint and mux id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BindTarget {
+    pub ep: Endpoint,
+    pub mux: u8,
+}
+
+/// The bind on an internal WDS slot's current socket.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bind {
+    /// No bind attempted on this socket (or no socket).
+    Fresh,
+    /// A bind is being sent on this socket.
+    Busy,
+    /// Bound; `subs_ok` says whether Bind Subscription succeeded (Qualcomm's
+    /// dsi ignores its failure, and so do we).
+    Bound { t: BindTarget, subs_ok: bool },
+    /// The bind failed (QMI error code, or None for a timeout / lost link).
+    Failed { t: BindTarget, code: Option<u16>, at: Instant },
+}
+
+/// The bind state of an internal WDS slot, for logging.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WdsBind {
+    /// No slot, no target yet, or no bind on the current socket yet.
+    Unbound,
+    Bound { mux: u8, subs_ok: bool },
+    Failed { mux: u8, code: Option<u16> },
+}
+
+struct WdsSlot {
+    family: IpFamily,
+    target: Option<BindTarget>,
+    bind: Bind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,6 +282,8 @@ struct Inner {
     timeouts: u32,
     /// While open: the earliest moment the next probe may go out.
     probe_at: Option<Instant>,
+    /// Internal WDS slots only: the held bind target and its state.
+    wds: Option<WdsSlot>,
 }
 
 impl Inner {
@@ -214,6 +295,8 @@ impl Inner {
 
 struct Service {
     id: u32,
+    /// Some for an internal WDS client slot; never reachable by `request`.
+    internal: Option<IpFamily>,
     inner: Mutex<Inner>,
     subs: Mutex<Vec<SyncSender<Msg>>>,
 }
@@ -261,11 +344,31 @@ fn next_txn(ctr: &mut u16, pending: &HashMap<u16, Waiter>) -> u16 {
 }
 
 impl Shared {
+    /// The public slot of `svc` (the one client requests use).
     fn idx(&self, svc: u32) -> Option<usize> {
-        self.services.iter().position(|s| s.id == svc)
+        self.services.iter().position(|s| s.id == svc && s.internal.is_none())
     }
 
-    fn call(self: &Arc<Self>, i: usize, msg_id: u16, tlvs: &[Tlv], deadline: Option<Instant>) -> Result<Msg, QmiError> {
+    /// The internal WDS slot of `fam`, when the registry has one.
+    fn idx_internal(&self, fam: IpFamily) -> Option<usize> {
+        self.services.iter().position(|s| s.internal == Some(fam))
+    }
+
+    /// Every slot (public and internal) of `svc`.
+    fn slots(&self, svc: u32) -> Vec<usize> {
+        self.services.iter().enumerate().filter(|(_, s)| s.id == svc).map(|(i, _)| i).collect()
+    }
+
+    /// `pin`: the request may only go out on this link; if the slot's
+    /// current link is another one it fails `modem_not_ready` unsent.
+    fn call(
+        self: &Arc<Self>,
+        i: usize,
+        msg_id: u16,
+        tlvs: &[Tlv],
+        deadline: Option<Instant>,
+        pin: Option<&Arc<Link>>,
+    ) -> Result<Msg, QmiError> {
         if msg::tlvs_len(tlvs) > MAX_REQUEST_BODY {
             return Err(QmiError::BadArgs(None));
         }
@@ -276,6 +379,11 @@ impl Shared {
             (SvcState::Unavailable, _) => return Err(QmiError::Unavailable),
             _ => return Err(QmiError::ModemNotReady(None)),
         };
+        if let Some(p) = pin {
+            if !Arc::ptr_eq(p, &link) {
+                return Err(QmiError::ModemNotReady(None));
+            }
+        }
         // The caller's budget, checked before anything is sent.
         let wait = match deadline {
             Some(d) => d.saturating_duration_since(Instant::now()).min(self.cfg.request_timeout),
@@ -381,7 +489,7 @@ impl Shared {
             if spawn_demux(self.clone(), i, link.clone()).is_err() {
                 return;
             }
-            if let Some(old) = g.link.replace(link) {
+            if let Some(old) = g.link.replace(link.clone()) {
                 old.close();
             }
             if g.state == SvcState::Down {
@@ -391,16 +499,138 @@ impl Shared {
             g.retry_at = None;
             g.backoff = self.cfg.backoff_min;
             g.close_circuit();
-            (g.cfg_hold.clone(), g.ind_reg.clone())
+            // An internal WDS slot with a held target binds the new socket
+            // now, before any stats read can use it.
+            let bind = match g.wds.as_mut() {
+                Some(w) => match w.target {
+                    Some(t) => {
+                        w.bind = Bind::Busy;
+                        Some((w.family, t))
+                    }
+                    None => {
+                        w.bind = Bind::Fresh;
+                        None
+                    }
+                },
+                None => None,
+            };
+            (g.cfg_hold.clone(), g.ind_reg.clone(), bind.map(|b| (link, b)))
         };
         // Order matters: signal config first, then the indication register.
-        let (cfg, ind) = replay;
+        let (cfg, ind, bind) = replay;
         if let Some((msg_id, tlvs)) = cfg {
-            let r = self.call(i, msg_id, &tlvs, None);
+            let r = self.call(i, msg_id, &tlvs, None, None);
             self.note_cfg(i, &r);
         }
         if let Some((msg_id, tlvs)) = ind {
-            let _ = self.call(i, msg_id, &tlvs, None);
+            let _ = self.call(i, msg_id, &tlvs, None, None);
+        }
+        if let Some((link, (fam, t))) = bind {
+            let b = self.run_bind(i, &link, fam, t);
+            self.finish_bind(i, &link, b);
+        }
+    }
+
+    /// Sends the bind sequence on `link` (pinned) and says how it went.
+    /// Bind Mux Data Port must succeed; Bind Subscription may fail (logged
+    /// through `WdsBind`, as Qualcomm's dsi ignores it); the IPv6 client's
+    /// Set Client IP Family must succeed, or it would count IPv4 bytes.
+    fn run_bind(self: &Arc<Self>, i: usize, link: &Arc<Link>, fam: IpFamily, t: BindTarget) -> Bind {
+        let failed = |e: QmiError| Bind::Failed { t, code: e.qmi_code(), at: Instant::now() };
+        let steps_allowed = [allow::WDS_BIND_MUX_DATA_PORT, allow::WDS_BIND_SUBSCRIPTION, allow::WDS_SET_CLIENT_IP_FAMILY]
+            .iter()
+            .all(|&m| allow::broker_allowed(SVC_WDS, m));
+        if !steps_allowed {
+            return failed(QmiError::Refused { svc: SVC_WDS, msg: allow::WDS_BIND_MUX_DATA_PORT });
+        }
+        let pin = Some(link);
+        if let Err(e) = self.call(i, allow::WDS_BIND_MUX_DATA_PORT, &wds::bind_mux_tlvs(t.ep, t.mux), None, pin) {
+            return failed(e);
+        }
+        let subs_ok = self.call(i, allow::WDS_BIND_SUBSCRIPTION, &wds::bind_subscription_tlvs(), None, pin).is_ok();
+        if fam == IpFamily::V6 {
+            if let Err(e) = self.call(i, allow::WDS_SET_CLIENT_IP_FAMILY, &wds::ip_family_tlvs(6), None, pin) {
+                return failed(e);
+            }
+        }
+        Bind::Bound { t, subs_ok }
+    }
+
+    /// Records a bind outcome, if `link` is still the slot's socket and the
+    /// bind is still the one in progress there.
+    fn finish_bind(&self, i: usize, link: &Arc<Link>, b: Bind) {
+        let svc = match self.services.get(i) {
+            Some(s) => s,
+            None => return,
+        };
+        let mut g = lock(&svc.inner);
+        let current = g.link.as_ref().map_or(false, |l| Arc::ptr_eq(l, link));
+        if let Some(w) = g.wds.as_mut() {
+            if current && w.bind == Bind::Busy {
+                w.bind = b;
+            }
+        }
+    }
+
+    /// Replaces slot `i`'s socket with a fresh one to the same endpoint (a
+    /// bind is per client, so a new target needs a new client). The old link
+    /// is closed. The caller holds the slot's lock.
+    fn fresh_link(self: &Arc<Self>, i: usize, g: &mut Inner) -> Option<Arc<Link>> {
+        let (node, port) = g.link.as_ref().map(|l| (l.node, l.port))?;
+        let sock = self.transport.open().ok()?;
+        let link = Arc::new(Link { sock, node, port, pending: Mutex::new(HashMap::new()), stop: AtomicBool::new(false) });
+        spawn_demux(self.clone(), i, link.clone()).ok()?;
+        if let Some(old) = g.link.replace(link.clone()) {
+            old.close();
+        }
+        g.close_circuit();
+        Some(link)
+    }
+
+    /// The bound socket of internal slot `i` for target `t`, binding it
+    /// first if needed (on a fresh socket unless this one never saw a bind).
+    fn ensure_bound(self: &Arc<Self>, i: usize, t: BindTarget) -> Result<Arc<Link>, QmiError> {
+        let svc = self.services.get(i).ok_or(QmiError::Unavailable)?;
+        let (link, fam) = {
+            let mut g = lock(&svc.inner);
+            let link = match (g.state, &g.link) {
+                (SvcState::Up, Some(l)) => l.clone(),
+                (SvcState::Unavailable, _) => return Err(QmiError::Unavailable),
+                _ => return Err(QmiError::ModemNotReady(None)),
+            };
+            let (fam, bind) = match g.wds.as_mut() {
+                Some(w) => {
+                    w.target = Some(t);
+                    (w.family, w.bind)
+                }
+                None => return Err(QmiError::Unavailable),
+            };
+            let fresh_needed = match bind {
+                Bind::Bound { t: b, .. } if b == t => return Ok(link),
+                Bind::Busy => return Err(QmiError::ModemNotReady(None)),
+                Bind::Failed { t: b, code: Some(c), at } if b == t && at.elapsed() < self.cfg.bind_retry => {
+                    return Err(QmiError::from_qmi(c));
+                }
+                Bind::Fresh => false,
+                // Bound elsewhere, or a failed bind to retry: a new client.
+                _ => true,
+            };
+            let link = if fresh_needed {
+                self.fresh_link(i, &mut g).ok_or(QmiError::ModemNotReady(None))?
+            } else {
+                link
+            };
+            if let Some(w) = g.wds.as_mut() {
+                w.bind = Bind::Busy;
+            }
+            (link, fam)
+        };
+        let b = self.run_bind(i, &link, fam, t);
+        self.finish_bind(i, &link, b);
+        match b {
+            Bind::Bound { .. } => Ok(link),
+            Bind::Failed { code: Some(c), .. } => Err(QmiError::from_qmi(c)),
+            _ => Err(QmiError::ModemNotReady(None)),
         }
     }
 
@@ -439,6 +669,10 @@ impl Shared {
         };
         g.state = SvcState::Down;
         g.cfg_state = SigConfig::Off;
+        if let Some(w) = g.wds.as_mut() {
+            // The bind died with the socket; the target stays held.
+            w.bind = Bind::Fresh;
+        }
         g.close_circuit();
         g.backoff = self.cfg.backoff_min;
         g.retry_at = Some(Instant::now() + g.backoff);
@@ -456,12 +690,12 @@ impl Shared {
     fn on_ctrl(self: &Arc<Self>, c: Ctrl) {
         match c {
             Ctrl::NewServer { svc, node, port } => {
-                if let Some(i) = self.idx(svc) {
+                for i in self.slots(svc) {
                     self.on_found(i, node, port);
                 }
             }
             Ctrl::DelServer { svc, node, port } => {
-                if let Some(i) = self.idx(svc) {
+                for i in self.slots(svc) {
                     self.mark_down(i, Lost::Endpoint(node, port));
                 }
             }
@@ -534,7 +768,11 @@ impl Shared {
 }
 
 fn spawn_demux(shared: Arc<Shared>, i: usize, link: Arc<Link>) -> io::Result<()> {
-    let name = format!("qmi-{}", service_name(shared.services[i].id));
+    let name = match shared.services.get(i) {
+        Some(Service { internal: Some(f), .. }) => format!("qmi-{}", f.tag()),
+        Some(s) => format!("qmi-{}", service_name(s.id)),
+        None => return Err(io::Error::from(io::ErrorKind::NotFound)),
+    };
     thread::Builder::new().name(name).stack_size(THREAD_STACK).spawn(move || demux(shared, i, link))?;
     Ok(())
 }
@@ -632,25 +870,29 @@ impl Registry {
     /// Looks every service up once (synchronously, bounded by the lookup
     /// timeout), connects the ones found and starts the watcher.
     pub fn start(transport: Box<dyn Transport>, cfg: Config) -> Registry {
-        let services = SERVICES
-            .iter()
-            .map(|&id| Service {
-                id,
-                inner: Mutex::new(Inner {
-                    state: SvcState::Unavailable,
-                    link: None,
-                    txn: 1,
-                    retry_at: None,
-                    backoff: cfg.backoff_min,
-                    ind_reg: None,
-                    cfg_hold: None,
-                    cfg_state: SigConfig::Off,
-                    timeouts: 0,
-                    probe_at: None,
-                }),
-                subs: Mutex::new(Vec::new()),
-            })
-            .collect();
+        let slot = |id: u32, internal: Option<IpFamily>| Service {
+            id,
+            internal,
+            inner: Mutex::new(Inner {
+                state: SvcState::Unavailable,
+                link: None,
+                txn: 1,
+                retry_at: None,
+                backoff: cfg.backoff_min,
+                ind_reg: None,
+                cfg_hold: None,
+                cfg_state: SigConfig::Off,
+                timeouts: 0,
+                probe_at: None,
+                wds: internal.map(|family| WdsSlot { family, target: None, bind: Bind::Fresh }),
+            }),
+            subs: Mutex::new(Vec::new()),
+        };
+        // The public slots first (in SERVICES order), then the internal ones.
+        let mut services: Vec<Service> = SERVICES.iter().map(|&id| slot(id, None)).collect();
+        if cfg.wds_stats {
+            services.extend(IpFamily::ALL.iter().map(|&f| slot(SVC_WDS, Some(f))));
+        }
         let shared = Arc::new(Shared {
             transport,
             cfg,
@@ -676,6 +918,12 @@ impl Registry {
         Registry::start(Box::new(QrtrTransport), Config::default())
     }
 
+    /// The daemon's registry: the real transport, default timings, and the
+    /// two internal WDS clients for packet statistics.
+    pub fn start_qrtr_daemon() -> Registry {
+        Registry::start(Box::new(QrtrTransport), Config { wds_stats: true, ..Config::default() })
+    }
+
     /// A client request: refused unless (svc, msg) is on the read-only
     /// allow-list; otherwise the successful response, or the typed error
     /// (including a failing result TLV).
@@ -689,7 +937,39 @@ impl Registry {
     pub fn request_by(&self, svc: u32, msg_id: u16, tlvs: &[Tlv], deadline: Option<Instant>) -> Result<Msg, QmiError> {
         allow::check_client(svc, msg_id)?;
         let i = self.shared.idx(svc).ok_or(QmiError::Unavailable)?;
-        self.shared.call(i, msg_id, tlvs, deadline)
+        self.shared.call(i, msg_id, tlvs, deadline, None)
+    }
+
+    /// Internal only (the daemon's snapshot sampler): the ok byte counters of
+    /// the default call, read with WDS Get Packet Statistics on the `fam`
+    /// internal client, bound to `t` first if it is not already. A client
+    /// with no call on its family answers `CommandFailed(Some(0x000F))`.
+    /// `Unavailable` when this registry has no internal WDS clients.
+    pub fn wds_packet_bytes(&self, fam: IpFamily, t: BindTarget) -> Result<PktBytes, QmiError> {
+        if !allow::broker_allowed(SVC_WDS, allow::WDS_GET_PKT_STATS) {
+            return Err(QmiError::Refused { svc: SVC_WDS, msg: allow::WDS_GET_PKT_STATS });
+        }
+        let i = self.shared.idx_internal(fam).ok_or(QmiError::Unavailable)?;
+        let link = self.shared.ensure_bound(i, t)?;
+        let m = self.shared.call(i, allow::WDS_GET_PKT_STATS, &wds::stats_request_tlvs(), None, Some(&link))?;
+        wds::pkt_bytes(&m).ok_or(QmiError::CommandFailed(None))
+    }
+
+    /// The bind on internal client `fam`'s current socket (for logging).
+    pub fn wds_bind_state(&self, fam: IpFamily) -> WdsBind {
+        let i = match self.shared.idx_internal(fam) {
+            Some(i) => i,
+            None => return WdsBind::Unbound,
+        };
+        let g = match self.shared.services.get(i) {
+            Some(s) => lock(&s.inner),
+            None => return WdsBind::Unbound,
+        };
+        match g.wds.as_ref().map(|w| w.bind) {
+            Some(Bind::Bound { t, subs_ok }) => WdsBind::Bound { mux: t.mux, subs_ok },
+            Some(Bind::Failed { t, code, .. }) => WdsBind::Failed { mux: t.mux, code },
+            _ => WdsBind::Unbound,
+        }
     }
 
     /// Internal only: NAS Indication Register on the registry's own NAS
@@ -703,7 +983,7 @@ impl Registry {
         }
         let i = self.shared.idx(svc).ok_or(QmiError::Unavailable)?;
         lock(&self.shared.services[i].inner).ind_reg = Some((msg_id, tlvs.to_vec()));
-        self.shared.call(i, msg_id, tlvs, None).map(|_| ())
+        self.shared.call(i, msg_id, tlvs, None, None).map(|_| ())
     }
 
     /// Internal only: holds NAS Config Signal Info v2 with the compiled-in
@@ -719,7 +999,7 @@ impl Registry {
         let i = self.shared.idx(SVC_NAS).ok_or(QmiError::Unavailable)?;
         let tlvs = sig_config_tlvs();
         lock(&self.shared.services[i].inner).cfg_hold = Some((msg_id, tlvs.clone()));
-        let r = self.shared.call(i, msg_id, &tlvs, None);
+        let r = self.shared.call(i, msg_id, &tlvs, None, None);
         self.shared.note_cfg(i, &r);
         r.map(|_| ())
     }
@@ -746,8 +1026,9 @@ impl Registry {
         Some(lock(&self.shared.services[i].inner).state)
     }
 
+    /// The public slots' states (the internal WDS clients are left out).
     pub fn states(&self) -> Vec<(u32, SvcState)> {
-        self.shared.services.iter().map(|s| (s.id, lock(&s.inner).state)).collect()
+        self.shared.services.iter().filter(|s| s.internal.is_none()).map(|s| (s.id, lock(&s.inner).state)).collect()
     }
 
     /// SSR episodes seen (losses within `ssr_merge` of each other count once).
@@ -805,6 +1086,8 @@ mod tests {
             ssr_merge: Duration::ZERO,
             circuit_after: 2,
             probe_every: Duration::from_millis(200),
+            wds_stats: false,
+            bind_retry: Duration::from_millis(100),
         }
     }
 
@@ -1276,6 +1559,179 @@ mod tests {
         assert!(reg.request(SVC_NAS, 0x0024, &[]).is_ok());
         assert!(cfg_sent(&net).is_empty());
         assert_eq!(reg.sig_config_state(), SigConfig::Off);
+    }
+
+    // ------------------------------------------- internal WDS clients (0.6.0)
+
+    use super::super::fake::{start_registry_wds, wds_net, WdsModel};
+
+    const T1: BindTarget = BindTarget { ep: wds::EP_IPA, mux: 1 };
+
+    /// WDS requests per client socket, in order: (socket, ids).
+    fn wds_by_sock(net: &Arc<FakeNet>) -> Vec<(u64, Vec<u16>)> {
+        let mut out: Vec<(u64, Vec<u16>)> = Vec::new();
+        for s in net.sent().into_iter().filter(|s| s.svc == SVC_WDS) {
+            match out.iter_mut().find(|(k, _)| *k == s.sock) {
+                Some((_, v)) => v.push(s.msg.id),
+                None => out.push((s.sock, vec![s.msg.id])),
+            }
+        }
+        out
+    }
+
+    fn wds_model() -> (Arc<FakeNet>, Arc<WdsModel>, Arc<Registry>) {
+        let (net, md) = wds_net();
+        md.rx4.store(730_328_803, SeqCst);
+        md.tx4.store(41_000_123, SeqCst);
+        let reg = start_registry_wds(&net);
+        (net, md, reg)
+    }
+
+    #[test]
+    fn internal_wds_clients_bind_with_the_device_proven_tlvs_before_the_first_stats_read() {
+        let (net, _md, reg) = wds_model();
+        // Five public clients, two internal WDS clients, the name-server watch.
+        assert_eq!(net.open_sockets(), 8);
+        assert_eq!(reg.states().len(), 5, "internal slots are not public states");
+        // Nothing is bound or read until the sampler asks.
+        assert!(net.sent().is_empty());
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Unbound);
+
+        let b = reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        assert_eq!((b.rx, b.tx), (730_328_803, 41_000_123));
+        let e = reg.wds_packet_bytes(IpFamily::V6, T1).unwrap_err();
+        assert_eq!(e.qmi_code(), Some(wds::ERR_OUT_OF_CALL));
+
+        let per = wds_by_sock(&net);
+        assert_eq!(per.len(), 2, "{per:?}");
+        assert_eq!(per[0].1, vec![0x00A2, 0x00AF, 0x0024]);
+        assert_eq!(per[1].1, vec![0x00A2, 0x00AF, 0x004D, 0x0024]);
+        // Exact request bytes.
+        let sent: Vec<_> = net.sent().into_iter().filter(|s| s.svc == SVC_WDS).collect();
+        let tl = |i: usize| sent[i].msg.tlvs.iter().map(|t| (t.t, t.v.clone())).collect::<Vec<_>>();
+        assert_eq!(tl(0), vec![(0x10, vec![4, 0, 0, 0, 1, 0, 0, 0]), (0x11, vec![1])]);
+        assert_eq!(tl(1), vec![(0x01, vec![1, 0, 0, 0])]);
+        assert_eq!(tl(2), vec![(0x01, vec![0xC0, 0, 0, 0])]);
+        assert_eq!(tl(5), vec![(0x01, vec![6])]);
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Bound { mux: 1, subs_ok: true });
+        assert_eq!(reg.wds_bind_state(IpFamily::V6), WdsBind::Bound { mux: 1, subs_ok: true });
+
+        // A second read on a bound client sends only the read.
+        reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        assert_eq!(wds_by_sock(&net)[0].1, vec![0x00A2, 0x00AF, 0x0024, 0x0024]);
+        // The public WDS client is untouched by all of it and still serves clients.
+        assert!(reg.request(SVC_WDS, 0x002A, &[]).is_ok());
+        let public = wds_by_sock(&net).into_iter().find(|(_, ids)| ids.contains(&0x002A)).unwrap();
+        assert_eq!(public.1, vec![0x002A]);
+        // Never a Reset or anything outside the four broker messages.
+        assert!(net.sent().iter().all(|s| s.svc != SVC_WDS || [0x00A2, 0x00AF, 0x004D, 0x0024, 0x002A].contains(&s.msg.id)));
+    }
+
+    #[test]
+    fn a_v6_call_is_read_on_the_v6_client() {
+        let (_net, md, reg) = wds_model();
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(5_000, SeqCst);
+        md.tx6.store(700, SeqCst);
+        let b = reg.wds_packet_bytes(IpFamily::V6, T1).unwrap();
+        assert_eq!((b.rx, b.tx), (5_000, 700));
+    }
+
+    #[test]
+    fn a_mux_change_rebinds_on_a_fresh_socket_and_closes_the_old_one() {
+        let (net, md, reg) = wds_model();
+        reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        let old = wds_by_sock(&net)[0].0;
+        assert_eq!(md.mux_of(old), Some(1));
+        let t7 = BindTarget { ep: wds::EP_IPA, mux: 7 };
+        reg.wds_packet_bytes(IpFamily::V4, t7).unwrap();
+        let per = wds_by_sock(&net);
+        assert_eq!(per.len(), 2, "{per:?}");
+        assert_ne!(per[1].0, old);
+        assert_eq!(per[1].1, vec![0x00A2, 0x00AF, 0x0024]);
+        assert_eq!(md.mux_of(per[1].0), Some(7));
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Bound { mux: 7, subs_ok: true });
+        // The old socket is closed: no leak.
+        assert!(wait_until(|| net.open_sockets() == 8), "open: {}", net.open_sockets());
+        // Same target again: no rebind.
+        reg.wds_packet_bytes(IpFamily::V4, t7).unwrap();
+        assert_eq!(wds_by_sock(&net).len(), 2);
+    }
+
+    #[test]
+    fn an_ssr_replays_the_bind_on_the_rebuilt_sockets_before_the_next_stats_read() {
+        let (net, md, reg) = wds_model();
+        reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        reg.wds_packet_bytes(IpFamily::V6, T1).unwrap_err();
+        net.del_server(SVC_WDS);
+        assert!(wait_until(|| reg.state(SVC_WDS) == Some(SvcState::Down)));
+        assert_eq!(reg.wds_packet_bytes(IpFamily::V4, T1).unwrap_err(), QmiError::ModemNotReady(None));
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Unbound);
+        assert_eq!(reg.ssr_count(), 1, "three WDS slots lost together are one SSR");
+        net.add_server(SVC_WDS, 0, 0x63);
+        // The watcher binds both rebuilt internal sockets on its own.
+        assert!(wait_until(|| reg.wds_bind_state(IpFamily::V4) == WdsBind::Bound { mux: 1, subs_ok: true }));
+        assert!(wait_until(|| reg.wds_bind_state(IpFamily::V6) == WdsBind::Bound { mux: 1, subs_ok: true }));
+        let b = reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        assert_eq!(b.rx, 730_328_803);
+        let per = wds_by_sock(&net);
+        assert_eq!(per.len(), 4, "{per:?}");
+        assert_eq!(per[2].1.first(), Some(&0x00A2));
+        assert_eq!(per[3].1.first(), Some(&0x00A2));
+        let v4_new = per.iter().skip(2).find(|(_, ids)| !ids.contains(&0x004D)).unwrap();
+        assert_eq!(v4_new.1, vec![0x00A2, 0x00AF, 0x0024]);
+        assert_eq!(md.mux_of(v4_new.0), Some(1));
+        assert!(wait_until(|| net.open_sockets() == 8), "open: {}", net.open_sockets());
+    }
+
+    #[test]
+    fn a_refused_bind_backs_off_then_retries_on_a_fresh_socket() {
+        let (net, md, reg) = wds_model();
+        *md.bind_err.lock().unwrap() = Some(0x0030);
+        let e = reg.wds_packet_bytes(IpFamily::V4, T1).unwrap_err();
+        assert_eq!(e.qmi_code(), Some(0x0030));
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Failed { mux: 1, code: Some(0x0030) });
+        // Inside the backoff: nothing sent.
+        reg.wds_packet_bytes(IpFamily::V4, T1).unwrap_err();
+        assert_eq!(wds_by_sock(&net).len(), 1);
+        assert_eq!(wds_by_sock(&net)[0].1, vec![0x00A2], "no read on an unbound client");
+        // After it: a fresh client, which binds and reads.
+        *md.bind_err.lock().unwrap() = None;
+        thread::sleep(Duration::from_millis(120));
+        reg.wds_packet_bytes(IpFamily::V4, T1).unwrap();
+        let per = wds_by_sock(&net);
+        assert_eq!(per.len(), 2);
+        assert_eq!(per[1].1, vec![0x00A2, 0x00AF, 0x0024]);
+        assert!(wait_until(|| net.open_sockets() == 8));
+    }
+
+    #[test]
+    fn a_failed_bind_subscription_is_tolerated() {
+        let (_net, md, reg) = wds_model();
+        *md.subs_err.lock().unwrap() = Some(0x0047);
+        assert!(reg.wds_packet_bytes(IpFamily::V4, T1).is_ok());
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Bound { mux: 1, subs_ok: false });
+    }
+
+    #[test]
+    fn clients_are_refused_the_wds_binds_and_the_stats_read() {
+        let (net, _md, reg) = wds_model();
+        for m in [0x00A2u16, 0x00AF, 0x004D, 0x0024, 0x0086] {
+            assert_eq!(reg.request(SVC_WDS, m, &[]).unwrap_err(), QmiError::Refused { svc: SVC_WDS, msg: m });
+        }
+        assert!(net.sent().is_empty());
+        // The read-only NAS 0x004D is still a client read.
+        assert!(reg.request(SVC_NAS, 0x004D, &[]).is_err_and(|e| e != QmiError::Refused { svc: SVC_NAS, msg: 0x004D }));
+    }
+
+    #[test]
+    fn a_one_shot_registry_has_no_internal_wds_clients() {
+        let (net, _md) = wds_net();
+        let reg = super::super::fake::start_registry(&net);
+        assert_eq!(net.open_sockets(), 6);
+        assert_eq!(reg.wds_packet_bytes(IpFamily::V4, T1).unwrap_err(), QmiError::Unavailable);
+        assert!(net.sent().is_empty());
+        assert_eq!(reg.wds_bind_state(IpFamily::V6), WdsBind::Unbound);
     }
 
     #[test]

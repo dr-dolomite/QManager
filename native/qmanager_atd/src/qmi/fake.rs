@@ -9,12 +9,14 @@ use super::transport::{
 };
 use std::collections::{HashMap, VecDeque};
 use std::io;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 pub const LOCAL_NODE: u32 = 1;
 
-type Responder = Arc<dyn Fn(u32, &Msg) -> Option<Vec<u8>> + Send + Sync>;
+/// (client socket id, service, request) -> reply bytes.
+type Responder = Arc<dyn Fn(u64, u32, &Msg) -> Option<Vec<u8>> + Send + Sync>;
 
 #[derive(Clone, Debug)]
 pub struct Sent {
@@ -123,6 +125,11 @@ impl FakeNet {
     }
 
     pub fn set_responder(&self, f: impl Fn(u32, &Msg) -> Option<Vec<u8>> + Send + Sync + 'static) {
+        self.st.lock().unwrap().responder = Some(Arc::new(move |_, svc, m| f(svc, m)));
+    }
+
+    /// A responder that also sees which client socket sent the request.
+    pub fn set_responder_by_sock(&self, f: impl Fn(u64, u32, &Msg) -> Option<Vec<u8>> + Send + Sync + 'static) {
         self.st.lock().unwrap().responder = Some(Arc::new(f));
     }
 
@@ -218,7 +225,7 @@ impl Datagram for FakeSock {
         st.socks.get_mut(&self.id).unwrap().peer_svc = Some(svc);
         st.sent.push(Sent { sock: self.id, svc, msg: m.clone() });
         if let Some(r) = st.responder.clone() {
-            if let Some(reply) = r(svc, &m) {
+            if let Some(reply) = r(self.id, svc, &m) {
                 st.socks.get_mut(&self.id).unwrap().q.push_back((reply, node, port));
             }
         }
@@ -272,12 +279,18 @@ use super::{SERVICES, SVC_DMS, SVC_DSD, SVC_NAS, SVC_UIM, SVC_WDS};
 /// read with the committed `r1` device capture (LTE B1, PCI 295, EARFCN 150,
 /// registered). Replies arrive immediately, as on the device.
 pub fn r1_net() -> Arc<FakeNet> {
-    use crate::qmi::codec::testfix::fx;
     let net = FakeNet::new();
     for (i, svc) in SERVICES.iter().enumerate() {
         net.add_server(*svc, 0, 0x40 + i as u32);
     }
-    net.set_responder(|svc, m| {
+    net.set_responder(r1_reply);
+    net
+}
+
+/// The `r1` capture reply to an allow-listed read, or None.
+pub fn r1_reply(svc: u32, m: &Msg) -> Option<Vec<u8>> {
+    use crate::qmi::codec::testfix::fx;
+    {
         let r = match (svc, m.id) {
             (SVC_NAS, 0x0020) => fx!("r1_3_0x0020"),
             (SVC_NAS, 0x0024) => fx!("r1_3_0x0024"),
@@ -297,8 +310,89 @@ pub fn r1_net() -> Arc<FakeNet> {
             _ => return None,
         };
         Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &r.tlvs))
+    }
+}
+
+/// A modem-side model of WDS packet statistics, per client socket, as seen
+/// on the RM551E (2026-10-23): an unbound client gets 0x0046 on 0x0024; a
+/// bound IPv4 client gets its call's counters; a bound IPv6 client gets
+/// 0x000F (out of call) with zero last-call TLVs unless `v6_call` is set.
+#[derive(Default)]
+pub struct WdsModel {
+    pub rx4: AtomicU64,
+    pub tx4: AtomicU64,
+    pub rx6: AtomicU64,
+    pub tx6: AtomicU64,
+    pub v6_call: AtomicBool,
+    /// When set, Bind Mux Data Port fails with this QMI error code.
+    pub bind_err: Mutex<Option<u16>>,
+    /// When set, Bind Subscription fails with this QMI error code.
+    pub subs_err: Mutex<Option<u16>>,
+    /// Client socket -> (bound mux, IP family).
+    socks: Mutex<HashMap<u64, (Option<u8>, u8)>>,
+}
+
+impl WdsModel {
+    pub fn mux_of(&self, sock: u64) -> Option<u8> {
+        self.socks.lock().unwrap().get(&sock).and_then(|s| s.0)
+    }
+
+    fn reply(&self, sock: u64, m: &Msg) -> Option<Vec<u8>> {
+        use super::msg::{result_tlv, Tlv};
+        let r = |tlvs: Vec<Tlv>| Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &tlvs));
+        let mut socks = self.socks.lock().unwrap();
+        let st = socks.entry(sock).or_insert((None, 4));
+        match m.id {
+            0x00A2 => {
+                if let Some(c) = *self.bind_err.lock().unwrap() {
+                    return r(vec![result_tlv(Some(c))]);
+                }
+                st.0 = m.tlv(0x11).and_then(|v| v.first().copied());
+                r(vec![result_tlv(None)])
+            }
+            0x00AF => r(vec![result_tlv(*self.subs_err.lock().unwrap())]),
+            0x004D => {
+                st.1 = m.tlv(0x01).and_then(|v| v.first().copied()).unwrap_or(4);
+                r(vec![result_tlv(None)])
+            }
+            0x0024 => {
+                let (mux, fam) = *st;
+                let (tx, rx, call) = match fam {
+                    6 => (self.tx6.load(SeqCst), self.rx6.load(SeqCst), self.v6_call.load(SeqCst)),
+                    _ => (self.tx4.load(SeqCst), self.rx4.load(SeqCst), true),
+                };
+                match (mux, call) {
+                    (None, _) => r(vec![result_tlv(Some(0x0046))]),
+                    (Some(_), false) => r(vec![
+                        result_tlv(Some(0x000F)),
+                        Tlv::new(0x1B, &0u64.to_le_bytes()),
+                        Tlv::new(0x1C, &0u64.to_le_bytes()),
+                    ]),
+                    (Some(_), true) => {
+                        r(vec![result_tlv(None), Tlv::new(0x19, &tx.to_le_bytes()), Tlv::new(0x1A, &rx.to_le_bytes())])
+                    }
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+/// `r1_net` whose WDS service also models packet statistics per client.
+pub fn wds_net() -> (Arc<FakeNet>, Arc<WdsModel>) {
+    let net = r1_net();
+    let model = Arc::new(WdsModel::default());
+    let md = model.clone();
+    net.set_responder_by_sock(move |sock, svc, m| match (svc, m.id) {
+        (SVC_WDS, 0x00A2 | 0x00AF | 0x004D | 0x0024) => md.reply(sock, m),
+        _ => r1_reply(svc, m),
     });
-    net
+    (net, model)
+}
+
+/// `start_registry` with the daemon's two internal WDS clients.
+pub fn start_registry_wds(net: &Arc<FakeNet>) -> Arc<Registry> {
+    Arc::new(Registry::start(Box::new(net.transport()), Config { wds_stats: true, ..fast_config() }))
 }
 
 /// Fast timings for tests (the defaults wait whole seconds).
@@ -312,6 +406,8 @@ pub fn fast_config() -> Config {
         ssr_merge: Duration::ZERO,
         circuit_after: 2,
         probe_every: Duration::from_millis(200),
+        wds_stats: false,
+        bind_retry: Duration::from_millis(100),
     }
 }
 
