@@ -30,6 +30,16 @@ export interface LiveSample {
   rsrp: number | null;
   rsrq: number | null;
   rssi: number | null;
+  /**
+   * Broker 0.5.0+ (absent from older brokers). LTE SINR, and NR (NSA) from
+   * Get Signal Info: 
+r_rsrp is the mean of the NR RX chains, not the
+   * strongest chain the AT path reports.
+   */
+  sinr?: number | null;
+  nr_rsrp?: number | null;
+  nr_rsrq?: number | null;
+  nr_sinr?: number | null;
   pci: number | null;
   earfcn: number | null;
   band: string | null;
@@ -88,15 +98,23 @@ export interface LiveSampleDb {
   rsrp: number | null;
   rsrq: number | null;
   rssi: number | null;
+  sinr: number | null;
+  nrRsrp: number | null;
+  nrRsrq: number | null;
+  nrSinr: number | null;
 }
 
-const toDb = (x10: number | null): number | null =>
-  x10 === null || !Number.isFinite(x10) ? null : Math.round(x10) / 10;
+const toDb = (x10: number | null | undefined): number | null =>
+  x10 === null || x10 === undefined || !Number.isFinite(x10) ? null : Math.round(x10) / 10;
 
 export function sampleDb(sample: LiveSample): LiveSampleDb {
   return {
     rsrp: toDb(sample.rsrp),
     rsrq: toDb(sample.rsrq),
     rssi: toDb(sample.rssi),
+    sinr: toDb(sample.sinr),
+    nrRsrp: toDb(sample.nr_rsrp),
+    nrRsrq: toDb(sample.nr_rsrq),
+    nrSinr: toDb(sample.nr_sinr),
   };
 }
