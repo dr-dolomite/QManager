@@ -42,8 +42,11 @@ _qmo_rssi=""
 # assignment whose value has no shell-active character, and the last line is
 # the end marker. Stricter than cq_env_source: a sourced line can only ever
 # assign a qmi_* variable, never a poller global. Returns 1 without sourcing.
+# Evaluates the lines it validated rather than re-opening the file: a broker
+# stop deletes qmi.env, and `.` on a missing file aborts the poller.
 _qmi_env_source() {
     _qes_last=""
+    _qes_buf=""
     _qes_bad=0
     {
         while IFS= read -r _qes_l; do
@@ -53,11 +56,13 @@ _qmi_env_source() {
                 *) _qes_bad=1; break ;;
             esac
             _qes_last="$_qes_l"
+            _qes_buf="$_qes_buf$_qes_l
+"
         done < "$QMI_ENV"
     } 2>/dev/null
     [ "$_qes_bad" = "0" ] || return 1
     [ "$_qes_last" = "qm_sidecar_end='1'" ] || return 1
-    . "$QMI_ENV"
+    eval "$_qes_buf"
 }
 
 # _qmi_int <value>: true when the value is a plain integer (optional minus,
