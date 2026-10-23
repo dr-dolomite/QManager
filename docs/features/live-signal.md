@@ -1,6 +1,6 @@
 # Live Signal (real-time LTE serving signal)
 
-While an authenticated page asks for it, the broker (`qmanager_atd` 0.4.1) samples the LTE serving cell over QMI at 1 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console (`aim`) and the dashboard (`watch`) both read it at 1 s (5 Hz `aim` is parked, see [Cadence decision](#cadence-decision-2026-10-23)); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
+While an authenticated page asks for it, the broker (`qmanager_atd` 0.5.0) samples the LTE serving cell over QMI at 1 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console (`aim`) and the dashboard (`watch`) both read it at 1 s (5 Hz `aim` is parked, see [Cadence decision](#cadence-decision-2026-10-23)); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
 
 Design and the device gate: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) (rules L1-L7 below are its section 1). The QMI lane itself: [`qmi-lane.md`](qmi-lane.md). Broker process model: [`at-broker.md`](at-broker.md). The poller's gap-fill overlay: [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only). UI consumer: [`antenna-alignment.md`](antenna-alignment.md#live-lead-qmi-phase-2).
 
@@ -50,8 +50,8 @@ Lease response:
 
 ```json
 {"v":1,"run":812345,"seq":4711,"period_ms":1000,"qmi_state":"up","ssr_count":0,"scan":false,
- "samples":[{"seq":4711,"t":812999,"reg":true,"rsrp":-955,"rsrq":-85,"rssi":-580,
-             "pci":295,"earfcn":150,"band":"B1","bw":20,
+ "samples":[{"seq":4711,"t":812999,"reg":true,"rsrp":-955,"rsrq":-85,"rssi":-580,"sinr":264,
+             "nr_rsrp":-890,"nr_rsrq":-110,"nr_sinr":250,"pci":295,"earfcn":150,"band":"B1","bw":20,
              "ca":[{"band":"B3","earfcn":1275,"pci":12,"bw":15,"active":true}]}]}
 ```
 
@@ -65,6 +65,9 @@ Lease response:
 | `ssr_count` | The daemon's SSR episode counter. |
 | `scan` | `true` while the long/scan flag is up. |
 | `samples[]` | Up to 32, oldest first. `t` is boot-clock ms (not comparable to the browser clock). Signals are integers x10 (`-955` = -95.5 dB), no floats; signals (`rsrp`/`rsrq`/`rssi`) are `null` unless registered; `pci`/`earfcn`/`band`/`bw` can still name the last camped cell while `reg:false` (the client treats `reg:false` as stale); every serving field is `null` while `scan` is true. `ca` lists SCCs only. |
+| `samples[].sinr`, `nr_rsrp`, `nr_rsrq`, `nr_sinr` | Added in 0.5.0, same x10 integers, placed after `rssi`. LTE SINR and NR (NSA) values from NAS Signal Info. `null` in the same cases as `rsrp` (unregistered or scan), and `nr_*` is `null` when there is no NR reading. |
+
+**SINR and NR (0.5.0).** The broker holds the modem's signal config live, so Signal Info stays current while the broker runs ([`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050)). `nr_rsrp` is the **mean of the NR RX chains**, the quantity `AT+QRSRP` reports. It is not QENG's strongest-chain value, so do not compare the two as the same number. Older brokers (before 0.5.0) omit these keys. `types/live-signal.ts` marks them optional, and `sampleDb()` returns them as `sinr`, `nrRsrp`, `nrRsrq` and `nrSinr`, with a missing key as `null`.
 
 **The file never contains** cell ID, TAC, eNodeB/sector, MCC/MNC, operator, IMSI or any other identifier; a unit test asserts their absence. **Why:** the URL is unauthenticated (anyone who knows the token can fetch it), so the renderer is an allow-list. The full bundle stays in `/tmp/qmanager_qmi.json`, never under `/www`.
 
@@ -124,7 +127,7 @@ Landed with this phase (0.4.0) after the device gate (plan section 4b), measured
 
 ## Rollback
 
-Each build step is a separate revertable commit. Reinstalling the previous release works: 0.3.0 ignores stamps and never writes `live=1`, so the lease CGI answers `available:false` and the UI stays on 2 s; the old install wipe removes the link; an old poller ignores `qmi.env`. A rolled-back 0.3.0 with the new `init.d` still creates `/www/qmlive` (dangling, harmless 404). If the broker or link is absent the UI drops to `unavailable` and renders as before. The poller overlay is disabled per device by removing `/usr/lib/qmanager/qmi_merge.sh`.
+Each build step is a separate revertable commit. Reinstalling the previous release works: 0.3.0 ignores stamps and never writes `live=1`, so the lease CGI answers `available:false` and the UI stays on 2 s; the old install wipe removes the link; an old poller ignores `qmi.env`. A rolled-back 0.3.0 with the new `init.d` still creates `/www/qmlive` (dangling, harmless 404). If the broker or link is absent the UI drops to `unavailable` and renders as before. For 0.5.0 the previous release is 0.4.1: it ignores the new sample keys and `qmi_sig_config`, and the UI never read them. A rollback does not undo the modem's signal config; it clears at the next SSR or reboot. The poller overlay is disabled per device by removing `/usr/lib/qmanager/qmi_merge.sh`.
 
 ## Gotchas
 
@@ -132,7 +135,8 @@ Each build step is a separate revertable commit. Reinstalling the previous relea
 - `uhttpd` runs `-n 3` (3 concurrent CGIs device-wide) and every open tab spends a slot for about 55 ms every 5 s. Do not add per-tick CGI calls.
 - `uhttpd` follows a `/www` symlink into the run dir today. A future `uhttpd` that stops following links turns the feed into 404 -> `unavailable` (the 2 s tier keeps working); the fallback design would be a tmpfs mount at `/www/qmlive`, not built.
 - Signal values are integers x10; the dashboard rounds to whole dB only at display (`wholeDb`), the antenna lead keeps 0.1 dB.
-- RSRQ/RSSI from QMI differ slightly from AT (90 % / 95 % within tolerance); SINR, NR and per-antenna values never come from QMI.
+- RSRQ/RSSI from QMI differ slightly from AT (90 % / 95 % within tolerance). LTE SINR and NR values come from QMI only since 0.5.0; their agreement with AT is not measured on the device yet. Per-antenna values never come from QMI.
+- **The dashboard and Antenna Alignment do not read the new fields yet.** Both still show AT SINR and NR. Live LTE SINR on the dashboard waits for an on-device QMI-vs-AT comparison.
 
 ## Device gate (2026-10-22, RM551E, broker 0.4.0)
 
@@ -150,6 +154,16 @@ Thresholds that failed on the first build, and the response (plan section 4b, ap
 The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, plus the 2 s authenticated `fetch_data.sh` probe. Static GET p50 6.9 / p95 8.5 ms; `fetch_data.sh` p95 moved +0.2 ms against the same-session baseline; zero errors on other CGIs.
 
 **Sidecars under a lease (2026-10-23, RM551E, broker 0.4.0, `aim` leased):** `qmi.env` and `qmanager_qmi.json` are rewritten together every 2 s (mtimes stepped +2 s on every sample over 6 s), and the poller's status shows `lte.source=qmi` with `mono - device.qmi_read_mono = 2` on every one of five 2 s samples.
+
+## Config signal hold (0.5.0, device validation pending)
+
+Built and host-tested only (245 crate tests, 259 with `--features poll`). The sampler reads Signal Info as part of the bundle and the broker holds the NAS signal config; see [`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050). The device checks still to run after deploy:
+
+- `/var/run/qmanager_atd.proto` reads `version=0.5.0`, with the same four lines as 0.4.1 (no new capability line).
+- `qmi_sig_config` in `/tmp/qmanager_qmi.json` reads `held`, and LTE RSRP/SINR and the NR fields change across live samples (not frozen as before).
+- The config is re-applied after the next natural SSR (`qmi_sig_config` back to `held`).
+- Broker CPU stays within the 0.4.1 budget (0.57 % of one core under an `aim` lease at 1 Hz).
+- **SSR watch:** count SSRs per hour for 24 h against this boot's history. If the rate rises, roll back to 0.4.1.
 
 ## Cadence decision (2026-10-23)
 
