@@ -227,6 +227,11 @@ stop_services() {
         info "Stopped all init.d services"
     fi
 
+    # Live-signal channel: the /www/qmlive symlink (a real directory there is not
+    # ours, leave it) and its public dir.
+    [ -L "$WWW_ROOT/qmlive" ] && rm -f "$WWW_ROOT/qmlive"
+    rm -rf /var/run/qmanager/live /tmp/qmanager_live
+
     # Kill every qmanager_* daemon present in /usr/bin
     if [ -d "$BIN_DIR" ]; then
         for f in "$BIN_DIR"/qmanager_*; do
@@ -318,7 +323,7 @@ remove_backend() {
     done
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
         /var/run/qmanager_atd.restart /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
-        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live \
+        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live         /var/run/qmanager/qmi_live_aim /var/run/qmanager/qmi_live_watch         /var/run/qmanager/qmi_live_aim.* /var/run/qmanager/qmi_live_watch.*         /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.*         /var/run/qmanager/qmi_live.lock /var/run/qmanager/qmi.stamp \
         "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* "$BIN_DIR"/.qmi.* 2>/dev/null || true
 
     for f in "$BIN_DIR"/qmanager_*; do

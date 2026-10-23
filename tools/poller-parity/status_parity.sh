@@ -252,6 +252,10 @@ sc_base() {
     sim_swap_detected=false
     sim_swap_profile_id=""
     sim_swap_profile_name=""
+    lte_source=at
+    _QMI_READ_MONO=0
+    _QMI_STATE=""
+    _QMI_SSR=0
 }
 
 # Fixture families (the corpus the parser gate uses): each starts from sc_base.
@@ -332,6 +336,26 @@ sc_deepstate() {
     wc_last_recovery_time=1759999000; wc_last_recovery_tier=2; wc_total_recoveries=3
     wc_cooldown_remaining=45; wc_reboots_this_hour=1; wc_failure_count=4; wc_current_tier=2
 }
+sc_qmi() {
+    # Deep tier between AT reads: LTE signal gap-filled from qmi.env.
+    sc_base
+    ap_tier=deep
+    lte_source=qmi
+    lte_rsrp=-89; lte_rsrq=-10; lte_rssi=-60
+    _QMI_READ_MONO=123455
+    _QMI_STATE=up
+    _QMI_SSR=3
+}
+sc_qmidown() {
+    sc_base
+    _QMI_READ_MONO=120000
+    _QMI_STATE=down
+    _QMI_SSR=4
+}
+sc_qmiunavail() {
+    sc_base
+    _QMI_STATE=unavailable
+}
 sc_empties() {
     # Fields that have a default in both composers, set empty.
     sc_base
@@ -351,15 +375,28 @@ sc_empties() {
     conn_internet_available=""
     conn_latency=""; conn_avg_latency=""; conn_min_latency=""; conn_max_latency=""; conn_jitter=""
     t1_temperature=""
+    lte_source=""; _QMI_READ_MONO=""; _QMI_STATE=""; _QMI_SSR=""
 }
 
 run_named() {
     local _s
-    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_empties; do
+    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmidown sc_qmiunavail sc_empties; do
         "$_s"
         write_cache_jq "$PH_TMP/a.json" 2>/dev/null
         _wc_compose_pf "$PH_TMP/b.json"
         _pair "$_s" "$PH_TMP/a.json" "$PH_TMP/b.json"
+    done
+    # The QMI Phase 2 keys exist in both composers with the scenario values.
+    sc_qmi
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    for _s in a b; do
+        if jq -e '(.lte.source == "qmi") and (.device.qmi_read_mono == 123455) and (.device.qmi_state == "up") and (.device.qmi_ssr_count == 3) and (.lte.rsrp == -89) and (.network | has("ca_source") | not)' "$PH_TMP/$_s.json" >/dev/null 2>&1; then
+            PH_PASS=$((PH_PASS + 1))
+        else
+            PH_FAIL=$((PH_FAIL + 1))
+            [ -z "$PH_FIRST" ] && PH_FIRST="qmi keys missing or wrong in $_s.json"
+        fi
     done
 }
 
@@ -427,16 +464,16 @@ _pick_num() {
     esac
 }
 
-PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state"
+PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source _QMI_STATE"
 # Numeric fields that have a default in BOTH composers (empty is allowed).
-PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at"
+PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
 
 run_random() {
     local _i=0
     local _cnt="$1"
     local _v
     local _k
-    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_deepstate"
+    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_deepstate sc_qmi"
     local _b
     local _nstr
     local _nnum
@@ -445,7 +482,7 @@ run_random() {
     set -- $PH_NUM_VARS
     _nnum=$#
     while [ "$_i" -lt "$_cnt" ]; do
-        _rand 6
+        _rand 7
         _k=0
         for _b in $_bases; do
             [ "$_k" -eq "$_R" ] && break
@@ -499,13 +536,13 @@ run_badnums() {
     local _f
     for _bad in "abc" "0123" "12abc" "1e5" "-" "." "1.2.3" "0x1F" " 5" "5 " "+5" "--5" "5-" ".5" "5." "NaN" "Infinity" "\$(id)"; do
         sc_base
-        for _f in lte_rsrp nr_pci t1_temperature conn_latency cpu_usage wc_current_tier t1_cfun; do
+        for _f in lte_rsrp nr_pci t1_temperature conn_latency cpu_usage wc_current_tier t1_cfun _QMI_READ_MONO _QMI_SSR; do
             eval "$_f=\$_bad"
         done
         _wc_compose_pf "$PH_TMP/b.json"
         if jq empty "$PH_TMP/b.json" >/dev/null 2>&1; then
             # Every poisoned numeric field must be a number or null, never text.
-            if jq -e '[.lte.rsrp,.nr.pci,.device.temperature,.connectivity.latency_ms,.device.cpu_usage,.watchcat.current_tier,.network.cfun] | all(. == null or type == "number")' "$PH_TMP/b.json" >/dev/null 2>&1; then
+            if jq -e '[.lte.rsrp,.nr.pci,.device.temperature,.connectivity.latency_ms,.device.cpu_usage,.watchcat.current_tier,.network.cfun,.device.qmi_read_mono,.device.qmi_ssr_count] | all(. == null or type == "number")' "$PH_TMP/b.json" >/dev/null 2>&1; then
                 PH_PASS=$((PH_PASS + 1))
             else
                 PH_FAIL=$((PH_FAIL + 1))
@@ -561,6 +598,8 @@ line' ;;
         t2_carrier="$_s"
         t2_apn="$_s"
         sim_swap_profile_name="$_s"
+        lte_source="$_s"
+        _QMI_STATE="$_s"
         errors="$_s"
         _wc_prepare
         _wc_compose_pf "$PH_TMP/b.json"
@@ -578,6 +617,12 @@ line' ;;
         fi
         jq -j '.sim_swap.matching_profile_name' "$PH_TMP/b.json" > "$PH_TMP/got"
         cmp -s "$PH_TMP/exp" "$PH_TMP/got" || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: profile name did not round-trip"; continue; }
+        jq -j '.device.qmi_state' "$PH_TMP/b.json" > "$PH_TMP/got"
+        cmp -s "$PH_TMP/exp" "$PH_TMP/got" || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: qmi_state did not round-trip"; continue; }
+        # lte.source falls back to at when empty.
+        printf '%s' "${_s:-at}" > "$PH_TMP/exp_src"
+        jq -j '.lte.source' "$PH_TMP/b.json" > "$PH_TMP/got"
+        cmp -s "$PH_TMP/exp_src" "$PH_TMP/got" || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: lte.source did not round-trip"; continue; }
         jq -j '.errors[0] // ""' "$PH_TMP/b.json" > "$PH_TMP/got"
         if [ -n "$_s" ]; then
             cmp -s "$PH_TMP/exp" "$PH_TMP/got" || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: errors[0] did not round-trip"; continue; }

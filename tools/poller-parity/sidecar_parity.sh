@@ -13,12 +13,17 @@
 #   - load_ondemand_cache_gated gives the same 12 values from ondemand.env as the
 #     jq path (hostile quoting included) and falls back when the JSON is newer;
 #   - the gated read_watchcat_state / read_sim_state re-read only on change;
-#   - the sidecar paths fork no jq / date / touch / awk.
+#   - the sidecar paths fork no jq / date / touch / awk;
+#   - with a 5th argument (qmi_merge.sh): qmi_load accepts the broker's qmi.env
+#     and rejects a truncated, stray-line, shell-active or non-qmi_ file, the
+#     stamp gate skips an older env and re-reads a same-second or forced one,
+#     qmi_overlay_apply / qmi_overlay_restore follow every merge gate, and the
+#     qmi path forks nothing.
 #
-# Usage: sidecar_parity.sh <poller> <qmanager_ping> <conn_state.sh> <ondemand_radio.sh>
+# Usage: sidecar_parity.sh <poller> <qmanager_ping> <conn_state.sh> <ondemand_radio.sh> [qmi_merge.sh]
 # Exit 0 only when nothing failed.
 
-POLLER="$1"; PING="$2"; CONN="$3"; ONDEM="$4"
+POLLER="$1"; PING="$2"; CONN="$3"; ONDEM="$4"; QMIM="$5"
 [ -f "$POLLER" ] && [ -f "$PING" ] && [ -f "$CONN" ] && [ -f "$ONDEM" ] || {
     echo "usage: sidecar_parity.sh <poller> <qmanager_ping> <conn_state.sh> <ondemand_radio.sh>" >&2
     exit 2
@@ -323,6 +328,158 @@ check "sim swap dismissed re-read" "false||" "$sim_swap_detected|$sim_swap_profi
 rm -f "$SIM_SWAP_FLAG" "$SIM_FAILOVER_FILE"
 read_sim_state
 check "sim files gone -> defaults" "false|false|null|null|null" "$sim_swap_detected|$sim_fo_active|$sim_fo_original_slot|$sim_fo_current_slot|$sim_fo_switched_at"
+
+
+# ---------------------------------------------------------------------------
+if [ -n "$QMIM" ]; then
+echo "== qmi.env (qmi_merge.sh) =="
+[ -f "$QMIM" ] || { echo "no such file: $QMIM"; exit 2; }
+QMI_ENV="$T/run/qmi.env"
+QMI_STAMP="$T/run/qmi.stamp"
+QMI_SCAN_FLAG="$T/scan_flag"
+QMI_SIMSW_FLAG="$T/simsw_flag"
+. "$QMIM"
+
+# qmi_env_write <mono> <state> <reg> <pci> <earfcn> <rsrp> <rsrq> <rssi>: the
+# broker's 38-name file plus the end marker.
+qmi_env_write() {
+    {
+        printf "qmi_mono='%s'\nqmi_state='%s'\nqmi_ssr_count='2'\nqmi_registered='%s'\n" "$1" "$2" "$3"
+        printf "qmi_lte_pci='%s'\nqmi_lte_earfcn='%s'\nqmi_lte_tac='49026'\nqmi_lte_cell_id='36393062'\n" "$4" "$5"
+        printf "qmi_lte_band='1'\nqmi_lte_bw_mhz='20'\nqmi_lte_rsrp='%s'\nqmi_lte_rsrq='%s'\nqmi_lte_rssi='%s'\n" "$6" "$7" "$8"
+        printf "qmi_ca_count='1'\nqmi_pcc_pci='%s'\nqmi_pcc_earfcn='%s'\nqmi_pcc_band='1'\nqmi_pcc_bw_mhz='20'\n" "$4" "$5"
+        for _qs in 1 2 3 4; do
+            printf "qmi_scc%s_pci=''\nqmi_scc%s_earfcn=''\nqmi_scc%s_band=''\nqmi_scc%s_bw_mhz=''\nqmi_scc%s_active=''\n" \
+                "$_qs" "$_qs" "$_qs" "$_qs" "$_qs"
+        done
+        printf "qm_sidecar_end='1'\n"
+    } > "$QMI_ENV.new" && mv -f "$QMI_ENV.new" "$QMI_ENV"
+}
+qmi_reset() { _QMI_OK=0; _qmi_calls=0; rm -f "$QMI_STAMP"; }
+{ read -r _UP _i < /proc/uptime; } 2>/dev/null
+_UP="${_UP%%.*}"
+_MONO_TOP="$_UP"
+
+qmi_env_write "$_UP" up 1 295 150 -89 -10 -60
+_n=0
+while IFS= read -r _l; do _n=$((_n + 1)); done < "$QMI_ENV"
+check "qmi.env fixture has 38 names + end" "39" "$_n"
+qmi_reset; qmi_load; check "valid env -> 0" "0" "$?"
+check "valid env values" "1|$_UP|up|2|1|295|150|-89|-10|-60" \
+    "$_QMI_OK|$_QMI_READ_MONO|$_QMI_STATE|$_QMI_SSR|$qmi_registered|$qmi_lte_pci|$qmi_lte_earfcn|$qmi_lte_rsrp|$qmi_lte_rsrq|$qmi_lte_rssi"
+cp "$QMI_ENV" "$T/qmi.env.good"
+
+# The broker's live file, when present (read-only copy into the scratch dir).
+if [ -f /var/run/qmanager/qmi.env ]; then
+    cp /var/run/qmanager/qmi.env "$QMI_ENV"
+    qmi_reset; qmi_load; check "live broker qmi.env accepted" "0|1" "$?|$_QMI_OK"
+    cp "$T/qmi.env.good" "$QMI_ENV"
+fi
+
+head -n 5 "$T/qmi.env.good" > "$QMI_ENV"
+qmi_reset; qmi_load; check "truncated env -> 1, fields reset" "1|0|0||0" "$?|$_QMI_OK|$_QMI_READ_MONO|$_QMI_STATE|$_QMI_SSR"
+{ head -n 3 "$T/qmi.env.good"; printf '$(touch %s/qpwn)\n' "$T"; tail -n 1 "$T/qmi.env.good"; } > "$QMI_ENV"
+qmi_reset; qmi_load; check "stray line -> 1" "1" "$?"
+[ -e "$T/qpwn" ] && bad "qmi.env stray line was executed"
+{ head -n 3 "$T/qmi.env.good"; printf "qmi_lte_rsrp='-1';touch %s/qpwn2\n" "$T"; tail -n 1 "$T/qmi.env.good"; } > "$QMI_ENV"
+qmi_reset; qmi_load; check "shell-active value -> 1" "1" "$?"
+[ -e "$T/qpwn2" ] && bad "qmi.env value was executed"
+lte_rsrp="-95"
+{ head -n 3 "$T/qmi.env.good"; printf "lte_rsrp='-1'\n"; tail -n 1 "$T/qmi.env.good"; } > "$QMI_ENV"
+qmi_reset; qmi_load; check "non-qmi_ name -> 1, poller global untouched" "1|-95" "$?|$lte_rsrp"
+{ cat "$T/qmi.env.good"; printf "qmi_extra='1'\n"; } > "$QMI_ENV"
+qmi_reset; qmi_load; check "end marker not last -> 1" "1" "$?"
+qmi_env_write "0$_UP" sideways 1 295 150 -89 -10 -60
+qmi_reset; qmi_load; check "bad mono/state sanitised" "0|0|" "$?|$_QMI_READ_MONO|$_QMI_STATE"
+rm -f "$QMI_ENV"
+qmi_reset; qmi_load; check "missing env -> 1" "1|0||0" "$?|$_QMI_OK|$_QMI_STATE|$_QMI_SSR"
+
+# Stamp gate.
+cp "$T/qmi.env.good" "$QMI_ENV"
+qmi_reset; qmi_load
+qmi_env_write "$_UP" up 1 295 150 -77 -10 -60
+command touch -d "@$(( $(command date +%s) - 30 ))" "$QMI_ENV"
+qmi_load; check "env older than stamp -> not re-read" "-89" "$qmi_lte_rsrp"
+_i=0
+while [ "$_i" -lt 20 ] && [ "$qmi_lte_rsrp" = "-89" ]; do qmi_load; _i=$((_i + 1)); done
+check "forced re-read within QMI_FORCE_EVERY calls" "-77|yes" "$qmi_lte_rsrp|$([ "$_i" -le "$QMI_FORCE_EVERY" ] && echo yes || echo no)"
+qmi_load
+qmi_env_write "$_UP" up 1 295 150 -66 -10 -60
+qmi_load; check "env written in the stamp's second -> re-read" "-66" "$qmi_lte_rsrp"
+
+# Overlay gates. ov <name> <qmi|at>: apply, check, restore, check.
+cp "$T/qmi.env.good" "$QMI_ENV"
+at_set() { lte_pci=295; lte_earfcn=150; nr_pci=""; lte_rsrp=-95; lte_rsrq=-11; lte_rssi=-65; _QENG_PARSED=0; lte_source=at; }
+ov() {
+    local _got
+    qmi_overlay_apply
+    _got="$lte_source|$lte_rsrp|$lte_rsrq|$lte_rssi"
+    if [ "$2" = "qmi" ]; then
+        check "overlay $1" "qmi|-89|-10|-60" "$_got"
+    else
+        check "overlay $1" "at|-95|-11|-65" "$_got"
+    fi
+    qmi_overlay_restore
+    check "restore $1" "at|-95|-11|-65" "$lte_source|$lte_rsrp|$lte_rsrq|$lte_rssi"
+}
+qmi_reset; qmi_load
+at_set; ov "all gates hold" qmi
+at_set; _QENG_PARSED=1; ov "AT parsed QENG this cycle" at
+at_set; lte_pci=296; ov "PCI mismatch" at
+at_set; lte_earfcn=1300; ov "EARFCN mismatch" at
+at_set; lte_pci=""; lte_earfcn=""; ov "AT has no serving cell" qmi
+at_set; lte_pci=""; lte_earfcn=""; nr_pci=45; ov "AT on SA (NR cell only)" at
+at_set; : > "$QMI_SCAN_FLAG"; ov "scan flag up" at; rm -f "$QMI_SCAN_FLAG"
+at_set; : > "$QMI_SIMSW_FLAG"; ov "SIM switch flag up" at; rm -f "$QMI_SIMSW_FLAG"
+at_set; system_state=scan_in_progress; ov "scan_in_progress until the next AT read" at; system_state=normal
+_MONO_TOP=$((_UP + 5)); at_set; ov "age 5 s" qmi
+_MONO_TOP=$((_UP + 6)); at_set; ov "age 6 s" at
+_MONO_TOP=$((_UP - 1)); at_set; ov "mono in the future" at
+_MONO_TOP=0; at_set; ov "no uptime" at
+_MONO_TOP="$_UP"
+qmi_env_write "$_UP" down 1 295 150 -89 -10 -60; qmi_reset; qmi_load
+at_set; ov "qmi_state=down" at
+qmi_env_write "$_UP" up 0 295 150 -89 -10 -60; qmi_reset; qmi_load
+at_set; ov "unregistered" at
+qmi_env_write "$_UP" up '' 295 150 -89 -10 -60; qmi_reset; qmi_load
+at_set; ov "registration unknown" at
+qmi_env_write "$_UP" up 1 295 150 '' -10 -60; qmi_reset; qmi_load
+at_set; ov "no QMI rsrp" at
+qmi_env_write "$_UP" up 1 295 150 -89.5 -10 -60; qmi_reset; qmi_load
+at_set; ov "non-integer QMI rsrp" at
+rm -f "$QMI_ENV"; qmi_reset; qmi_load
+at_set; ov "broker stopped (no env)" at
+
+# No fork on the qmi path: 200 load + apply + restore rounds; the /proc/stat
+# process counter may only move by background noise (other processes).
+cp "$T/qmi.env.good" "$QMI_ENV"
+qmi_reset; qmi_load; at_set
+# Three trials, the quietest one counts: one fork per round would be >= 200 in
+# every trial, while other processes only add bursts.
+: > "$FORKS"
+_dmin=""
+_t=0
+while [ "$_t" -lt 3 ]; do
+    _p0=""; while read -r _k _v; do [ "$_k" = processes ] && _p0="$_v"; done < /proc/stat
+    _i=0
+    while [ "$_i" -lt 200 ]; do
+        qmi_load; qmi_overlay_apply; qmi_overlay_restore
+        _i=$((_i + 1))
+    done
+    _p1=""; while read -r _k _v; do [ "$_k" = processes ] && _p1="$_v"; done < /proc/stat
+    _d=$((_p1 - _p0))
+    { [ -z "$_dmin" ] || [ "$_d" -lt "$_dmin" ]; } && _dmin="$_d"
+    _t=$((_t + 1))
+done
+check "qmi path: no jq/date/touch/awk" "0" "$(count_forks)"
+if [ "$_dmin" -lt 20 ]; then
+    ok
+    echo "qmi path: $_dmin system-wide forks over 200 rounds (quietest of 3 trials, background noise)"
+else
+    bad "qmi path forked: $_dmin system-wide forks over 200 rounds (quietest of 3 trials)"
+fi
+check "qmi path still loaded" "1|-89" "$_QMI_OK|$qmi_lte_rsrp"
+fi
 
 echo "RESULT sidecar: PASS=$PASS FAIL=$FAIL"
 [ -n "$FIRST" ] && echo "FIRST FAILURE: $FIRST"

@@ -22,7 +22,7 @@ there. Nothing here is installed by the product.
 | `measure.sh [seconds]` | on-device poller cost sampler (one summary line) |
 | `gen_fixtures.sh [dir]` | regenerates the whole fixture corpus byte for byte (device or Git Bash) |
 | `status_parity.sh` | Phase C gate for the status.json composers: printf composer vs the jq composer (`write_cache_jq`) over synthetic scenarios, seeded random values, hostile text and the write_cache safety net; and the live 200-pair capture from the deployed poller (`arm` / `compare` / `live`) |
-| `sidecar_parity.sh` | Phase C gate for the `.env` sidecars (`ping.env`, `dns.env`, `ondemand.env`) and the `-nt`-gated watchcat / SIM state readers, in a scratch dir; also asserts the sidecar paths fork no `jq` / `date` / `touch` / `awk` |
+| `sidecar_parity.sh` | Phase C gate for the `.env` sidecars (`ping.env`, `dns.env`, `ondemand.env`) and the `-nt`-gated watchcat / SIM state readers, in a scratch dir; also asserts the sidecar paths fork no `jq` / `date` / `touch` / `awk`. An optional 5th argument (`qmi_merge.sh`) adds the `qmi.env` gate: a valid env loads, truncated / stray-line / hostile-value / older-than-stamp envs are rejected, the overlay applies and restores, and the path forks nothing |
 
 ### Status composer gate (Phase C)
 
@@ -32,7 +32,7 @@ current directory), then:
 
 ```
 sh status_parity.sh all /tmp/pcx/qmanager_poller 500     # synthetic + hostile + safety net
-sh sidecar_parity.sh /tmp/pcx/qmanager_poller /tmp/pcx/qmanager_ping /tmp/pcx/conn_state.sh /tmp/pcx/ondemand_radio.sh
+sh sidecar_parity.sh /tmp/pcx/qmanager_poller /tmp/pcx/qmanager_ping /tmp/pcx/conn_state.sh /tmp/pcx/ondemand_radio.sh /tmp/pcx/qmi_merge.sh   # last arg optional (QMI overlay)
 
 # live, after the orchestrator deploys the poller (about 7 minutes: 200 cycles of 2 s)
 sh status_parity.sh live 900        # arm, wait for the 200 pairs, compare

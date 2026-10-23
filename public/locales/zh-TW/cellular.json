@@ -1878,6 +1878,7 @@
     "aim": {
       "title": "即時對準",
       "description": "主接收鏈路，評分標準與已記錄的位置相同。",
+      "description_live": "即時顯示服務小區訊號，並以與已記錄位置相同的標準為主接收鏈路評分。",
       "score_label": "對準評分",
       "score_sr": "對準評分 {{score}}，滿分 100",
       "no_reading": "無對準評分 — 主鏈路未回報",
@@ -1887,7 +1888,23 @@
       "delta_down": "較上次讀數下降",
       "partial": "僅 {{leg}}",
       "not_reported": "未回報",
-      "primary_chain": "Main / PRX 是評分所依據的鏈路"
+      "primary_chain": "Main / PRX 是評分所依據的鏈路",
+      "score_cadence": "每 2 秒",
+      "live": {
+        "label": "服務小區 RSRP",
+        "hint_label": "關於服務小區 RSRP",
+        "hint": "服務小區在所有接收鏈路上的訊號，每秒更新一次。在 5G NSA 下這是 LTE 錨點，因此可能與下方的 Main / PRX 不同。",
+        "sr": "服務小區 RSRP {{value}} dBm",
+        "no_reading": "未回報服務小區 RSRP",
+        "from_peak": "距峰值 {{delta}} dB",
+        "at_peak": "處於峰值",
+        "state": {
+          "live": "即時",
+          "stale": "未更新",
+          "paused": "已暫停",
+          "connecting": "連線中"
+        }
+      }
     },
     "quality": {
       "excellent": "極佳",

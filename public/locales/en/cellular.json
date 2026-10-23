@@ -1878,6 +1878,7 @@
     "aim": {
       "title": "Live Aim",
       "description": "The primary receive chain, scored on the same scale as your recorded positions.",
+      "description_live": "The serving cell's signal as it moves, then the primary chain scored on the same scale as your recorded positions.",
       "score_label": "Aim score",
       "score_sr": "Aim score {{score}} out of 100",
       "no_reading": "No aim score — the primary chain isn't reporting",
@@ -1887,7 +1888,23 @@
       "delta_down": "dropped since the last reading",
       "partial": "{{leg}} only",
       "not_reported": "Not reported",
-      "primary_chain": "Main / PRX is the chain the score is built from"
+      "primary_chain": "Main / PRX is the chain the score is built from",
+      "score_cadence": "every 2 s",
+      "live": {
+        "label": "Serving RSRP",
+        "hint_label": "About serving RSRP",
+        "hint": "The serving cell's signal across all receive chains, every second. In 5G NSA it is the LTE anchor, so it can differ from Main / PRX below.",
+        "sr": "Serving RSRP {{value}} dBm",
+        "no_reading": "No serving RSRP reported",
+        "from_peak": "{{delta}} dB from peak",
+        "at_peak": "At peak",
+        "state": {
+          "live": "Live",
+          "stale": "Not updating",
+          "paused": "Paused",
+          "connecting": "Connecting"
+        }
+      }
     },
     "quality": {
       "excellent": "Excellent",

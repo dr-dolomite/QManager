@@ -15,7 +15,7 @@ import { DashboardStatusRail } from "./status-rail";
 import NetworkStatusComponent from "./network-status";
 import DeviceStatus from "./device-status";
 import { SignalStatusCard } from "./signal-status-card";
-import { buildSignalRows } from "./signal-rows";
+import { buildSignalRows, useLiveLteOverlay } from "./signal-rows";
 import CarrierAggregationComponent from "./carrier-aggregation";
 import { SignalHistoryComponent } from "./signal-history";
 import RecentActivitiesComponent from "./recent-activities";
@@ -49,6 +49,12 @@ const HomeComponent = () => {
   }, [daemonIntervalSec]);
 
   const networkType = data?.network?.type ?? "";
+  // LTE RSRP / RSRQ / RSSI at 1 Hz while the LTE card is shown and the live
+  // sample is on the same cell; otherwise the 2 s snapshot stands.
+  const liveLte = useLiveLteOverlay(
+    data?.lte ?? null,
+    !isLoading && !!data?.lte && networkType !== "5G-SA",
+  );
   const carrierComponents = data?.network?.carrier_components ?? [];
 
   return (
@@ -132,7 +138,7 @@ const HomeComponent = () => {
                 <SignalStatusCard
                   family="lte"
                   isLoading={isLoading}
-                  {...buildSignalRows("lte", data?.lte ?? null, t)}
+                  {...buildSignalRows("lte", data?.lte ?? null, t, liveLte)}
                 />
               </motion.div>
             )}

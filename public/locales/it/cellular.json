@@ -1878,6 +1878,7 @@
     "aim": {
       "title": "Puntamento in tempo reale",
       "description": "La catena di ricezione principale, valutata con la stessa scala delle posizioni registrate.",
+      "description_live": "Il segnale della cella servente mentre cambia, poi la catena principale valutata con la stessa scala delle posizioni registrate.",
       "score_label": "Punteggio di puntamento",
       "score_sr": "Punteggio di puntamento {{score}} su 100",
       "no_reading": "Nessun punteggio di puntamento — la catena principale non riporta dati",
@@ -1887,7 +1888,23 @@
       "delta_down": "calato dall'ultima lettura",
       "partial": "Solo {{leg}}",
       "not_reported": "Non riportato",
-      "primary_chain": "Main / PRX è la catena su cui si basa il punteggio"
+      "primary_chain": "Main / PRX è la catena su cui si basa il punteggio",
+      "score_cadence": "ogni 2 s",
+      "live": {
+        "label": "RSRP cella servente",
+        "hint_label": "Informazioni su RSRP cella servente",
+        "hint": "Il segnale della cella servente su tutte le catene di ricezione, ogni secondo. In 5G NSA è l'ancora LTE, quindi può differire da Main / PRX qui sotto.",
+        "sr": "RSRP cella servente {{value}} dBm",
+        "no_reading": "Nessun RSRP della cella servente riportato",
+        "from_peak": "{{delta}} dB dal picco",
+        "at_peak": "Al picco",
+        "state": {
+          "live": "In diretta",
+          "stale": "Non aggiornato",
+          "paused": "In pausa",
+          "connecting": "Connessione"
+        }
+      }
     },
     "quality": {
       "excellent": "Eccellente",

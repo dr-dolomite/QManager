@@ -36,6 +36,7 @@
 #   /usr/lib/qmanager/ondemand_radio.sh — Last-known on-demand radio cache reader
 #   /usr/lib/qmanager/events.sh       — Network event detection
 #   /usr/lib/qmanager/data_used.sh    — Persistent Data Used counter (30 s sample)
+#   /usr/lib/qmanager/qmi_merge.sh    — QMI LTE signal gap-fill overlay (optional)
 #
 # Install location: /usr/bin/qmanager_poller
 # =============================================================================
@@ -111,6 +112,15 @@ METRICS_LEASE_TTL=120
 # .device.ca_read_mono so a consumer can age the radio data (deep tier freezes CA).
 _SERVING_READ_MONO=0
 _CA_READ_MONO=0
+# 1 when this cycle's AT+QENG reply was parsed (AT owns the serving cell this
+# cycle, so the QMI overlay stays off). Reset at the top of poll_cycle.
+_QENG_PARSED=0
+# QMI gap-fill state (qmi_merge.sh; defaults for when the lib is absent).
+# Published as lte.source and device.qmi_read_mono / qmi_state / qmi_ssr_count.
+lte_source="at"
+_QMI_READ_MONO=0
+_QMI_STATE=""
+_QMI_SSR=0
 
 # Signal history (NDJSON file for chart data)
 SIGNAL_HISTORY_FILE="/tmp/qmanager_signal_history.json"
@@ -425,6 +435,13 @@ else
     du_tick() { :; }
     du_flush() { :; }
 fi
+
+# QMI gap-fill (optional). Missing lib = AT-only status.json; removing it is the
+# per-device off switch.
+[ -f /usr/lib/qmanager/qmi_merge.sh ] && . /usr/lib/qmanager/qmi_merge.sh
+command -v qmi_load >/dev/null 2>&1 || qmi_load() { return 1; }
+command -v qmi_overlay_apply >/dev/null 2>&1 || qmi_overlay_apply() { lte_source="at"; return 1; }
+command -v qmi_overlay_restore >/dev/null 2>&1 || qmi_overlay_restore() { lte_source="at"; }
 
 # =============================================================================
 # DEV-ONLY AT TAP (see TAP_FLAG)
@@ -986,6 +1003,7 @@ poll_serving_cell() {
         local prev_network_type="$network_type"
         local prev_lte_state="$lte_state"
         local prev_nr_state="$nr_state"
+        _QENG_PARSED=1
         parse_serving_cell "$_QR"
         case "$_QR" in
             *'+QENG:'*) _SERVING_READ_MONO="${_MONO_TOP:-0}" ;;
@@ -2052,6 +2070,7 @@ _wc_compose_pf() {
     _kN sinr "$lte_sinr" null
     _kN rssi "$lte_rssi" null
     _kN ta "$lte_ta" null
+    _kS source "${lte_source:-at}"
     _kE
     _kO nr
     _kS state "$nr_state"
@@ -2109,6 +2128,9 @@ _wc_compose_pf() {
     _kN serving_read_mono "$_SERVING_READ_MONO" 0
     _kN ca_read_mono "$_CA_READ_MONO" 0
     _kS poller_tier "${ap_tier:-active}"
+    _kN qmi_read_mono "$_QMI_READ_MONO" 0
+    _kS qmi_state "$_QMI_STATE"
+    _kN qmi_ssr_count "$_QMI_SSR" 0
     _kE
     _kO connectivity
     _kB internet_available "$conn_internet_available" null
@@ -2271,7 +2293,7 @@ write_cache_jq() {
         --arg ippt_dns  "$boot_ippt_dhcpv4dns" \
         --argjson sc_read_mono "${_SERVING_READ_MONO:-0}" \
         --argjson ca_read_mono "${_CA_READ_MONO:-0}" \
-        --arg ap_tier "${ap_tier:-active}" \
+        --arg ap_tier "${ap_tier:-active}"         --arg lte_src "${lte_source:-at}"         --argjson qmi_rmono "${_QMI_READ_MONO:-0}"         --arg qmi_st "$_QMI_STATE"         --argjson qmi_ssr "${_QMI_SSR:-0}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
         --argjson lat "${conn_latency:-null}" \
@@ -2349,7 +2371,8 @@ write_cache_jq() {
                 pci: $lte_pci, cell_id: $lte_cid,
                 enodeb_id: $lte_enb, sector_id: $lte_sec, tac: $lte_tac,
                 rsrp: $lte_rsrp, rsrq: $lte_rsrq,
-                sinr: $lte_sinr, rssi: $lte_rssi, ta: $lte_ta
+                sinr: $lte_sinr, rssi: $lte_rssi, ta: $lte_ta,
+                source: $lte_src
             },
             nr: {
                 state: $nr_st, band: $nr_b,
@@ -2387,7 +2410,10 @@ write_cache_jq() {
                 ippt_dhcpv4dns: $ippt_dns,
                 serving_read_mono: $sc_read_mono,
                 ca_read_mono: $ca_read_mono,
-                poller_tier: $ap_tier
+                poller_tier: $ap_tier,
+                qmi_read_mono: $qmi_rmono,
+                qmi_state: $qmi_st,
+                qmi_ssr_count: $qmi_ssr
             },
             connectivity: {
                 internet_available: $inet, status: $conn_st,
@@ -2676,6 +2702,7 @@ poll_cycle() {
     _NOW=$(date +%s)
     mono_now_set
     _MONO_TOP="$_MONO"
+    _QENG_PARSED=0
 
     # Live reload of connection-quality thresholds when the CGI drops the flag.
     if [ -f "$QUALITY_RELOAD_FLAG" ]; then
@@ -2951,7 +2978,13 @@ poll_cycle() {
     fi
     update_conn_uptime
     du_tick
+    # QMI gap-fill: an overlay around this write only (never the scan /
+    # SIM-switch early return above), restored right after, so every AT
+    # consumer keeps seeing AT samples.
+    qmi_load
+    qmi_overlay_apply
     write_cache
+    qmi_overlay_restore
 
     cycle_count=$((cycle_count + 1))
 }

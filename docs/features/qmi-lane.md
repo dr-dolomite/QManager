@@ -1,6 +1,6 @@
 # QMI Lane (`qmi`, QMI sidecars)
 
-The broker `qmanager_atd` (0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 1 only builds the lane: nothing consumes the sidecars or calls `qmi` yet** (the poller, CGIs and UI are still AT-only; adoption is Phase 2).
+The broker `qmanager_atd` (0.4.1; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Nothing else calls `qmi` or reads the sidecars yet.
 
 Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Field verdicts behind the table below: [`../research/qmi-phase0-results.md`](../research/qmi-phase0-results.md). Design: [`../plans/2026-10-22-qmi-phase1-broker-architecture.md`](../plans/2026-10-22-qmi-phase1-broker-architecture.md).
 
@@ -10,11 +10,11 @@ Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Fi
 |---|---|
 | Client | `/usr/bin/qmi` → `qmanager_atd` (`at_qmi_link`; always a client) |
 | Verb / reply | `QMI <nbytes> <sent_ms>\n<NUL-joined reads>` → `RES <0\|1> <n>\n<json>`; cap 1 KB; answered on the reader thread |
-| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1`; callers gate on both |
+| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1` (0.4.0 adds `live=1`); callers gate on both |
 | Reads | `serving signal cell ca rf ids rev opmode time card slots profiles dsd`, plus `bundle` (alone) |
-| Env sidecar | `/var/run/qmanager/qmi.env` (dir `0700`; for the poller, Phase 2) |
+| Env sidecar | `/var/run/qmanager/qmi.env` (dir `0700`; sourced by the poller's `qmi_merge.sh`) |
 | JSON snapshot | `/tmp/qmanager_qmi.json` (for CGIs) |
-| Live lease | `/tmp/qmanager_qmi_live` (touch to raise the rate) |
+| Live lease | stamps `/var/run/qmanager/qmi_live_{aim,watch}` written by the lease CGI; see [`live-signal.md`](live-signal.md). The Phase 1 `/tmp/qmanager_qmi_live` lease is retired. |
 | Code | `native/qmanager_atd/src/{qmi/,daemon/qmi_lane.rs,daemon/qmi_snapshot.rs,client/qmi.rs}` |
 
 ## Architecture
@@ -102,17 +102,17 @@ The baseband restart (SSR) shows up as `ECONNRESET`/`ENETRESET` on a service soc
 
 ## Snapshot sidecars and the live lease
 
-The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle every **2 s** and publishes two files (each as `<path>.new`, `O_EXCL` + `O_NOFOLLOW`, then rename). The JSON is written first and the env right after it, so the env is never older than the JSON.
+The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle every **2 s** (faster while a live lease is held, see below) and publishes two files (each as `<path>.new`, `O_EXCL` + `O_NOFOLLOW`, then rename). The JSON is written first and the env right after it, so the env is never older than the JSON.
 
 | File | For | Contents |
 |---|---|---|
-| `/var/run/qmanager/qmi.env` | the poller (Phase 2) | 38 `name='value'` lines, then `qm_sidecar_end='1'` |
+| `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 38 `name='value'` lines, then `qm_sidecar_end='1'` |
 | `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","registered","data":<bundle>}` |
 
 **Env contract** (same as `ping.env` / `ondemand.env`, validated and sourced by `cq_env_source`):
 - Every line is a single-quoted assignment; the last line is exactly `qm_sidecar_end='1'`.
 - Names come from a compiled list, all `qmi_`-prefixed (never the poller's `lte_*`, `t2_*`, `nr_*`).
-- Every value is an integer or empty, except `qmi_state` (`up|down|unavailable`). Never a float, `N/A` or `null`.
+- Every value is an integer or empty, except `qmi_state` (`up|down|unavailable`). Never a float, `N/A` or `null`. The poller's `_qmi_env_source` is stricter than `cq_env_source`: it accepts only `qmi_*` assignments whose line is made of `[A-Za-z0-9_='-]`, so keep every value inside that set.
 - Names (in file order): `qmi_mono`, `qmi_state`, `qmi_ssr_count`, `qmi_registered` (`1`/`0`, empty = unknown), `qmi_lte_{pci,earfcn,tac,cell_id,band,bw_mhz,rsrp,rsrq,rssi}`, `qmi_ca_count`, `qmi_pcc_{pci,earfcn,band,bw_mhz}`, `qmi_scc{1..4}_{pci,earfcn,band,bw_mhz,active}`. Bands are the LTE number (`41`, not `B41`); signals are whole dBm/dB, empty unless registered. Only the PCC and up to four SCCs are published; a fifth SCC is dropped.
 
 **Semantics:**
@@ -123,9 +123,11 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 - A write failure is logged once (`cannot publish the qmi snapshot`) and again on recovery, never per cycle.
 - **The JSON and the env are written independently.** A directory or other object planted at `/tmp/qmanager_qmi.json` (or its `.new`) fails only the JSON: the env still publishes to `/var/run/qmanager/` and the failure is reported. The planted object is left alone; the temp name is cleared when it is in the way.
 
-**Live lease.** A caller touches `/tmp/qmanager_qmi_live`; while its mtime is within **10 s**, the sampler runs every **500 ms** (2 Hz; the floor is 200 ms / 5 Hz). Without it, 2 s. The lease is judged by mtime against the wall clock, which steps on this modem after an SSR or NTP sync, so an mtime **in the future or older than 10 s counts as expired**: a clock step can only drop the rate to 2 s until the next renewal, never hold it up. Phase 0 measured about 0.5 % CPU at 10 Hz.
+**Live lease and cadence.** Phase 1's `/tmp/qmanager_qmi_live` mtime lease is **retired** (world-writable `/tmp`, wall-clock based, never used); the broker ignores it. The sampler now runs every **2 s** with no lease, **1 s** for a fresh `watch` or `aim` stamp (aim's 200 ms / 5 Hz is parked since 0.4.1, see [`live-signal.md`](live-signal.md#cadence-decision-2026-10-23)), judged on the boot clock from root-only stamps in `/var/run/qmanager`. The two sidecars are written **every 2 s** whatever the tier (and immediately on a `qmi_state` / SSR-count change and on the first sample); only the live file follows the lease rate. Samples run on a fixed deadline grid, so a lease delivers its rate rather than drifting. The live file keeps a 32-sample ring (about 32 s at 1 Hz, roughly 4-5 KB). Lease contract, token, public file and expiry: [`live-signal.md`](live-signal.md).
 
-**Lifecycle.** `init.d` `stop_service` and `uninstall.sh` remove the env (+ `.new`), JSON (+ `.new`) and lease. Files persist across a daemon crash with stale content; judge freshness by `qmi_mono` and `qmi_state`, never by existence.
+**Device cost (0.4.0 re-measure, 2026-10-22, RM551E):** the sampler thread adds +0.80 % of one core under an `aim` lease, and uhttpd + CGI + broker together come to 2.55 % of one core, with 5.00 Hz delivered and no samples lost. The `qmi.env` cadence under a lease is covered by unit and thread tests only and is not yet checked on the device; see [`live-signal.md`](live-signal.md#device-gate-2026-10-22-rm551e-broker-040).
+
+**Lifecycle.** `init.d` `service_stopped` (after the broker is gone) and `uninstall.sh` remove the env (+ `.new`), JSON (+ `.new`), the old lease path and the live-signal files ([`live-signal.md`](live-signal.md#lifecycle)). Files persist across a daemon crash with stale content; judge freshness by `qmi_mono` and `qmi_state`, never by existence.
 
 ## Daemon limits (cap, deadline, circuit)
 
@@ -149,10 +151,10 @@ These keep a silent QMI service from starving AT of reader threads. Constants: `
 - **Sidecar contract:** `qmi_` prefix, integer-or-empty values, `qm_sidecar_end` last, single-quoted. A float or `N/A` breaks the poller's `jq --argjson` fallback composer; a bad line makes `cq_env_source` reject the whole file.
 - **The env lives in the verified root-only dir.** Do not move it back to `/tmp`.
 - **Never delete the sidecars during an SSR**, and keep `qmi_mono` as the last successful read's time.
-- **Keep the sampler's lease check tolerant of clock steps** (future mtime = expired).
+- **Keep the sampler's lease check on the boot clock** (a stamp in the future or older than 10 s is no lease), so wall-clock steps cannot hold the rate up.
 - **Keep the daemon's QMI limits.** The cap (4) must leave AT at least 12 of the 16 readers, the daemon deadline (2.0 s) must stay below the client's 3 s reply timeout, and over-cap or dead-lane requests answer `ERR command_failed` so the client falls back rather than waiting.
 - **No `unwrap`, `expect` or indexing on runtime data in non-test code.** Release builds are `panic=abort`, so a panic kills every AT caller, not just the QMI request.
-- **Do not put QMI values into `events.sh` input.** Its settle/churn counters count samples; a faster QMI cadence would silently retune `ca_change`. (Phase 2 rule.)
+- **Do not put QMI values into `events.sh` input.** Its settle/churn counters count samples; a faster QMI cadence would silently retune `ca_change`. The poller overlay is applied around the final `write_cache` and restored right after it, so AT consumers only see AT samples.
 
 ## Validation
 
@@ -166,7 +168,7 @@ Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`, 5G-NSA: B1 20 MHz PC
 | Reads and bad args | `bundle` and all 13 single reads rc 0 `ok:true`. Bad args (`bogus`, none, `bundle serving`, `-x`, `SERVING`, 17 args) rc 1 `bad_args`. Duplicate `serving serving` rc 0 (deduplicated) |
 | In-process fallback, daemon stopped | rc 0 in 9 ms, same JSON path set as the daemon |
 | Sidecar `qmi.env` | 38 lines plus `qm_sidecar_end='1'`. The real `cq_env_source` (`conn_state.sh`) accepts it. Dir `0700`, root |
-| Live lease | Sidecar rewrites per 10 s: 5 with no lease, 21 while leased (about 2 Hz), 6 after expiry. A future-mtime lease (2030) counts as expired |
+| Live lease (Phase 1, retired in Phase 2) | Sidecar rewrites per 10 s: 5 with no lease, 21 while leased (about 2 Hz), 6 after expiry. A future-mtime lease (2030) counts as expired |
 | Cross-check vs `AT+QENG` | Exact: PCI 295, EARFCN 150, B1, 20 MHz, TAC 49026, cell 36393062, RSRP −88/−88, RSRQ −10/−10, RSSI −58/−58 |
 | 30-minute soak beside the poller (`qmi bundle` every 2 s) | 900/900 ok, `ssr_count` 0. Latency p50 8.9, p95 12.8, p99 14.2, max 25.1 ms. Daemon fd 12→12, threads 10→10. Smaps Rss 724→736 kB over 2000 back-to-back bundles. `netmgrd` and QCMAP unchanged |
 | `compare.py`, active tier (292 fresh pairs, 10 min) | Identity 100 %. LTE RSRP within ±2 dB 98.6 % (Phase 0: 99.3 %; the 5 misses had AT 2.2–3.0 s older than QMI). RSRQ 90.1 %. RSSI 95.2 %. CA 100 % (one LTE carrier this run; Phase 0 had three) |
@@ -184,6 +186,6 @@ Host: `cargo test --release` 222 tests (236 with `--features poll`), including f
 - **During a network scan the QMI serving EARFCN follows the scanned carriers.** Mid-scan the serving row showed 38927/39125 at RSRP −95 on 47 samples. Do not treat that as a handover; gate on the long/scan flag (`scan_in_progress`).
 - **Timing on BusyBox.** `date` has no `%N`. Read `/proc/timer_list` (`now at N nsecs`) with shell builtins for a monotonic microsecond clock, measure the exec floor (`qmi --version`) alongside, and say whether a figure includes process spawn. See `tools/atd-parity/parity.sh` for the helper.
 
-## Phase 2 (not built)
+## Phase 2 (built) and what is left
 
-The poller gap-fills from `qmi.env` (`qmi_merge.sh`; AT from the same cycle always wins), new `status.json` keys (`lte.source`, `network.ca_source`, `device.qmi_*`), a live-lease CGI for the dashboard and antenna aiming, then `radio_details.sh` and the cell-scanner serving cell. See the design plan section 2b.
+Built: the poller gap-fill and `lte.source` / `device.qmi_*` keys ([`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), the live lease and static feed ([`live-signal.md`](live-signal.md)), and the Antenna Alignment / dashboard consumers. Not built (separate approval): CA gap-fill and `network.ca_source` (the poller's `t2_carrier_components` carries per-carrier signal and the NR SCC QMI cannot supply), the `radio_details.sh` network-type gate (keeps its QENG crash guard), the cell-scanner serving-cell strip, live NR/SINR/per-antenna, and NAS `0x0003` push sampling. Design: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md).

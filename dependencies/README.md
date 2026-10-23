@@ -33,8 +33,8 @@ CRT objects and `rust-lld`, so no cross gcc is needed; the crate's
 ```sh
 rustup target add aarch64-unknown-linux-musl     # once
 cd native/qmanager_atd
-cargo test --release                             # host unit tests (222)
-cargo test --release --features poll             # + the parked POLL parsers (236)
+cargo test --release                             # host unit tests (240)
+cargo test --release --features poll             # + the parked POLL parsers (254)
 cargo build --release --target aarch64-unknown-linux-musl
 cp target/aarch64-unknown-linux-musl/release/qmanager_atd ../../dependencies/qmanager_atd
 
@@ -43,7 +43,7 @@ readelf -l ../../dependencies/qmanager_atd | grep -i INTERP   # -> (nothing)
 file ../../dependencies/qmanager_atd   # ELF 64-bit LSB executable, ARM aarch64, statically linked
 ```
 
-Shipped build: **0.3.0**, 634472 bytes, md5 `dbe079d2964854d91eb23209f78a4c8a`.
+Shipped build: **0.4.1** (live signal at 1 Hz in both tiers, 5 Hz `aim` parked), 647904 bytes, md5 `14112f99eb2a68dce66db6f3aa5ce90b` (the binary is rebuilt from `native/qmanager_atd/` and verified static as above). The previous build was 0.4.0 (5 Hz `aim`), 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656`.
 
 Build on a Linux filesystem (e.g. copy the crate into `~/`), not across
 `/mnt/<drive>`, and commit the binary together with any source change.

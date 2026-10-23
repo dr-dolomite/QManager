@@ -205,5 +205,7 @@
   "port_in_use": "該連接埠已被其他服務佔用。",
   "token_generation_failed": "無法建立安全權杖。請重試。",
   "poller_not_running": "背景服務未回應，請稍後再試",
-  "reset_failed": "無法重設計數器"
+  "reset_failed": "無法重設計數器",
+  "bad_tier": "不支援的即時訊號速率。",
+  "lease_failed": "無法啟動即時訊號，請重試。"
 }

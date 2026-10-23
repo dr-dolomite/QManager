@@ -34,13 +34,18 @@
 //! - CA is the PCC plus up to four SCCs, 5 fields each; the contract is flat
 //!   names, so the list is fixed. A fifth SCC is not published.
 //!
-//! Cadence. Every 2 s; while `/tmp/qmanager_qmi_live` was touched within the
-//! last 10 s (a CGI renews the lease while a page wants fast data), every
-//! 500 ms (2 Hz; never faster than 5 Hz). The lease is judged by the file's
-//! mtime against the wall clock, which steps on this modem after an SSR or an
-//! NTP sync, so an mtime in the future or older than 10 s is expired: a clock
-//! step can only drop the rate back to 2 s until the next renewal, never
-//! hold it up.
+//! Cadence. Every 2 s, or faster while the live channel (`live.rs`) holds a
+//! lease: 1 s for both `watch` and `aim` (aim's 5 Hz is parked, see
+//! `live::AIM_PERIOD`). Samples run on a fixed deadline grid
+//! (`next_deadline`), so a lease delivers 1.0 Hz however long a sample
+//! takes. The two files above keep the 2 s
+//! cadence whatever the tier (`sidecar_due`): only the live file follows the
+//! lease rate. They are also written at once when `qmi_state` or the SSR
+//! count changes, and on the first sample, so the poller's freshness gate
+//! (`qmi_mono` at most a few seconds old) holds in every tier. The sampler
+//! re-checks the lease stamps every `min(period, 250 ms)`. (Phase 1's
+//! world-writable `/tmp/qmanager_qmi_live` mtime lease is retired; the
+//! broker ignores it.)
 
 use crate::common::json::J;
 use crate::common::log::Logger;
@@ -49,8 +54,9 @@ use crate::qmi::error::QmiError;
 use crate::qmi::model::{self, Bundle, Registration};
 use crate::qmi::registry::{Registry, SvcState, THREAD_STACK};
 use crate::qmi::SVC_NAS;
+use super::live::{self, Live, LivePaths, Tier};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 /// The sourced sidecar lives in the root-only run dir (a world-writable /tmp
 /// path could be planted before the first write and then sourced by the
@@ -58,16 +64,6 @@ use std::time::{Duration, Instant, SystemTime};
 pub const RUN_DIR: &str = "/var/run/qmanager";
 pub const ENV_PATH: &str = "/var/run/qmanager/qmi.env";
 pub const JSON_PATH: &str = "/tmp/qmanager_qmi.json";
-pub const LIVE_PATH: &str = "/tmp/qmanager_qmi_live";
-
-pub const IDLE_PERIOD: Duration = Duration::from_secs(2);
-pub const LIVE_PERIOD: Duration = Duration::from_millis(500);
-/// Floor of any period: 5 Hz.
-pub const MIN_PERIOD: Duration = Duration::from_millis(200);
-/// How long a renewal keeps the live rate.
-pub const LEASE_TTL: Duration = Duration::from_secs(10);
-/// How often the sleeping sampler re-checks the lease and its due time.
-const SLICE: Duration = Duration::from_millis(250);
 
 pub struct Paths {
     /// Made root-only (0700, own, not a link) before each env write; None
@@ -75,12 +71,43 @@ pub struct Paths {
     pub run_dir: Option<String>,
     pub env: String,
     pub json: String,
-    pub live: String,
+    pub live: LivePaths,
 }
 
 impl Paths {
     pub fn production() -> Paths {
-        Paths { run_dir: Some(RUN_DIR.into()), env: ENV_PATH.into(), json: JSON_PATH.into(), live: LIVE_PATH.into() }
+        Paths { run_dir: Some(RUN_DIR.into()), env: ENV_PATH.into(), json: JSON_PATH.into(), live: LivePaths::production() }
+    }
+}
+
+/// The sidecars' cadence while a lease samples faster.
+pub const SIDECAR_EVERY: Duration = Duration::from_secs(2);
+/// Early allowance, so scheduling jitter on the 1 s grid cannot push a due
+/// write one sample (to 3 s) late.
+const SIDECAR_SLACK: Duration = Duration::from_millis(100);
+
+/// Whether this sample writes `qmi.env` and the CGI JSON: always without a
+/// lease (the sample period is already 2 s), on the first sample, when the
+/// state or the SSR count changed since the last write, and otherwise once
+/// `SIDECAR_EVERY` has passed.
+pub fn sidecar_due(tier: Tier, last: Option<Instant>, now: Instant, changed: bool) -> bool {
+    match last {
+        _ if tier == Tier::None || changed => true,
+        None => true,
+        Some(l) => now.saturating_duration_since(l) + SIDECAR_SLACK >= SIDECAR_EVERY,
+    }
+}
+
+/// The deadline after `prev` on a fixed grid: `prev + period`, so the time a
+/// sample takes never stretches the period. More than a period late (a
+/// blocked read, a suspended thread) resyncs to `now` instead of bursting to
+/// catch up.
+pub fn next_deadline(prev: Instant, period: Duration, now: Instant) -> Instant {
+    let d = prev + period;
+    if now > d + period {
+        now
+    } else {
+        d
     }
 }
 
@@ -239,23 +266,6 @@ pub fn boot_secs() -> u64 {
     ts.tv_sec as u64
 }
 
-/// True while the lease file's mtime is within `LEASE_TTL` of `now`. Missing,
-/// unreadable, in the future (a stepped clock) or older: expired.
-pub fn lease_active(path: &str, now: SystemTime) -> bool {
-    match std::fs::metadata(path).and_then(|m| m.modified()) {
-        Ok(mtime) => now.duration_since(mtime).map_or(false, |age| age <= LEASE_TTL),
-        Err(_) => false,
-    }
-}
-
-pub fn period_for(live: bool) -> Duration {
-    if live {
-        LIVE_PERIOD.max(MIN_PERIOD)
-    } else {
-        IDLE_PERIOD
-    }
-}
-
 /// Holds what the last good read said, and publishes after every read.
 pub struct Sampler {
     paths: Paths,
@@ -263,21 +273,52 @@ pub struct Sampler {
     last_mono: Option<u64>,
     write_failed: bool,
     log: Arc<Logger>,
+    live: Live,
+    /// When the sidecars were last written, and the state and SSR count
+    /// they said then.
+    side_at: Option<Instant>,
+    side_state: &'static str,
+    side_ssr: u64,
+    /// Sidecar publications so far (tests count them).
+    side_writes: u64,
 }
 
 impl Sampler {
-    pub fn new(paths: Paths, log: Arc<Logger>) -> Sampler {
-        Sampler { paths, last: None, last_mono: None, write_failed: false, log }
+    pub fn new(mut paths: Paths, log: Arc<Logger>) -> Sampler {
+        let lp = std::mem::replace(&mut paths.live, LivePaths::production());
+        let live = Live::new(lp, log.clone());
+        Sampler {
+            paths,
+            last: None,
+            last_mono: None,
+            write_failed: false,
+            log,
+            live,
+            side_at: None,
+            side_state: "",
+            side_ssr: 0,
+            side_writes: 0,
+        }
     }
 
-    /// One read and one publication. Never fails: a failed read republishes
-    /// the last values with a `down` / `unavailable` state.
+    /// One read and one publication, at the tier the stamps say now (tests).
+    #[cfg(test)]
     pub fn sample(&mut self, reg: &Registry) {
+        let tier = self.live.tier(boot_secs());
+        self.sample_at(reg, tier);
+    }
+
+    /// One read, the live file (under a lease) and, when due, the sidecars.
+    /// Never fails: a failed read republishes the last values with a
+    /// `down` / `unavailable` state.
+    pub fn sample_at(&mut self, reg: &Registry, tier: Tier) {
         let fetch = |svc: u32, id: u16| reg.request(svc, id, &[]);
+        let mut fresh = false;
         let state = match model::bundle(&fetch) {
             Ok(b) => {
                 self.last = Some(b);
                 self.last_mono = Some(boot_secs());
+                fresh = true;
                 "up"
             }
             Err(QmiError::Unavailable) => "unavailable",
@@ -285,7 +326,22 @@ impl Sampler {
             Err(_) if reg.state(SVC_NAS) == Some(SvcState::Unavailable) => "unavailable",
             Err(_) => "down",
         };
-        let v = View { mono_s: self.last_mono, state, ssr_count: reg.ssr_count(), bundle: self.last.as_ref() };
+        let ssr = reg.ssr_count();
+        let now = Instant::now();
+        let changed = state != self.side_state || ssr != self.side_ssr;
+        if sidecar_due(tier, self.side_at, now, changed) {
+            self.write_sidecars(state, ssr);
+            self.side_at = Some(now);
+            self.side_state = state;
+            self.side_ssr = ssr;
+        }
+        let fresh_bundle = if fresh { self.last.as_ref() } else { None };
+        self.live.on_sample(tier, state, ssr, fresh_bundle);
+    }
+
+    fn write_sidecars(&mut self, state: &'static str, ssr_count: u64) {
+        self.side_writes += 1;
+        let v = View { mono_s: self.last_mono, state, ssr_count, bundle: self.last.as_ref() };
         let json = render_json(&v);
         let env = render_env(&v);
         // JSON first, then env, each on its own: a path planted in /tmp can
@@ -323,21 +379,32 @@ pub fn spawn(reg: Arc<Registry>, paths: Paths, log: Arc<Logger>) -> std::io::Res
 }
 
 fn run(reg: &Registry, paths: Paths, log: Arc<Logger>) {
-    let live = paths.live.clone();
     let mut s = Sampler::new(paths, log);
-    // None: sample at once. (Not `now - period`: Instant subtraction panics
-    // if the host has been up for less than the period.)
-    let mut last: Option<Instant> = None;
+    s.live.start();
+    // The deadline the last sample was scheduled for. None: sample at once.
+    // (Not `now - period`: Instant subtraction panics if the host has been
+    // up for less than the period.) The period is the current tier's, so a
+    // new lease is picked up within a slice, not after the idle period.
+    let mut prev: Option<Instant> = None;
     loop {
-        let period = period_for(lease_active(&live, SystemTime::now()));
-        let now = Instant::now();
-        let due = last.map_or(now, |l| l + period);
+        let now_s = boot_secs();
+        let tier = s.live.tier(now_s);
+        s.live.tick(tier, now_s);
+        let period = live::period_for(tier);
+        let mut now = Instant::now();
+        let mut due = prev.map_or(now, |p| next_deadline(p, period, now));
         if now >= due {
-            s.sample(reg);
-            last = Some(Instant::now());
-            continue;
+            s.sample_at(reg, tier);
+            prev = Some(due);
+            now = Instant::now();
+            due = next_deadline(due, period, now);
+            if now >= due {
+                continue;
+            }
         }
-        std::thread::sleep((due - now).min(SLICE).max(Duration::from_millis(5)));
+        // Sleeping straight to the next deadline after a sample saves a
+        // second stamp read per sample.
+        std::thread::sleep((due - now).min(live::slice_for(period)).max(Duration::from_millis(1)));
     }
 }
 
@@ -358,7 +425,16 @@ mod tests {
 
     fn paths(d: &std::path::Path) -> Paths {
         let p = |n: &str| d.join(n).to_str().unwrap().to_string();
-        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live: p("q_live") }
+        let live = LivePaths {
+            run_dir: None,
+            aim: p("aim"),
+            watch: p("watch"),
+            token: p("token"),
+            lock: p("lock"),
+            public_dir: p("pub"),
+            long_flag: p("long"),
+        };
+        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live }
     }
 
     fn log() -> Arc<Logger> {
@@ -682,7 +758,8 @@ mod tests {
         assert_eq!(std::fs::metadata(&run).unwrap().permissions().mode() & 0o777, 0o700);
         assert!(std::fs::read_dir(&victim).unwrap().next().is_none(), "nothing written through the link");
         assert_eq!(ENV_PATH, "/var/run/qmanager/qmi.env");
-        assert!(Paths::production().json.starts_with("/tmp/") && Paths::production().live.starts_with("/tmp/"));
+        assert!(Paths::production().json.starts_with("/tmp/"));
+        assert_eq!(Paths::production().live.public_dir, "/var/run/qmanager/live");
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -725,70 +802,195 @@ mod tests {
     }
 
     #[test]
-    fn the_lease_is_judged_by_mtime_and_a_stepped_clock_cannot_hold_it_up() {
-        let d = dir("lease");
-        let live = d.join("live");
-        let l = live.to_str().unwrap();
-        let now = SystemTime::now();
-        assert!(!lease_active(l, now), "no file, no lease");
-        std::fs::write(&live, b"").unwrap();
-        let set = |mtime: SystemTime| std::fs::File::options().write(true).open(&live).unwrap().set_modified(mtime).unwrap();
-        set(now);
-        assert!(lease_active(l, now));
-        set(now - Duration::from_secs(9));
-        assert!(lease_active(l, now));
-        set(now - Duration::from_secs(11));
-        assert!(!lease_active(l, now), "older than 10 s");
-        // Wall clock stepped back after the touch: mtime is in the future.
-        set(now + Duration::from_secs(3600));
-        assert!(!lease_active(l, now), "a future mtime is expired");
-        // Stepped forward by hours: the old touch is simply stale.
-        set(now);
-        assert!(!lease_active(l, now + Duration::from_secs(3 * 3600)));
+    fn the_env_contract_is_unchanged_38_names_in_order() {
+        assert_eq!(NAMES.len(), 38);
+        let mut want: Vec<String> = ["qmi_mono", "qmi_state", "qmi_ssr_count", "qmi_registered"].iter().map(|s| s.to_string()).collect();
+        for f in ["pci", "earfcn", "tac", "cell_id", "band", "bw_mhz", "rsrp", "rsrq", "rssi"] {
+            want.push(format!("qmi_lte_{f}"));
+        }
+        want.push("qmi_ca_count".into());
+        for f in ["pci", "earfcn", "band", "bw_mhz"] {
+            want.push(format!("qmi_pcc_{f}"));
+        }
+        for i in 1..=4 {
+            for f in ["pci", "earfcn", "band", "bw_mhz", "active"] {
+                want.push(format!("qmi_scc{i}_{f}"));
+            }
+        }
+        assert_eq!(NAMES, want.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice());
+    }
+
+    #[test]
+    fn a_leased_sample_publishes_the_live_file_beside_both_sidecars() {
+        let d = dir("leased");
+        let p = paths(&d);
+        let (env_p, json_p) = (p.env.clone(), p.json.clone());
+        let tok = "ab".repeat(32);
+        std::fs::write(d.join("token"), format!("{tok}\n")).unwrap();
+        std::fs::write(d.join("aim"), format!("{}\n", boot_secs())).unwrap();
+        let reg = start_registry(&r1_net());
+        let mut s = Sampler::new(p, log());
+        s.live.start();
+        s.sample(&reg);
+        assert_eq!(violation(&std::fs::read_to_string(&env_p).unwrap()), None);
+        assert!(std::fs::read_to_string(&json_p).unwrap().contains("\"qmi_state\":\"up\""));
+        let f = std::fs::read_to_string(d.join("pub").join(format!("{tok}.json"))).unwrap();
+        assert!(f.contains("\"period_ms\":1000,\"qmi_state\":\"up\"") && f.contains("\"pci\":295"), "{f}");
+        assert_eq!(std::fs::read(d.join("pub").join("index.html")).unwrap(), b"");
+        // The retired Phase 1 lease file means nothing any more.
+        std::fs::remove_file(d.join("aim")).unwrap();
+        std::fs::write(d.join("q_live"), b"").unwrap();
+        assert_eq!(s.live.tier(boot_secs()), Tier::None);
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
-    fn periods_are_two_seconds_idle_and_two_hertz_live_never_over_five() {
-        assert_eq!(period_for(false), Duration::from_secs(2));
-        assert_eq!(period_for(true), Duration::from_millis(500));
-        assert!(period_for(true) >= Duration::from_millis(200));
-        assert!(MIN_PERIOD >= Duration::from_millis(200), "5 Hz cap");
+    fn the_sidecars_keep_a_2_s_cadence_under_a_lease_but_follow_changes_at_once() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        // No lease: every sample (2 s apart) writes.
+        assert!(sidecar_due(Tier::None, Some(t0), t0, false));
+        // The first sample always writes.
+        assert!(sidecar_due(Tier::Aim, None, t0, false));
+        // Not at 1.8 s, yes at 2.0 s (any grid), and jitter that
+        // lands the 2.0 s sample a few ms early still counts.
+        assert!(!sidecar_due(Tier::Aim, Some(t0), ms(1800), false));
+        assert!(sidecar_due(Tier::Aim, Some(t0), ms(1997), false));
+        assert!(sidecar_due(Tier::Aim, Some(t0), ms(2000), false));
+        assert!(!sidecar_due(Tier::Watch, Some(t0), ms(1000), false));
+        assert!(sidecar_due(Tier::Watch, Some(t0), ms(2000), false));
+        // A state or SSR change writes at once.
+        assert!(sidecar_due(Tier::Aim, Some(t0), ms(200), true));
+
+        let d = dir("throttle");
+        let p = paths(&d);
+        let env_p = p.env.clone();
+        let tok = "ef".repeat(32);
+        std::fs::write(d.join("token"), &tok).unwrap();
+        std::fs::write(d.join("aim"), format!("{}\n", boot_secs())).unwrap();
+        let reg = start_registry(&r1_net());
+        let mut s = Sampler::new(p, log());
+        s.live.start();
+        for _ in 0..5 {
+            s.sample_at(&reg, Tier::Aim);
+        }
+        assert_eq!(s.side_writes, 1, "five back-to-back aim samples write the sidecars once");
+        let f = std::fs::read_to_string(d.join("pub").join(format!("{tok}.json"))).unwrap();
+        assert_eq!(f.matches("{\"seq\":").count(), 5, "the live file has every sample: {f}");
+        assert_eq!(violation(&std::fs::read_to_string(&env_p).unwrap()), None);
+        // 2 s later the next sample writes them again.
+        s.side_at = s.side_at.and_then(|t| t.checked_sub(SIDECAR_EVERY));
+        s.sample_at(&reg, Tier::Aim);
+        assert_eq!(s.side_writes, 2);
+        // A state change (here: the SSR count moving) writes at once.
+        s.side_ssr += 1;
+        s.sample_at(&reg, Tier::Aim);
+        assert_eq!(s.side_writes, 3);
+        s.sample_at(&reg, Tier::Aim);
+        assert_eq!(s.side_writes, 3);
+        // Without a lease every sample writes, as before.
+        s.sample_at(&reg, Tier::None);
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(s.side_writes, 5);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
-    fn the_sampler_thread_speeds_up_on_a_lease_and_relaxes_after_it() {
+    fn samples_follow_a_fixed_deadline_grid_and_resync_when_far_behind() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let p = Duration::from_millis(200);
+        // On time or a little late: the grid holds.
+        assert_eq!(next_deadline(t0, p, ms(12)), ms(200));
+        assert_eq!(next_deadline(t0, p, ms(350)), ms(200));
+        assert_eq!(next_deadline(t0, p, ms(400)), ms(200));
+        // More than a period late: resync to now, no burst.
+        assert_eq!(next_deadline(t0, p, ms(401)), ms(401));
+        assert_eq!(next_deadline(t0, p, ms(3000)), ms(3000));
+        // The run loop's arithmetic on a virtual clock: a sample costs
+        // 12 ms and every sleep overshoots by 1 ms, yet 10 s gives exactly
+        // 50 samples (the old "period after the sample" gave ~47).
+        let (mut now, mut prev, mut n) = (t0, None::<Instant>, 0u32);
+        while now < ms(10_000) {
+            let due = prev.map_or(now, |q| next_deadline(q, p, now));
+            if now >= due {
+                n += 1;
+                prev = Some(due);
+                now += Duration::from_millis(12);
+                continue;
+            }
+            now = due + Duration::from_millis(1);
+        }
+        assert_eq!(n, 50);
+    }
+
+    #[test]
+    fn the_sampler_thread_follows_the_tiers_and_expires_the_lease() {
         let d = dir("run");
         let p = paths(&d);
-        let (live, json_p) = (p.live.clone(), p.json.clone());
+        let json_p = p.json.clone();
+        let tok = "cd".repeat(32);
         let reg = start_registry(&r1_net());
         let r2 = reg.clone();
         std::thread::spawn(move || run(&r2, p, log()));
-        let mtime = || std::fs::metadata(&json_p).and_then(|m| m.modified()).ok();
-        // Distinct publications seen while polling for `ms`.
+        let pubf = d.join("pub").join(format!("{tok}.json"));
+        let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+        // Distinct publications of the live file and of the sidecar JSON
+        // seen while polling for `ms`.
         let changes = |ms: u64| {
             let end = Instant::now() + Duration::from_millis(ms);
-            let mut last = mtime();
-            let mut n = 0;
+            let (mut lf, mut lj) = (mtime(&pubf), mtime(std::path::Path::new(&json_p)));
+            let (mut nf, mut nj) = (0, 0);
             while Instant::now() < end {
-                let m = mtime();
-                if m != last {
-                    n += 1;
-                    last = m;
+                let (f, j) = (mtime(&pubf), mtime(std::path::Path::new(&json_p)));
+                if f != lf {
+                    nf += 1;
+                    lf = f;
                 }
-                std::thread::sleep(Duration::from_millis(10));
+                if j != lj {
+                    nj += 1;
+                    lj = j;
+                }
+                std::thread::sleep(Duration::from_millis(5));
             }
-            n
+            (nf, nj)
         };
         // Idle: the first sample is immediate, the next is 2 s later.
         std::thread::sleep(Duration::from_millis(600));
-        assert!(mtime().is_some(), "the first sample is not delayed");
-        assert_eq!(changes(1000), 0, "idle period is 2 s");
-        // A lease: within a slice it samples, then about every 500 ms.
-        std::fs::write(&live, b"").unwrap();
-        let n = changes(1600);
-        assert!(n >= 3, "live rate gave {n} publications in 1.6 s");
-        assert!(n <= 5, "live rate must stay under 5 Hz, got {n} in 1.6 s");
+        assert!(mtime(std::path::Path::new(&json_p)).is_some(), "the first sample is not delayed");
+        assert_eq!(changes(1000).1, 0, "idle period is 2 s");
+        // watch: about 1 Hz.
+        let stamp = |t: &str| std::fs::write(d.join(t), format!("{}\n", boot_secs())).unwrap();
+        std::fs::write(d.join("token"), &tok).unwrap();
+        stamp("watch");
+        let t0 = Instant::now();
+        while !pubf.exists() && t0.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(t0.elapsed() < Duration::from_millis(300), "lease to file took {:?}", t0.elapsed());
+        let (n, _) = changes(2100);
+        assert!((1..=3).contains(&n), "watch gave {n} publications in 2.1 s");
+        // aim beats watch but runs at the same 1 Hz while 5 Hz is parked,
+        // never faster; the sidecars keep their 2 s cadence.
+        stamp("watch");
+        stamp("aim");
+        let (n, nj) = changes(1600);
+        assert!(n >= 1, "aim gave {n} publications in 1.6 s");
+        assert!(n <= 2, "aim must stay at or under 1 Hz, got {n} in 1.6 s");
+        assert!(nj <= 1, "the sidecar JSON was written {nj} times in 1.6 s of aim");
+        stamp("aim");
+        let (n, nj) = changes(4100);
+        assert!((3..=5).contains(&n), "aim gave {n} publications in 4.1 s");
+        assert!((1..=3).contains(&nj), "the sidecar JSON was written {nj} times in 4.1 s of aim");
+        // Lease gone: expiry removes the token and the file within a slice.
+        std::fs::remove_file(d.join("aim")).unwrap();
+        std::fs::remove_file(d.join("watch")).unwrap();
+        let t0 = Instant::now();
+        while (pubf.exists() || d.join("token").exists()) && t0.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(!pubf.exists() && !d.join("token").exists(), "expired within {:?}", t0.elapsed());
+        assert!(d.join("pub").join("index.html").exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 }

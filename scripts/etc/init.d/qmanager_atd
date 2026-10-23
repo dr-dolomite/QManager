@@ -7,6 +7,8 @@
 #
 # On every start it also reconciles these boot-time states:
 #   - /usr/bin/qcmd, qsms and qmi -> qmanager_atd (multicall clients)
+#   - /www/qmlive -> /var/run/qmanager/live (live-signal static dir under the run dir; the frontend
+#     install wipes /www/*)
 #   - port-bridge on/off (quecmanager.ports.host_at); a firmware update can
 #     re-enable the vendor service, so this re-applies the user's choice.
 #
@@ -27,6 +29,7 @@ start_service() {
     at_qcmd_link
     command -v at_qsms_link >/dev/null 2>&1 && at_qsms_link
     command -v at_qmi_link >/dev/null 2>&1 && at_qmi_link
+    command -v at_live_link >/dev/null 2>&1 && at_live_link
     host_at_apply
 
     at_broker_available || return 0
@@ -44,6 +47,9 @@ start_service() {
 }
 
 stop_service() {
+    # The broker's pid, for service_stopped: procd's delete only signals it.
+    QM_ATD_PID=$(ubus call service list '{"name":"qmanager_atd"}' 2>/dev/null |
+        jsonfilter -e '@.qmanager_atd.instances.broker.pid' 2>/dev/null)
     # A stale socket is harmless (clients get ECONNREFUSED and fall back), but
     # remove it so status checks read true.
     rm -f /var/run/qmanager_atd.sock
@@ -51,10 +57,34 @@ stop_service() {
     # here so a rolled-back binary, which never writes it, is not credited
     # with a protocol it does not speak.
     rm -f /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new
+}
+
+# rc.common runs this after procd_kill. The broker keeps rewriting qmi.env
+# and can recreate live/index.html until it is gone, so wait for it (up to
+# ~5 s, procd's TERM-to-KILL window) before removing its files.
+service_stopped() {
+    local n
+    n=0
+    case "$QM_ATD_PID" in
+        ''|*[!0-9]*) ;;
+        *)
+            while [ "$n" -lt 50 ] && kill -0 "$QM_ATD_PID" 2>/dev/null; do
+                sleep 0.1
+                n=$((n + 1))
+            done
+            ;;
+    esac
     # QMI sidecars + lease. The sourced env lives in the root-only run dir;
     # the json and the lease are in /tmp. Atomic-write temps are "<path>.new".
-    rm -f /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
-        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live
+    rm -f /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new         /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live
+    # Live-signal channel: the /www link (removed so it never dangles; a real
+    # directory there is not ours), the public dir, and any copy an earlier
+    # build left in world-writable /tmp. Then the per-tier lease stamps (+ CGI
+    # temps), the capability token and its lock.
+    [ -L /www/qmlive ] && rm -f /www/qmlive
+    rm -rf /var/run/qmanager/live /tmp/qmanager_live
+    rm -f /var/run/qmanager/qmi_live_aim /var/run/qmanager/qmi_live_aim.*         /var/run/qmanager/qmi_live_watch /var/run/qmanager/qmi_live_watch.*         /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.*         /var/run/qmanager/qmi_live.lock
+    return 0
 }
 
 # No reload trigger on purpose: many CGIs commit the quecmanager config, and

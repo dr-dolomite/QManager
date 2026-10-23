@@ -1393,6 +1393,12 @@ seed_uci_defaults() {
         else
             warn "Could not link $BIN_DIR/qmi — QMI client unavailable"
         fi
+        # Runs after install_frontend (its /www wipe removes the link).
+        if at_live_link; then
+            info "qmlive -> $(readlink "$WWW_ROOT/qmlive" 2>/dev/null)"
+        else
+            warn "Could not link $WWW_ROOT/qmlive — real-time signal unavailable"
+        fi
     else
         warn "at_engine.sh missing — /usr/bin/qcmd, qsms and qmi not linked"
     fi
@@ -1526,6 +1532,18 @@ install_frontend() {
     local n
     n=$(count_files "$SRC_FRONTEND")
     info "Frontend installed ($n files)"
+
+    # The /www wipe above removed the live-signal link. Frontend-only installs
+    # do not reach the at_engine block in seed_uci_defaults, so restore it here
+    # when the installed library already has the helper (a fresh install gets it
+    # from that block once install_backend has placed the library).
+    # Subshell: on OTA this is still the previous release's library, and sourcing
+    # it here would set _AT_ENGINE_LOADED and shadow the new one in seed_uci_defaults.
+    if [ -f "$LIB_DIR/at_engine.sh" ]; then
+        ( . "$LIB_DIR/at_engine.sh"
+          command -v at_live_link >/dev/null 2>&1 || exit 0
+          at_live_link ) || warn "Could not link $WWW_ROOT/qmlive — real-time signal unavailable"
+    fi
 }
 
 install_backend() {

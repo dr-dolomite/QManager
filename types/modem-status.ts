@@ -220,6 +220,12 @@ export interface LteStatus {
   rssi: number | null;
   /** Timing Advance index (0–1282). Used for cell distance estimation. */
   ta: number | null;
+  /**
+   * Origin of rsrp/rsrq/rssi in this snapshot: "at" (this or the last AT read)
+   * or "qmi" (gap-filled from the broker's QMI sampler between AT reads).
+   * Absent on pollers older than QMI Phase 2.
+   */
+  source?: "at" | "qmi";
 }
 
 export interface NrStatus {
@@ -254,6 +260,12 @@ export interface NrStatus {
 export interface DeviceStatus {
   /** Live adaptive-polling backoff tier the poller is currently running at. */
   poller_tier?: PollerTier;
+  /** Uptime seconds of the last successful QMI read (0 = never or no sidecar). */
+  qmi_read_mono?: number;
+  /** QMI lane state from the broker sidecar ("" = no sidecar). */
+  qmi_state?: "" | "up" | "down" | "unavailable";
+  /** Baseband SSR episodes the broker has counted since it started. */
+  qmi_ssr_count?: number;
   /** Average modem temperature in °C across all available sensors (null if unavailable) */
   temperature: number | null;
   /** CPU usage percentage (0–100), calculated from /proc/stat delta between poll cycles */
