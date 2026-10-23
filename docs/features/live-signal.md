@@ -167,7 +167,15 @@ Earlier unleased baseline on this unit: 4 SSRs in one boot with no lease (gaps 1
 
 No further soak was run: the user skipped phase C (a 1 h 1 Hz lease) and took 1 Hz on this evidence, so 1 Hz is not soak-proven on its own.
 
-<!-- DEVICE-0.4.1: lifecycle + browser results go here -->
-**Open before merge:** deploy broker 0.4.1; the install / OTA / uninstall runs and the browser check.
+**Device gate, broker 0.4.1 (2026-10-23, RM551E, boot `0aa7bf6b`, tarball sha256 `ea12dafb…`).** Lifecycle runs in order:
+
+1. **OTA path** (`install.sh --skip-packages --no-reboot` over 0.4.0, what `qmanager_update` runs): capability `proto=3 version=0.4.1 qmi=1 live=1`; `/www/qmlive` link kept; the stale `qmi_live_watch` stamp and the lock removed by the broker stop; sidecars republished.
+2. **Uninstall** (`uninstall.sh --force --keep-config --no-reboot`): `/www/qmlive`, `/var/run/qmanager` (live dir, stamps, token, lock, `qmi.env`, `qmi.stamp`), `/tmp/qmanager_qmi.json`, the retired `/tmp/qmanager_qmi_live`, `qmi_merge.sh`, `live_signal.sh`, the broker and the `qcmd` / `qmi` links all gone; no QManager process left; `/etc/qmanager` kept.
+3. **Fresh install** (`install.sh --no-reboot`, packages included): link recreated, broker 0.4.1 up, sidecars publishing, no stamps. A second OTA-path run after restoring the user's UCI file left it byte-identical.
+
+Lease at 1 Hz: the CGI answers `period_ms:1000` for `aim`; the file advanced exactly 1 `seq` per second (2 -> 12 over 11 s) with `period_ms:1000`; status `lte.source=qmi`, age 1 s; the token and file were gone about 10 s after the last renewal and the URL then 404s. Broker CPU 0.43 % of one core with no lease vs 0.57 % under an `aim` lease (+0.14 %, against +0.80 % at 5 Hz); RSS 528 kB, 10 threads, 12 fds; no new SSR.
+
+<!-- BROWSER-E2E: Antenna Alignment + dashboard results go here -->
+**Open before merge:** the browser check of Antenna Alignment and the dashboard.
 
 Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
