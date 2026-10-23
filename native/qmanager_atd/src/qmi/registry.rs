@@ -564,7 +564,7 @@ impl Shared {
             None => return,
         };
         let mut g = lock(&svc.inner);
-        let current = g.link.as_ref().map_or(false, |l| Arc::ptr_eq(l, link));
+        let current = g.link.as_ref().is_some_and(|l| Arc::ptr_eq(l, link));
         if let Some(w) = g.wds.as_mut() {
             if current && w.bind == Bind::Busy {
                 w.bind = b;

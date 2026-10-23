@@ -45,7 +45,7 @@ pub fn default_mux(route: &str) -> Option<u8> {
             None => continue,
         };
         let metric = metric.parse::<u32>().unwrap_or(u32::MAX);
-        if best.map_or(true, |(bm, _)| metric < bm) {
+        if best.is_none_or(|(bm, _)| metric < bm) {
             best = Some((metric, mux));
         }
     }
