@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -22,6 +22,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 import type { DeviceStatus, LteStatus, NrStatus } from "@/types/modem-status";
 import {
@@ -31,7 +43,9 @@ import {
   formatDistance,
   formatTemperature,
 } from "@/types/modem-status";
+import { useDataUsed } from "@/hooks/use-data-used";
 import { useStorage } from "@/hooks/use-storage";
+import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import { useUnitPreferences } from "@/hooks/use-system-settings";
 import { useSpeedtest, type SpeedtestPhase } from "@/hooks/use-speedtest";
 import { formatSpeed, type SpeedtestProgressLine } from "@/types/speedtest";
@@ -90,6 +104,23 @@ const TEMP_WARN = 60; // °C
 const TEMP_DANGER = 75; // °C
 const CPU_WARN = 70; // percentage
 const CPU_DANGER = 90; // percentage
+
+/**
+ * A Data Used total in three significant figures ("976 GB", "86.8 GB",
+ * "4.21 TB"): a running counter is read for its size, and the shared
+ * `formatBytes` fixed decimal would cost the row its label at phone width.
+ */
+function formatTotal(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const digits = i === 0 || v >= 100 ? 0 : v >= 10 ? 1 : 2;
+  return `${v.toFixed(digits)} ${units[i]}`;
+}
 
 /** `initializing` has no entry on purpose: it falls back to the generic label. */
 const PHASE_LABEL_KEY: Partial<Record<SpeedtestPhase, string>> = {
@@ -186,9 +217,9 @@ function MeterRow({
 }
 
 /**
- * Skeleton (Skeleton-Mirror Rule): four meter groups, the shared cell-distance
- * pill and the pinned speed-test tile, i.e. the exact geometry of the loaded
- * body at the exact same heights.
+ * Skeleton (Skeleton-Mirror Rule): four meter groups, the Data Used and shared
+ * cell-distance pills and the pinned speed-test tile, i.e. the exact geometry
+ * of the loaded body at the exact same heights.
  *
  * It used to draw TEN generic rows for a smaller body, so the card lost height
  * the instant data landed and dragged its grid siblings with it.
@@ -205,7 +236,9 @@ function MetricsSkeleton() {
           <Skeleton className={cn(METER_H, "w-full rounded-pill")} />
         </div>
       ))}
-      <Skeleton className="h-10 w-full rounded-pill" />
+      {Array.from({ length: 2 }).map((_, i) => (
+        <Skeleton key={i} className="h-10 w-full rounded-pill" />
+      ))}
       <div className="mt-auto">
         <Skeleton className={cn(SPEEDTEST.TILE_H, "w-full rounded-tile")} />
       </div>
@@ -222,7 +255,8 @@ const DeviceMetricsComponent = ({
   liveLteTa,
   liveNrTa,
 }: DeviceMetricsComponentProps) => {
-  const { t } = useTranslation("dashboard");
+  const { t, i18n } = useTranslation("dashboard");
+  const { t: tc } = useTranslation("common");
   const unitPrefs = useUnitPreferences();
   const temp = deviceData?.temperature ?? null;
   const cpu = deviceData?.cpu_usage ?? null;
@@ -241,9 +275,43 @@ const DeviceMetricsComponent = ({
   const isCpuHigh = cpu !== null && cpu >= CPU_WARN;
   const memPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
 
-  // Usage of the writable volume; its own CGI and poll.
+  // Persistent Data Used counter (sampled every 30 s off the poller's hot
+  // path) and the writable volume's usage; each has its own CGI and poll.
+  const {
+    data: dataUsed,
+    isResetting,
+    reset: resetDataUsed,
+  } = useDataUsed();
   const { data: storage } = useStorage();
   const storagePct = storage ? (storage.usedKb / storage.totalKb) * 100 : null;
+  // A counter the sampler stopped refreshing is a photograph: show absence.
+  const dataUsedLive = dataUsed && !dataUsed.stale ? dataUsed : null;
+
+  const [resetOpen, setResetOpen] = useState(false);
+  const handleReset = useCallback(async () => {
+    const result = await resetDataUsed();
+    setResetOpen(false);
+    if (result.success) {
+      toast.success(t("metrics.reset_success"));
+    } else {
+      toast.error(
+        resolveErrorMessage(
+          t,
+          result.error,
+          result.detail,
+          t("metrics.reset_error"),
+        ),
+      );
+    }
+  }, [resetDataUsed, t]);
+  const sinceText =
+    dataUsedLive?.since != null
+      ? new Date(dataUsedLive.since * 1000).toLocaleDateString(i18n.language, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : null;
 
   const [speedtestOpen, setSpeedtestOpen] = useState(false);
   // One watching instance: a run started elsewhere shows up here too. The
@@ -310,9 +378,10 @@ const DeviceMetricsComponent = ({
   // it ever talks to the modem. Blanking them would be inventing an outage this
   // box is not having.
   //
-  // NOT GATED either: Storage (a df of /usrdata) is read on this box, not over
-  // AT. It was dropped in U4.10 for want of a backend and restored by U4.22
-  // (B5.22).
+  // NOT GATED either: Storage (a df of /usrdata) and Data Used (the broker's
+  // QMI WDS counter, or the kernel netdev fallback) are read on this box, not
+  // over AT. They were dropped in U4.10 for want of a backend and restored by
+  // U4.22 (B5.21 / B5.22).
   //
   // ABSENT rather than the formatters' own "-": both return a hyphen-minus for
   // a null reading, which beside a column of figures reads as a minus sign
@@ -467,6 +536,91 @@ const DeviceMetricsComponent = ({
             </TickingValue>
           </span>
         </MeterRow>
+
+        {/* ── Data Used (the modem's per-call counter since the last reset) ── */}
+        <PillRow
+          label={
+            <>
+              <span className="truncate">{t("metrics.data_used_label")}</span>
+              {/* Only while the figure comes from the netdev fallback, which
+                  misses traffic the modem forwards in hardware. */}
+              {dataUsedLive?.source === "netdev" && (
+                <HintIcon label={t("metrics.data_used_label")}>
+                  {t("metrics.data_used_partial_hint")}
+                </HintIcon>
+              )}
+              <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-5 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                    aria-label={t("metrics.reset_counter_aria")}
+                    disabled={isResetting || !dataUsedLive}
+                  >
+                    <MaterialSymbol name="restart_alt" size={14} />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {t("metrics.reset_confirm_title")}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("metrics.reset_confirm_desc")}
+                      {sinceText &&
+                        ` ${t("metrics.counting_since", { date: sinceText })}`}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isResetting}>
+                      {tc("actions.cancel")}
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isResetting}
+                      onClick={(e) => {
+                        // Stay open until the backend answers; the handler closes.
+                        e.preventDefault();
+                        void handleReset();
+                      }}
+                    >
+                      {t("metrics.reset_confirm_button")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          }
+        >
+          {/* Direction ink on the glyph only; the figure stays neutral. One
+              value cell with a tighter inner gap, and three significant
+              figures, so "Data Used" keeps its label at phone width even at
+              hundreds of GB. */}
+          <span className="flex items-center gap-1.5">
+            <span className={cn(VALUE_CLASS, "flex items-center gap-0.5")}>
+              <MaterialSymbol
+                name="arrow_circle_down"
+                size={16}
+                filled
+                className="shrink-0 text-downlink-on-surface"
+              />
+              <TickingValue value={dataUsedLive?.rxBytes ?? null}>
+                {dataUsedLive ? formatTotal(dataUsedLive.rxBytes) : ABSENT}
+              </TickingValue>
+            </span>
+            <span className={cn(VALUE_CLASS, "flex items-center gap-0.5")}>
+              <MaterialSymbol
+                name="arrow_circle_up"
+                size={16}
+                filled
+                className="shrink-0 text-uplink-on-surface"
+              />
+              <TickingValue value={dataUsedLive?.txBytes ?? null}>
+                {dataUsedLive ? formatTotal(dataUsedLive.txBytes) : ABSENT}
+              </TickingValue>
+            </span>
+          </span>
+        </PillRow>
 
         {/* ── Cell Distance ─────────────────────────────────────────────────
             One row for both legs: the radio is identity, so each figure leads
