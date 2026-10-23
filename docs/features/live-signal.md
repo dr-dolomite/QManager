@@ -140,8 +140,6 @@ Every functional check passed: capability line `proto=3 version=0.4.0 qmi=1 live
 
 Thresholds that failed on the first build, and the response (plan section 4b, approved R1-R4):
 
-| Threshold | Result | Response |
-|---|---|---|
 | Threshold | First build | Response | Re-measure after R1/R2 |
 |---|---|---|---|
 | Broker <= 1.0 % | +1.17 % (three file writes per sample) | R1: sidecars every 2 s, fixed-deadline pacing | **Pass**, +0.80 % (sampler thread 1.37 -> 0.87 %) |
@@ -151,6 +149,11 @@ Thresholds that failed on the first build, and the response (plan section 4b, ap
 
 The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, plus the 2 s authenticated `fetch_data.sh` probe. Static GET p50 6.9 / p95 8.5 ms; `fetch_data.sh` p95 moved +0.2 ms against the same-session baseline; zero errors on other CGIs.
 
-**Not yet measured on device:** the `qmi.env` rewrite cadence while `aim` is leased (expected every 2 s; covered by the unit and thread tests only) and the poller's `lte.source=qmi` flip under a lease. Both need a short on-device check before the UI steps rely on them.
+**Sidecars under a lease (2026-10-23, RM551E, broker 0.4.0, `aim` leased):** `qmi.env` and `qmanager_qmi.json` are rewritten together every 2 s (mtimes stepped +2 s on every sample over 6 s), and the poller's status shows `lte.source=qmi` with `mono - device.qmi_read_mono = 2` on every one of five 2 s samples.
 
-**Open before merge:** the 3 h A/B soak (lease vs no lease) for SSR rate; if the rate rises with the lease, drop `aim` to 2-2.5 Hz (one constant in `live.rs`). Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
+**Open before merge:** the A/B soak (lease vs no lease) for SSR rate; if the rate rises with the lease, drop `aim` to 2-2.5 Hz (one constant in `live.rs`). Unleased baseline on this unit: SSR gaps of 23-200 min (4 SSRs in one boot, gaps 1368/6040/11991/5951 s).
+
+<!-- SOAK-RESULT: fill in after /usrdata/qm_soak/soak.log logs "# end" -->
+**Phase A soak (2026-10-23, `aim` held 2 h from 09:20 PHT, boot `0aa7bf6b`):** _TBD: SSR count, boot id unchanged, broker RSS/threads/fds, `live_seq` rate._
+
+Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
