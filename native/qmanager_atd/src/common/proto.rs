@@ -45,6 +45,9 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// 0.4.1 runs `aim` at 1 s like `watch` (5 Hz parked; no wire change).
 /// 0.5.0 holds NAS Config Signal Info v2 so the live file carries SINR and NR
 ///    (no wire change).
+/// 0.6.0 binds two broker-internal WDS clients and publishes the default
+///    call's packet counters as `qmi_wds_*` in `qmi.env` (no wire change,
+///    no new capability line: readers detect the keys in the sidecar).
 pub const PROTO_VERSION: u32 = 3;
 
 pub fn version_line() -> String {
@@ -355,7 +358,7 @@ mod tests {
     fn capability_file_is_proto_version_then_qmi_and_live() {
         assert_eq!(PROTO_VERSION, 3, "live=1 is no wire change");
         assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\nlive=1\n", env!("CARGO_PKG_VERSION")));
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.5.0");
+        assert_eq!(env!("CARGO_PKG_VERSION"), "0.6.0");
         assert_eq!(parse_capability(&capability_body()), Caps { proto: 3, qmi: true, live: true });
         assert!(!parse_capability("proto=3\nversion=0.3.0\nqmi=1\n").live, "0.3.0 has no live channel");
         // The shape every earlier reader saw is still the first two lines.
