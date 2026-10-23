@@ -4,10 +4,10 @@
 # Sourced by qmanager_poller. Counts download (rx) and upload (tx) bytes across
 # poller restarts, data-call / interface re-creation and reboots. Off the hot
 # path by design (B5.29):
-#   every cycle      one [ -f ] test for the reset flag (builtin, no fork)
+#   every cycle      one counter increment (no reset: the total runs from install)
 #   every 15 cycles  builtin `read`s of qmi.env + /proc/uptime (and sysfs on
 #                    fallback) + the RAM mirror (one mv)
-#   every 10 samples the persistent file (qm_durable_write), also on reset and
+#   every 10 samples the persistent file (qm_durable_write), also at init and
 #                    on poller stop (du_flush from the poller's TERM trap)
 # status.json is not touched; network/data_used.sh serves the RAM mirror.
 #
@@ -27,19 +27,20 @@
 # Counter rules (docs/features/data-used.md), applied to the chosen source:
 #   cur >= prev               add cur - prev
 #   cur <  prev (either dir)  the counter restarted at 0 (netdev re-created, new
-#                             WDS data call, SSR): add cur, count a reset
+#                             WDS data call, SSR): add cur, iface_resets += 1
 #   source switched           wds <-> netdev: prev = the new source's cur, add
-#                             nothing (never a cross-source delta), no reset
+#                             nothing (never a cross-source delta), not counted
+#                             in iface_resets
 #   boot_id changed           same as a restart, on the first sample of the boot
 #   no state file             baseline only (bytes from before install are not ours)
 #   no source readable        skip the sample, iface_present=false
 #
-# The poller is the ONLY writer of both files; the reset CGI only drops a flag.
+# The poller is the ONLY writer of both files.
 
 [ -n "$_QM_DATA_USED_LOADED" ] && return 0
 _QM_DATA_USED_LOADED=1
 
-# Overridable for scripts/test/data-used.sh.
+# Overridable for tools/data-used-test/data-used-test.sh.
 : "${DU_IFACE:=rmnet_ipa0}"
 : "${DU_SYS_DIR:=/sys/class/net}"
 : "${DU_BOOT_ID_FILE:=/proc/sys/kernel/random/boot_id}"
@@ -52,7 +53,6 @@ _QM_DATA_USED_LOADED=1
 : "${DU_WDS_MAX_AGE:=30}"
 DU_STATE_FILE="$DU_STATE_DIR/data_used.json"
 DU_MIRROR="$DU_RUN_DIR/data_used.json"
-DU_RESET_FLAG="$DU_RUN_DIR/data_used_reset"
 DU_SCHEMA=1
 # Below this the wall clock is the 1970 boot value: store 0, never a fake date.
 DU_SANE_EPOCH=1700000000
@@ -96,7 +96,7 @@ _du_write_mirror() {
 }
 
 # du_flush: persist to flash. Called every DU_FLUSH_EVERY samples when counts
-# moved, on reset, at init and from the poller's TERM trap.
+# moved, at init and from the poller's TERM trap.
 du_flush() {
     [ "$_du_ready" = "1" ] || return 0
     [ -d "$DU_STATE_DIR" ] || mkdir -p "$DU_STATE_DIR" 2>/dev/null
@@ -276,7 +276,7 @@ du_init() {
         if [ -n "$_du_boot" ] && [ "$_du_file_boot" = "$_du_boot" ]; then
             _du_mode="delta"
         else
-            # New boot (or unknown boot): every byte on the netdev is new.
+            # New boot (or unknown boot): every byte on the source is new.
             _du_mode="rebase"
         fi
     else
@@ -297,29 +297,9 @@ du_init() {
     qlog_info "data_used: started (source=$_du_src mode=$_du_mode rx=$_du_rx tx=$_du_tx)"
 }
 
-_du_do_reset() {
-    rm -f "$DU_RESET_FLAG"
-    _du_rx=0
-    _du_tx=0
-    _du_resets=0
-    _du_now
-    _du_since="$_du_t"
-    # Re-baseline on the current source so only post-reset bytes count.
-    _du_mode="baseline"
-    _du_sample
-    _du_write_mirror
-    du_flush
-    qlog_info "data_used: counters reset by user"
-}
-
 # du_tick: every poller cycle.
 du_tick() {
     [ "$_du_ready" = "1" ] || return 0
-    if [ -f "$DU_RESET_FLAG" ]; then
-        _du_do_reset
-        _du_n=0
-        return 0
-    fi
     _du_n=$((_du_n + 1))
     [ "$_du_n" -ge "$DU_SAMPLE_EVERY" ] || return 0
     _du_n=0
