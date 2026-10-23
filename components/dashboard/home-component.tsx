@@ -49,7 +49,7 @@ const HomeComponent = () => {
   }, [daemonIntervalSec]);
 
   const networkType = data?.network?.type ?? "";
-  // LTE RSRP / RSRQ / RSSI at 1 Hz while the LTE card is shown and the live
+  // LTE RSRP / RSRQ / RSSI / SINR at 1 Hz while the LTE card is shown and the live
   // sample is on the same cell; otherwise the 2 s snapshot stands.
   const liveLte = useLiveLteOverlay(
     data?.lte ?? null,

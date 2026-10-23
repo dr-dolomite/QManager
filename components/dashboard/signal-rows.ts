@@ -82,7 +82,7 @@ function fmt(value: number | null | undefined, unit: string): string {
 }
 
 // -----------------------------------------------------------------------------
-// The live overlay: LTE RSRP / RSRQ / RSSI at 1 Hz
+// The live overlay: LTE RSRP / RSRQ / RSSI / SINR at 1 Hz
 // -----------------------------------------------------------------------------
 
 /** LTE serving values from the live file, in dB at 0.1 resolution. */
@@ -90,6 +90,7 @@ export interface LiveLteOverlay {
   rsrp: number | null;
   rsrq: number | null;
   rssi: number | null;
+  sinr: number | null;
 }
 
 /**
@@ -115,6 +116,10 @@ export function useLiveLteOverlay(
     rsrp: normalizeSignalValue(db.rsrp, "rsrp"),
     rsrq: normalizeSignalValue(db.rsrq, "rsrq"),
     rssi: db.rssi,
+    // QMI Signal Info SINR tracks AT+QCAINFO RSSNR (+0.2 dB bias, 0.9 dB mean
+    // abs diff over 90 paired reads on the device) at 0.1 dB, where QENG
+    // reports 2 dB steps. Brokers before 0.5.0 omit it: the snapshot stands.
+    sinr: normalizeSignalValue(db.sinr, "sinr"),
   };
 }
 
@@ -155,7 +160,7 @@ export function buildSignalRows(
   // reads it as a property of the row, never of the reading; that split is the
   // whole of the no-reading state. A row with no `thresholds` is an identifier
   // and must never be tinted, gauged or announced with a quality word.
-  // `liveRsrp` / `liveRsrq` mark a row as fed by the 1 Hz overlay, which the
+  // `liveRsrp` / `liveRsrq` / `liveSinr` mark a row as fed by the 1 Hz overlay, which the
   // card reads to skip the value tick (it would never finish dipping).
   const measurements = (source: {
     rsrp: number | null;
@@ -163,6 +168,7 @@ export function buildSignalRows(
     sinr: number | null;
     liveRsrp?: boolean;
     liveRsrq?: boolean;
+    liveSinr?: boolean;
   }): SignalStatusRow[] => [
     {
       label: t("signal_status.rsrp"),
@@ -180,9 +186,10 @@ export function buildSignalRows(
     },
     {
       label: t("signal_status.sinr"),
-      value: fmt(source.sinr, "dB"),
+      value: fmt(source.liveSinr ? wholeDb(source.sinr) : source.sinr, "dB"),
       rawValue: source.sinr,
       thresholds: SINR_THRESHOLDS,
+      live: source.liveSinr,
     },
   ];
 
@@ -220,17 +227,20 @@ export function buildSignalRows(
 
   const lte = data as LteStatus | null;
   // Per field: a live value that came back null falls back to the snapshot's
-  // rather than blanking a row the 2 s feed can still fill. SINR is never live.
+  // rather than blanking a row the 2 s feed can still fill. NR stays on the
+  // snapshot: QMI's NR values are the RX-chain mean, not QENG's quantity.
   const liveRsrp = live?.rsrp != null;
   const liveRsrq = live?.rsrq != null;
   const liveRssi = live?.rssi != null;
+  const liveSinr = live?.sinr != null;
   const rsrp = liveRsrp ? live!.rsrp : (lte?.rsrp ?? null);
   const trio = measurements({
     rsrp,
     rsrq: liveRsrq ? live!.rsrq : (lte?.rsrq ?? null),
-    sinr: lte?.sinr ?? null,
+    sinr: liveSinr ? live!.sinr : (lte?.sinr ?? null),
     liveRsrp,
     liveRsrq,
+    liveSinr,
   });
   return {
     title: t("signal_status.lte_primary_title"),
