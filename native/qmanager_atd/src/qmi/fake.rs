@@ -337,7 +337,7 @@ impl WdsModel {
         self.socks.lock().unwrap().get(&sock).and_then(|s| s.0)
     }
 
-    fn reply(&self, sock: u64, m: &Msg) -> Option<Vec<u8>> {
+    pub fn reply(&self, sock: u64, m: &Msg) -> Option<Vec<u8>> {
         use super::msg::{result_tlv, Tlv};
         let r = |tlvs: Vec<Tlv>| Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &tlvs));
         let mut socks = self.socks.lock().unwrap();

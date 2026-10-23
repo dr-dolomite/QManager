@@ -15,6 +15,7 @@
 //!   lane.
 
 pub(crate) mod at_lane;
+pub(crate) mod data_call;
 pub(crate) mod qmi_lane;
 pub(crate) mod live;
 pub(crate) mod qmi_snapshot;
