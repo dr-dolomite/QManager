@@ -99,7 +99,7 @@ Install and update copy the lib and the CGI with their trees and restart the pol
 | Direction in the browser | CGI `rx_bytes` shown as download, `tx_bytes` as upload |
 | SSR at 15:36 | call restarted, WDS counter restarted from 0 (QCMAP agreed), rebase path absorbed it |
 | `rmnet_ipa0` vs reality | about 40 % of a modem-local download, none of the IPA-offloaded LAN traffic |
-| Parity / CPU (10 min run) | Parity/CPU: see below |
+| Parity / CPU (9 x 60 s) | WDS vs QCMAP_CLI within 0.4-1.7 KB on every sample in both directions (read skew only), `qmi_wds_ok=1` throughout. Broker 0.67 % of one core over 525 s (0.5.0 measured 0.40-0.55 %) |
 | Sampler tests | 66 cases pass under the device BusyBox |
 | Broker host tests | 267 (281 with `--features poll`) |
 
