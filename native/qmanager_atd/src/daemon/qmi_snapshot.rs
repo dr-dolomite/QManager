@@ -35,9 +35,10 @@
 //!   names, so the list is fixed. A fifth SCC is not published.
 //!
 //! Cadence. Every 2 s, or faster while the live channel (`live.rs`) holds a
-//! lease: 1 s for the `watch` tier, 200 ms for `aim` (the 5 Hz floor).
-//! Samples run on a fixed deadline grid (`next_deadline`), so `aim` delivers
-//! 5.0 Hz however long a sample takes. The two files above keep the 2 s
+//! lease: 1 s for both `watch` and `aim` (aim's 5 Hz is parked, see
+//! `live::AIM_PERIOD`). Samples run on a fixed deadline grid
+//! (`next_deadline`), so a lease delivers 1.0 Hz however long a sample
+//! takes. The two files above keep the 2 s
 //! cadence whatever the tier (`sidecar_due`): only the live file follows the
 //! lease rate. They are also written at once when `qmi_state` or the SSR
 //! count changes, and on the first sample, so the poller's freshness gate
@@ -81,8 +82,8 @@ impl Paths {
 
 /// The sidecars' cadence while a lease samples faster.
 pub const SIDECAR_EVERY: Duration = Duration::from_secs(2);
-/// Early allowance, so scheduling jitter on the 200 ms grid cannot push a
-/// due write one sample (to 2.2 s) late.
+/// Early allowance, so scheduling jitter on the 1 s grid cannot push a due
+/// write one sample (to 3 s) late.
 const SIDECAR_SLACK: Duration = Duration::from_millis(100);
 
 /// Whether this sample writes `qmi.env` and the CGI JSON: always without a
@@ -834,7 +835,7 @@ mod tests {
         assert_eq!(violation(&std::fs::read_to_string(&env_p).unwrap()), None);
         assert!(std::fs::read_to_string(&json_p).unwrap().contains("\"qmi_state\":\"up\""));
         let f = std::fs::read_to_string(d.join("pub").join(format!("{tok}.json"))).unwrap();
-        assert!(f.contains("\"period_ms\":200,\"qmi_state\":\"up\"") && f.contains("\"pci\":295"), "{f}");
+        assert!(f.contains("\"period_ms\":1000,\"qmi_state\":\"up\"") && f.contains("\"pci\":295"), "{f}");
         assert_eq!(std::fs::read(d.join("pub").join("index.html")).unwrap(), b"");
         // The retired Phase 1 lease file means nothing any more.
         std::fs::remove_file(d.join("aim")).unwrap();
@@ -851,7 +852,7 @@ mod tests {
         assert!(sidecar_due(Tier::None, Some(t0), t0, false));
         // The first sample always writes.
         assert!(sidecar_due(Tier::Aim, None, t0, false));
-        // On the 200 ms grid: not at 1.8 s, yes at 2.0 s, and jitter that
+        // Not at 1.8 s, yes at 2.0 s (any grid), and jitter that
         // lands the 2.0 s sample a few ms early still counts.
         assert!(!sidecar_due(Tier::Aim, Some(t0), ms(1800), false));
         assert!(sidecar_due(Tier::Aim, Some(t0), ms(1997), false));
@@ -969,17 +970,17 @@ mod tests {
         assert!(t0.elapsed() < Duration::from_millis(300), "lease to file took {:?}", t0.elapsed());
         let (n, _) = changes(2100);
         assert!((1..=3).contains(&n), "watch gave {n} publications in 2.1 s");
-        // aim beats watch: 5 Hz on the deadline grid, never faster; the
-        // sidecars keep their 2 s cadence (at most one write in 1.6 s).
+        // aim beats watch but runs at the same 1 Hz while 5 Hz is parked,
+        // never faster; the sidecars keep their 2 s cadence.
         stamp("watch");
         stamp("aim");
         let (n, nj) = changes(1600);
-        assert!(n >= 7, "aim gave {n} publications in 1.6 s");
-        assert!(n <= 9, "aim must stay at or under 5 Hz, got {n} in 1.6 s");
+        assert!(n >= 1, "aim gave {n} publications in 1.6 s");
+        assert!(n <= 2, "aim must stay at or under 1 Hz, got {n} in 1.6 s");
         assert!(nj <= 1, "the sidecar JSON was written {nj} times in 1.6 s of aim");
         stamp("aim");
         let (n, nj) = changes(4100);
-        assert!((19..=22).contains(&n), "aim gave {n} publications in 4.1 s");
+        assert!((3..=5).contains(&n), "aim gave {n} publications in 4.1 s");
         assert!((1..=3).contains(&nj), "the sidecar JSON was written {nj} times in 4.1 s of aim");
         // Lease gone: expiry removes the token and the file within a slice.
         std::fs::remove_file(d.join("aim")).unwrap();

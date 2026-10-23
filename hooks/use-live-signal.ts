@@ -123,7 +123,7 @@ const liveSignalStore = createLiveSignalStore({
 });
 
 export interface UseLiveSignalOptions {
-  /** `aim` = 200 ms (alignment), `watch` = 1 s. */
+  /** `aim` (alignment) and `watch` both run at 1 s; aim's 5 Hz is parked. */
   tier: LiveTier;
   /** Whether to hold a lease (default: true). */
   enabled?: boolean;

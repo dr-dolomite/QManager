@@ -665,10 +665,10 @@ Reads target from UCI (ignores request body). Single send attempt. Test body: `F
 
 ### POST `/cellular/live_signal.sh?tier=aim|watch`
 
-Renews the real-time signal lease and returns the capability URL of the static file the broker publishes while a lease is fresh. Auth-gated; POST only, no body (the tier is the only input and selects a compiled period: `aim` 200 ms, `watch` 1000 ms). The page calls it at subscribe, every 5 s and on becoming visible, then polls the returned URL. See [`features/live-signal.md`](features/live-signal.md).
+Renews the real-time signal lease and returns the capability URL of the static file the broker publishes while a lease is fresh. Auth-gated; POST only, no body (the tier is the only input and selects a compiled period: 1000 ms for both `aim` and `watch`; `aim` was 200 ms until 2026-10-23). The page calls it at subscribe, every 5 s and on becoming visible, then polls the returned URL. See [`features/live-signal.md`](features/live-signal.md).
 
 ```json
-{ "success": true, "available": true, "url": "/qmlive/<64 lowercase hex>.json", "period_ms": 200, "renew_s": 5, "ttl_s": 10 }
+{ "success": true, "available": true, "url": "/qmlive/<64 lowercase hex>.json", "period_ms": 1000, "renew_s": 5, "ttl_s": 10 }
 ```
 
 `{ "success": true, "available": false }` means the running broker does not advertise `qmi=1` and `live=1` (or `/usr/bin/qmi` is missing); the client stays on the 2 s `status.json` path. No stamp is written in that case. The file at `url` is **unauthenticated by design** (capability token, rotates per lease episode) and identifier-free: `{ v, run, seq, period_ms, qmi_state, ssr_count, scan, samples[] }`, signals as integers x10.

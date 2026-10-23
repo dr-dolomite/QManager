@@ -42,6 +42,7 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// 3: the `QMI` verb (answered by the QMI lane on the reader thread) and the
 ///    `qmi=1` capability line. (`POLL` was parked; it would be 4.)
 /// 0.4.0 adds `live=1` (the live signal file; no wire change, still 3).
+/// 0.4.1 runs `aim` at 1 s like `watch` (5 Hz parked; no wire change).
 pub const PROTO_VERSION: u32 = 3;
 
 pub fn version_line() -> String {
@@ -352,7 +353,7 @@ mod tests {
     fn capability_file_is_proto_version_then_qmi_and_live() {
         assert_eq!(PROTO_VERSION, 3, "live=1 is no wire change");
         assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\nlive=1\n", env!("CARGO_PKG_VERSION")));
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.4.0");
+        assert_eq!(env!("CARGO_PKG_VERSION"), "0.4.1");
         assert_eq!(parse_capability(&capability_body()), Caps { proto: 3, qmi: true, live: true });
         assert!(!parse_capability("proto=3\nversion=0.3.0\nqmi=1\n").live, "0.3.0 has no live channel");
         // The shape every earlier reader saw is still the first two lines.

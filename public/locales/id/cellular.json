@@ -1893,7 +1893,7 @@
       "live": {
         "label": "RSRP sel layanan",
         "hint_label": "Tentang RSRP sel layanan",
-        "hint": "Sinyal sel layanan di semua rantai penerima, beberapa kali per detik. Pada 5G NSA ini adalah anchor LTE, jadi bisa berbeda dari Main / PRX di bawah.",
+        "hint": "Sinyal sel layanan di semua rantai penerima, setiap detik. Pada 5G NSA ini adalah anchor LTE, jadi bisa berbeda dari Main / PRX di bawah.",
         "sr": "RSRP sel layanan {{value}} dBm",
         "no_reading": "Tidak ada RSRP sel layanan yang dilaporkan",
         "from_peak": "{{delta}} dB dari puncak",

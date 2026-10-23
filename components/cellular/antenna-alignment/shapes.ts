@@ -170,7 +170,7 @@ export const CONSOLE = {
  * The live lead: serving-cell RSRP from the live file, above the 2 s score.
  *
  * It takes the console's 52px numeral because it is the figure that moves as
- * the antenna does (5 Hz). The composite score steps down to `SCORE_SECONDARY`
+ * the antenna does (1 Hz). The composite score steps down to `SCORE_SECONDARY`
  * while the lead is shown, so the card never carries two equal headline
  * figures; when the lead is absent the console is exactly as it was.
  */

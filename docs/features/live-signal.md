@@ -1,6 +1,6 @@
 # Live Signal (real-time LTE serving signal)
 
-While an authenticated page asks for it, the broker (`qmanager_atd` 0.4.0) samples the LTE serving cell over QMI at up to 5 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console reads it at 200 ms (`aim`), the dashboard at 1 s (`watch`); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
+While an authenticated page asks for it, the broker (`qmanager_atd` 0.4.1) samples the LTE serving cell over QMI at 1 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console (`aim`) and the dashboard (`watch`) both read it at 1 s (5 Hz `aim` is parked, see [Cadence decision](#cadence-decision-2026-10-23)); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
 
 Design and the device gate: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) (rules L1-L7 below are its section 1). The QMI lane itself: [`qmi-lane.md`](qmi-lane.md). Broker process model: [`at-broker.md`](at-broker.md). The poller's gap-fill overlay: [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only). UI consumer: [`antenna-alignment.md`](antenna-alignment.md#live-lead-qmi-phase-2).
 
@@ -16,7 +16,7 @@ Design and the device gate: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../
 | Web link | `/www/qmlive` -> `/var/run/qmanager/live` (`at_live_link` in `at_engine.sh`) |
 | Capability URL | `/qmlive/<token>.json` |
 | Broker code | `native/qmanager_atd/src/daemon/live.rs` (lease, token, ring, renderer), `daemon/qmi_snapshot.rs` (sampler, cadence) |
-| Capability | `/var/run/qmanager_atd.proto` has `qmi=1` and `live=1` (broker 0.4.0, wire still proto 3) |
+| Capability | `/var/run/qmanager_atd.proto` has `qmi=1` and `live=1` (broker 0.4.0+, wire still proto 3) |
 | Frontend | `lib/live-signal-store.ts` (shared store), `hooks/use-live-signal.ts`, `types/live-signal.ts` |
 | Consumers | `components/cellular/antenna-alignment/{use-live-lead.ts,live-aim.tsx,live-sparkline.tsx}`, `components/dashboard/signal-rows.ts` (`useLiveLteOverlay`) |
 | Lease CGI errors | `bad_tier`, `lease_failed`; `{"success":true,"available":false}` when the broker cannot serve it |
@@ -31,14 +31,14 @@ Design and the device gate: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../
 Lease response:
 
 ```json
-{"success":true,"available":true,"url":"/qmlive/<64hex>.json","period_ms":200,"renew_s":5,"ttl_s":10}
+{"success":true,"available":true,"url":"/qmlive/<64hex>.json","period_ms":1000,"renew_s":5,"ttl_s":10}
 ```
 
-`period_ms` is 200 for `aim`, 1000 for `watch`. The CGI is `printf`-only (no `jq`), reads no body and costs about 3 forks per renewal.
+`period_ms` is 1000 for both tiers (it was 200 for `aim` while 5 Hz was live). The CGI is `printf`-only (no `jq`), reads no body and costs about 3 forks per renewal.
 
 ## Rules (L1-L7)
 
-- **L1. No client number reaches the broker.** The CGI accepts only `tier=aim|watch` (a shell `case` on `QUERY_STRING`; anything else is `bad_tier`). The stamp holds `/proc/uptime`'s integer part, the same `CLOCK_BOOTTIME` second the broker reads, so wall-clock steps (NTP/NITZ after an SSR) cannot hold a lease up. The broker accepts a stamp only if it is a regular file owned by its euid, opened `O_NOFOLLOW`, digits only (no leading zero, at most 10), not in the future and at most 10 s old. Tier maps to a compiled period: `aim` 200 ms, `watch` 1 s, none 2 s. The 200 ms floor (`MIN_PERIOD`) stays.
+- **L1. No client number reaches the broker.** The CGI accepts only `tier=aim|watch` (a shell `case` on `QUERY_STRING`; anything else is `bad_tier`). The stamp holds `/proc/uptime`'s integer part, the same `CLOCK_BOOTTIME` second the broker reads, so wall-clock steps (NTP/NITZ after an SSR) cannot hold a lease up. The broker accepts a stamp only if it is a regular file owned by its euid, opened `O_NOFOLLOW`, digits only (no leading zero, at most 10), not in the future and at most 10 s old. Tier maps to a compiled period: `aim` 1 s, `watch` 1 s, none 2 s, with a 1 s floor (`MIN_PERIOD`). `aim` keeps its own stamp and stays the faster-or-equal tier so 5 Hz can return by changing `AIM_PERIOD` and `MIN_PERIOD` in `live.rs` and the CGI's `period_ms`.
 - **L2. Many tabs.** One stamp per tier (no shared read-modify-write). The effective period is the fastest fresh tier, so `aim` beats `watch`. All authenticated tabs share one token per lease episode (single-admin device; the content is non-identifying).
 - **L3. Token = capability URL.** Exactly 64 lowercase hex, minted by the CGI (`qm_generate_token`) under the lock when absent or invalid, written atomically with a `$$` temp + `mv -f` (allowed only inside the root-only run dir, see [`safe-tmp.md`](../reference/safe-tmp.md)). The token **rotates per lease episode**: on expiry the broker try-locks the lock file (busy: retry next slice), re-checks the stamps under the lock, deletes the token, the public file and its `.new`, and clears its ring. The broker validates the token (64 hex) before it builds any path from it.
 - **L4. Public dir.** `/var/run/qmanager/live`, made a real `0755` directory by `safefs::ensure_own_dir` and verified before every publish. It always holds an **empty `index.html`**. Hygiene on start, on a token change and on expiry deletes everything except `index.html` and the current `<token>.json`. Files are written with `safefs::write_atomic`.
@@ -49,7 +49,7 @@ Lease response:
 ## File format
 
 ```json
-{"v":1,"run":812345,"seq":4711,"period_ms":200,"qmi_state":"up","ssr_count":0,"scan":false,
+{"v":1,"run":812345,"seq":4711,"period_ms":1000,"qmi_state":"up","ssr_count":0,"scan":false,
  "samples":[{"seq":4711,"t":812999,"reg":true,"rsrp":-955,"rsrq":-85,"rssi":-580,
              "pci":295,"earfcn":150,"band":"B1","bw":20,
              "ca":[{"band":"B3","earfcn":1275,"pci":12,"bw":15,"active":true}]}]}
@@ -64,7 +64,7 @@ Lease response:
 | `qmi_state` | `up`, `down` (SSR window, modem not ready) or `unavailable` (no QRTR/NAS). A failed read pushes no sample. |
 | `ssr_count` | The daemon's SSR episode counter. |
 | `scan` | `true` while the long/scan flag is up. |
-| `samples[]` | Up to 32, oldest first. `t` is boot-clock ms (not comparable to the browser clock). Signals are integers x10 (`-955` = -95.5 dB), no floats; every serving field is `null` unless registered and while `scan` is true. `ca` lists SCCs only. |
+| `samples[]` | Up to 32, oldest first. `t` is boot-clock ms (not comparable to the browser clock). Signals are integers x10 (`-955` = -95.5 dB), no floats; signals (`rsrp`/`rsrq`/`rssi`) are `null` unless registered; `pci`/`earfcn`/`band`/`bw` can still name the last camped cell while `reg:false` (the client treats `reg:false` as stale); every serving field is `null` while `scan` is true. `ca` lists SCCs only. |
 
 **The file never contains** cell ID, TAC, eNodeB/sector, MCC/MNC, operator, IMSI or any other identifier; a unit test asserts their absence. **Why:** the URL is unauthenticated (anyone who knows the token can fetch it), so the renderer is an allow-list. The full bundle stays in `/tmp/qmanager_qmi.json`, never under `/www`.
 
@@ -72,7 +72,7 @@ Lease response:
 
 ## Broker cadence (R1/R2)
 
-Landed with this phase (0.4.0) after the device gate (plan section 4b):
+Landed with this phase (0.4.0) after the device gate (plan section 4b), measured at the then-current 5 Hz `aim`:
 
 - **Samples run on a fixed deadline grid** (`next_deadline`), so `aim` delivers 5.0 Hz instead of drifting to ~4.75 Hz.
 - **`qmi.env` and `qmanager_qmi.json` are written every 2 s** whatever the tier (`sidecar_due`, with a 100 ms scheduling slack so jitter on the 200 ms grid cannot push a write to 2.2 s), and at once when `qmi_state` or the SSR count changes and on the first sample. Only the live file follows the lease rate. With no lease they are written every 2 s sample, as before. **Why:** three file writes per 200 ms sample cost the sampler 1.37 % of a core; the poller only needs the sidecar at most a few seconds old.
@@ -98,7 +98,7 @@ Landed with this phase (0.4.0) after the device gate (plan section 4b):
 - **Failure ladder:** a failed poll (404 past the grace, network, bad body) or a lease error re-leases at once, then backs off 1 / 2 / 5 s (`LIVE_RETRY_DELAYS_MS` = 0/1/2/5 s); one more failure and the store is `unavailable` until the tab becomes visible again or the consumer remounts.
 - **Hidden tab stops polling and renewal**; the broker's lease lapses within about 11 s.
 - **Idle demotion:** `aim` becomes `watch` after 10 min without pointer/keyboard/wheel input; the next input restores `aim`.
-- **Client ring** is 150 samples (30 s at 5 Hz), deduped by `seq`; only a changed `run` resets it.
+- **Client ring** is 150 samples (150 s at 1 Hz; sized for 30 s at the parked 5 Hz), deduped by `seq`; only a changed `run` resets it.
 - The page clock is read in effects/timers, never in render.
 
 ## Lifecycle
@@ -140,8 +140,6 @@ Every functional check passed: capability line `proto=3 version=0.4.0 qmi=1 live
 
 Thresholds that failed on the first build, and the response (plan section 4b, approved R1-R4):
 
-| Threshold | Result | Response |
-|---|---|---|
 | Threshold | First build | Response | Re-measure after R1/R2 |
 |---|---|---|---|
 | Broker <= 1.0 % | +1.17 % (three file writes per sample) | R1: sidecars every 2 s, fixed-deadline pacing | **Pass**, +0.80 % (sampler thread 1.37 -> 0.87 %) |
@@ -151,6 +149,34 @@ Thresholds that failed on the first build, and the response (plan section 4b, ap
 
 The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, plus the 2 s authenticated `fetch_data.sh` probe. Static GET p50 6.9 / p95 8.5 ms; `fetch_data.sh` p95 moved +0.2 ms against the same-session baseline; zero errors on other CGIs.
 
-**Not yet measured on device:** the `qmi.env` rewrite cadence while `aim` is leased (expected every 2 s; covered by the unit and thread tests only) and the poller's `lte.source=qmi` flip under a lease. Both need a short on-device check before the UI steps rely on them.
+**Sidecars under a lease (2026-10-23, RM551E, broker 0.4.0, `aim` leased):** `qmi.env` and `qmanager_qmi.json` are rewritten together every 2 s (mtimes stepped +2 s on every sample over 6 s), and the poller's status shows `lte.source=qmi` with `mono - device.qmi_read_mono = 2` on every one of five 2 s samples.
 
-**Open before merge:** the 3 h A/B soak (lease vs no lease) for SSR rate; if the rate rises with the lease, drop `aim` to 2-2.5 Hz (one constant in `live.rs`). Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
+## Cadence decision (2026-10-23)
+
+Live signal runs at **1 Hz in both tiers**, Antenna Alignment included ("it's already real time enough"). 5 Hz `aim` is **parked, not removed**: the two tiers, both stamps and the `tier=aim|watch` contract stay, so restoring it means changing `AIM_PERIOD` and `MIN_PERIOD` back to 200 ms in `native/qmanager_atd/src/daemon/live.rs` and the CGI's `aim` `period_ms` back to 200 (broker 0.4.1 -> next version). The frontend follows the lease's `period_ms`, so it needs no change either way.
+
+Evidence (RM551E, one boot `0aa7bf6b`, the same `remoteproc-mss` / `nr_rx_ctl_agc.c` RFG fault signature throughout):
+
+| Window | Lease | Duration | SSRs |
+|---|---|---|---|
+| Boot to 09:20:53 PHT (uptime 0-7456) | none (no tab) | ~124 min | 0 |
+| Phase A, 09:20:53-10:23:00 | `aim` 5 Hz | 62 min | **5** (uptime 8241, 8302, 9992, 10141, 10168) |
+| Phase B, 10:23:15-11:23:15 | none | 60 min | 0 |
+
+Earlier unleased baseline on this unit: 4 SSRs in one boot with no lease (gaps 1368/6040/11991/5951 s), so SSRs do happen without our reads. The broker survived all five phase A SSRs with flat RSS, threads and fds. This **suggests a rate effect, it does not prove one**: SSRs on this unit cluster, and one hour per arm is short.
+
+No further soak was run: the user skipped phase C (a 1 h 1 Hz lease) and took 1 Hz on this evidence, so 1 Hz is not soak-proven on its own.
+
+**Device gate, broker 0.4.1 (2026-10-23, RM551E, boot `0aa7bf6b`, tarball sha256 `ea12dafb…`).** Lifecycle runs in order:
+
+1. **OTA path** (`install.sh --skip-packages --no-reboot` over 0.4.0, what `qmanager_update` runs): capability `proto=3 version=0.4.1 qmi=1 live=1`; `/www/qmlive` link kept; the stale `qmi_live_watch` stamp and the lock removed by the broker stop; sidecars republished.
+2. **Uninstall** (`uninstall.sh --force --keep-config --no-reboot`): `/www/qmlive`, `/var/run/qmanager` (live dir, stamps, token, lock, `qmi.env`, `qmi.stamp`), `/tmp/qmanager_qmi.json`, the retired `/tmp/qmanager_qmi_live`, `qmi_merge.sh`, `live_signal.sh`, the broker and the `qcmd` / `qmi` links all gone; no QManager process left; `/etc/qmanager` kept.
+3. **Fresh install** (`install.sh --no-reboot`, packages included): link recreated, broker 0.4.1 up, sidecars publishing, no stamps. A second OTA-path run after restoring the user's UCI file left it byte-identical.
+
+Lease at 1 Hz: the CGI answers `period_ms:1000` for `aim`; the file advanced exactly 1 `seq` per second (2 -> 12 over 11 s) with `period_ms:1000`; status `lte.source=qmi`, age 1 s; the token and file were gone about 10 s after the last renewal and the URL then 404s. Broker CPU 0.43 % of one core with no lease vs 0.57 % under an `aim` lease (+0.14 %, against +0.80 % at 5 Hz); RSS 528 kB, 10 threads, 12 fds; no new SSR.
+
+Browser check (desktop app browser, same build): Antenna Alignment shows the live lead (Serving RSRP, peak and delta) and polls `/qmlive/` every 1.0 s (10 gaps of 0.73-1.02 s); the dashboard polls every 1.01-1.03 s with `watch` renewals about every 5 s and shows whole-dB LTE values; closing the tab let the lease lapse 11 s after the last renewal, leaving only `index.html`. Antenna Alignment leased `watch` until the first pointer/keyboard input, then `aim` (see the idle-demotion follow-up); at 1 Hz both tiers have the same period, so nothing visible changes.
+
+**Follow-up (only matters if 5 Hz returns):** on a freshly loaded Antenna Alignment tab with no input, the store leased `watch` and renewed 4 times in 10 s instead of `aim` every 5 s; one synthetic input switched it to `aim`. Check the idle-demotion / mount ordering in `lib/live-signal-store.ts` before un-parking 5 Hz.
+
+Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.
