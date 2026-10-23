@@ -10,7 +10,7 @@ Since broker 0.3.0 the same binary also serves **read-only QMI over QRTR** to
 `/usr/bin/qmi`, on a lane of its own that never touches the modem lock. The
 QMI side (allow-list, field coverage, sidecars, SSR behaviour) is in
 [`qmi-lane.md`](qmi-lane.md); this doc covers the process model both lanes
-share. Broker 0.4.0 adds the live signal sampler (`live=1`, a static file for
+share. Broker 0.4.0 adds the live signal sampler (1 Hz since 0.4.1) (`live=1`, a static file for
 the UI, see [`live-signal.md`](live-signal.md)); it is not an AT path and adds
 no wire verb.
 

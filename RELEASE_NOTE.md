@@ -4,7 +4,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 
 ## ✨ New Features
 
-- **Real-time signal on Antenna Alignment and the dashboard.** Antenna Alignment now leads with a live signal reading that updates about five times a second, with a 30-second trace and your best position so far, so you can see the effect of every small turn as you aim. The dashboard's LTE signal values refresh every second while you watch them, and both pages quietly fall back to the usual two-second updates if live readings are not available. Live readings only run while the page is open and visible.
+- **Real-time signal on Antenna Alignment and the dashboard.** Antenna Alignment now leads with a live signal reading that updates every second, with a 30-second trace and your best position so far, so you can see the effect of each turn as you aim. The dashboard's LTE signal values also refresh every second while you watch them, and both pages quietly fall back to the usual two-second updates if live readings are not available. Live readings only run while the page is open and visible.
 - **PCIe power saving for the ethernet port.** The Ethernet Status page's speed card is now **Ethernet Port** and gains a **PCIe power saving** setting: Performance (recommended), Kernel default, Power saving or Max power saving. Changing it never drops the link, and your choice is reapplied on every boot.
 - **Performance by default.** New installs and upgrades set PCIe power saving to Performance, since the platform's own default can cause ethernet dropouts and added latency. If you have already picked a setting, it is kept.
 
