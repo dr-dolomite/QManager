@@ -1,6 +1,6 @@
 # QMI Lane (`qmi`, QMI sidecars)
 
-The broker `qmanager_atd` (0.4.1; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Nothing else calls `qmi` or reads the sidecars yet.
+The broker `qmanager_atd` (0.5.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Nothing else calls `qmi` or reads the sidecars yet.
 
 Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Field verdicts behind the table below: [`../research/qmi-phase0-results.md`](../research/qmi-phase0-results.md). Design: [`../plans/2026-10-22-qmi-phase1-broker-architecture.md`](../plans/2026-10-22-qmi-phase1-broker-architecture.md).
 
@@ -10,7 +10,8 @@ Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Fi
 |---|---|
 | Client | `/usr/bin/qmi` → `qmanager_atd` (`at_qmi_link`; always a client) |
 | Verb / reply | `QMI <nbytes> <sent_ms>\n<NUL-joined reads>` → `RES <0\|1> <n>\n<json>`; cap 1 KB; answered on the reader thread |
-| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1` (0.4.0 adds `live=1`); callers gate on both |
+| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1` (0.4.0 adds `live=1`; 0.5.0 adds nothing); callers gate on both |
+| Signal config | NAS `0x006C` (Config Signal Info v2), sent by the broker only (`BROKER_CONFIG`); state `qmi_sig_config` in `/tmp/qmanager_qmi.json`. See [Signal config hold](#signal-config-hold-nas-0x006c-broker-050). |
 | Reads | `serving signal cell ca rf ids rev opmode time card slots profiles dsd`, plus `bundle` (alone) |
 | Env sidecar | `/var/run/qmanager/qmi.env` (dir `0700`; sourced by the poller's `qmi_merge.sh`) |
 | JSON snapshot | `/tmp/qmanager_qmi.json` (for CGIs) |
@@ -38,7 +39,7 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 | DSD | `0x0024` System Status |
 
 - **NAS `0x0003` Indication Register is internal only** (`INTERNAL_ONLY`, reachable through the registry's own API, never from a request). It is per-client state on the daemon's socket, replayed after a rebuilt socket. Nothing calls it in Phase 1.
-- **Config Signal Info v2 (NAS `0x006C`) is never allowed.** It is a config write; it needs separate approval.
+- **Config Signal Info v2 (NAS `0x006C`) is never client-allowed.** It is a config write, held by the broker itself (see [Signal config hold](#signal-config-hold-nas-0x006c-broker-050)). It sits in `BROKER_CONFIG` only, never in `CLIENT_ALLOWED` or `INTERNAL_ONLY`, so the `QMI` verb, `qcmd` and the in-process fallback client can never send it.
 - WDS `0x0024` (packet stats) and `0x002D` (current settings) are excluded: they fail without data-session ownership (Phase 0), and Data Used is parked.
 - Four allow-listed messages (NAS `0x0020`, `0x0034`, `0x004D`, `0x005A`) are not used by any named read. A client can only run the named reads, never an arbitrary `(service, message)`.
 
@@ -61,7 +62,7 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 
 - **Partial failure:** `data` has one key per requested read. A failed read is `{"error":"<word>"}` in its slot and the envelope stays `ok:true` while at least one read succeeded; `ok:false` (first read's error) only when every read failed. Consumers needing all reads check each slot.
 - **`mono_ms` is `CLOCK_MONOTONIC` milliseconds**, the clock of `sent_ms`. It is **not** the clock of the sidecar's `qmi_mono` (below).
-- `bundle` = serving + cell + CA + RF in one round trip (4 requests). Its `signal` block comes from the cell row only: no SINR, no NR. The `signal` read also asks Signal Info (`0x004F`) and is the only read with SINR/NR values (cached).
+- `bundle` = serving + cell + CA + RF + Signal Info (`0x004F`) in one round trip (5 requests). The Signal Info request is optional: the bundle fails only if all five fail. Its `signal` block carries LTE SINR and NR RSRP/RSRQ/SINR from Signal Info, live while the signal config is held (0.5.0) and cached otherwise. The `signal` read asks the same three requests (serving, cell, Signal Info).
 - `ssr_count` in a client's in-process fallback is its own fresh registry's (always 0). Only the daemon's counter says anything about SSRs.
 
 ## Field coverage (RM551E, Phase 0)
@@ -73,9 +74,9 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 | LTE CA (PCC + SCCs: EARFCN, PCI, band, bandwidth, active) | GO | `0x00AC`. Count is at least 1 when LTE is up. SCC state 1 = configured, 2 = activated (`active`). **NR SCC is not in this message.** |
 | LTE RSRP | GO, live | Serving row of `0x0043` (0.1 dB), source `cell_location`. |
 | LTE RSRQ, RSSI | partial, live | Different rounding/averaging than AT. |
-| LTE SINR | cached | Signal Info only, source `signal_info`. Not for live use. |
+| LTE SINR | live while held (0.5.0) | Signal Info `0x004F`, source `signal_info`. Cached until the signal config is held; not yet compared with AT on the device. |
 | NR ARFCN (NSA) | GO | `0x0043` TLV `0x2E`. |
-| NR RSRP/RSRQ/SINR (NSA) | cached | Signal Info; 60-83 % agreement with AT. |
+| NR RSRP/RSRQ/SINR (NSA) | live while held (0.5.0) | Signal Info. The 60-83 % agreement with AT was measured on the cached values (Phase 0), not re-measured with the config held. NR RSRP is the **mean of the NR RX chains**, not QENG's strongest chain. |
 | NR PCI / band (NSA) | not available | TLV `0x2F` absent in NSA. Expected in SA, **untested**; `cell.nr.pci` is `null` until seen. |
 | Per-antenna RSRP/RSRQ/SINR | not available | `0x005A` answers `QMI_ERR_NOT_SUPPORTED` on this firmware. Stays AT. |
 | LTE timing advance | not available | No TLV tracked AT consistently. Stays AT (on-demand radio details). |
@@ -87,7 +88,7 @@ In NSA, QMI cannot replace `QENG servingcell` or `QCAINFO`: it fills the gaps wh
 ## Freshness rules
 
 - **Registration gate.** Every signal value is `null` unless Serving System says `registered` (or serving could not be read, which is *unknown*, also gated). A searching modem still answers Cell Location with a stale serving row; the gate avoids reporting RSRP while searching. **Identity (PCI, EARFCN, ...) is not gated.**
-- **Per-metric source tag.** Each reading carries `source`: `cell_location` (computed at request time) or `signal_info` (cached by the modem: LTE RSRP changed 4 times in 30 min; indications every 60 s). Live is preferred per metric; SINR and all NR values exist only as `signal_info`.
+- **Per-metric source tag.** Each reading carries `source`: `cell_location` (computed at request time) or `signal_info` (cached by the modem: LTE RSRP changed 4 times in 30 min; indications every 60 s). Live is preferred per metric. SINR and all NR values come only from `signal_info`. While the signal config is held that source is live, but the tag does not change: read `qmi_sig_config` to tell live from cached.
 - **Range filter.** Values outside plausible ranges (RSRP -150..0 dBm, RSRQ -40..0, RSSI -130..0, SINR -30..50 dB) are invalid-value sentinels and become `null`.
 - **Do not mix cached and live in a decision.** A consumer comparing QMI against AT must look at `source`.
 
@@ -99,6 +100,32 @@ The baseband restart (SSR) shows up as `ECONNRESET`/`ENETRESET` on a service soc
 - **Recovery.** The watcher re-looks-up with backoff 250 ms doubling to 2 s; a `NEW_SERVER` brings the service back. After an SSR the first replies may be `0x004A` (mapped to `modem_not_ready`) and then `searching` before `registered`.
 - **`ssr_count`.** Counts episodes: a loss counts only if no service is currently down **and** the previous loss was at least 2 s ago, so one SSR that drops five services counts once. It is the daemon's exact SSR signal (free for the watchdog later); `last_ssr_mono_ms` is kept in the registry.
 - **Sidecars during an SSR** keep their last values with `qmi_state=down` and a bumped `qmi_ssr_count`; they are never deleted.
+- **`qmi_sig_config`** (JSON only, never in `qmi.env`) is the signal config state (`off|held|rejected|unsupported`, below). It is not in the capability file either: the file stays a static contract.
+
+## Signal config hold (NAS `0x006C`, broker 0.5.0)
+
+Get Signal Info (`0x004F`) returns the modem's shared signal cache, which the modem refreshes only about every 60 s, so every client reads a cached value. Config Signal Info v2 (`0x006C`) sets report deltas that keep that cache live. The daemon holds it, with compiled-in TLVs, for the life of the registry. Evidence and the GO decision: [`../research/qmi-signal-info-v2.md`](../research/qmi-signal-info-v2.md). Plan and deviations: [`../plans/2026-10-22-qmi-signal-info-v2-integration.md`](../plans/2026-10-22-qmi-signal-info-v2-integration.md).
+
+> ℹ️ NOTE: Status: built in 0.5.0. Device validation is pending (the modem bridge was down when this was written), so the rows below describe the code, not a measured device.
+
+- **TLVs.** Seven delta-only TLVs, each `u16` 10 (1.0 dB): LTE RSSI/SNR/RSRQ/RSRP (`0x23`, `0x25`, `0x27`, `0x29`) and NR5G SNR/RSRP/RSRQ (`0x34`, `0x36`, `0x39`). No report-config TLVs (`0x2A`, `0x37`). Built by `sig_config_tlvs()` in `qmi/registry.rs`.
+- **Broker-internal.** The only path is `BROKER_CONFIG` in `qmi/allow.rs`. `Registry::hold_config()` runs in the daemon's QMI lane only: once at lane start, then from the monitor's retry. The in-process fallback client never calls it, and no client can supply TLVs.
+- **Replay.** The modem does not persist the config, so an SSR or reboot clears it. The registry stores it beside the indication register and replays it on every rebuilt NAS socket **before** the indication register (`0x0003`). Order matters: the config must be applied first.
+- **Retry.** While NAS is up and the state is `off` (not yet applied on this socket, or a replay timed out), the monitor re-sends it at most every **30 s**. A failure with no QMI error code (timeout, link lost) leaves the state alone; the next rebuilt socket replays it.
+- **States** (`qmi_sig_config` in the JSON sidecar, `SigConfig` in `qmi/registry.rs`):
+
+| State | Meaning | Action |
+|---|---|---|
+| `off` | Not held, not yet applied on this socket, or NAS is down | Retried every 30 s while NAS is up |
+| `held` | Applied on the current socket | None |
+| `rejected` | The modem returned a QMI error code | None; not retried |
+| `unsupported` | The modem answered invalid command or not supported | None; no `0x0050` fallback |
+
+- **Log lines** (state changes only, like the rest of the lane): `qmi nas signal config applied` (info), `qmi nas signal config unsupported by the modem` (warn), `qmi nas signal config rejected (qmi 0x....)` (warn, with the code).
+- **Feed.** The bundle polls `0x004F` as its 5th request; the sampler does not subscribe to `0x0051` indications. Once held, the polled value is as fresh as the indication stream and costs about 1 ms per sample, so no staleness rules are needed. This is a deliberate deviation from the research, which proposed the indication feed.
+- **Effect and scope.** While `held`, `0x004F` returns live values to every client on the device, not only the broker. The change is volatile and benign: it clears at the next SSR or reboot. Uninstall and rollback cannot undo it.
+
+> ⚠️ WARNING: Do not add `0x006C` to `CLIENT_ALLOWED`, to the `QMI` verb or to `qcmd`, and do not let a caller supply its TLVs. The `clients_are_still_refused_the_signal_config` test pins the refusal. **Why:** the write changes device-wide cache behaviour, which only the daemon may own.
 
 ## Snapshot sidecars and the live lease
 
@@ -107,7 +134,7 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 | File | For | Contents |
 |---|---|---|
 | `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 38 `name='value'` lines, then `qm_sidecar_end='1'` |
-| `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","registered","data":<bundle>}` |
+| `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","qmi_sig_config","registered","data":<bundle>}` |
 
 **Env contract** (same as `ping.env` / `ondemand.env`, validated and sourced by `cq_env_source`):
 - Every line is a single-quoted assignment; the last line is exactly `qm_sidecar_end='1'`.
@@ -145,7 +172,8 @@ These keep a silent QMI service from starving AT of reader threads. Constants: `
 
 ## Invariants a future editor must not break
 
-- **Keep the allow-list read-only and exact (18 pairs).** The test `exactly_the_read_only_gets` pins it. Adding a write, `0x006C`, or a client path to `0x0003` needs explicit approval.
+- **Keep the allow-list read-only and exact (18 pairs).** The test `exactly_the_read_only_gets` pins it. Adding a write, a client path to `0x006C`, or a client path to `0x0003` needs explicit approval. `0x006C` stays in `BROKER_CONFIG` only.
+- **Keep the signal config daemon-only and compiled-in.** Only the daemon lane calls `hold_config()`, with the seven delta TLVs from `sig_config_tlvs()`. Replay order is config first, then `ind_reg`.
 - **QMI never goes through the AT lane or the modem lock.** That independence is the feature.
 - **Signal values stay gated by registration**, and cached (`signal_info`) values stay tagged.
 - **Sidecar contract:** `qmi_` prefix, integer-or-empty values, `qm_sidecar_end` last, single-quoted. A float or `N/A` breaks the poller's `jq --argjson` fallback composer; a bad line makes `cq_env_source` reject the whole file.
@@ -188,4 +216,4 @@ Host: `cargo test --release` 222 tests (236 with `--features poll`), including f
 
 ## Phase 2 (built) and what is left
 
-Built: the poller gap-fill and `lte.source` / `device.qmi_*` keys ([`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), the live lease and static feed ([`live-signal.md`](live-signal.md)), and the Antenna Alignment / dashboard consumers. Not built (separate approval): CA gap-fill and `network.ca_source` (the poller's `t2_carrier_components` carries per-carrier signal and the NR SCC QMI cannot supply), the `radio_details.sh` network-type gate (keeps its QENG crash guard), the cell-scanner serving-cell strip, live NR/SINR/per-antenna, and NAS `0x0003` push sampling. Design: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md).
+Built: the poller gap-fill and `lte.source` / `device.qmi_*` keys ([`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), the live lease and static feed ([`live-signal.md`](live-signal.md)), and the Antenna Alignment / dashboard consumers. Not built (separate approval): CA gap-fill and `network.ca_source` (the poller's `t2_carrier_components` carries per-carrier signal and the NR SCC QMI cannot supply), the `radio_details.sh` network-type gate (keeps its QENG crash guard), the cell-scanner serving-cell strip, per-antenna live values, any UI reading of the live SINR/NR fields (published since 0.5.0, see [`live-signal.md`](live-signal.md)), and NAS `0x0003` push sampling. Design: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md).
