@@ -165,7 +165,8 @@ Host-tested (245 crate tests, 259 with `--features poll`) and deployed to the RM
 - **LTE SINR vs AT:** QMI 20.8-25.6 dB vs QENG 20-22 dB in the same window, about 2-4 dB higher. This is why the dashboard does not overlay live SINR yet; it needs a longer comparison first.
 - **Live file:** under a `watch` lease the file runs at `period_ms:1000` with `sinr`, `nr_rsrp`, `nr_rsrq`, `nr_sinr` filled (e.g. `sinr:246, nr_rsrp:-820, nr_rsrq:-110, nr_sinr:315`) and no identifier keys; it was removed once the lease lapsed.
 - **CPU:** 0.40 % of one core with no lease (0.4.1: 0.43 %) and 0.55 % under an `aim` lease (0.4.1: 0.57 %); RSS 592 kB (0.4.1: 528 kB), 10 threads, 12 fds.
-- **Still open:** re-apply after the next natural SSR (`qmi_sig_config` back to `held`), and the **SSR watch**: count SSRs per hour for 24 h against this boot's history; if the rate rises, roll back to 0.4.1 (kept on the device at `/tmp/qm_atd_041` until reboot).
+- **Re-apply after SSR:** passed. SSR #6 (uptime 23794 s, 41 min after the deploy, the usual `nr_rx_ctl_agc.c:7563` RFG fault) took every QMI service down; the broker logged `qmi ssr detected (episode 1)`, the services came back, it logged `qmi nas signal config applied` again, `qmi_sig_config` read `held` with `qmi_ssr_count:1`, and NR RSRP kept moving.
+- **SSR watch (open):** count SSRs per hour for 24 h against the history (5 SSRs in the 6.0 h of 0.4.1 on this boot, crashes #3 to #5 clustered at 2.8 h). If the rate rises, roll back to 0.4.1. The count runs in the dev-only watcher [`tools/ssr-watch/`](../../tools/ssr-watch/README.md), installed 2026-10-23 at uptime 24086 s: it survives reboots and keeps the 0.4.1 rollback binary on flash at `/usrdata/ssr_watch/qmanager_atd.041`. It records SSR #6 only as history (`event=start ssr_boot=6`), so add it to the 0.5.0 count by hand.
 
 ## Cadence decision (2026-10-23)
 
