@@ -596,3 +596,15 @@ A previous release's binary (0.2.0) ignores `/usr/bin/qmi` and never writes
 or removes it. Nothing in Phase 1 consumes the sidecars, so there is nothing to
 unwind. There is no runtime switch. To go back to a pre-broker AT path, revert to a
 previous release through Software Update or reinstall it.
+
+## Parked poll module (`src/poll/`): what it is and what removing it touches
+
+`native/qmanager_atd/src/poll/` (about 2.7k lines: `parse.rs`, `parse/ca.rs`, `parse/tests.rs`, `envout.rs`) is the B5.29 Phase D port of the poller's AT reply parsers and its env-file writer to Rust. It is compiled only with `--features poll` (off by default, declared in `Cargo.toml`, `mod poll` gated in `main.rs`), so the shipped binary does not contain it. It is **unwired**: no daemon code, `qcmd` argument or poller path calls it, there is no `POLL` verb and no `--parse-only` entry point, and the poller still parses every reply in shell. Phase D was decided against on 2026-10-19 (A+B+C already met the active-tier gate; D would save about 1-2 %). It costs nothing at run time and only adds the 14 `--features poll` host tests (267 vs 281 at 0.6.0).
+
+Removing it would touch:
+
+- **Code:** delete `src/poll/`, the `#[cfg(feature = "poll")] mod poll;` lines in `main.rs`, and the `[features] poll` entry in `Cargo.toml`.
+- **Test tooling that already cannot run:** `tools/poller-parity/rx_rust.sh`, `rx_expect.sh`, and `native/qmanager_atd/tests/parity/{rx_rust.sh,rx_expect.sh,rx_pack.py,expected.txt,README.md}` drive `qcmd --parse-only`, which no build provides.
+- **Docs:** the `poll/` row and the 222/236 counts in the Source layout section above, the matching counts in `qmi-lane.md`, `live-signal.md`, `data-used.md` and `dependencies/README.md`, the "Rust parser ports are built, not wired" bullet in `adaptive-polling.md`, and the design notes in `docs/architecture/poller-on-broker.md` and `docs/plans/2026-10-22-qmi-phase1-broker-architecture.md`.
+
+Keeping it preserves the parity-tested parsers if the poller is ever moved into the broker. The decision to delete or keep is open.
