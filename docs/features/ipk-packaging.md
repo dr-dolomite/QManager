@@ -91,9 +91,9 @@ While `/usr/lib/opkg/info/sdxpinn-qmanager.control` exists, every non-opkg write
 
 Details of the page contract are in [`../reference/software-update.md`](../reference/software-update.md); the error key is in [`error-codes.md`](error-codes.md).
 
-### Uninstall (`--deconfigure`) is a full removal that keeps `/etc/qmanager`
+### Uninstall (`--deconfigure`) is a full removal that keeps `/etc/qmanager` and UCI
 
-`--deconfigure` = `--force --keep-config --no-reboot`. Despite the "opkg then deletes its own files" wording in the script header, the code path is the ordinary uninstall: `stop_services`, `remove_services`, `remove_backend`, `remove_frontend`, `remove_runtime_state`. That stops and disables services, restores uhttpd to 80/443 if QManager moved it, tears down nft/sysctl/Tailscale state, strips cron lines, **deletes the packaged files and the `quecmanager` UCI namespace (`/etc/config/quecmanager`)**, restores LuCI's `index.html`, and clears `/tmp/qmanager_*` including both package hand-off files. `/etc/qmanager` (password hash, profiles, locks, backups) is the only config that survives a `remove`. Settings stored in UCI (web port, watchdog, adaptive polling, and so on) do not; they are re-seeded to defaults on the next install. An **upgrade** skips the prerm, so UCI is kept across upgrades.
+`--deconfigure` = `--force --keep-config --no-reboot`. The code path is the ordinary uninstall: `stop_services`, `remove_services`, `remove_backend`, `remove_frontend`, `remove_runtime_state`. That stops and disables services, restores uhttpd to 80/443 if QManager moved it, tears down nft/sysctl/Tailscale state, strips cron lines, **deletes the packaged files**, restores LuCI's `index.html`, and clears `/tmp/qmanager_*` including both package hand-off files. Unlike a tarball uninstall, package mode **keeps the `quecmanager` UCI config** (`/etc/config/quecmanager`), as OpenWrt packages keep `/etc/config`, so a reinstall picks the settings back up (`seed_uci_defaults` only adds). `/etc/qmanager` (password hash, profiles, locks, backups) is kept too. An **upgrade** skips the prerm entirely.
 
 > ⚠️ WARNING: Because prerm already deleted the files, opkg's own deletion pass sees paths that are gone. Whether this stays silent on the device's opkg is not verified (see below).
 
@@ -140,7 +140,7 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 # or, from an extracted release: sh /tmp/qmanager_install/install.sh --ignore-package
 ```
 
-`--ignore-package` is only needed if the opkg `.control` file is still present (a broken removal). After a clean `opkg remove` the plain installer works. Restore the UCI-stored settings by hand; see the uninstall note above.
+`--ignore-package` is only needed if the opkg `.control` file is still present (a broken removal). After a clean `opkg remove` the plain installer works, and it reuses the UCI settings the removal kept.
 
 ## Software Update `managed` view
 

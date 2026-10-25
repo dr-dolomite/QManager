@@ -38,7 +38,7 @@
 #   --no-reboot          Do not reboot after uninstall
 #   --ignore-package     Uninstall an opkg-managed (sdxpinn-qmanager) install
 #   --deconfigure        Package mode (ipk prerm): --force --keep-config
-#                        --no-reboot; opkg then deletes its own files
+#                        --no-reboot, and keeps the quecmanager UCI config
 #   --help, -h           Show this help
 # =============================================================================
 
@@ -406,14 +406,20 @@ remove_backend() {
     fi
 
     # --- UCI config namespace ---
-    if uci -q get quecmanager >/dev/null 2>&1; then
-        uci -q delete quecmanager 2>/dev/null || true
-        uci commit 2>/dev/null || true
-        info "Removed UCI config (quecmanager.*)"
-    fi
-    if [ -f /etc/config/quecmanager ]; then
-        rm -f /etc/config/quecmanager
-        info "Removed /etc/config/quecmanager"
+    # A package removal keeps it, as OpenWrt packages keep /etc/config: a
+    # reinstall picks the settings back up and seed_uci_defaults only adds.
+    if [ "$DO_PACKAGE" = "1" ]; then
+        info "Kept UCI config (quecmanager.*) for a reinstall"
+    else
+        if uci -q get quecmanager >/dev/null 2>&1; then
+            uci -q delete quecmanager 2>/dev/null || true
+            uci commit 2>/dev/null || true
+            info "Removed UCI config (quecmanager.*)"
+        fi
+        if [ -f /etc/config/quecmanager ]; then
+            rm -f /etc/config/quecmanager
+            info "Removed /etc/config/quecmanager"
+        fi
     fi
 
     # --- Firewall rule files ---
