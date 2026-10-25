@@ -323,6 +323,7 @@ Constants: `TS_NET_ZONE=tailscale`, `TS_NET_DEV=tailscale0`, `TS_NET_PREF=1990`,
 | `ts_net_fw_reload` | `/etc/init.d/firewall reload` |
 | `ts_net_ensure_rules` | Idempotent v4 + v6 `ip rule`; v6 is skipped silently when unsupported |
 | `ts_net_remove_rules` | Deletes every pref-1990 rule, v4 and v6 (loop capped at 16) |
+| `ts_net_remove_tiny_rules` | After a Tiny uninstall only: deletes the v4 + v6 rules at prefs 1310/1330/1350/1370 that carry tailscaled's `fwmark 0x80000/0xff0000` or `lookup 52`. Never while Tiny is installed |
 | `ts_net_apply [--no-reload]` | Rules, then zone; reloads fw4 only when the zone changed and `--no-reload` was not given |
 | `ts_net_teardown` | Removes rules and zone (reloads if changed), plus `ipset del mwan3_connected_ipv4 100.64.0.0/10` when no `netbird` binary exists (NetBird shares the range) |
 | `ts_net_status_json` | `{"enabled":bool,"zone":bool,"rule_v4":bool,"rule_v6":bool}` |
@@ -431,7 +432,9 @@ POST { action:"uninstall" }
          tiny also: uci delete network.tailscale (only when proto none + device
          tailscale0, the interface the package's init created);
          rm -f /etc/config/tailscale /etc/config/tailscale-opkg
-         (opkg keeps a modified conffile, which resurrects the section)
+         (opkg keeps a modified conffile, which resurrects the section);
+         once the package is gone, ts_net_remove_tiny_rules (the v4 + v6
+         rules its init moved to prefs 1310-1370 outlive it otherwise)
   rm -rf /var/lib/tailscale /etc/tailscale; rm auth-url / up-output / up-pid / both latest caches
   hash -r; verify /usr/bin/tailscale, /usr/sbin/tailscale, /usr/sbin/tailscaled are gone
     -> uninstall_failed if any remain
@@ -481,6 +484,7 @@ See [`docs/reference/tailscale.md`](../reference/tailscale.md). The hook returns
 - **`timeout` may be absent.** `tailscale status --json` calls are guarded with `command -v timeout`.
 - **Exit-node advertising requires admin-console approval** (see the NOTE under POST).
 - **No source switch.** Changing between Official and Tiny is uninstall, then install with the other source. An unknown `opkg` install keeps running until the user does the same; the UI banner says so.
+- **Official may not fit where Tiny does.** The official flash guard needed 77 MB on the RM551E test modem (2026-10-25), which had 48 MB free; Tiny's guard is 28 MB and it uses about 20 MB.
 - **The Tiny CLI cannot start a login.** `tailscale-tiny` is built with `ts_omit_ipnbus`: `tailscale up` and `tailscale login` print "not waiting for completion" and return without setting `WantRunning` or starting a login (validated on the RM551E, 2026-10-25). `ts_tiny_connect` drives the LocalAPI over `/var/run/tailscale/tailscaled.sock` instead: `PATCH /localapi/v0/prefs` (`WantRunning` on, `CorpDNS` off; a masked edit, so SSH and exit-node prefs survive), then `POST /localapi/v0/login-interactive` while `NeedsLogin`, polling `tailscale status --json` up to 10 s for `AuthURL` or `Running`. No orphaned process is needed: the daemon finishes the login itself.
 - **The Tiny postinst always enables boot.** Every opkg upgrade turns Start on boot back on; the update body snapshots and restores it. Any new opkg path must do the same.
 - **Never call `ts_net_teardown` on a live Tiny install.** It deletes the zone the package's init recreates only on service start (Ownership).
