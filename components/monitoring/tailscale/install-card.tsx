@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   CheckCircle2Icon,
+  CheckIcon,
   Loader2Icon,
   PackageIcon,
   RefreshCcwIcon,
@@ -19,6 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HintIcon } from "@/components/ui/hint-icon";
+import { SEGMENTED, SegmentedField } from "@/components/ui/segmented-field";
+import type { TailscaleInstallSource } from "@/hooks/use-tailscale";
 import type { InstallResult } from "@/types/video-optimizer";
 import { cn } from "@/lib/utils";
 
@@ -38,23 +42,36 @@ import {
   NOTICE_TONE,
   PILL_REST,
   RAIL,
+  SOURCE,
 } from "./shapes";
 
 // -----------------------------------------------------------------------------
 // Install — the not-installed hero. The only card on this shape.
 // -----------------------------------------------------------------------------
 
+/** The lucide check that SegmentedField reserves on every segment. */
+const renderCheckGlyph = (className: string) => (
+  <CheckIcon size={SEGMENTED.GLYPH} className={className} aria-hidden="true" />
+);
+
+const SOURCES: readonly TailscaleInstallSource[] = ["official", "tiny"];
+
 export function InstallCard({
   installResult,
   runInstall,
   onRefresh,
+  tinyAvailable,
 }: {
   installResult: InstallResult;
-  runInstall: () => Promise<void>;
+  runInstall: (source: TailscaleInstallSource) => Promise<void>;
   onRefresh: () => void;
+  /** The firmware trusts the Tiny build's feed; without it there is one path. */
+  tinyAvailable: boolean;
 }) {
   const { t } = useTranslation("common");
   const running = installResult.status === "running";
+  const [picked, setPicked] = React.useState<TailscaleInstallSource>("official");
+  const source: TailscaleInstallSource = tinyAvailable ? picked : "official";
   const showLog =
     running ||
     ((installResult.status === "complete" ||
@@ -85,7 +102,9 @@ export function InstallCard({
             {t("tailscale.install.title")}
           </CardTitle>
           <CardDescription className={CARD_DESC}>
-            {t("tailscale.install.description")}
+            {tinyAvailable
+              ? t("tailscale.install.descriptionChoice")
+              : t("tailscale.install.description")}
           </CardDescription>
         </div>
       </CardHeader>
@@ -121,11 +140,39 @@ export function InstallCard({
           </div>
         ) : null}
 
+        {tinyAvailable ? (
+          <div className={SOURCE.ROOT}>
+            <div className={SOURCE.LABEL_ROW}>
+              <span className={SOURCE.LABEL}>
+                {t("tailscale.install.sourceLabel")}
+              </span>
+              <HintIcon label={t("tailscale.install.sourceHintLabel")}>
+                {t("tailscale.install.sourceHint")}
+              </HintIcon>
+            </div>
+            <SegmentedField
+              value={picked}
+              onValueChange={setPicked}
+              ariaLabel={t("tailscale.install.sourceLabel")}
+              disabled={running}
+              breakpoint="never"
+              glyph={renderCheckGlyph}
+              options={SOURCES.map((s) => ({
+                value: s,
+                label: t(`tailscale.install.source.${s}.title`),
+              }))}
+            />
+            <p className={SOURCE.DESC}>
+              {t(`tailscale.install.source.${picked}.description`)}
+            </p>
+          </div>
+        ) : null}
+
         <div className={cn(RAIL, "justify-center")}>
           <Button
             type="button"
             size="action"
-            onClick={() => void runInstall()}
+            onClick={() => void runInstall(source)}
             disabled={running}
           >
             {running ? (

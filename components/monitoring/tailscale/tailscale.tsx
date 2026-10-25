@@ -207,6 +207,7 @@ const TailscaleComponent = () => {
           installResult={installResult}
           runInstall={runInstall}
           onRefresh={reload}
+          tinyAvailable={status?.tiny_available ?? false}
         />
       </motion.div>
     );

@@ -255,6 +255,15 @@ export const LOG_PANEL = {
   PLACEHOLDER: "text-on-surface-variant",
 } as const;
 
+/** The install-source picker: a labelled segmented pair over one sentence. */
+export const SOURCE = {
+  ROOT: "flex w-full flex-col items-center gap-2 text-center",
+  LABEL_ROW: "flex items-center gap-1",
+  LABEL:
+    "text-on-surface-variant text-[0.6875rem] font-semibold tracking-[0.02em] uppercase",
+  DESC: "text-on-surface-variant max-w-sm text-xs leading-[1.5] text-pretty",
+} as const;
+
 // -----------------------------------------------------------------------------
 // Conditions
 // -----------------------------------------------------------------------------

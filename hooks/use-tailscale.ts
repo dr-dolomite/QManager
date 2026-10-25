@@ -65,6 +65,9 @@ export interface TailscalePeer {
   exit_node: boolean;
 }
 
+/** Where an install comes from: Tailscale's own build or the Tiny opkg build. */
+export type TailscaleInstallSource = "official" | "tiny";
+
 export interface TailscaleStatus {
   installed: boolean;
   daemon_running?: boolean;
@@ -76,15 +79,20 @@ export interface TailscaleStatus {
   tailnet?: TailscaleTailnet;
   peers?: TailscalePeer[];
   health?: string[];
-  install_variant?: "official" | "tiny" | "opkg";
-  /** Newest official version, "" when it could not be determined. */
+  install_variant?: TailscaleInstallSource | "opkg";
+  /** Newest version from the installed source, "" when it could not be determined. */
   latest_version?: string;
-  /** Official builds only; always false on a legacy build. */
+  /** Official and Tiny builds; always false on a legacy build. */
   update_available?: boolean;
-  /** The older community (tiny / opkg) build. It cannot be updated in place. */
+  /** An unknown opkg build. It cannot be updated in place. */
   legacy_build?: boolean;
-  /** Reachability fixes for tailnet devices (fw4 zone + routing rule). */
+  /**
+   * Reachability fixes for tailnet devices (fw4 zone + routing rule). Absent on
+   * the Tiny build, whose own service sets that up.
+   */
   net_fixes_enabled?: boolean;
+  /** The firmware trusts the Tiny build's package feed, so it can be installed. */
+  tiny_available?: boolean;
   /** An install or update holds the lock; the other fields may be absent. */
   busy?: "install" | "update";
   exit_node_advertised?: boolean;
@@ -136,7 +144,7 @@ export interface UseTailscaleReturn {
   setNetFixes: (enabled: boolean) => Promise<TailscaleActionResult>;
   checkUpdate: (force?: boolean) => Promise<TailscaleActionResult>;
   runUpdate: () => Promise<TailscaleActionResult>;
-  runInstall: () => Promise<void>;
+  runInstall: (source?: TailscaleInstallSource) => Promise<void>;
   refresh: () => void;
 }
 
@@ -429,11 +437,12 @@ export function useTailscale(): UseTailscaleReturn {
     }
   }, [postAction, toInstallResult, stopInstallPolling, fetchStatus]);
 
-  const runInstall = useCallback(async () => {
+  const runInstall = useCallback(
+    async (source: TailscaleInstallSource = "official") => {
     stopInstallPolling();
     setInstallResult({ success: true, status: "running", op: "install" });
     try {
-      const json = await postAction({ action: "install" });
+      const json = await postAction({ action: "install", source });
       if (!mountedRef.current) return;
       if (!json.success) {
         // Refused up front (another VPN, install already running, ...): no
@@ -455,10 +464,12 @@ export function useTailscale(): UseTailscaleReturn {
         });
       }
     }
-  }, [postAction, pollInstallStatus, stopInstallPolling, t]);
+    },
+    [postAction, pollInstallStatus, stopInstallPolling, t],
+  );
 
   /**
-   * Ask for the newest official version. Merges the answer into `status`
+   * Ask for the newest version of the installed source. Merges the answer into `status`
    * instead of refetching, so the card does not flicker for a background read.
    */
   const checkUpdate = useCallback(
@@ -497,8 +508,8 @@ export function useTailscale(): UseTailscaleReturn {
     [postAction, t],
   );
 
-  // One background check per visit, once an official build is known to be
-  // installed. The CGI caches the answer, so this is cheap, and a failure
+  // One background check per visit, once an updatable (official or Tiny) build
+  // is known to be installed. The CGI caches the answer, so this is cheap, and a failure
   // simply leaves the page without an update badge.
   const shouldCheckUpdate =
     !!status?.installed && !status.legacy_build && !status.busy;
