@@ -3,6 +3,8 @@
 // client-side snapshot the shared store hands to consumers.
 // =============================================================================
 
+import { normalizeSignalValue } from "./modem-status";
+
 /** Lease tier. Both sample at 1 s today (`aim`'s 200 ms was dropped). */
 export type LiveTier = "aim" | "watch";
 
@@ -115,5 +117,28 @@ export function sampleDb(sample: LiveSample): LiveSampleDb {
     nrRsrp: toDb(sample.nr_rsrp),
     nrRsrq: toDb(sample.nr_rsrq),
     nrSinr: toDb(sample.nr_sinr),
+  };
+}
+
+/** LTE serving values of a live sample, in dB, as the dashboard overlays them. */
+export interface LiveLteDb {
+  rsrp: number | null;
+  rsrq: number | null;
+  rssi: number | null;
+  sinr: number | null;
+}
+
+/**
+ * RSRP/RSRQ keep the AT sentinel table. SINR does not: `-20` is the per-port
+ * `AT+QSINR` "idle chain" sentinel, but the broker already drops QMI's own
+ * invalid value and gates the range, so a live `-20.0` dB is a real reading.
+ */
+export function liveLteDb(sample: LiveSample): LiveLteDb {
+  const db = sampleDb(sample);
+  return {
+    rsrp: normalizeSignalValue(db.rsrp, "rsrp"),
+    rsrq: normalizeSignalValue(db.rsrq, "rsrq"),
+    rssi: db.rssi,
+    sinr: db.sinr,
   };
 }

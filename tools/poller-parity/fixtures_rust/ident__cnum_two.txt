@@ -1,6 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+CNUM: ,"111",129
-
-+CNUM: ,"222",129
-
-OK

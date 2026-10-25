@@ -1,13 +1,12 @@
 import type { TFunction } from "i18next";
 
 import { useLiveSignal } from "@/hooks/use-live-signal";
-import { sampleDb } from "@/types/live-signal";
+import { liveLteDb } from "@/types/live-signal";
 import type { LteStatus, NrStatus } from "@/types/modem-status";
 import {
   RSRP_THRESHOLDS,
   RSRQ_THRESHOLDS,
   SINR_THRESHOLDS,
-  normalizeSignalValue,
 } from "@/types/modem-status";
 
 import { ABSENT } from "./shapes";
@@ -111,16 +110,10 @@ export function useLiveLteOverlay(
   if (!enabled || state !== "live" || !latest || !lte) return null;
   if (latest.pci === null || latest.earfcn === null) return null;
   if (latest.pci !== lte.pci || latest.earfcn !== lte.earfcn) return null;
-  const db = sampleDb(latest);
-  return {
-    rsrp: normalizeSignalValue(db.rsrp, "rsrp"),
-    rsrq: normalizeSignalValue(db.rsrq, "rsrq"),
-    rssi: db.rssi,
-    // QMI Signal Info SINR tracks AT+QCAINFO RSSNR (+0.2 dB bias, 0.9 dB mean
-    // abs diff over 90 paired reads on the device) at 0.1 dB, where QENG
-    // reports 2 dB steps. Brokers before 0.5.0 omit it: the snapshot stands.
-    sinr: normalizeSignalValue(db.sinr, "sinr"),
-  };
+  // QMI Signal Info SINR tracks AT+QCAINFO RSSNR (+0.2 dB bias, 0.9 dB mean
+  // abs diff over 90 paired reads on the device) at 0.1 dB, where QENG
+  // reports 2 dB steps. Brokers before 0.5.0 omit it: the snapshot stands.
+  return liveLteDb(latest);
 }
 
 /**

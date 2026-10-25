@@ -1,6 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+CNUM: ,"$(touch /tmp/pp_pwned)'`id`",129
-
-+CPIN: READY
-
-OK

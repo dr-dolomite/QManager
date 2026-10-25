@@ -1,5 +1,4 @@
 # Fixtures carry literal CR bytes (CRLF framing from the AT broker): never normalise.
 fixtures/** -text
 *.sh text eol=lf
-fixtures_rust/** -text
 *.init text eol=lf

@@ -1,4 +1,0 @@
-AT+QENG="servingcell"
-+QENG: "servingcell","NOCONN","NR5G-SA","TDD",515,03,8000000000000000,100,00,627264,78,12,-80,-10,5,1,-
-
-OK

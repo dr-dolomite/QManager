@@ -521,7 +521,7 @@ so **no consumer changes**. Each is listed with what the gate checks.
 | `system/adaptive_polling.sh` | `.device.poller_tier` | none |
 | `device/about.sh`, `cellular/imei.sh`, `network/ip_passthrough.sh`, `config-backup/collect.sh`, `config_backup_sections.sh` | `.device.*`, `.network.wan_*` | none |
 | `use-watchdog-indicator.ts` | `.watchcat.*` | none |
-| `qmanager_debug_report`, `scripts/debug_poller_at.sh` | whole file | none; add `poll.env` to the debug bundle (redact CNUM) |
+| `qmanager_debug_report`, `tools/debug_poller_at.sh` | whole file | none; add `poll.env` to the debug bundle (redact CNUM) |
 | Heartbeat `/tmp/qmanager_ui_active` | poller | write becomes atomic (Phase A, already built) |
 | `/tmp/qmanager_force_tier2`, `_refresh_policy_band`, `_sim_switch_active`, `_poller_reload`, `_quality_reload` | poller | unchanged semantics |
 | `/tmp/qmanager_ondemand.json` (`stale:true` fallback in `radio_details.sh`) | `radio_details.sh`, poller | unchanged; the `.env` sidecar is additive and written in the same function |

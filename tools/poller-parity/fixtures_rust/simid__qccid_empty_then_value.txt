@@ -1,6 +1,0 @@
-AT+CIMI;+QCCID
-+QCCID: 
-
-+QCCID: 77
-
-OK

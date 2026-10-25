@@ -1,4 +1,0 @@
-AT+CIMI;+QCCID
-a+QCCID: b+QCCID: c
-
-OK

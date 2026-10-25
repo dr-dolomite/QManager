@@ -1,4 +1,0 @@
-AT+CFUN?
-+CFUN: 0
-
-OK

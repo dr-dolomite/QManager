@@ -1,4 +1,0 @@
-AT+CFUN?
-+CFUN: $(touch /tmp/pp_pwned)'"`id`;x
-
-OK

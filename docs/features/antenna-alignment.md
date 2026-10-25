@@ -33,6 +33,8 @@ The modem says "this port measured nothing" three ways and the poller only trans
 - RSRQ `-32768` only (a real `-19` dB RSRQ is reachable, so `-20` is not a sentinel there)
 - SINR `-20` and `-32768`
 
+The table is for AT readings (`AT+QSINR` reports `-20` on an idle chain). The dashboard's live QMI SINR overlay (`liveLteDb` in `types/live-signal.ts`) skips the SINR row: the broker already drops QMI's own invalid value and gates the range, so a live `-20.0` dB is a real reading.
+
 Confirmed on the RM551E on 2026-10-19: `/tmp/qmanager_signal_history.json` shows `lte_rsrp` `-140` in the same sample and port index as `null` RSRQ and SINR, the same pattern the fork measured on the RM520N. Every per-antenna value on both pages goes through this function; pass the real metric at each call site. A null reading renders as "Not reported" / "Not reporting" with `MetricBar value={null}`, never as an empty bar labelled `-140 dBm`.
 
 ## Antenna-type toggle contract (kept from the old page)
