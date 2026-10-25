@@ -289,7 +289,9 @@ function PortBlock({
               grayscale and deuteranopia. */}
           <Badge
             variant={reporting ? qualityBadgeVariant(verdict) : "muted"}
-            className="min-w-0"
+            /* `shrink` overrides the primitive's `shrink-0`; without it the
+               label never truncates and the chip runs out of the tile. */
+            className="min-w-0 shrink"
           >
             <MaterialSymbol
               name={reporting ? QUALITY_GLYPH[verdict] : "do_not_disturb_on"}

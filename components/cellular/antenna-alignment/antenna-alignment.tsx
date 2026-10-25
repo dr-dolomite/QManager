@@ -76,7 +76,7 @@ import { countReportingPorts, detectRadioMode } from "./utils";
 const SENTINEL_MARGIN = "-72px 0px 0px 0px";
 
 export default function AntennaAlignmentComponent() {
-  const { t, i18n } = useTranslation("cellular");
+  const { t } = useTranslation("cellular");
   const { data, isLoading, isStale, error, refresh } = useModemStatus();
   /** Serving-cell RSRP from the live file; null renders the console as before. */
   const lead = useLiveLead();
@@ -121,20 +121,6 @@ export default function AntennaAlignmentComponent() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [showsConsole]);
-
-  /**
-   * The modem's own timestamp for this snapshot, rendered as a clock time.
-   *
-   * Deliberately the device's stamp and not an elapsed age: computing "3s ago"
-   * means reading a clock during render, which `react-hooks/purity` flags and
-   * `use-modem-status.ts` explicitly asks consumers not to do. A frozen clock
-   * time is just as legible as a frozen counter — if the figure stops advancing,
-   * the feed has stopped — and it needs no timer to stay honest.
-   */
-  const updatedAt =
-    data?.timestamp != null
-      ? new Date(data.timestamp * 1000).toLocaleTimeString(i18n.language)
-      : null;
 
   /** Recording depends on fresh snapshots arriving; say so when they are not. */
   const feedStalled = !!error || isStale;
@@ -198,7 +184,6 @@ export default function AntennaAlignmentComponent() {
               <AimConsole
                 spa={spa}
                 snapshotTs={data?.timestamp ?? null}
-                updatedAt={updatedAt}
                 lead={lead}
               />
             </div>

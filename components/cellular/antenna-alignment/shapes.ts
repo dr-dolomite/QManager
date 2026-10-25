@@ -127,15 +127,17 @@ export const CONSOLE = {
   TITLE: "min-w-0 truncate text-lg font-semibold",
   DESCRIPTION: "min-w-0 text-sm leading-relaxed text-pretty",
 
-  /** The composite numeral. Sized to its slot, per The Numeric rule. */
-  SCORE: "text-[52px] font-semibold leading-none tabular-nums",
-  SCORE_BOX: "h-[52px]",
+  /**
+   * The lead numeral. 40px, down from 52: the card used to carry two ramp-red
+   * headline figures (52px RSRP over a 32px score), and at the cell edge both
+   * shouted the same red. One figure leads now, and it leads by size alone.
+   */
+  SCORE: "text-[40px] font-semibold leading-none tabular-nums",
+  SCORE_BOX: "h-10",
 
   /**
-   * The composite meter. 8px — which is now every bar in the product, so this
-   * no longer out-weighs the leg lanes by thickness. It out-weighs them by
-   * spanning the card's own line where a leg gets a 56px lane, and by the 52px
-   * numeral it sits under.
+   * An 8px meter lane, the one thickness every bar in the product uses. The
+   * relative box is what the session-peak tick is registered against.
    */
   METER_LANE: "relative flex h-2 items-center",
   /**
@@ -154,34 +156,67 @@ export const CONSOLE = {
   LEG_LANE: "w-14 shrink-0",
   LEG_VALUE: "w-[4.75rem] shrink-0 text-right text-[13px]/5 font-semibold tabular-nums",
   /**
-   * The scoring weights. Kept, because decomposability is what earns a 52px
-   * composite numeral: the score never appears alone, and printing what it is
-   * made of is the difference between an instrument and an oracle. Demoted to a
-   * label, because at value weight they read as a second reading.
+   * The scoring weights. Kept, because the score never appears alone, and
+   * printing what it is made of is the difference between an instrument and an
+   * oracle. Demoted to a label, because at value weight they read as a second
+   * reading.
    */
   LEG_WEIGHT: "ml-1.5 text-xs font-medium tabular-nums text-on-surface-variant",
 
-  /** The small-caps label above the composite numeral. */
+  /** The small-caps key above the lead numeral and over each section. */
   EYEBROW: KEY_LABEL,
-  /** Peak / updated-at / primary-chain. Free to wrap; never truncated. */
   CAPTION: "text-xs text-on-surface-variant",
+
+  /**
+   * A labelled group: the score's "Now" row, then the legs. Section labels
+   * replace the divider that used to split lead from score; alignment and a
+   * label already say "new group", so the rule was a second separator.
+   */
+  SECTION: "flex flex-col gap-2.5",
+  SECTION_HEAD: "flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1.5",
+  LEGS: "flex flex-col gap-2",
+
+  /**
+   * The composite score, as ONE Position-shaped row: label, 28px score,
+   * flex-1 bar with the session-best tick, delta. It was a 32px ramp-red
+   * numeral over its own full-width meter, a second headline under the lead.
+   * Sharing the recorder row's anatomy (`SLOT.*`) says what it is: the reading
+   * you would record here, on the same scale as the rows beside it.
+   */
+  NOW_ROW:
+    "flex h-16 items-center gap-3 rounded-pill bg-surface-container px-4 text-on-surface",
+  /**
+   * Sized to its word, not to the recorder's 5.5rem label slot: this row sits
+   * in another card, so there is no column to align with, and on a phone the
+   * fixed slot plus a 44px delta slot left the bar ~43px.
+   */
+  NOW_LABEL: "shrink-0 text-[13px] font-semibold text-on-surface-variant",
+  NOW_LANE: "min-w-0 flex-1",
+  /** Fixed, so the bar does not jump when the delta appears or clears. */
+  NOW_DELTA:
+    "flex w-8 shrink-0 items-center justify-end gap-0.5 text-xs font-semibold tabular-nums text-on-surface-variant",
 } as const;
 
 /**
  * The live lead: serving-cell RSRP from the live file, above the 2 s score.
  *
- * It takes the console's 52px numeral because it is the figure that moves as
- * the antenna does (1 Hz). The composite score steps down to `SCORE_SECONDARY`
- * while the lead is shown, so the card never carries two equal headline
- * figures; when the lead is absent the console is exactly as it was.
+ * It takes the console's numeral because it is the figure that moves as the
+ * antenna does (1 Hz). The steering cue, distance back to the session peak,
+ * holds the numeral row's right edge: it is the figure a sweep is steered by,
+ * and as a 12px grey caption it was the quietest text on the card.
  */
 export const LIVE = {
   BLOCK: "flex flex-col gap-2.5",
   /** Wraps, so a long locale drops the chip to its own line instead of
    *  pushing it out of the card (Italian runs ~370px at phone width). */
   KEY_ROW: "flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1.5",
-  NUMERAL_ROW: "flex items-baseline gap-1.5",
+  NUMERAL_ROW: "flex items-end justify-between gap-3",
+  NUMERAL: "flex min-w-0 items-baseline gap-1.5",
   UNIT: "text-base font-semibold text-on-surface-variant",
+  /** Distance to peak (16px/600) over the peak itself (12px caption). */
+  TO_PEAK: "flex shrink-0 flex-col items-end gap-0.5 text-right",
+  TO_PEAK_VALUE: "text-base/5 font-semibold tabular-nums text-on-surface",
+  TO_PEAK_CAPTION: "text-xs tabular-nums text-on-surface-variant",
   /** Muting rides opacity on the trace and the meter, never their hue. */
   MUTABLE:
     "transition-opacity duration-(--duration-standard) ease-standard",
@@ -190,17 +225,17 @@ export const LIVE = {
    * The console's slack absorber. When the work column is the taller side the
    * trace grows into the difference instead of leaving a gap under the legs —
    * more vertical resolution on the one graph a sweep is read from. 48px floor,
-   * 192px ceiling: at 1440 the 2-up Chains grid makes the work column ~220px
-   * taller, and an uncapped trace swelled to 267px of mostly empty plot. Past
-   * the ceiling the block itself takes the rest, which leaves the score group
-   * on the card's bottom edge, level with the bottom of Chains.
+   * 208px ceiling. The console's HEIGHT is set by the work column, never by
+   * this cap: a lower ceiling (112px was tried) only turned the slack into an
+   * empty band above the score. The 1440 console was fixed by shortening the
+   * work column (`PORT.GRID`'s 4-up step). Past the ceiling the block itself
+   * takes the rest, which leaves the score group on the card's bottom edge.
    */
   BLOCK_FILL: "flex-1",
-  SPARK_SLOT: "flex max-h-48 min-h-12 flex-1 flex-col",
+  SPARK_SLOT: "flex max-h-52 min-h-12 flex-1 flex-col",
   SPARK: "block min-h-12 w-full flex-1 overflow-visible",
-  SCORE_SECONDARY: "text-[32px] font-semibold leading-none tabular-nums",
-  SCORE_BOX_SECONDARY: "h-8",
-  DIVIDER: "h-px bg-surface-container-high",
+  /** Neutral: the trace is shape, not verdict. The numeral and meter carry it. */
+  SPARK_INK: "text-on-surface-variant",
 } as const;
 
 // `CONSOLE.LEG_KEY` deliberately carries NO fixed width, even though a column
@@ -259,6 +294,11 @@ export const CONDENSED = {
   SHOWN: "opacity-100",
   SCORE: "shrink-0 text-[28px] font-semibold leading-none tabular-nums",
   LANE: "min-w-0 flex-1",
+  /** The live pill's figure: numeral plus unit on one baseline. */
+  FIGURE: "flex shrink-0 items-baseline gap-1",
+  UNIT: "text-xs font-semibold text-on-surface-variant",
+  /** Distance to peak on the pill's right edge, the lead's steering cue. */
+  TO_PEAK: "shrink-0 text-right text-base font-semibold tabular-nums text-on-surface",
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -332,16 +372,20 @@ export const PORT = {
   /** Declared on the Chains card's content, so the grid steps on its own width. */
   CONTAINER: "@container/card",
   /**
-   * 4-up from `@3xl/card` — a CARD step, because the card now lives in the
-   * 7-of-12 work column and the page width says nothing about its cells.
+   * 4-up from `@xl/card` — a CARD step, because the card lives in the 7-of-12
+   * work column and the page width says nothing about its cells.
    *
    * The history is the rule: a `@4xl/main` step in this column once gave a
-   * ~123px block, `px-4` left ~91px inside, and the bar lane collapsed to
-   * nothing — DESIGN.md's named bug of ramp ink with no bar beside it. **Cost a
-   * grid step against the narrowest cell it produces in the column it actually
-   * lives in.** 768px of card content gives a ~180px block, ~150px inside.
+   * ~123px block, `px-4` left ~91px inside, and the INLINE bar lane collapsed
+   * to nothing — DESIGN.md's named bug of ramp ink with no bar beside it. **Cost
+   * a grid step against the narrowest cell it produces in the column it
+   * actually lives in.** The metric now stacks its bar full-width under the
+   * key and value, so 576px of card content (~137px blocks, ~109px inside)
+   * still carries a full bar. The step was `@3xl/card` (768px) until
+   * 2026-10-25: at 1440 the 579px card ran 2x2, ~130px taller than one row,
+   * and the console, matched to this column's height, carried it as a hole.
    */
-  GRID: "grid grid-cols-1 gap-2.5 @md/card:grid-cols-2 @2xl/card:gap-3.5 @3xl/card:grid-cols-4",
+  GRID: "grid grid-cols-1 gap-2.5 @md/card:grid-cols-2 @xl/card:grid-cols-4 @2xl/card:gap-3.5",
   ROOT: "flex flex-col gap-2 rounded-tile bg-surface-container px-3.5 py-3.5 @2xl/card:px-4",
   /**
    * Pinned per radio mode: one metric (LTE-only or SA) or two (EN-DC). A single
@@ -449,9 +493,9 @@ export const RECORD_GLYPH = {
 // -----------------------------------------------------------------------------
 
 export const SKELETON_SHAPE = {
-  SCORE: "h-[52px] w-28 rounded-inline",
+  /** A section's small-caps key line (`CONSOLE.SECTION_HEAD`, 24px). */
+  KEY: "h-6 w-24 rounded-inline",
   CHIP: "h-[1.625rem] w-24 rounded-pill",
-  METER: "h-2 w-full rounded-pill",
   LEG_ROW: "h-10 w-full rounded-pill",
   SLOT_ROW: "h-16 w-full rounded-pill",
   /** The single-metric pin: the mode is unknown until the first snapshot. */
