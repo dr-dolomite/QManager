@@ -31,7 +31,7 @@ LIVE_QMI_BIN="${QM_LIVE_QMI_BIN:-/usr/bin/qmi}"
 [ "$REQUEST_METHOD" = "POST" ] || cgi_method_not_allowed
 
 case "$QUERY_STRING" in
-    tier=aim)   period_ms=1000 ;; # 5 Hz (200) parked; matches live.rs AIM_PERIOD
+    tier=aim)   period_ms=1000 ;; # 1 Hz final, 5 Hz dropped; matches live.rs AIM_PERIOD
     tier=watch) period_ms=1000 ;;
     *) cgi_error "bad_tier" "tier must be aim or watch"; exit 0 ;;
 esac

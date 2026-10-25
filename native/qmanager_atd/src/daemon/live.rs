@@ -7,7 +7,7 @@
 //! (`/var/run/qmanager/qmi_live_{aim,watch}`), each holding one line: the
 //! CLOCK_BOOTTIME second (`/proc/uptime`'s integer part) of the renewal. The
 //! broker maps the fastest fresh tier to a compiled period (aim 1 s,
-//! watch 1 s, none 2 s; aim's 5 Hz is parked, see `AIM_PERIOD`). A stamp
+//! watch 1 s, none 2 s; aim's 5 Hz was dropped, see `AIM_PERIOD`). A stamp
 //! counts only if it is a regular file owned by
 //! the broker's euid, opened without following a link, holding digits only
 //! (no leading zero, at most 10), not in the future and at most 10 s old. No
@@ -61,8 +61,8 @@ pub const PUBLIC_DIR: &str = "/var/run/qmanager/live";
 pub const INDEX: &str = "index.html";
 
 /// 1 s, the same as `watch`, since 2026-10-23: a leased 5 Hz soak coincided
-/// with a higher baseband SSR rate. 5 Hz is parked, not removed: 200 ms here
-/// and in `MIN_PERIOD` brings it back.
+/// with a higher baseband SSR rate. 1 Hz is final (decision 2026-10-25) and
+/// 5 Hz is dropped; the aim tier and its stamp stay for the lease contract.
 pub const AIM_PERIOD: Duration = Duration::from_millis(1000);
 pub const WATCH_PERIOD: Duration = Duration::from_millis(1000);
 pub const IDLE_PERIOD: Duration = Duration::from_secs(2);

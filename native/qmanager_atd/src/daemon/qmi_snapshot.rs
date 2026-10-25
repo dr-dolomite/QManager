@@ -49,7 +49,7 @@
 //!   of the default call whenever one is detected.
 //!
 //! Cadence. Every 2 s, or faster while the live channel (`live.rs`) holds a
-//! lease: 1 s for both `watch` and `aim` (aim's 5 Hz is parked, see
+//! lease: 1 s for both `watch` and `aim` (aim's 5 Hz was dropped, see
 //! `live::AIM_PERIOD`). Samples run on a fixed deadline grid
 //! (`next_deadline`), so a lease delivers 1.0 Hz however long a sample
 //! takes. The two files above keep the 2 s
@@ -1346,7 +1346,7 @@ mod tests {
         assert!(t0.elapsed() < Duration::from_millis(300), "lease to file took {:?}", t0.elapsed());
         let (n, _) = changes(2100);
         assert!((1..=3).contains(&n), "watch gave {n} publications in 2.1 s");
-        // aim beats watch but runs at the same 1 Hz while 5 Hz is parked,
+        // aim beats watch but runs at the same 1 Hz since 5 Hz was dropped,
         // never faster; the sidecars keep their 2 s cadence.
         stamp("watch");
         stamp("aim");

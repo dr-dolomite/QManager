@@ -1,6 +1,6 @@
 # Live Signal (real-time LTE serving signal)
 
-While an authenticated page asks for it, the broker (`qmanager_atd` 0.5.0) samples the LTE serving cell over QMI at 1 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console (`aim`) and the dashboard (`watch`) both read it at 1 s (5 Hz `aim` is parked, see [Cadence decision](#cadence-decision-2026-10-23)); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
+While an authenticated page asks for it, the broker (`qmanager_atd` 0.5.0) samples the LTE serving cell over QMI at 1 Hz and publishes a small identifier-free JSON file that `uhttpd` serves as a plain static file. The Antenna Alignment console (`aim`) and the dashboard (`watch`) both read it at 1 s (5 Hz `aim` was dropped, see [Cadence decision](#cadence-decision-2026-10-23)); everything else stays on the 2 s `status.json` path. The lane exists so a person turning an antenna sees RSRP move as they turn it, without CGI polling (a CGI costs about 20x the CPU of a static file and `uhttpd` runs only 3 concurrent CGIs).
 
 Design and the device gate: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) (rules L1-L7 below are its section 1). The QMI lane itself: [`qmi-lane.md`](qmi-lane.md). Broker process model: [`at-broker.md`](at-broker.md). The poller's gap-fill overlay: [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only). UI consumer: [`antenna-alignment.md`](antenna-alignment.md#live-lead-qmi-phase-2).
 
@@ -101,7 +101,7 @@ Landed with this phase (0.4.0) after the device gate (plan section 4b), measured
 - **Failure ladder:** a failed poll (404 past the grace, network, bad body) or a lease error re-leases at once, then backs off 1 / 2 / 5 s (`LIVE_RETRY_DELAYS_MS` = 0/1/2/5 s); one more failure and the store is `unavailable` until the tab becomes visible again or the consumer remounts.
 - **Hidden tab stops polling and renewal**; the broker's lease lapses within about 11 s.
 - **Idle demotion:** `aim` becomes `watch` after 10 min without pointer/keyboard/wheel input; the next input restores `aim`.
-- **Client ring** is 150 samples (150 s at 1 Hz; sized for 30 s at the parked 5 Hz), deduped by `seq`; only a changed `run` resets it.
+- **Client ring** is 150 samples (150 s at 1 Hz; sized for 30 s at the dropped 5 Hz), deduped by `seq`; only a changed `run` resets it.
 - The page clock is read in effects/timers, never in render.
 
 ## Lifecycle
@@ -186,7 +186,7 @@ LTE SINR from QMI is the same quantity as RSSNR at 0.1 dB, so the dashboard over
 
 ## Cadence decision (2026-10-23)
 
-Live signal runs at **1 Hz in both tiers**, Antenna Alignment included ("it's already real time enough"). 5 Hz `aim` is **parked, not removed**: the two tiers, both stamps and the `tier=aim|watch` contract stay, so restoring it means changing `AIM_PERIOD` and `MIN_PERIOD` back to 200 ms in `native/qmanager_atd/src/daemon/live.rs` and the CGI's `aim` `period_ms` back to 200 (broker 0.4.1 -> next version). The frontend follows the lease's `period_ms`, so it needs no change either way.
+Live signal runs at **1 Hz in both tiers**, Antenna Alignment included ("it's already real time enough"). **1 Hz is final and 5 Hz is dropped (decision 2026-10-25).** The code keeps the two tiers, both stamps and the `tier=aim|watch` contract, but `AIM_PERIOD` and `MIN_PERIOD` stay at 1000 ms and no 5 Hz restore is planned. The frontend follows the lease's `period_ms`. At 1 Hz `aim` and `watch` have the same period, so which tier is leased changes nothing visible; the tier only decides which stamp is kept alive.
 
 Evidence (RM551E, one boot `0aa7bf6b`, the same `remoteproc-mss` / `nr_rx_ctl_agc.c` RFG fault signature throughout):
 
@@ -210,6 +210,6 @@ Lease at 1 Hz: the CGI answers `period_ms:1000` for `aim`; the file advanced exa
 
 Browser check (desktop app browser, same build): Antenna Alignment shows the live lead (Serving RSRP, peak and delta) and polls `/qmlive/` every 1.0 s (10 gaps of 0.73-1.02 s); the dashboard polls every 1.01-1.03 s with `watch` renewals about every 5 s and shows whole-dB LTE values; closing the tab let the lease lapse 11 s after the last renewal, leaving only `index.html`. Antenna Alignment leased `watch` until the first pointer/keyboard input, then `aim` (see the idle-demotion follow-up); at 1 Hz both tiers have the same period, so nothing visible changes.
 
-**Fixed (idle window, frontend only).** On a freshly loaded Antenna Alignment tab the store leased `watch` and renewed 4 times in 10 s instead of leasing `aim` every 5 s; one synthetic input switched it to `aim`. Cause found in `lib/live-signal-store.ts`: the last-input time was only set by the first subscriber and by input events, so an `aim` subscriber joining a store that had gone quiet for 10 minutes (a `watch` subscriber runs no idle timer), or a tab foregrounded after a long hidden spell, inherited a stale time and was demoted at once. A new subscriber, a tier change to `aim` and the tab becoming visible now each restart the 10-minute window. Renewal cadence is `renew_s` = 5 s (a fresh `aim` subscriber leases at 0, 5 and 10 s). Regression tests in `lib/live-signal-store.test.ts`. The browser symptom was not reproduced on a device in this change; the store behaviour is pinned by host tests only.
+**Fixed (idle window, frontend only).** On a freshly loaded Antenna Alignment tab the store leased `watch` and renewed 4 times in 10 s instead of leasing `aim` every 5 s; one synthetic input switched it to `aim`. At 1 Hz `aim` and `watch` have the same period, so the quirk was harmless to cadence. Cause found in `lib/live-signal-store.ts`: the last-input time was only set by the first subscriber and by input events, so an `aim` subscriber joining a store that had gone quiet for 10 minutes (a `watch` subscriber runs no idle timer), or a tab foregrounded after a long hidden spell, inherited a stale time and was demoted at once. A new subscriber, a tier change to `aim` and the tab becoming visible now each restart the 10-minute window. Renewal cadence is `renew_s` = 5 s (a fresh `aim` subscriber leases at 0, 5 and 10 s). Regression tests in `lib/live-signal-store.test.ts`. The browser symptom was not reproduced on a device in this change; the store behaviour is pinned by host tests only.
 
 Plan reference: [`docs/plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md) section 4b.

@@ -45,7 +45,7 @@ Confirmed on the RM551E on 2026-10-19: `/tmp/qmanager_signal_history.json` shows
 
 ## Live lead (QMI Phase 2)
 
-The console's composite, SINR leg and Receive Chains stay on the per-port 2 s snapshot. Above them sits a **live lead**: the serving cell's RSRP at 0.1 dB, fed by `useLiveSignal({tier:"aim"})` (1 s; 5 Hz is parked, see [`live-signal.md`](live-signal.md#cadence-decision-2026-10-23)). `useLiveLead()` runs once in `antenna-alignment.tsx` and hands the same object to the console and the condensed pill, so the two can never disagree about the session peak.
+The console's composite, SINR leg and Receive Chains stay on the per-port 2 s snapshot. Above them sits a **live lead**: the serving cell's RSRP at 0.1 dB, fed by `useLiveSignal({tier:"aim"})` (1 s; 5 Hz was dropped, settled at 1 Hz on 2026-10-25, see [`live-signal.md`](live-signal.md#cadence-decision-2026-10-23)). `useLiveLead()` runs once in `antenna-alignment.tsx` and hands the same object to the console and the condensed pill, so the two can never disagree about the session peak.
 
 - **What it is.** The serving cell's RSRP as the modem reports it across **all receive chains** (the LTE anchor in NSA). It is **not** port 1 / Main (PRX); labels and copy never imply it is, and the two readings sit side by side.
 - **`null` is today's console.** `useLiveLead()` returns `null` when the feed is `unavailable`, no sample has arrived, or no sample in the ring has a serving RSRP (connecting; 5G SA, where the live file has no LTE serving cell). `live-aim.tsx` then renders exactly as it did before the live channel existed. Never add a placeholder lead.

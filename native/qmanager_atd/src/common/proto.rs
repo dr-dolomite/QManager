@@ -42,7 +42,7 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// 3: the `QMI` verb (answered by the QMI lane on the reader thread) and the
 ///    `qmi=1` capability line. (`POLL` was parked; it would be 4.)
 /// 0.4.0 adds `live=1` (the live signal file; no wire change, still 3).
-/// 0.4.1 runs `aim` at 1 s like `watch` (5 Hz parked; no wire change).
+/// 0.4.1 runs `aim` at 1 s like `watch` (1 Hz final, 5 Hz dropped; no wire change).
 /// 0.5.0 holds NAS Config Signal Info v2 so the live file carries SINR and NR
 ///    (no wire change).
 /// 0.6.0 binds two broker-internal WDS clients and publishes the default

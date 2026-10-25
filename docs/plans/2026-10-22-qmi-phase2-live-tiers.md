@@ -6,7 +6,7 @@ Status: **APPROVED 2026-10-22** with the recommended D1–D5 (skip CA gap-fill, 
 
 | Tier | Cadence | What | Transport |
 |---|---|---|---|
-| **Real-time** | antenna page and dashboard 1 s (antenna page 200 ms / 5 Hz until 2026-10-23, now parked) | LTE serving signal (RSRP/RSRQ/RSSI at 0.1 dB), PCI, EARFCN, band, bandwidth, LTE CA summary, registered, qmi_state | Static file served by uhttpd from tmpfs, written by the broker sampler only while an authenticated lease exists |
+| **Real-time** | antenna page and dashboard 1 s (antenna page 200 ms / 5 Hz until 2026-10-23, dropped for good 2026-10-25) | LTE serving signal (RSRP/RSRQ/RSSI at 0.1 dB), PCI, EARFCN, band, bandwidth, LTE CA summary, registered, qmi_state | Static file served by uhttpd from tmpfs, written by the broker sampler only while an authenticated lease exists |
 | **Normal** | 2 s | Everything else in `status.json`. NR, SINR and per-antenna values stay AT. | Unchanged `fetch_data.sh` |
 | **Background** | poller tiers | `qmi_merge.sh` gap-fill keeps LTE serving values ≤ ~2 s old in idle/deep tiers and on busy cycles | `qmi.env` sidecar, no forks |
 
@@ -189,11 +189,11 @@ Every functional check passed; three thresholds failed and one is ambiguous (res
 - Other CGIs: 0 errors / timeouts, `fetch_data.sh` p95 Δ +0.2 ms vs the same-session baseline.
 - **Not measured** (the session ended when the modem was disconnected): the `qmi.env` rewrite cadence while `aim` is leased (expected 2 s; covered by the unit and thread tests only) and the poller's `lte.source=qmi` flip with `mono - device.qmi_read_mono ≤ 3` under a lease. One idle read after the run showed `lte.source` `at` with no lease, which says nothing either way. Both need a short on-device check before the UI steps rely on them. The 3-client run and the soak were not repeated. (Measured 2026-10-23 under an `aim` lease: both sidecars every 2 s, `lte.source=qmi` with age 2 s; see `live-signal.md`.)
 
-### 4c. Cadence decision (2026-10-23): 1 Hz everywhere, 5 Hz parked
+### 4c. Cadence decision (2026-10-23, settled 2026-10-25): 1 Hz everywhere, 5 Hz dropped
 
 A/B soak on the RM551E, one boot (`0aa7bf6b`), same `remoteproc-mss` / `nr_rx_ctl_agc.c` RFG fault throughout: 0 SSRs in the ~124 min before any lease; **5 SSRs in 62 min** with `aim` at 5 Hz (phase A, 09:20:53-10:23:00 PHT, uptime 8241/8302/9992/10141/10168); 0 in the 60 min of phase B with no lease (10:23:15-11:23:15). The broker rode all five out (flat RSS/threads/fds). Suggestive of a rate effect, not proof: SSRs cluster on this unit, and it has logged 4 SSRs in one boot with no lease before.
 
-User decision: run live signal at 1 Hz everywhere, Antenna Alignment included ("it's already real time enough"). Broker 0.4.1 sets `AIM_PERIOD` and `MIN_PERIOD` to 1000 ms and the lease CGI answers `period_ms:1000` for `aim`; both tiers, both stamps and the `tier=aim|watch` contract stay, so 5 Hz is **parked, not removed** (restore = those two constants + the CGI value). The frontend follows `period_ms` and needed copy changes only. The R1/R2 cost numbers above were taken at 5 Hz and are an upper bound for 1 Hz. A 1 Hz lease soak (phase C) was skipped by the user; 1 Hz is not soak-proven on its own.
+User decision: run live signal at 1 Hz everywhere, Antenna Alignment included ("it's already real time enough"). Broker 0.4.1 sets `AIM_PERIOD` and `MIN_PERIOD` to 1000 ms and the lease CGI answers `period_ms:1000` for `aim`; both tiers, both stamps and the `tier=aim|watch` contract stay, and 5 Hz was parked at first. **Settled 2026-10-25: 1 Hz is final, 5 Hz is dropped** (the tiers, stamps and constants stay in code; no restore is planned). The frontend follows `period_ms` and needed copy changes only. The R1/R2 cost numbers above were taken at 5 Hz and are an upper bound for 1 Hz. A 1 Hz lease soak (phase C) was skipped by the user; 1 Hz is not soak-proven on its own.
 
 ## 5. Validation per step
 
