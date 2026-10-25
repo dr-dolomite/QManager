@@ -460,10 +460,15 @@ remove_backend() {
     # wholesale rm -rf "$CONF_DIR" when DO_CONFIG=purge.
 
     # --- Cron jobs ---
-    # -i: the scheduled-reboot header comment ("# QManager Scheduled Reboot")
-    # carries no lowercase marker and would otherwise outlive the job.
-    if crontab -l 2>/dev/null | grep -qi qmanager; then
-        crontab -l 2>/dev/null | grep -vi qmanager | crontab - 2>/dev/null || true
+    # Only QManager's own lines: the jobs (command path or "# qmanager_*"
+    # marker) and their header comments, as written by tower/schedule.sh,
+    # system/settings.sh, system/update.sh and scenario_mgr.sh, plus the
+    # legacy low-power lines. A new cron writer must extend this pattern.
+    # A user's line that merely mentions QManager is kept.
+    local qm_cron_re
+    qm_cron_re='/usr/bin/qmanager_|# qmanager_(tower_schedule|scheduled_reboot|auto_update|profile_scenario|low_power)|qmanager_low_power|^# QManager (Tower Lock Schedule|Scheduled Reboot|Profile Scenario Schedule|Low Power Mode)'
+    if crontab -l 2>/dev/null | grep -qE "$qm_cron_re"; then
+        crontab -l 2>/dev/null | grep -vE "$qm_cron_re" | crontab - 2>/dev/null || true
         info "Removed qmanager cron jobs"
     fi
 }
