@@ -6,6 +6,10 @@
 # extract only the nfqws binary for the detected architecture, install to
 # /usr/bin/nfqws, and verify it works. Skips the full zapret package to avoid
 # opkg dependency issues on custom firmware.
+#
+# The release is pinned by tag AND sha256: nfqws runs as root, so a moved
+# "latest" or a tampered asset must never install. To bump, take the asset's
+# digest from the GitHub release (and re-hash the download to confirm it).
 
 . /usr/lib/qmanager/qlog.sh
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
@@ -19,7 +23,9 @@ INSTALL_DIR="/usr/bin"
 NFQWS_BIN="$INSTALL_DIR/nfqws"
 # B4.1: root-owned work dir under /var/run (the binary is extracted and installed as root)
 TMP_DIR="/var/run/qmanager/dpi_download"
-GITHUB_API="https://api.github.com/repos/bol-van/zapret/releases/latest"
+ZAPRET_TAG="v72.13"
+ZAPRET_SHA256="b2a9f454523264899e0e7ba19c662e59e29fb20ebb354aa3631cd76885f4c2e6"
+ZAPRET_URL="https://github.com/bol-van/zapret/releases/download/${ZAPRET_TAG}/zapret-${ZAPRET_TAG}-openwrt-embedded.tar.gz"
 
 # Write PID for singleton check (fail closed without the safe_tmp helpers)
 if ! command -v qm_atomic_write >/dev/null 2>&1 || ! qm_run_dir >/dev/null; then
@@ -72,57 +78,9 @@ if [ -z "$arch" ]; then
     exit 1
 fi
 qlog_info "Detected architecture: $arch"
-write_result "running" "Architecture: $arch" "Fetching latest release..."
+write_result "running" "Architecture: $arch" "Preparing download..."
 
-# Step 2: Get latest release tarball URL
-# Look for the openwrt-embedded tarball (smaller, contains only binaries)
-qlog_info "Querying GitHub API for latest zapret release"
-release_json=$(curl -s -L -H "User-Agent: QManager" -w '\n%{http_code}' "$GITHUB_API" 2>/dev/null)
-
-# Split response body from HTTP status code (last line)
-http_code=$(echo "$release_json" | tail -1)
-release_json=$(echo "$release_json" | sed '$d')
-
-if [ -z "$release_json" ]; then
-    write_result "error" "Failed to reach GitHub API" "Check internet connection"
-    exit 1
-fi
-
-# Check for GitHub API errors (rate limiting, auth issues, etc.)
-api_error=$(echo "$release_json" | jq -r '.message // empty' 2>/dev/null)
-if [ -n "$api_error" ] && [ -z "$(echo "$release_json" | jq -r '.assets // empty' 2>/dev/null)" ]; then
-    qlog_error "GitHub API error (HTTP $http_code): $api_error"
-    write_result "error" "GitHub API error (HTTP $http_code)" "$api_error"
-    exit 1
-fi
-
-release_tag=$(echo "$release_json" | jq -r '.tag_name // empty' 2>/dev/null)
-qlog_info "Latest release: ${release_tag:-unknown} (HTTP $http_code)"
-
-# List available assets for debugging
-asset_names=$(echo "$release_json" | jq -r '.assets[].name' 2>/dev/null)
-qlog_info "Release assets: $asset_names"
-
-# Note: jq test() requires oniguruma regex which many OpenWRT jq builds lack.
-# Use endswith()/contains() instead — they are built-in and always available.
-tarball_url=$(echo "$release_json" | jq -r '.assets[] | select(.name | endswith("-openwrt-embedded.tar.gz")) | .browser_download_url' 2>/dev/null)
-
-if [ -z "$tarball_url" ]; then
-    # Fallback: try any .tar.gz asset (skip sha256sum.txt, .zip)
-    tarball_url=$(echo "$release_json" | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url' 2>/dev/null | head -1)
-fi
-
-if [ -z "$tarball_url" ]; then
-    asset_count=$(echo "$release_json" | jq '.assets | length' 2>/dev/null)
-    qlog_error "No matching tarball in ${asset_count:-0} assets: $asset_names"
-    write_result "error" "No compatible release found" "Release $release_tag has ${asset_count:-0} assets, none match expected pattern. Check /tmp/qmanager.log"
-    exit 1
-fi
-
-qlog_info "Found release $release_tag: $tarball_url"
-write_result "running" "Downloading zapret $release_tag..." ""
-
-# Step 3: Download tarball
+# Step 2: Download the pinned openwrt-embedded tarball (smaller, binaries only)
 if ! type qm_root_dir >/dev/null 2>&1 || ! qm_run_dir >/dev/null || ! qm_root_dir "$TMP_DIR" 0700; then
     qlog_error "Cannot create root-owned work dir $TMP_DIR"
     write_result "error" "Download failed" "Could not prepare work directory"
@@ -130,8 +88,12 @@ if ! type qm_root_dir >/dev/null 2>&1 || ! qm_run_dir >/dev/null || ! qm_root_di
 fi
 tarball="$TMP_DIR/zapret.tar.gz"
 
-if ! curl -s -L -o "$tarball" "$tarball_url" 2>/dev/null; then
-    write_result "error" "Download failed" "Could not download $tarball_url"
+qlog_info "Downloading zapret $ZAPRET_TAG: $ZAPRET_URL"
+write_result "running" "Downloading zapret $ZAPRET_TAG..." ""
+
+if ! curl -fsSL --proto =https --proto-redir =https -H "User-Agent: QManager" \
+        -o "$tarball" "$ZAPRET_URL" 2>/dev/null; then
+    write_result "error" "Download failed" "Could not download zapret $ZAPRET_TAG"
     exit 1
 fi
 
@@ -142,6 +104,22 @@ if [ ! -s "$tarball" ]; then
 fi
 
 qlog_info "Downloaded tarball ($(wc -c < "$tarball") bytes)"
+
+# Step 3: Verify the pinned sha256 before tar touches the archive (fail closed)
+write_result "running" "Verifying download..." ""
+if ! command -v sha256sum >/dev/null 2>&1; then
+    qlog_error "sha256sum not available, refusing to install unverified nfqws"
+    write_result "error" "Verification failed" "Cannot verify the download on this device"
+    exit 1
+fi
+actual_sha=$(sha256sum "$tarball" 2>/dev/null | awk '{ print $1 }')
+if [ "$actual_sha" != "$ZAPRET_SHA256" ]; then
+    qlog_error "SHA-256 mismatch for zapret $ZAPRET_TAG: expected=$ZAPRET_SHA256 actual=${actual_sha:-none}"
+    write_result "error" "Verification failed" "Download does not match the expected checksum"
+    exit 1
+fi
+qlog_info "SHA-256 verified (zapret $ZAPRET_TAG)"
+
 write_result "running" "Extracting nfqws binary..." ""
 
 # Step 4: Extract only the nfqws binary for our architecture
@@ -184,6 +162,6 @@ if ! qm_durable_write "$NFQWS_BIN" 0755 < "$extracted"; then
 fi
 
 qlog_info "nfqws installed successfully: $nfqws_version"
-write_result "complete" "nfqws installed successfully" "$release_tag"
+write_result "complete" "nfqws installed successfully" "$ZAPRET_TAG"
 
 exit 0
