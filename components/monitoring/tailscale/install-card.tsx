@@ -54,7 +54,8 @@ const renderCheckGlyph = (className: string) => (
   <CheckIcon size={SEGMENTED.GLYPH} className={className} aria-hidden="true" />
 );
 
-const SOURCES: readonly TailscaleInstallSource[] = ["official", "tiny"];
+// Tiny first: it is the default wherever the firmware offers it.
+const SOURCES: readonly TailscaleInstallSource[] = ["tiny", "official"];
 
 export function InstallCard({
   installResult,
@@ -70,7 +71,7 @@ export function InstallCard({
 }) {
   const { t } = useTranslation("common");
   const running = installResult.status === "running";
-  const [picked, setPicked] = React.useState<TailscaleInstallSource>("official");
+  const [picked, setPicked] = React.useState<TailscaleInstallSource>("tiny");
   const source: TailscaleInstallSource = tinyAvailable ? picked : "official";
   const showLog =
     running ||
