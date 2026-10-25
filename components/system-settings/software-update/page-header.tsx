@@ -44,7 +44,8 @@ export function PageHeader({
   // nothing at all.
   const runFailed =
     failed && (failure?.kind === "download" || failure?.kind === "install");
-  const offersCheck = !running && !runFailed;
+  // A package install is updated by the package manager, never checked here.
+  const offersCheck = !running && !runFailed && view !== "managed";
 
   const label = failed
     ? t(`${K}.actions.try_again`)
@@ -57,7 +58,11 @@ export function PageHeader({
     <motion.header variants={staggerItem} className={PAGE_HEAD.ROOT}>
       <div className={PAGE_HEAD.TITLES}>
         <h1 className={PAGE_HEAD.TITLE}>{t(`${K}.page.title`)}</h1>
-        <p className={PAGE_HEAD.DESC}>{t(`${K}.page.description`)}</p>
+        <p className={PAGE_HEAD.DESC}>
+          {view === "managed"
+            ? t(`${K}.page.description_managed`)
+            : t(`${K}.page.description`)}
+        </p>
       </div>
 
       <div className={PAGE_HEAD.ACTIONS}>

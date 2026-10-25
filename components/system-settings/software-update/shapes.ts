@@ -4,6 +4,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  BoxesIcon,
   CheckCircle2Icon,
   CircleDashedIcon,
   CloudOffIcon,
@@ -15,6 +16,7 @@ import {
   PackageCheckIcon,
   PackageIcon,
   PackageOpenIcon,
+  PackageSearchIcon,
   RefreshCwIcon,
   RotateCwIcon,
   ServerOffIcon,
@@ -478,7 +480,8 @@ export type LatestState =
   | "check_failed"
   | "download_failed"
   | "install_failed"
-  | "never_checked";
+  | "never_checked"
+  | "managed";
 
 export const LATEST_FACE: Record<LatestState, Face> = {
   up_to_date: { tone: "success", glyph: CheckCircle2Icon },
@@ -494,6 +497,8 @@ export const LATEST_FACE: Record<LatestState, Face> = {
   download_failed: { tone: "destructive", glyph: XCircleIcon },
   install_failed: { tone: "destructive", glyph: OctagonAlertIcon },
   never_checked: { tone: "neutral", glyph: HelpCircleIcon },
+  // Not a verdict: the package manager owns the question, this page does not.
+  managed: { tone: "neutral", glyph: PackageSearchIcon },
 };
 
 export type AutoState = "on" | "off";
@@ -521,6 +526,9 @@ export const ANCHOR_CHIP: Record<
   staged: { variant: "success", glyph: PackageIcon },
   installing: { variant: "info", glyph: PackageOpenIcon },
   rebooting: { variant: "info", glyph: RotateCwIcon, spin: true },
+  // The page swaps the anchor card out on a package install; this is the
+  // band's fact chip, kept here so the record stays exhaustive.
+  managed: { variant: "info", glyph: BoxesIcon },
 };
 
 /**

@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   AlertCircleIcon,
+  BoxesIcon,
   CloudOffIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -145,6 +146,7 @@ export function StatusBand({
   const runFailed =
     failed && (failure?.kind === "download" || failure?.kind === "install");
   const running = view === "installing" || view === "rebooting";
+  const managed = view === "managed";
 
   // --- Installed -----------------------------------------------------------
   const installed = installedState(info);
@@ -152,7 +154,9 @@ export function StatusBand({
   const installedCaption =
     installed === "interrupted"
       ? t(`${K}.band.installed.caption_interrupted`)
-      : t(`${K}.band.installed.caption_${channelKey(info)}`);
+      : managed
+        ? t(`${K}.band.installed.caption_package`)
+        : t(`${K}.band.installed.caption_${channelKey(info)}`);
 
   // --- Latest release ------------------------------------------------------
   const latest = latestState(view, lastChecked, failure);
@@ -180,6 +184,8 @@ export function StatusBand({
         return t(`${K}.band.latest.caption_failed_download`);
       case "install_failed":
         return t(`${K}.band.latest.caption_failed_install`);
+      case "managed":
+        return t(`${K}.band.latest.caption_managed`);
       default:
         // An unparseable timestamp reads as never checked, never as "null".
         return state === "never_checked" || ago === null
@@ -213,6 +219,12 @@ export function StatusBand({
               {t(`${K}.band.chip_offline`)}
             </Badge>
           ))}
+        {managed && (
+          <Badge variant="info">
+            <BoxesIcon className={BAND.GLYPH} aria-hidden="true" />
+            {t(`${K}.band.chip_managed`)}
+          </Badge>
+        )}
       </div>
 
       {/* NO `aria-live` here: the Latest tile's caption re-reads the wall clock
@@ -261,11 +273,19 @@ export function StatusBand({
               glyph={latestFace.glyph}
               tone={latestFace.tone}
               spin={latestFace.spin}
-              eyebrow={t(`${K}.band.latest.eyebrow`)}
-              value={info?.latest_version ?? VALUE_NONE}
-              mono
+              eyebrow={
+                managed
+                  ? t(`${K}.band.latest.eyebrow_managed`)
+                  : t(`${K}.band.latest.eyebrow`)
+              }
+              value={
+                managed
+                  ? t(`${K}.band.latest.value_managed`)
+                  : (info?.latest_version ?? VALUE_NONE)
+              }
+              mono={!managed}
               valueLabel={
-                info?.latest_version
+                managed || info?.latest_version
                   ? undefined
                   : t(`${K}.band.latest.value_none_label`)
               }
@@ -277,7 +297,11 @@ export function StatusBand({
               spin={autoFace.spin}
               eyebrow={t(`${K}.band.auto.eyebrow`)}
               value={t(`${K}.band.auto.value_${autoState}`)}
-              caption={t(`${K}.band.auto.caption_${autoState}`)}
+              caption={
+                managed
+                  ? t(`${K}.band.auto.caption_managed`)
+                  : t(`${K}.band.auto.caption_${autoState}`)
+              }
             />
           </motion.div>
         )}

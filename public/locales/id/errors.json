@@ -132,6 +132,7 @@
   "not_installed": "Layanan yang diperlukan tidak terinstal",
   "other_scan_running": "Pemindaian lain sedang menggunakan modem. Tunggu hingga selesai, lalu coba lagi.",
   "other_vpn_installed": "Layanan VPN lain sudah terinstal",
+  "package_managed": "QManager terpasang sebagai paket perangkat lunak. Perbarui melalui pengelola paket.",
   "parse_failed": "Gagal menguraikan respons perintah",
   "partial_apply": "Profil diterapkan dengan beberapa langkah gagal — periksa progres penerapan untuk detailnya",
   "partial_failure": "Beberapa item berhasil tetapi yang lain gagal",

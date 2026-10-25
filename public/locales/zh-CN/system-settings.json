@@ -186,7 +186,8 @@
   "software_update": {
     "page": {
       "title": "软件更新",
-      "description": "QManager 会检查 GitHub 上是否有更新的版本，并直接在调制解调器上安装。安装会替换应用并重启设备，因此您正在阅读本页的会话会中断，随后自动恢复。"
+      "description": "QManager 会检查 GitHub 上是否有更新的版本，并直接在调制解调器上安装。安装会替换应用并重启设备，因此您正在阅读本页的会话会中断，随后自动恢复。",
+      "description_managed": "QManager 以软件包形式安装，因此其更新来自软件包管理器。"
     },
     "actions": {
       "check": "检查更新",
@@ -207,12 +208,14 @@
     "band": {
       "head": "更新状态",
       "chip_offline": "离线",
+      "chip_managed": "软件包安装",
       "chip_in_progress": "进行中",
       "installed": {
         "eyebrow": "已安装",
         "caption_stable": "稳定版通道",
         "caption_prerelease": "预发布通道",
-        "caption_interrupted": "安装可能不完整"
+        "caption_interrupted": "安装可能不完整",
+        "caption_package": "以软件包形式安装"
       },
       "latest": {
         "eyebrow": "最新版本",
@@ -226,14 +229,18 @@
         "caption_downloading_plain": "正在下载安装包…",
         "caption_verifying": "正在校验安装包…",
         "caption_failed_download": "下载未能完成",
-        "caption_failed_install": "安装未能完成"
+        "caption_failed_install": "安装未能完成",
+        "eyebrow_managed": "更新",
+        "value_managed": "软件包管理器",
+        "caption_managed": "不在此页面检查"
       },
       "auto": {
         "eyebrow": "自动更新",
         "value_on": "开启",
         "value_off": "关闭",
         "caption_on": "每天在随机时间检查一次",
-        "caption_off": "仅手动更新"
+        "caption_off": "仅手动更新",
+        "caption_managed": "软件包安装不支持此功能"
       },
       "chip_failed": "失败"
     },
@@ -398,6 +405,14 @@
       "unreachable": {
         "title": "无法访问更新服务",
         "description": "QManager 无法访问本调制解调器上的更新接口。已安装的版本未被改动，这只是一次读取失败，并非损失。"
+      }
+    },
+    "managed": {
+      "title": "通过软件包管理器更新",
+      "description": "像其他软件包一样，在 LuCI 的软件页面中升级 QManager。",
+      "package": {
+        "label": "软件包",
+        "description": "它在软件包列表中的名称。"
       }
     },
     "time": {

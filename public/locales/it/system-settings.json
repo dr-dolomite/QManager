@@ -186,7 +186,8 @@
   "software_update": {
     "page": {
       "title": "Aggiornamento software",
-      "description": "QManager controlla su GitHub se esiste una release più recente e la installa sul modem stesso. L'installazione sostituisce l'app e riavvia il dispositivo, quindi la sessione in cui stai leggendo cadrà e tornerà da sola."
+      "description": "QManager controlla su GitHub se esiste una release più recente e la installa sul modem stesso. L'installazione sostituisce l'app e riavvia il dispositivo, quindi la sessione in cui stai leggendo cadrà e tornerà da sola.",
+      "description_managed": "QManager è stato installato come pacchetto software, quindi gli aggiornamenti arrivano dal gestore pacchetti."
     },
     "actions": {
       "check": "Controlla aggiornamenti",
@@ -207,12 +208,14 @@
     "band": {
       "head": "Stato dell'aggiornamento",
       "chip_offline": "Offline",
+      "chip_managed": "Installazione da pacchetto",
       "chip_in_progress": "In corso",
       "installed": {
         "eyebrow": "Installata",
         "caption_stable": "Canale stabile",
         "caption_prerelease": "Canale versioni preliminari",
-        "caption_interrupted": "L'installazione potrebbe essere incompleta"
+        "caption_interrupted": "L'installazione potrebbe essere incompleta",
+        "caption_package": "Installata come pacchetto software"
       },
       "latest": {
         "eyebrow": "Ultima release",
@@ -226,14 +229,18 @@
         "caption_downloading_plain": "Download del pacchetto in corso…",
         "caption_verifying": "Controllo del pacchetto…",
         "caption_failed_download": "Il download non è stato completato",
-        "caption_failed_install": "L'installazione non è stata completata"
+        "caption_failed_install": "L'installazione non è stata completata",
+        "eyebrow_managed": "Aggiornamenti",
+        "value_managed": "Gestore pacchetti",
+        "caption_managed": "Non controllati da questa pagina"
       },
       "auto": {
         "eyebrow": "Aggiornamenti automatici",
         "value_on": "Attivi",
         "value_off": "Disattivati",
         "caption_on": "Controllo giornaliero a un orario casuale",
-        "caption_off": "Solo aggiornamenti manuali"
+        "caption_off": "Solo aggiornamenti manuali",
+        "caption_managed": "Non disponibili per un'installazione da pacchetto"
       },
       "chip_failed": "Non riuscito"
     },
@@ -398,6 +405,14 @@
       "unreachable": {
         "title": "Impossibile raggiungere il servizio di aggiornamento",
         "description": "QManager non è riuscito a raggiungere l'endpoint di aggiornamento su questo modem. La build installata è intatta: è un errore di lettura, non una perdita."
+      }
+    },
+    "managed": {
+      "title": "Aggiornamenti tramite il gestore pacchetti",
+      "description": "Aggiorna QManager dalla pagina Software di LuCI, come qualsiasi altro pacchetto.",
+      "package": {
+        "label": "Pacchetto",
+        "description": "Il suo nome nell'elenco dei pacchetti."
       }
     },
     "time": {

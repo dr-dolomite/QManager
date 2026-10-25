@@ -61,6 +61,7 @@ const NOTICE_COPY: Record<
   staged: "staged",
   installing: "running",
   rebooting: "running",
+  managed: null,
 };
 
 /** Whether the strip has a second version to offer. */
@@ -75,6 +76,7 @@ const SHOWS_NEXT: Record<UpdateView, boolean> = {
   staged: true,
   installing: true,
   rebooting: true,
+  managed: false,
 };
 
 export interface UpdateCardProps {

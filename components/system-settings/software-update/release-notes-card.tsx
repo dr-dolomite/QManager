@@ -60,6 +60,7 @@ const SHOWS_NEXT: Record<UpdateView, boolean> = {
   staged: true,
   installing: true,
   rebooting: true,
+  managed: false,
 };
 
 export interface ReleaseNotesCardProps {

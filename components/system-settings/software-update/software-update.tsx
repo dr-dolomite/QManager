@@ -21,6 +21,7 @@ import { useSoftwareUpdate } from "@/hooks/use-software-update";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
 import { AnchorCardSkeleton, NotesCardSkeleton } from "./card-skeleton";
+import ManagedCard from "./managed-card";
 import PageHeader from "./page-header";
 import ReleaseNotesCard from "./release-notes-card";
 import StatusBand from "./status-band";
@@ -202,6 +203,15 @@ export function SoftwareUpdate(): React.JSX.Element {
             retryLabel={t(`${K}.actions.retry`)}
             className={ERROR_STATE.BLOCK}
           />
+        </motion.div>
+      ) : view === "managed" ? (
+        <motion.div
+          className="contents"
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+        >
+          <ManagedCard info={updateInfo} />
         </motion.div>
       ) : (
         // `display: contents` keeps these in the page's flex column while

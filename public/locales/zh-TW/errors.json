@@ -132,6 +132,7 @@
   "not_installed": "未安裝必需的服務",
   "other_scan_running": "另一項掃描正在使用調變解調器。請等待其完成後再試。",
   "other_vpn_installed": "已安裝另一個 VPN 服務",
+  "package_managed": "QManager 以套件形式安裝，請透過套件管理員更新。",
   "parse_failed": "解析命令響應失敗",
   "partial_apply": "配置已部分套用，但部分步驟失敗 — 請檢視套用進度瞭解詳情",
   "partial_failure": "某些專案成功但其他專案失敗",
