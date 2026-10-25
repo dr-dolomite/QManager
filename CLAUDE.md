@@ -106,6 +106,7 @@ Each doc holds invariants the code doesn't show. CGI / hook / type / reboot tabl
 - `web-port.md`: `web_port.sh`, `qmanager_web_port`, `system/web_port.sh`, `quecmanager.web.*`, installer `prompt_web_port`, `lib/web-port.ts`
 - `lan-config.md`: `network/lan_config.sh`, `use-lan-config.ts`, `lan-config-card.tsx`, self-severing apply
 - `bandwidth-monitor.md`: retired; `retire_bandwidth_monitor()` upgrade cleanup in `install.sh`
+- `ipk-packaging.md`: `sdxpinn-qmanager` opkg package (SDXPINN feed), `scripts-dev/ipk/`, `bun run package:ipk`, `install.sh --configure` / `QM_INSTALL_ENTRY=ipk_preinst`, `uninstall.sh --deconfigure`, `--ignore-package`, `/usr/share/qmanager/manifest`, `/tmp/qmanager_pending_reboot_package`, `managed_by` / `package_managed`, tarball/OTA mutual exclusion
 
 `docs/reference/`:
 - `ttl-mtu.md`: `/local-network/ttl-settings`, `ttl-mtu-settings/**`, `network/ttl.sh` / `mtu.sh`, SIM-profile TTL hold
