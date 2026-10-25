@@ -93,9 +93,11 @@ Details of the page contract are in [`../reference/software-update.md`](../refer
 
 ### Uninstall (`--deconfigure`) is a full removal that keeps `/etc/qmanager` and UCI
 
-`--deconfigure` = `--force --keep-config --no-reboot`. The code path is the ordinary uninstall: `stop_services`, `remove_services`, `remove_backend`, `remove_frontend`, `remove_runtime_state`. That stops and disables services, restores uhttpd to 80/443 if QManager moved it, tears down nft/sysctl/Tailscale state, strips cron lines, **deletes the packaged files**, restores LuCI's `index.html`, and clears `/tmp/qmanager_*` including both package hand-off files. Unlike a tarball uninstall, package mode **keeps the `quecmanager` UCI config** (`/etc/config/quecmanager`), as OpenWrt packages keep `/etc/config`, so a reinstall picks the settings back up (`seed_uci_defaults` only adds). `/etc/qmanager` (password hash, profiles, locks, backups) is kept too. An **upgrade** skips the prerm entirely.
+`--deconfigure` = `--force --keep-config --no-reboot`. The code path is the ordinary uninstall: `stop_services`, `remove_services`, `remove_backend`, `remove_frontend`, `remove_runtime_state`. That stops and disables services, restores uhttpd to 80/443 if QManager moved it, tears down nft/sysctl/Tailscale state, **deletes the packaged files**, restores LuCI's `index.html`, and clears `/tmp/qmanager_*` including both package hand-off files. Unlike a tarball uninstall, package mode **keeps the whole `quecmanager` UCI config** (`/etc/config/quecmanager`, the `tailscale_net` section included), as OpenWrt packages keep `/etc/config`, so a reinstall picks the settings back up (`seed_uci_defaults` only adds). `/etc/qmanager` (password hash, profiles, locks, backups) is kept too. An **upgrade** skips the prerm entirely.
 
-> ⚠️ WARNING: Because prerm already deleted the files, opkg's own deletion pass sees paths that are gone. Whether this stays silent on the device's opkg is not verified (see below).
+Package mode also **keeps QManager's cron lines** (scheduled reboot, tower schedule, auto-update, scenario schedule). **Why:** only a settings save writes them, so stripping them while UCI says "enabled" left a reinstall showing a scheduled reboot that never fired (seen on device). With `/usr/bin/qmanager_*` gone they do nothing, and they fire again after a reinstall.
+
+Prerm deletes the files before opkg's own deletion pass. On the device opkg treats the paths that are already gone as a silent no-op: `opkg remove` exits 0, prints nothing extra, and leaves none of the 829 listed paths behind (verified 2026-10-26).
 
 ## Building
 
@@ -150,14 +152,20 @@ See [`../reference/software-update.md`](../reference/software-update.md). Summar
 
 The tarball path in `install.sh`, `--configure`, `uninstall.sh` `--deconfigure` and the update path must stay in sync. A new service, `/tmp` file, reload flag, symlink or UCI key goes into **both** the tarball steps and the `--configure` / `--deconfigure` steps (usually one shared function, as with `seed_runtime_files`). A new payload directory also needs a row in `assemble_ipk_source.py` `target_for`, otherwise the build fails with "no package path" (by design).
 
+## Verified on device (RM551E, 2026-10-26)
+
+Install over a tarball v0.1.35 install, `opkg remove`, then reinstall:
+
+- **Tarball-to-package migration works.** `opkg install` exits 0; opkg overwrites the tarball's files, and `--configure` pruned 124 stale `/www` files (old Next.js chunks) while keeping LuCI's `cgi-bin` and `luci-static`. `qmanager`, `qmanager_atd` and `qmanager_sites` run; `/www/index.html` is QManager's and `index.html.old` is LuCI's 838 B page; `VERSION` = `v0.1.35`, no `VERSION.pending`; no watchcat lock left; UCI choices preserved.
+- Software Update GET returns `managed_by:"opkg"`; POST `download` returns `package_managed`; `sh /usr/share/qmanager/install.sh` refuses with exit 1; `system/pending_reboot.sh` reports `package:true` once, then `false`.
+- **`opkg remove`**: exit 0, LuCI's `index.html` back, no QManager processes, no payload path left, `/etc/qmanager` kept. The UCI keep and the cron keep above came out of this run: the first remove dropped `tailscale_net` and the cron lines, and both were fixed afterwards. The reinstall with the fix came back to the same 66-line UCI.
+- `/etc/qmanager/VERSION` is removed on deconfigure and rewritten by the next install (expected).
+
 ## Known unverified assumptions
 
-These were not exercised on a live device when this was written; the plan reserved them for a spare unit.
-
-1. **opkg and files prerm already deleted.** `--deconfigure` removes the packaged files before opkg's deletion pass. Whether the device's opkg treats the missing paths as a no-op (expected) or warns/fails is untested.
-2. **`Replaces` auto-removal of an old QuecManager package.** The test unit never had `sdxpinn-quecmanager(-beta)` installed, so `Conflicts`+`Replaces` removing it on install is untested. If it does not, `opkg remove` the old package first.
-3. **Tarball-to-package migration** relies on opkg overwriting existing files it does not own.
-4. **Feed CI end to end.** The workflow was built and rehearsed separately; this repo only produces the inputs.
+1. **`Replaces` auto-removal of an old QuecManager package.** The test unit never had `sdxpinn-quecmanager(-beta)` installed, so `Conflicts`+`Replaces` removing it on install is untested. If it does not, `opkg remove` the old package first.
+2. **The cron keep on package removal** was written after the device run. It needs one more `opkg remove` to confirm.
+3. **Feed CI against Cameron's real key and branch protection.** The workflow passed a full rehearsal in a fork with a throwaway key (build, sign, verify, idempotent re-run); the sign job's failure paths are not exercised.
 
 ## Related
 
