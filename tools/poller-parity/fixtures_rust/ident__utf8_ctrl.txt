@@ -1,4 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+COPS: 0,0,"Glöbe\\",7
-
-OK

@@ -1,4 +1,0 @@
-AT+QCAINFO
-+QCAINFO: "PCC",nan,100,"LTE BAND 1",1,1,1,1,1,1
-
-OK

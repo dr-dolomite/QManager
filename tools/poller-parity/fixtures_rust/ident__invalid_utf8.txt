@@ -1,6 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+COPS: 0,0,"AÿþBÃ",7
-
-+CNUM: ,"ÿ",129
-
-OK

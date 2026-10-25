@@ -1,6 +1,0 @@
-AT+QRSRP;+QRSRQ;+QSINR
-+QRSRP: -Ene,-ne,-,-32768,NR5G
-
-+QRSRQ: -32768x,+5,0x10,-0,NR5G
-
-OK

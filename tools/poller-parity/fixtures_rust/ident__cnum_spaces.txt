@@ -1,4 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+CNUM: "me", "1 2 3" ,129
-
-OK

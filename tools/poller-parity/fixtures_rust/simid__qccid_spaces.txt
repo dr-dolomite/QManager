@@ -1,4 +1,0 @@
-AT+CIMI;+QCCID
-+QCCID:  89 63 00 
-
-OK

@@ -1,4 +1,0 @@
-AT+QENG="servingcell"
-+QENG: "servingcell","CONNECT","LTE","FDD",$(touch /tmp/pp_pwned),'q',`id`,;,\\,$HOME,5,5,A1B2,-9,-1,-6,1"'"
-
-OK

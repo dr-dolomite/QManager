@@ -1,4 +1,0 @@
-AT+QENG="servingcell"
-+QENG:
-
-OK

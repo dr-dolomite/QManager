@@ -1,6 +1,0 @@
-AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?
-+CNUM: ,"",129
-
-+CPIN: READY
-
-OK
