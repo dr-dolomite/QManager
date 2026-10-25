@@ -87,6 +87,8 @@ While `/usr/lib/opkg/info/sdxpinn-qmanager.control` exists, every non-opkg write
 | `system/update.sh` GET | Returns early with `managed_by: "opkg"`, `package_name: "sdxpinn-qmanager"`, `update_available: false`, `auto_update_enabled: false`, and every GitHub-derived field `null`/empty (no network call). The tarball branches emit `managed_by: "tarball"`. |
 | `system/update.sh` POST | `download`, `install_staged`, `install`, `rollback`, `save_auto_update` return `cgi_error "package_managed"` (HTTP 200 envelope). `save_prerelease` is not gated. |
 
+`--ignore-package` only bypasses the installer guards. While `/usr/lib/opkg/info/sdxpinn-qmanager.control` exists, Software Update and auto-update stay in the `managed` state; run `opkg remove` first to hand updates back to the app.
+
 Details of the page contract are in [`../reference/software-update.md`](../reference/software-update.md); the error key is in [`error-codes.md`](error-codes.md).
 
 ### Uninstall (`--deconfigure`) is a full removal that keeps `/etc/qmanager`
