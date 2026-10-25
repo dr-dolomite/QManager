@@ -66,6 +66,7 @@ The console's composite, SINR leg and Receive Chains stay on the per-port 2 s sn
 ## Gotchas
 
 - `CONSOLE_SPLIT` must not get `items-start`: the sticky console needs its column to stretch, or it never pins.
+- Receive Chains lives in the work column under Positions (moved back from a full-width row on 2026-10-25, once the live lead made the console ~620px tall). Each column has one slack absorber: the live trace on the console (`LIVE.SPARK_SLOT`, 48 to 192px) and the Chains card in the work column (`CARD_FILL`). Never give Positions `h-full` again: in a two-card column it claims the whole column. Its grid steps on `@container/card` (`PORT.CONTAINER`), not on `@container/main`.
 - Receive Chains draws LTE / NR rows from the surface-level radio mode, never from whether a port currently reports, so a dropping chain shows "Not reported" rather than vanishing.
 - Port blocks on Statistics stay mounted at a pinned height and say "Not reporting"; chains drop in and out several times an hour and a collapsing block would make the card jump.
 - Card order on Statistics comes from `network.type` (`5G-SA` puts NR first), not from which radio has readings, because per-antenna presence flaps.
