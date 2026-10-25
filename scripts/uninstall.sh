@@ -481,6 +481,13 @@ remove_backend() {
     # system/settings.sh, system/update.sh and scenario_mgr.sh, plus the
     # legacy low-power lines. A new cron writer must extend this pattern.
     # A user's line that merely mentions QManager is kept.
+    # A package removal keeps them with the UCI config they mirror (only a
+    # settings save writes them): they no-op while /usr/bin/qmanager_* is gone
+    # and fire again after a reinstall.
+    if [ "$DO_PACKAGE" = "1" ]; then
+        info "Kept qmanager cron jobs for a reinstall"
+        return 0
+    fi
     local qm_cron_re
     qm_cron_re='/usr/bin/qmanager_|# qmanager_(tower_schedule|scheduled_reboot|auto_update|profile_scenario|low_power)|qmanager_low_power|^# QManager (Tower Lock Schedule|Scheduled Reboot|Profile Scenario Schedule|Low Power Mode)'
     if crontab -l 2>/dev/null | grep -qE "$qm_cron_re"; then
