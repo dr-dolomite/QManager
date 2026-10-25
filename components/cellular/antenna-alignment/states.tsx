@@ -84,21 +84,22 @@ export function AlignmentSkeleton({ label }: { label?: string }) {
           <Card className={CONSOLE.SHELL}>
             <HeaderGhost />
 
-            <div className="flex flex-col gap-5">
-              {/* The composite numeral, its verdict chip, and the 8px meter. */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-end justify-between gap-4">
-                  <Skeleton className={SKELETON_SHAPE.SCORE} />
-                  <Skeleton className={SKELETON_SHAPE.CHIP} />
-                </div>
-                <Skeleton className={SKELETON_SHAPE.METER} />
+            {/* The console without its live lead, which arrives on its own
+                channel after the snapshot: the score section's key and "Now"
+                row, then the legs under their chain label on the bottom edge. */}
+            <div className="flex flex-1 flex-col gap-5">
+              <div className={CONSOLE.SECTION}>
+                <Skeleton className={SKELETON_SHAPE.KEY} />
+                <Skeleton className={SKELETON_SHAPE.SLOT_ROW} />
               </div>
 
-              {/* The two weighted leg rows. */}
-              <div className="flex flex-col gap-2">
-                {[0, 1].map((i) => (
-                  <Skeleton key={i} className={SKELETON_SHAPE.LEG_ROW} />
-                ))}
+              <div className={cn(CONSOLE.SECTION, "mt-auto")}>
+                <Skeleton className={SKELETON_SHAPE.KEY} />
+                <div className={CONSOLE.LEGS}>
+                  {[0, 1].map((i) => (
+                    <Skeleton key={i} className={SKELETON_SHAPE.LEG_ROW} />
+                  ))}
+                </div>
               </div>
             </div>
           </Card>

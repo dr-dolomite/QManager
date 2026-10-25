@@ -2094,9 +2094,11 @@ Tailscale VPN status and configuration. Full contract: [`docs/features/tailscale
 | Installed, daemon stopped | `installed:true`, `daemon_running:false`, `version`, `install_variant`, `enabled_on_boot`, `latest_version`, `update_available`, `legacy_build`, `net_fixes_enabled` |
 | Daemon running | All of the above + `backend_state`, `exit_node_advertised`, `ssh_enabled`, `auth_url`, `self`, `tailnet`, `peers`, `health` |
 
-`install_variant` — `"official"` (QManager static tarball from pkgs.tailscale.com), or the legacy `"tiny"` (opkg `tailscale-tiny`) / `"opkg"` (pre-marker). The marker file `/etc/tailscale/.qm_install_method` is authoritative; opkg detection is the fallback. `legacy_build` is `true` for `tiny` and `opkg`. `install_hint` and `install_variants` are gone.
+`install_variant` — `"official"` (QManager static tarball from pkgs.tailscale.com), `"tiny"` (iamromulan's opkg `tailscale-tiny`, installed as-is) or `"opkg"` (any other opkg Tailscale). The marker file `/etc/tailscale/.qm_install_method` is authoritative; the opkg info file is the fallback. `legacy_build` is `true` only for `opkg`. `install_hint` and `install_variants` are gone.
 
-`latest_version` comes from the cache only (the GET never fetches); `update_available` is `true` only on an official install with a newer cached version. `net_fixes_enabled` is UCI `quecmanager.tailscale_net.enabled` (default on).
+`tiny_available` (every non-busy tier) — the firmware already trusts the Tiny build's signed feed (feed line, usign key, `check_signature`, arch `aarch64_cortex-a53`). Gates the install card's source picker.
+
+`latest_version` comes from the cache only (the GET never fetches); `update_available` is `true` on an official or Tiny install with a newer cached version of that source (Tiny compares package versions, so `-rN` rebuilds count). `net_fixes_enabled` is UCI `quecmanager.tailscale_net.enabled` (default on), omitted on Tiny, whose package owns its own network setup.
 
 `exit_node_advertised` — boolean derived from `.Self.ExitNodeOption` in `tailscale status --json`. Present on the Tier-3 (daemon running) response only.
 
@@ -2106,11 +2108,11 @@ Tailscale VPN status and configuration. Full contract: [`docs/features/tailscale
 
 | Action | Required fields | Notes |
 |---|---|---|
-| `install` | `variant` (optional; only `"official"` accepted) | Background; poll `install_status`. `"tiny"` returns `invalid_variant` |
+| `install` | `source` (optional; `"official"` default, or `"tiny"`; `variant` accepted as an alias) | Background; poll `install_status`. Other values return `invalid_variant`; `"tiny"` without `tiny_available` returns `feed_unavailable` |
 | `install_status` | — | Returns `/tmp/qmanager_tailscale_install.json` (`status`, `message`, `detail?`, `error?`, `op`) plus `log` (last 50 lines of `/var/run/qmanager/tailscale_install.log`) |
-| `check_update` | `force` (bool, optional) | Returns `{installed_version, latest_version, update_available, checked_at}`. Cached 6 h (30 min back-off after a failed check); `force` always asks pkgs.tailscale.com |
-| `update` | — | Official builds only. Background; poll `install_status` (`op:"update"`). Stages, swaps, restarts, health-checks, rolls back on failure |
-| `set_net_fixes` | `enabled` (bool) | Writes UCI `quecmanager.tailscale_net.enabled`, returns `{success, enabled}`, then applies or tears down the fw4 zone and the pref-1990 routing rule in the background |
+| `check_update` | `force` (bool, optional) | Returns `{installed_version, latest_version, update_available, checked_at}`. Cached 6 h (30 min back-off after a failed check); `force` always asks the installed source (pkgs.tailscale.com, or the Tiny feed index). `opkg` returns `legacy_build` |
+| `update` | — | Official and Tiny. Background; poll `install_status` (`op:"update"`). Official stages, swaps, restarts; Tiny upgrades through opkg and restores the boot-enable choice; both health-check and roll back on failure |
+| `set_net_fixes` | `enabled` (bool) | Writes UCI `quecmanager.tailscale_net.enabled`, returns `{success, enabled}`, then applies or tears down the fw4 zone and the pref-1990 routing rule in the background. `not_applicable` on an installed Tiny build |
 | `connect` | — | Orphaned double-fork `tailscale up --accept-dns=false --json`; also re-asserts the routing rule |
 | `disconnect` | — | `tailscale down`; stays registered |
 | `logout` | — | `tailscale logout`; removes device from tailnet |
@@ -2119,7 +2121,7 @@ Tailscale VPN status and configuration. Full contract: [`docs/features/tailscale
 | `set_boot_enabled` | `enabled` (bool) | Writes `tailscale.settings.service_enabled` + `init.d enable/disable` |
 | `set_exit_node` | `enabled` (bool) | `tailscale set --advertise-exit-node=<bool>`; requires `BackendState=="Running"` |
 | `set_ssh` | `enabled` (bool) | `tailscale set --ssh=<bool>`; requires `BackendState=="Running"` |
-| `uninstall` | — | Method-aware: tarball path removes binaries + init.d + rc.d + UCI + `/etc/config/tailscale`; opkg path uses smart 6-package removal. Network fixes are torn down after the response |
+| `uninstall` | — | Method-aware: tarball path removes binaries + init.d + rc.d + UCI + `/etc/config/tailscale`; opkg path uses smart 6-package removal (Tiny also drops the `network.tailscale` interface its init created and `/etc/config/tailscale`). Network fixes are torn down after the response |
 
 **Install / update progress shape** (polled via `install_status`):
 

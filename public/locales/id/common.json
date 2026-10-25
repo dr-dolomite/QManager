@@ -524,6 +524,7 @@
       "updateDialogDescription": "Tunnel tersambung ulang selama beberapa detik saat versi baru dimulai.",
       "updateLogTitle": "Log pembaruan",
       "communityBuild": "Build komunitas",
+      "tinyBuild": "Build Tiny",
       "netFixesTitle": "Perbaikan jaringan",
       "netFixesDescription": "Memungkinkan perangkat tailnet Anda menjangkau modem ini dan LAN-nya."
     },
@@ -570,13 +571,27 @@
       "offlineDescription": "Hubungkan Tailscale untuk melihat perangkat lain di tailnet Anda."
     },
     "install": {
-      "title": "Tailscale",
-      "description": "Memasang versi resmi dari Tailscale, mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
-      "conditionTitle": "Tailscale belum terinstal",
-      "conditionDescription": "Instalasi mengunduh paket Tailscale lewat koneksi seluler yang sama dengan sesi ini, jadi ini memakai kuota data Anda dan koneksi akan lebih lambat selama berlangsung.",
+      "title": "Instal Tailscale",
+      "description": "Mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
       "install": "Instal Tailscale",
       "installing": "Menginstal…",
-      "checkAgain": "Periksa lagi",
+      "retry": "Coba lagi",
+      "installingBuild": "Menginstal build {{build}}. Biarkan halaman ini tetap terbuka.",
+      "cost": "Memakai data seluler; koneksi melambat selama berlangsung.",
+      "switchLater": "Untuk berganti nanti, copot lalu pasang ulang.",
+      "sourceLabel": "Build",
+      "sourceHintLabel": "Tentang build",
+      "sourceHint": "Build Tiny membawa layanan dan pengaturan jaringannya sendiri. Build Resmi memakai milik QManager.",
+      "source": {
+        "official": {
+          "title": "Resmi",
+          "description": "Ukuran penuh. Build milik Tailscale sendiri."
+        },
+        "tiny": {
+          "title": "Tiny",
+          "description": "Sekitar setengah ruang flash. Build komunitas dari iamromulan."
+        }
+      },
       "done": "Tailscale terinstal.",
       "failed": "Instalasi tidak selesai.",
       "logTitle": "Log instalasi",
@@ -629,8 +644,8 @@
       "description": "Hanya satu VPN yang dapat diinstal dalam satu waktu. Copot {{other_vpn}} dari <link>halaman NetBird</link> terlebih dahulu."
     },
     "legacy": {
-      "title": "Build komunitas lama",
-      "description": "Modem ini menjalankan build komunitas Tailscale yang lama. Copot lalu pasang ulang untuk beralih ke build resmi."
+      "title": "Build tidak didukung",
+      "description": "Modem ini menjalankan build Tailscale yang tidak dapat diperbarui QManager. Copot lalu pasang ulang untuk memilih build yang didukung."
     }
   },
   "pending_reboot": {

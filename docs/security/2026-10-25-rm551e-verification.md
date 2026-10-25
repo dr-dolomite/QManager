@@ -116,9 +116,17 @@ There is no `discord-bot/` and no bot integration in this repo or in the toolkit
 
 ## Recommended fixes (priority order)
 
-1. **P1: close the #3 gap.** **Done 2026-10-25.** `cgi_base.sh` now installs the fail-closed stubs whenever `require_auth` is undefined after sourcing (`type require_auth`). That covers a missing, empty or truncated library. A harness run under `bash --posix` returned 500 for missing, empty and truncated files, and the old code ran the handler on an empty file. Not yet verified on the device under BusyBox ash.
-2. **P1: drop `-k` in `device/about.sh` (#9).** **Done 2026-10-25.** If no CA bundle is present, the lookup fails and the public IP is left blank.
-3. **P1: pin the zapret version and its SHA-256 in `qmanager_dpi_install` (#6).** **Done 2026-10-25.** Pinned to v72.13, sha256 `b2a9f454…f4c2e6`. The GitHub asset digest and a local re-hash agree. Downloads are HTTPS-only, and the archive is verified before extraction. Not yet run on the device.
+1. **P1: close the #3 gap.** **Done 2026-10-25.** `cgi_base.sh` now installs the fail-closed stubs whenever `require_auth` is undefined after sourcing (`type require_auth`). That covers a missing, empty or truncated library. A harness run under `bash --posix` returned 500 for missing, empty and truncated files, and the old code ran the handler on an empty file. **Verified on the device (BusyBox ash):**
+- With `cgi_auth.sh` emptied, protected endpoints returned `500 auth library unavailable`, with and without a forged cookie.
+- `public/hostname.sh` still returned 200, and `auth/login.sh` turned every password down.
+- After the original was restored (md5 matches), anonymous requests returned 401 again.
+2. **P1: drop `-k` in `device/about.sh` (#9).** **Done 2026-10-25.** If no CA bundle is present, the lookup fails and the public IP is left blank. **Verified on the device:**
+- The IPv4 lookup completed with `ssl_verify_result 0`, and About Device returned the public IPv4.
+- Public IPv6 stayed blank because the unit has no global IPv6 route. It fails the same way with `-k`, so it isn't a TLS problem.
+3. **P1: pin the zapret version and its SHA-256 in `qmanager_dpi_install` (#6).** **Done 2026-10-25.** Pinned to v72.13, sha256 `b2a9f454…f4c2e6`. The GitHub asset digest and a local re-hash agree. Downloads are HTTPS-only, and the archive is verified before extraction. **Verified on the device:**
+- A copy with a wrong hash refused with "Verification failed", installed nothing and cleaned up its work folder.
+- The real run logged `SHA-256 verified (zapret v72.13)` and installed `nfqws` v72.13.
+- `nfqws` was then removed again to restore the unit's prior state, since it hadn't been installed before.
 4. **P2: add a Health Check item for the WAN firewall posture (#2).** It would catch units without sdxpinn-patch 3.x.
 5. **P2: replace the web password hash with an iterated KDF, with migration on next login (#4).**
 6. **P2: optional hardening.** Bind dropbear to LAN, default to an HTTPS redirect, and add the `Secure` cookie flag when served over HTTPS (#2, #4).

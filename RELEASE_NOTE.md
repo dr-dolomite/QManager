@@ -1,6 +1,6 @@
 # 🚀 QManager BETA v0.1.35
 
-v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, plus one new setting: PCIe power saving for the ethernet port, which now defaults to Performance. Modems that shipped with aggressive power saving on the ethernet controller can see dropouts and extra latency on the LAN port, and QManager now keeps that controller fully awake unless you choose otherwise. The dashboard also gets its Data Used total back, now counted from the modem itself.
+v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, plus one new setting: PCIe power saving for the ethernet port, which now defaults to Performance. Modems that shipped with aggressive power saving on the ethernet controller can see dropouts and extra latency on the LAN port, and QManager now keeps that controller fully awake unless you choose otherwise. The dashboard also gets its Data Used total back, now counted from the modem itself. Tailscale installs can now use iamromulan's smaller Tiny build where the firmware supports it.
 
 ## ✨ New Features
 
@@ -8,6 +8,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 - **Real-time signal on Antenna Alignment and the dashboard.** Antenna Alignment now leads with a live signal reading that updates every second, with a 30-second trace and your best position so far, so you can see the effect of each turn as you aim. The dashboard's LTE signal values also refresh every second while you watch them, and both pages quietly fall back to the usual two-second updates if live readings are not available. Live readings only run while the page is open and visible.
 - **PCIe power saving for the ethernet port.** The Ethernet Status page's speed card is now **Ethernet Port** and gains a **PCIe power saving** setting: Performance (recommended), Kernel default, Power saving or Max power saving. Changing it never drops the link, and your choice is reapplied on every boot.
 - **Performance by default.** New installs and upgrades set PCIe power saving to Performance, since the platform's own default can cause ethernet dropouts and added latency. If you have already picked a setting, it is kept.
+- **Choose your Tailscale build.** On modems whose firmware already trusts iamromulan's package feed, the Tailscale install card lets you pick the Official build or the smaller Tiny build, which takes about half the flash space and brings its own service and network setup. Tiny installs, including ones made before this release, can now be updated from the Tailscale page, and your Start on boot choice is kept through every update. To change builds, uninstall and install again.
 
 ## ✅ Improvements
 
@@ -17,6 +18,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 - **Live LTE SINR on the dashboard.** The LTE signal quality (SINR) on the dashboard now updates every second along with the other LTE values while you watch it.
 - **Steadier modem status during scans and SIM switches.** The dashboard keeps showing current LTE signal readings while a network scan or a SIM switch is running, instead of pausing until it finishes.
 - **Antenna Alignment fits on one screen.** Receive Chains now sits under Positions beside the live reading, so on a desktop the whole page is visible without scrolling. Record moved up next to the Directional / Omni switch, and each empty position says "Not recorded" right beside its label.
+- **A calmer Live Aim card.** The live reading is smaller, with how far you are from your best position right beside it and an "At peak" marker when you are there. The aim score now sits in a single row shaped like your recorded positions, and the trace is drawn in a neutral colour. On a phone, the pinned reading now waits until you scroll past the card instead of covering the page title, and it shows the distance to your peak too. Receive Chains uses one full-width column on a phone and a single row on a 1440px screen.
 - **Easier-to-read scan results.** The results summary on Neighbourcell Scan and Full Scan now puts each group's name and cell count on the left and its best signal on the right, with every dBm figure lined up on one edge, so you can compare readings at a glance.
 
 ## 📥 Installation

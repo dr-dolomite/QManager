@@ -192,6 +192,7 @@ export function ConnectionCard({
   const locked = updating || !!status.busy;
 
   const legacyBuild = status.legacy_build ?? false;
+  const tinyBuild = status.install_variant === "tiny";
   // Reported by the CGI on every installed tier; undefined means "not told",
   // in which case the row is left out rather than shown with a guessed state.
   const netFixesKnown = status.net_fixes_enabled !== undefined;
@@ -468,6 +469,10 @@ export function ConnectionCard({
             {legacyBuild ? (
               <Tag variant="neutral" className={HEAD_TAG}>
                 {t("tailscale.connection.communityBuild")}
+              </Tag>
+            ) : tinyBuild ? (
+              <Tag variant="neutral" className={HEAD_TAG}>
+                {t("tailscale.connection.tinyBuild")}
               </Tag>
             ) : null}
             <Button
