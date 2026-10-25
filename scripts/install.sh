@@ -39,7 +39,13 @@
 #   --no-start         Do not start services after install
 #   --no-reboot        Do not reboot after install (OTA path uses this)
 #   --force            Skip modem firmware detection
+#   --ignore-package   Install over an opkg-managed (sdxpinn-qmanager) install
+#   --configure        Package mode: configure files opkg already placed
+#                      (the ipk postinst runs this; never prompts or reboots)
 #   --help, -h         Show this help
+#
+# Package (ipk) builds also embed this script as the preinst, entered through
+# QM_INSTALL_ENTRY=ipk_preinst (see ipk_preinst below and build-ipk.sh).
 # =============================================================================
 
 set -e
@@ -69,6 +75,24 @@ VERSION_PENDING="/etc/qmanager/VERSION.pending"
 SRC_FRONTEND="$INSTALL_DIR/out"
 SRC_SCRIPTS="$INSTALL_DIR/scripts"
 SRC_DEPS="$INSTALL_DIR/dependencies"
+
+# Package (ipk) install. opkg owns the payload files, so --configure reads the
+# shipped file list (manifest, root-relative paths) instead of a source tree,
+# and default configs from defaults/. IPK_INFO exists once opkg has the package.
+IPK_PACKAGE="sdxpinn-qmanager"
+IPK_SHARE_DIR="/usr/share/qmanager"
+IPK_MANIFEST="$IPK_SHARE_DIR/manifest"
+IPK_DEFAULTS="$IPK_SHARE_DIR/defaults"
+IPK_INFO="/usr/lib/opkg/info/$IPK_PACKAGE.control"
+# Services running before preinst stopped them, handed to the postinst
+IPK_RUNNING_FILE="/tmp/qmanager_ipk_running"
+# Read (and cleared) by system/pending_reboot.sh to raise the reboot banner
+IPK_REBOOT_FLAG="/tmp/qmanager_pending_reboot_package"
+
+# 1 while running inside opkg (preinst / --configure): opkg holds its lock, so
+# nothing here may call opkg, prompt, or reboot.
+IN_OPKG=0
+CONFIGURE=0
 
 # Packages
 # Note: coreutils-timeout is required even though BusyBox ships a `timeout`
@@ -137,7 +161,8 @@ ICO_STEP='▶'
 
 log_init() {
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
-    : > "$LOG_FILE" 2>/dev/null || true
+    # The postinst appends, so one log holds the whole package install.
+    [ "$CONFIGURE" = "1" ] || : > "$LOG_FILE" 2>/dev/null || true
     _log_raw "=== QManager install started at $(date '+%Y-%m-%d %H:%M:%S') (version=$VERSION) ==="
 }
 
@@ -645,13 +670,15 @@ WEB_HTTPS_PORT=""
 
 prompt_web_port() {
     local lib="$SRC_SCRIPTS/usr/lib/qmanager/web_port.sh"
+    [ "$CONFIGURE" = "1" ] && lib="$LIB_DIR/web_port.sh"
     [ -f "$lib" ] || return 0
     . "$lib"
 
     WEB_HTTP_PORT=$(wp_conf_http)
     WEB_HTTPS_PORT=$(wp_conf_https)
 
-    [ -t 0 ] || return 0
+    # opkg can hand its maintainer scripts the terminal; never prompt there.
+    [ -t 0 ] && [ "$IN_OPKG" = "0" ] || return 0
     uci -q get quecmanager.web >/dev/null 2>&1 && return 0
 
     printf "\n  QManager is served on HTTP %s and HTTPS %s (LuCI moves with it).\n" \
@@ -827,7 +854,8 @@ retire_bandwidth_monitor() {
           /tmp/quecmanager/bridge_traffic_monitor.pid 2>/dev/null || true
     rm -rf /etc/qmanager/bandwidth_certs 2>/dev/null || true
 
-    if opkg list-installed 2>/dev/null | awk '{print $1}' | grep -qx websocat; then
+    # Inside opkg the package's Conflicts/Replaces handle websocat instead.
+    if [ "$IN_OPKG" = "0" ] && opkg list-installed 2>/dev/null | awk '{print $1}' | grep -qx websocat; then
         if opkg remove websocat >>"$LOG_FILE" 2>&1; then
             info "Removed package: websocat"
         else
@@ -1637,6 +1665,19 @@ install_backend() {
         done
     fi
 
+    seed_runtime_files
+
+    info "Backend installed"
+}
+
+# Runtime directories, deploy-if-missing default configs, the alert routing
+# seed and the UCI stub. Shared by the tarball install (after install_backend
+# copied the tree) and the package --configure path (defaults ship under
+# $IPK_DEFAULTS there, since opkg must not own user-editable config).
+seed_runtime_files() {
+    local defaults="$SRC_SCRIPTS/etc/qmanager"
+    [ "$CONFIGURE" = "1" ] && defaults="$IPK_DEFAULTS"
+
     # --- Required runtime directories ---
     # The session dir is not pre-created: cgi_auth.sh makes it root-owned on
     # first login and refuses one another user created first (B4.1).
@@ -1655,9 +1696,9 @@ install_backend() {
     # Exception: supported_bands_hw.env is a manually-maintained spec-sheet file
     # that MUST refresh on every upgrade, so it is force-copied below (outside the
     # deploy-if-missing loop) rather than treated as user-owned config.
-    if [ -d "$SRC_SCRIPTS/etc/qmanager" ]; then
+    if [ -d "$defaults" ]; then
         local deployed=0
-        for f in "$SRC_SCRIPTS/etc/qmanager"/*; do
+        for f in "$defaults"/*; do
             [ -f "$f" ] || continue
             local fname
             fname="$(basename "$f")"
@@ -1672,8 +1713,8 @@ install_backend() {
 
         # Force-copy the hardware band-capability file every install/upgrade so
         # spec/firmware edits in the repo always reach the device.
-        if [ -f "$SRC_SCRIPTS/etc/qmanager/supported_bands_hw.env" ]; then
-            cp "$SRC_SCRIPTS/etc/qmanager/supported_bands_hw.env" "$CONF_DIR/supported_bands_hw.env"
+        if [ -f "$defaults/supported_bands_hw.env" ]; then
+            cp "$defaults/supported_bands_hw.env" "$CONF_DIR/supported_bands_hw.env"
             info "  Force-deployed hardware band capability: supported_bands_hw.env"
         fi
     fi
@@ -1700,8 +1741,6 @@ install_backend() {
 
     # UCI config stub
     [ -f /etc/config/quecmanager ] || touch /etc/config/quecmanager
-
-    info "Backend installed"
 }
 
 install_bundled_binaries() {
@@ -1723,18 +1762,7 @@ install_bundled_binaries() {
         info "Installed $bin -> $dst"
     done
 
-    # Legacy AT engine (removed): the shell gatekeeper and the atcli binary it
-    # drove. If /usr/bin/qcmd still points at qcmd.sh it dangles until
-    # seed_uci_defaults repoints it; services are stopped meanwhile.
-    # sms_tool (retired in SMS phase 4): every caller uses qsms through the
-    # broker, which must be the only opener of /dev/smd11.
-    local old
-    for old in qcmd.sh atcli_smd11 sms_tool; do
-        if [ -e "$BIN_DIR/$old" ]; then
-            rm -f "$BIN_DIR/$old"
-            info "Removed legacy AT engine file: $old"
-        fi
-    done
+    remove_legacy_at_engine
 
     # Smoke test (warn-only — modem may not be ready yet on fresh hardware).
     # The broker is stopped here, so this exercises the in-process path.
@@ -1745,6 +1773,21 @@ install_bundled_binaries() {
     else
         warn "qmanager_atd smoke test did not return OK — check /dev/smd11"
     fi
+}
+
+# Legacy AT engine (removed): the shell gatekeeper and the atcli binary it
+# drove. If /usr/bin/qcmd still points at qcmd.sh it dangles until
+# seed_uci_defaults repoints it; services are stopped meanwhile.
+# sms_tool (retired in SMS phase 4): every caller uses qsms through the
+# broker, which must be the only opener of /dev/smd11.
+remove_legacy_at_engine() {
+    local old
+    for old in qcmd.sh atcli_smd11 sms_tool; do
+        if [ -e "$BIN_DIR/$old" ]; then
+            rm -f "$BIN_DIR/$old"
+            info "Removed legacy AT engine file: $old"
+        fi
+    done
 }
 
 # --- Tailscale Network Fixes Migration ---------------------------------------
@@ -1834,6 +1877,16 @@ migrate_tailscale_initd_boot_fix() {
 # This is the ONLY place where legacy cleanup happens — integrated into the
 # install path rather than a separate pass.
 
+# True when the release being installed ships <root-relative path>: the
+# tarball's scripts/ tree, or the package manifest under --configure.
+src_has() {
+    if [ "$CONFIGURE" = "1" ]; then
+        grep -qxF "$1" "$IPK_MANIFEST" 2>/dev/null
+    else
+        [ -f "$SRC_SCRIPTS/$1" ]
+    fi
+}
+
 cleanup_legacy_scripts() {
     step "Cleaning up legacy scripts"
 
@@ -1879,7 +1932,7 @@ cleanup_legacy_scripts() {
     for f in "$BIN_DIR"/qmanager_* "$BIN_DIR/qcmd" "$BIN_DIR"/bridge_traffic_monitor_*; do
         [ -f "$f" ] || continue
         fname="$(basename "$f")"
-        [ -f "$SRC_SCRIPTS/usr/bin/$fname" ] && continue
+        src_has "usr/bin/$fname" && continue
         # Not legacy: qmanager_atd ships from dependencies/, and /usr/bin/qcmd
         # is the symlink to it that seed_uci_defaults (re)creates.
         case "$fname" in qmanager_atd|qcmd) continue ;; esac
@@ -1892,7 +1945,7 @@ cleanup_legacy_scripts() {
     for f in "$INITD_DIR"/qmanager*; do
         [ -f "$f" ] || continue
         fname="$(basename "$f")"
-        [ -f "$SRC_SCRIPTS/etc/init.d/$fname" ] && continue
+        src_has "etc/init.d/$fname" && continue
         "$f" disable 2>/dev/null || true
         "$f" stop 2>/dev/null || true
         rm -f "$f"
@@ -1908,7 +1961,7 @@ cleanup_legacy_scripts() {
         for f in "$LIB_DIR"/*; do
             [ -f "$f" ] || continue
             fname="$(basename "$f")"
-            [ -f "$SRC_SCRIPTS/usr/lib/qmanager/$fname" ] && continue
+            src_has "usr/lib/qmanager/$fname" && continue
             rm -f "$f"
             info "  Removed legacy library: $fname"
             removed=$(( removed + 1 ))
@@ -2097,6 +2150,8 @@ Options:
   --no-start         Do not start services after install
   --no-reboot        Do not reboot after install (used by OTA)
   --force            Skip modem firmware detection
+  --ignore-package   Install over an opkg-managed (sdxpinn-qmanager) install
+  --configure        Package mode (ipk postinst): configure placed files
   --help, -h         Show this help
 
 Archive layout:
@@ -2110,6 +2165,179 @@ Example:
   cd /tmp && tar xzf qmanager.tar.gz
   cd qmanager_install && sh install.sh
 EOF
+}
+
+# --- Package (ipk) Lifecycle -------------------------------------------------
+# opkg places the payload itself, so the package path reuses every phase above
+# except the file copies:
+#   preinst   = this script embedded by build-ipk.sh, QM_INSTALL_ENTRY=ipk_preinst
+#               (the new files are not on disk yet, so it cannot be a path call)
+#   postinst  = $IPK_SHARE_DIR/install.sh --configure
+# Neither may call opkg (it holds the lock), prompt, or reboot.
+
+# Remove files under <dir> that the package does not ship, then the emptied
+# directories. A tarball install leaves files opkg does not track, and a
+# removed Next.js chunk or CGI would otherwise linger forever. Top-level names
+# in <keep> (space-separated) are never touched.
+prune_unshipped() {
+    local dir="$1"
+    local keep=" $2 "
+    local list item name f
+    local n=0
+
+    [ -d "$dir" ] && [ -f "$IPK_MANIFEST" ] || return 0
+    list=$(mktemp /tmp/qm_prune.XXXXXX) || return 0
+
+    for item in "$dir"/*; do
+        [ -e "$item" ] || [ -L "$item" ] || continue
+        name="$(basename "$item")"
+        case "$keep" in *" $name "*) continue ;; esac
+        find "$item" -type f -o -type l
+    done | awk 'NR == FNR { ship["/" $0] = 1; next } !($0 in ship)' "$IPK_MANIFEST" - > "$list"
+
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rm -f "$f" && n=$(( n + 1 ))
+    done < "$list"
+    rm -f "$list"
+
+    for item in "$dir"/*; do
+        [ -d "$item" ] && [ ! -L "$item" ] || continue
+        name="$(basename "$item")"
+        case "$keep" in *" $name "*) continue ;; esac
+        find "$item" -depth -type d | while IFS= read -r f; do
+            rmdir "$f" 2>/dev/null || true
+        done
+    done
+
+    [ "$n" = "0" ] || info "Removed $n file(s) under $dir the package does not ship"
+}
+
+# Firmware gate for the package path: warn, never abort. Architecture
+# "sdxpinn" already limits the package to the SDX75 family, and a failing
+# postinst would only leave a half-configured package behind. The poller cache
+# is read first so a stopped broker never costs an AT round-trip here.
+preflight_configure() {
+    step "Pre-flight checks"
+
+    [ "$(id -u)" -eq 0 ] || die "This script must be run as root"
+    [ -f "$IPK_MANIFEST" ] || die "Package manifest not found: $IPK_MANIFEST"
+
+    local fw=""
+    local cache
+    for cache in /tmp/qmanager_status.json /etc/qmanager/status.json; do
+        [ -f "$cache" ] || continue
+        fw=$(tr -d '\r\n' < "$cache" \
+            | sed -n 's/.*"device"[[:space:]]*:[[:space:]]*{[^}]*"firmware"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        [ -n "$fw" ] && break
+    done
+    [ -n "$fw" ] || fw=$(detect_modem_firmware || true)
+
+    if [ -z "$fw" ]; then
+        warn "Could not detect modem firmware; QManager supports the RM551E-GL"
+    elif ! printf '%s' "$fw" | tr '[:lower:]' '[:upper:]' | tr -cd 'A-Z0-9' | grep -q "$REQUIRED_FIRMWARE"; then
+        warn "Modem firmware $fw is not an RM551E-GL; some features may not work"
+    else
+        info "Modem firmware: $fw"
+    fi
+    info "Pre-flight checks passed"
+}
+
+# preinst: everything the tarball install does before it copies files, against
+# the system as it is now. $1 is opkg's "install" or "upgrade".
+ipk_preinst() {
+    IN_OPKG=1
+    DO_REBOOT=0
+    TOTAL_STEPS=1
+
+    # Release the watchcat lock only on failure; on success the postinst holds
+    # it across the unpack and releases it after start_services.
+    trap 'rm -f "$WATCHCAT_LOCK" 2>/dev/null || true' EXIT INT TERM
+
+    log_init
+    _log_raw "Package preinst ($1)"
+    [ "$(id -u)" -eq 0 ] || die "This script must be run as root"
+
+    mark_version_pending
+    retire_bandwidth_monitor
+    retire_low_power
+    stop_services
+    printf '%s\n' "$RUNNING_BEFORE_STOP" > "$IPK_RUNNING_FILE"
+
+    trap - EXIT INT TERM
+}
+
+# postinst (--configure): every post-copy phase of the tarball install, run
+# over the files opkg just placed.
+configure_main() {
+    IN_OPKG=1
+    CONFIGURE=1
+    DO_FRONTEND=1
+    DO_BACKEND=1
+    DO_REBOOT=0
+    TOTAL_STEPS=9
+    [ "$DO_ENABLE" = "1" ] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [ "$DO_START" = "1" ] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+
+    log_init
+    _log_raw "Package postinst (--configure)"
+
+    preflight_configure
+    prompt_web_port
+    [ -f "$VERSION_PENDING" ] || mark_version_pending
+
+    # Held since preinst; re-assert in case /tmp was touched in between.
+    touch "$WATCHCAT_LOCK" 2>/dev/null || true
+    RUNNING_BEFORE_STOP=$(cat "$IPK_RUNNING_FILE" 2>/dev/null || true)
+    rm -f "$IPK_RUNNING_FILE"
+
+    # LuCI's /www/index.html belongs to luci-base, so the package ships ours
+    # under $IPK_SHARE_DIR and swaps it in (uninstall puts LuCI's back).
+    backup_originals
+    step "Installing frontend entry page"
+    cp "$IPK_SHARE_DIR/index.html" "$WWW_ROOT/index.html" \
+        || die "Failed to install $WWW_ROOT/index.html"
+    info "Installed $WWW_ROOT/index.html"
+
+    step "Removing files left by a previous install"
+    prune_unshipped "$WWW_ROOT" "cgi-bin luci-static index.html index.html.old qmlive"
+    prune_unshipped "$CGI_DIR" ""
+    remove_legacy_at_engine
+
+    step "Applying firewall and sysctl rules"
+    if [ -f /etc/nftables.d/12-mangle-qmanager-dpi.nft ] && command -v fw4 >/dev/null 2>&1; then
+        fw4 reload >/dev/null 2>&1 || true
+        info "Reloaded fw4"
+    fi
+    local f
+    for f in /etc/sysctl.d/90-qmanager-*.conf; do
+        [ -f "$f" ] || continue
+        sysctl -p "$f" >/dev/null 2>&1 || warn "sysctl: could not apply $f live"
+        info "sysctl.d: $(basename "$f") applied"
+    done
+
+    step "Seeding runtime files"
+    seed_runtime_files
+
+    cleanup_legacy_scripts
+    migrate_tailscale_net
+    migrate_tailscale_initd_boot_fix || warn "Tailscale initd boot-fix returned non-zero; continuing install"
+    seed_uci_defaults
+    flush_storage "pre-start"
+
+    [ "$DO_ENABLE" = "1" ] && enable_services
+    if [ "$DO_START" = "1" ]; then
+        start_services
+    fi
+    rm -f "$WATCHCAT_LOCK" 2>/dev/null || true
+
+    finalize_version
+    # The OTA path reboots after every install; the package path never
+    # reboots on its own, so it asks through the app's deferred-reboot banner.
+    touch "$IPK_REBOOT_FLAG" 2>/dev/null || true
+    flush_storage "install complete"
+    print_summary
+    info "Reboot the modem to finish the update"
 }
 
 # --- Main --------------------------------------------------------------------
@@ -2128,9 +2356,12 @@ main() {
     DO_PACKAGES=1
     DO_REBOOT=1
     DO_FORCE=0
+    DO_IGNORE_PACKAGE=0
 
     while [ $# -gt 0 ]; do
         case "$1" in
+            --configure)     CONFIGURE=1 ;;
+            --ignore-package) DO_IGNORE_PACKAGE=1 ;;
             --frontend-only) DO_FRONTEND=1; DO_BACKEND=0 ;;
             --backend-only)  DO_FRONTEND=0; DO_BACKEND=1 ;;
             --skip-packages) DO_PACKAGES=0 ;;
@@ -2147,6 +2378,21 @@ main() {
         esac
         shift
     done
+
+    if [ "$CONFIGURE" = "1" ]; then
+        configure_main
+        return 0
+    fi
+
+    # opkg owns an ipk install's file list: a tarball install over it (manual
+    # or Software Update) would leave opkg removing and upgrading the wrong
+    # files. Update the package through opkg instead.
+    if [ -f "$IPK_INFO" ] && [ "$DO_IGNORE_PACKAGE" = "0" ]; then
+        error "QManager is installed as the $IPK_PACKAGE package."
+        error "Update it with: opkg update && opkg upgrade $IPK_PACKAGE"
+        error "To switch to a manual install, run first: opkg remove $IPK_PACKAGE"
+        exit 1
+    fi
 
     log_init
 
@@ -2241,4 +2487,7 @@ main() {
     fi
 }
 
-main "$@"
+case "${QM_INSTALL_ENTRY:-main}" in
+    ipk_preinst) ipk_preinst "$@" ;;
+    *)           main "$@" ;;
+esac
