@@ -87,7 +87,7 @@ Loss bounds: an unplanned reboot loses at most one flush window (5 min); a plann
 
 ## Lifecycle
 
-Install and update copy the lib and the CGI with their trees and restart the poller; the state file survives updates. Uninstall removes `/var/run/qmanager` (the run copy) always, and `/usrdata/qmanager/data_used.json` only with `--purge` (`remove_config`); `--keep-config` keeps the counter, and a fresh install after it continues from the saved total (checked on the RM551E 2026-10-25: 248 B file unchanged across OTA, uninstall and reinstall, `source: "wds"` after). Not in config backup (a usage counter is not a setting).
+Install and update copy the lib and the CGI with their trees and restart the poller; the state file survives updates. Uninstall removes `/var/run/qmanager` (the run copy) always, and `/usrdata/qmanager/data_used.json` only with `--purge` (`remove_config`); `--keep-config` keeps the counter, and a fresh install after it continues from the saved total (checked on the RM551E 2026-10-25: counter kept across OTA, uninstall and reinstall, file 248 B throughout and rewritten only by normal flushes, `source: "wds"` after). Not in config backup (a usage counter is not a setting).
 
 ## Validation (RM551E, 2026-10-23)
 
