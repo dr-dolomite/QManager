@@ -90,7 +90,7 @@ Each doc holds invariants the code doesn't show. CGI / hook / type / reboot tabl
 - `connection-watchdog.md`: `qmanager_watchcat` + `wd_*.sh` libs, `tools/watchdog-harness/`, `monitoring/watchdog.sh`, `use-watchdog-settings.ts`, recovery ladder, heartbeat, reboot ledger, SSR hold, verified SIM swap + failover record + auto-failback (`primary_recheck_*`)
 - `scheduled-jobs.md`: crond jobs (scheduled reboot, tower/scenario schedule, auto-update), 1970 clock guard `schedule_guard.sh` / `_qm_timer_fire_allowed`, catch-up
 - `sms-forwarding.md`: `qmanager_sms_forward`, `cellular/sms_forwarding.sh`, `forwarding-center.tsx`
-- `tailscale-vpn.md`: `vpn/tailscale.sh`, `tailscale_mgr.sh` (install/update, sha256, rollback, lock), `tailscale_net.sh`, `qmanager_tailscale_net`, fw4 zone + `ip rule pref 1990`, `set_exit_node`
+- `tailscale-vpn.md`: `vpn/tailscale.sh`, `tailscale_mgr.sh` (Official/Tiny install sources, update, sha256, rollback, lock), `tailscale_net.sh` (`ts_net_owned`), `qmanager_tailscale_net`, fw4 zone + `ip rule pref 1990`, `set_exit_node`
 - `diagnostics.md`: `system/diagnostics.sh`, `qmanager_debug_report`, IPA offload (`ipa_offload.sh`, `r8125_ioss.init`), `pending_reboot_required`
 - `system-health-check.md`: `qmanager_health_check`, `system/health-check/*.sh`, `use-system-health-check.ts`, 49-check catalog (runner + `shapes.ts` + `tests.<id>` keys), read-only invariant, redaction
 - `adaptive-polling.md`: `qmanager_poller`, `system/adaptive_polling.sh`, `poller_tier`, `qmanager_force_tier2`, `write_cache`, `parse_at.sh` (parity gate `tools/poller-parity/`), `QC_WAIT_MS`, `status.json` composer, `*.env` sidecars
