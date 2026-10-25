@@ -801,6 +801,17 @@ mod tests {
     }
 
     #[test]
+    fn a_ca_list_without_sccs_is_an_empty_array_not_null() {
+        let mut b = bundle();
+        // PCC only: the list is known, it just carries no secondary cells.
+        b.ca.as_mut().unwrap().carriers.retain(|c| c.kind != "SCC");
+        let s = render_sample(1, 2, Some(&b), false);
+        assert!(s.ends_with("\"bw\":20,\"ca\":[]}"), "{s}");
+        b.ca.as_mut().unwrap().carriers.clear();
+        assert_eq!(render_sample(1, 2, Some(&b), false), s);
+    }
+
+    #[test]
     fn the_scan_gate_marks_the_file_and_nulls_new_samples() {
         let d = dir("scan");
         let mut l = live(&d);
