@@ -40,7 +40,8 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 /// 1: `REQ` / `SMS` (v0.1.32, no capability file).
 /// 2: `qcmd -t <ms>` / `QCMD_WAIT_MS` client wait cap, `--version`.
 /// 3: the `QMI` verb (answered by the QMI lane on the reader thread) and the
-///    `qmi=1` capability line. (`POLL` was parked; it would be 4.)
+///    `qmi=1` capability line. (A `POLL` verb was designed for B5.29 but never
+///    wired; its parsers were removed on 2026-10-25. Number 4 stays unassigned.)
 /// 0.4.0 adds `live=1` (the live signal file; no wire change, still 3).
 /// 0.4.1 runs `aim` at 1 s like `watch` (1 Hz final, 5 Hz dropped; no wire change).
 /// 0.5.0 holds NAS Config Signal Info v2 so the live file carries SINR and NR

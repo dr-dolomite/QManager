@@ -8,10 +8,6 @@ publish = false
 [dependencies]
 libc = "0.2"
 
-[features]
-# The parked B5.29 poll parsers + env writer (src/poll/), off by default.
-poll = []
-
 [profile.release]
 opt-level = "s"
 lto = true

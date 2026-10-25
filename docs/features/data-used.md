@@ -101,7 +101,7 @@ Install and update copy the lib and the CGI with their trees and restart the pol
 | `rmnet_ipa0` vs reality | about 40 % of a modem-local download, none of the IPA-offloaded LAN traffic |
 | Parity / CPU (9 x 60 s) | WDS vs QCMAP_CLI within 0.4-1.7 KB on every sample in both directions (read skew only), `qmi_wds_ok=1` throughout. Broker 0.67 % of one core over 525 s (0.5.0 measured 0.40-0.55 %) |
 | Sampler tests | 66 cases pass under the device BusyBox |
-| Broker host tests | 267 (281 with `--features poll`) |
+| Broker host tests | 267 |
 
 ## Rollback
 

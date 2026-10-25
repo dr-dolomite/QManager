@@ -230,7 +230,7 @@ Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`, 5G-NSA: B1 20 MHz PC
 
 Lifecycle on device (2026-10-22, init.d + at_engine.sh from development-home): start re-creates `/usr/bin/qmi` (also over a regular file), restarts are idempotent with no `.qmi.*` temps, stop removes qmi.env, qmanager_qmi.json, the lease, socket and capability file while leaving the rest of `/var/run/qmanager` alone, and the env passes `cq_env_source` after restart. Full install, OTA re-install and uninstall were not run (uninstall reviewed statically).
 
-Host: `cargo test --release` 222 tests (236 with `--features poll`) at 0.3.0; 267 (281 with `--features poll`) at 0.6.0, including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
+Host: `cargo test --release` 222 tests at 0.3.0 (236 with the since-removed `poll` feature); 267 at 0.6.0, including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
 
 ## Gotchas for Phase 2 consumers
 

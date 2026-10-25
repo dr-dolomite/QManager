@@ -30,8 +30,6 @@ mod client;
 mod common;
 mod daemon;
 mod qmi;
-#[cfg(feature = "poll")]
-mod poll;
 mod sms;
 
 use client::qcmd::run_qcmd;

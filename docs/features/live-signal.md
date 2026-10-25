@@ -157,7 +157,7 @@ The re-measure ran on the RM551E, broker 0.4.0, 10 min at 5 Hz with one client, 
 
 ## Config signal hold (0.5.0, device gate 2026-10-23)
 
-Host-tested (245 crate tests, 259 with `--features poll`) and deployed to the RM551E (boot `0aa7bf6b`, uptime 6.0 h at deploy, 5 SSRs before it). The sampler reads Signal Info as part of the bundle and the broker holds the NAS signal config; see [`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050).
+Host-tested (245 crate tests at 0.5.0) and deployed to the RM551E (boot `0aa7bf6b`, uptime 6.0 h at deploy, 5 SSRs before it). The sampler reads Signal Info as part of the bundle and the broker holds the NAS signal config; see [`qmi-lane.md`](qmi-lane.md#signal-config-hold-nas-0x006c-broker-050).
 
 - **Capability:** `/var/run/qmanager_atd.proto` reads `proto=3 version=0.5.0 qmi=1 live=1`, the same four lines as 0.4.1.
 - **Apply:** `qmi nas signal config applied` logged at broker start; `qmi_sig_config` in `/tmp/qmanager_qmi.json` reads `held`; `qcmd AT` still answers.

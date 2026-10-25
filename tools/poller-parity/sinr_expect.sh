@@ -3,7 +3,7 @@
 #
 # Table test for _lte_sinr_db_g (AT+QENG LTE <SINR> raw X -> 2X-20 dB, raw
 # 0..25 only, else empty). Run under the device's BusyBox ash. Exit 0 only if
-# every row matches. The Rust port has the same table (lte_sinr_raw_to_db).
+# every row matches. The Rust port that had the same table was removed 2026-10-25.
 
 LIB=$1
 [ -f "$LIB" ] || { echo "usage: sinr_expect.sh <parse_at.sh>" >&2; exit 2; }

@@ -24,13 +24,13 @@ Related canon: [`at-broker.md`](../features/at-broker.md),
 **Phases A, B and C are deployed on the RM551E and measured. Phase D wiring
 was not built (decided 2026-10-19).** A+B+C already meet the active gate, and
 D would save about 1-2 % in the active tier only. The Rust parsers and the env
-writer (`native/qmanager_atd/src/poll/{parse.rs,parse/,envout.rs}`) stay in the
-tree with host parity tests, built only with the off-by-default `poll` cargo
-feature and unwired, for a later row. The `POLL`
+writer (`native/qmanager_atd/src/poll/`) were kept parked behind the off-by-default
+`poll` cargo feature and then **removed on 2026-10-25** (still in git history; see
+`docs/features/at-broker.md`). The `POLL`
 verb, the `qcmd --poll` client, the poller fallback and the `poll_legacy`
 marker of Section 14 were not built; Sections 4, 5 and the Phase D text
 describe a design that is not in the product. Proto number 3 is now the QMI lane
-(broker 0.3.0, see `docs/features/qmi-lane.md`); a `POLL` verb would be 4. The 12 h soak on this build passed (2026-10-19 10:22 to 2026-10-20
+(broker 0.3.0, see `docs/features/qmi-lane.md`); number 4 stays unassigned. The 12 h soak on this build passed (2026-10-19 10:22 to 2026-10-20
 01:30 PHT; see the Soak entry in Section 14 notes and the ledger row B5.29).
 
 Measured after A+B+C (poller CPU including children, one core):

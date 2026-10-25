@@ -18,7 +18,7 @@ there. Nothing here is installed by the product.
 | `parity.sh --tap <new> <tap_dir>` | replay poller tap records through the new parsers (see below) |
 | `tap_replay.sh` | implementation of `--tap` |
 | `shim.sh` | qlog stubs + the poller's call shapes (`qcmd_exec` strip, `poll_*` guards) + sentinel / default initialisers |
-| `sinr_expect.sh <parse_at>` | table test for `_lte_sinr_db_g` (QENG LTE raw `<SINR>` X to `2X-20` dB, 0..25 only, else empty); the Rust port carries the same table (`lte_sinr_raw_to_db`) |
+| `sinr_expect.sh <parse_at>` | table test for `_lte_sinr_db_g` (QENG LTE raw `<SINR>` X to `2X-20` dB, 0..25 only, else empty); the Rust port that carried the same table was removed 2026-10-25 |
 | `measure.sh [seconds]` | on-device poller cost sampler (one summary line) |
 | `gen_fixtures.sh [dir]` | regenerates the whole fixture corpus byte for byte (device or Git Bash) |
 | `status_parity.sh` | Phase C gate for the status.json composers: printf composer vs the jq composer (`write_cache_jq`) over synthetic scenarios, seeded random values, hostile text and the write_cache safety net; and the live 200-pair capture from the deployed poller (`arm` / `compare` / `live`) |
