@@ -70,26 +70,22 @@ export const CONSOLE_SPLIT = "grid grid-cols-1 gap-5 @4xl/main:grid-cols-12";
  * riding loose inside a taller column.
  */
 export const CONSOLE_COLUMN = "flex flex-col @4xl/main:col-span-5";
-export const WORK_COLUMN = "flex flex-col gap-5 @4xl/main:col-span-7";
 
 /**
- * Receive Chains sits BELOW the split, spanning the full width — it is not a
- * third item in the work column.
+ * Positions, then Receive Chains, stacked beside the console.
  *
- * Measured: with it in the work column, that column ran 929px against the
- * console's 403px, so the left half of a desktop viewport was ~525px of empty
- * canvas beside a dense right half. That gap is the sticky travel, so it grows
- * with content rather than being a fixture of the empty state, and it read as a
- * missing card rather than as intentional space.
+ * Chains lived in a full-width row beneath the split while the console was
+ * 403px tall. The live lead took the console to ~620px, and Positions — locked
+ * to that height and holding ~400px of rows — stranded ~200px of empty card
+ * under its Record button, with Chains pushed below the fold at 1080p. In this
+ * column, with compact tiles, the two cards land within ~70px of the console,
+ * so the whole page reads in one desktop viewport. Mobile order is unchanged:
+ * console, positions, chains.
  *
- * Moving it out fixes two things at once. The columns come within ~20px of each
- * other, and the strip gets the full width, so it can run 4-up and finally read
- * as the diagnostic footnote it is documented to be — in the work column it was
- * the TALLEST card on the page while being described as a footnote.
- *
- * The mobile order is unchanged by this: console, positions, chains.
+ * Whichever side is shorter absorbs the difference in ONE region: the live
+ * trace on the console (`LIVE.SPARK_SLOT`), the Chains card here (`CARD_FILL`).
  */
-export const CHAINS_ROW = "flex flex-col";
+export const WORK_COLUMN = "flex flex-col gap-5 @4xl/main:col-span-7";
 
 // -----------------------------------------------------------------------------
 // The console — the pinned aim instrument
@@ -105,7 +101,12 @@ export const CHAINS_ROW = "flex flex-col";
  * before, which is the drift this module was created to end.
  */
 export const CARD_SHELL =
-  "h-full gap-5 rounded-card border-0 bg-surface px-6 py-6 shadow-[var(--shadow-whisper)]";
+  "gap-5 rounded-card border-0 bg-surface px-6 py-6 shadow-[var(--shadow-whisper)]";
+/**
+ * The work column's slack absorber: the LAST card grows to meet the console's
+ * height. Never on Positions — `h-full` there claimed the whole column.
+ */
+export const CARD_FILL = "flex-1";
 export const CARD_TITLE = "min-w-0 truncate text-lg font-semibold";
 export const CARD_DESCRIPTION = "min-w-0 text-sm leading-relaxed text-pretty";
 export const CARD_HEADER = "gap-1 px-0";
@@ -185,7 +186,18 @@ export const LIVE = {
   MUTABLE:
     "transition-opacity duration-(--duration-standard) ease-standard",
   MUTED: "opacity-45",
-  SPARK: "block h-12 w-full overflow-visible",
+  /**
+   * The console's slack absorber. When the work column is the taller side the
+   * trace grows into the difference instead of leaving a gap under the legs —
+   * more vertical resolution on the one graph a sweep is read from. 48px floor,
+   * 192px ceiling: at 1440 the 2-up Chains grid makes the work column ~220px
+   * taller, and an uncapped trace swelled to 267px of mostly empty plot. Past
+   * the ceiling the block itself takes the rest, which leaves the score group
+   * on the card's bottom edge, level with the bottom of Chains.
+   */
+  BLOCK_FILL: "flex-1",
+  SPARK_SLOT: "flex max-h-48 min-h-12 flex-1 flex-col",
+  SPARK: "block min-h-12 w-full flex-1 overflow-visible",
   SCORE_SECONDARY: "text-[32px] font-semibold leading-none tabular-nums",
   SCORE_BOX_SECONDARY: "h-8",
   DIVIDER: "h-px bg-surface-container-high",
@@ -310,27 +322,32 @@ export const SLOT = {
 // -----------------------------------------------------------------------------
 
 /**
- * 2-up on a phone, 4-up on a wide surface. The outgoing strip ran one column at
- * phone width, 743px for the card that answers "am I aiming with all the chains
- * I think I have" — a question asked FIRST, at a scroll position reached last.
+ * 2-up on a narrow card, 4-up on a wide one. The outgoing strip ran one column
+ * at phone width, 743px for the card that answers "am I aiming with all the
+ * chains I think I have" — a question asked FIRST, at a scroll position reached
+ * last.
  */
 export const PORT = {
+  /** Declared on the Chains card's content, so the grid steps on its own width. */
+  CONTAINER: "@container/card",
   /**
-   * 4-up from `@3xl`, which is only safe because this card spans the FULL page
-   * width (see `CHAINS_ROW`) rather than living in the 7-of-12 work column.
+   * 4-up from `@3xl/card` — a CARD step, because the card now lives in the
+   * 7-of-12 work column and the page width says nothing about its cells.
    *
-   * The history is the rule: inside the work column the step had to wait until
-   * `@6xl`. At `@4xl` there, the column was ~580px, a 4-up block ~123px, and
-   * `px-4` left ~91px inside — while one metric needs ~27px of key plus ~58px
-   * of value plus gaps. The bar lane collapsed to nothing and the bar vanished,
-   * which is DESIGN.md's named bug: ramp ink on a numeral with no bar beside
-   * it. **Cost a grid step against the narrowest cell it produces in the column
-   * it actually lives in, not against the page width.** Full-width at `@3xl`
-   * (768px) gives a ~170px block, comfortably clear.
+   * The history is the rule: a `@4xl/main` step in this column once gave a
+   * ~123px block, `px-4` left ~91px inside, and the bar lane collapsed to
+   * nothing — DESIGN.md's named bug of ramp ink with no bar beside it. **Cost a
+   * grid step against the narrowest cell it produces in the column it actually
+   * lives in.** 768px of card content gives a ~180px block, ~150px inside.
    */
-  GRID: "grid grid-cols-2 gap-2.5 @2xl/main:gap-3.5 @3xl/main:grid-cols-4",
-  ROOT: "flex h-40 flex-col gap-2 rounded-tile bg-surface-container px-3.5 py-3.5 @2xl/main:px-4",
-  HEIGHT: "h-40",
+  GRID: "grid grid-cols-2 gap-2.5 @2xl/card:gap-3.5 @3xl/card:grid-cols-4",
+  ROOT: "flex flex-col gap-2 rounded-tile bg-surface-container px-3.5 py-3.5 @2xl/card:px-4",
+  /**
+   * Pinned per radio mode: one metric (LTE-only or SA) or two (EN-DC). A single
+   * pin sized for two left every LTE tile ~40px of empty floor.
+   */
+  HEIGHT_SINGLE: "h-[7.375rem]",
+  HEIGHT_DUAL: "h-40",
   NAME: "min-w-0 truncate text-sm font-semibold",
   RX: "inline-flex shrink-0 items-center rounded-pill bg-surface-container-high px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.09em] text-on-surface-variant",
 
@@ -429,7 +446,11 @@ export const SKELETON_SHAPE = {
   METER: "h-2 w-full rounded-pill",
   LEG_ROW: "h-10 w-full rounded-pill",
   SLOT_ROW: "h-16 w-full rounded-pill",
-  PORT_BLOCK: "h-40 w-full rounded-tile",
+  /** The single-metric pin: the mode is unknown until the first snapshot. */
+  PORT_BLOCK: "h-[7.375rem] w-full rounded-tile",
+  CONTROL_ROW: "h-[2.125rem] w-56 rounded-pill",
+  /** `Button size="action"`, 42px. */
+  ACTION: "h-[2.625rem] w-36 rounded-pill",
   TITLE: "h-7 w-40 rounded-inline",
   /** A description that holds one line at every width. */
   LINE: "h-5 w-56 rounded-inline",

@@ -334,7 +334,7 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
     lead.peak !== null ? signalToProgress(lead.peak, RSRP_THRESHOLDS) : null;
 
   return (
-    <section aria-live="off" className={LIVE.BLOCK}>
+    <section aria-live="off" className={cn(LIVE.BLOCK, LIVE.BLOCK_FILL)}>
       <div className={LIVE.KEY_ROW}>
         <span className={CONSOLE.EYEBROW}>
           {t("antenna_alignment.aim.live.label")}
@@ -431,7 +431,9 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
         </div>
       </div>
 
-      <div className={cn(LIVE.MUTABLE, muted && LIVE.MUTED)}>
+      {/* The console's slack absorber: the trace grows when the work column is
+          taller, so the difference becomes resolution, not a gap. */}
+      <div className={cn(LIVE.SPARK_SLOT, LIVE.MUTABLE, muted && LIVE.MUTED)}>
         <LiveSparkline points={lead.points} peak={lead.peak} inkClass={ink} />
       </div>
     </section>
@@ -496,7 +498,7 @@ export function AimConsole({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-5 px-0">
+      <CardContent className="flex flex-1 flex-col gap-5 px-0">
         {lead && <LiveLeadBlock lead={lead} showTag={radio !== "lte"} />}
         {lead && <div className={LIVE.DIVIDER} aria-hidden="true" />}
 
@@ -674,7 +676,9 @@ export function AimConsole({
         {/* Which chain the whole card is about. It WRAPS — this line truncated
             to "Main / PRX is the chain the score is …" in the outgoing build,
             which cut the sentence exactly where its meaning starts. */}
-        <p className={cn(CONSOLE.CAPTION, "text-pretty leading-relaxed")}>
+        {/* `mt-auto` holds the card's bottom edge when there is no live trace
+            to absorb a taller work column. */}
+        <p className={cn(CONSOLE.CAPTION, "mt-auto text-pretty leading-relaxed")}>
           {t("antenna_alignment.aim.primary_chain")}
         </p>
       </CardContent>

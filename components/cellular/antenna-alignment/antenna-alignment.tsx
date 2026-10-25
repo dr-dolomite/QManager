@@ -12,7 +12,6 @@ import { AimConsole, CondensedAim } from "./live-aim";
 import { PortStripCard } from "./port-strip";
 import { PositionsCard } from "./recorder-card";
 import {
-  CHAINS_ROW,
   CONDENSED,
   CONSOLE,
   CONSOLE_COLUMN,
@@ -44,13 +43,15 @@ import { countReportingPorts, detectRadioMode } from "./utils";
 // FIRST VIEWPORT: Page title, then the console — 52px composite numeral,
 //   verdict chip, delta, peak tick over an 8px meter, two weighted leg rows.
 //   A sticky left pane at >=896px; in flow on a phone, where a 64px pill
-//   readout pins as it scrolls away. Positions fills the right column and
-//   Receive Chains spans the full width beneath both.
-//   (Amended at inspection. The locked card put Chains in the right column;
-//   built, that ran 929px against the console's 403px and left half a desktop
-//   viewport empty, and made the documented "footnote" the tallest card on the
-//   page. Full width closes the columns to within 1px and lets the strip run
-//   4-up. The phone order is unchanged: console, positions, chains.)
+//   readout pins as it scrolls away. Positions and Receive Chains stack in the
+//   right column.
+//   (Amended twice. Chains first moved to a full-width row: in the right column
+//   its tall tiles ran 929px against a 403px console. The live lead later took
+//   the console to ~620px, which stranded ~200px of empty Positions card and
+//   pushed Chains below the fold, so 2026-10-25 brought Chains back into the
+//   right column as compact tiles: the two columns land within ~70px and the
+//   page reads in one 1080p viewport. The phone order never changed: console,
+//   positions, chains.)
 // FORM: Pinned Console; 7th of seven ranked structures; seed 8731ff15.
 // FINISH: unreviewed and undocumented is unfinished; this build ends with the
 //   finish review, the verdict, DESIGN.md, and every shipping raster carrying
@@ -201,25 +202,18 @@ export default function AntennaAlignmentComponent() {
             <div ref={sentinelRef} aria-hidden="true" className="h-px" />
           </motion.div>
 
+          {/* Positions above Chains: the commit before the diagnostic. The
+              Chains card is the column's slack absorber (see WORK_COLUMN). */}
           <motion.div variants={staggerItem} className={WORK_COLUMN}>
             <PositionsCard
               spa={spa}
               snapshotTs={data?.timestamp ?? null}
               feedStalled={feedStalled}
             />
+            <PortStripCard spa={spa} mode={mode} />
           </motion.div>
         </div>
       ) : null}
-
-      {/* Full width, beneath the split rather than inside the work column. See
-          CHAINS_ROW: in the column it ran 929px against the console's 403px and
-          left half a desktop viewport empty, and it was the tallest card on a
-          page that documents it as a footnote. */}
-      {spa && mode && !isLoading && !unreachable && !noReadings && (
-        <motion.div variants={staggerItem} className={CHAINS_ROW}>
-          <PortStripCard spa={spa} mode={mode} />
-        </motion.div>
-      )}
     </motion.div>
   );
 }

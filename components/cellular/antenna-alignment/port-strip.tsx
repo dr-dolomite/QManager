@@ -38,6 +38,7 @@ import {
 import {
   CARD_CONTENT,
   CARD_DESCRIPTION,
+  CARD_FILL,
   CARD_HEADER,
   CARD_SHELL,
   CARD_TITLE,
@@ -262,12 +263,15 @@ function PortBlock({
     : "none";
 
   return (
-    <motion.div variants={staggerRowItem} className={PORT.ROOT}>
+    <motion.div
+      variants={staggerRowItem}
+      className={cn(PORT.ROOT, mode === "endc" ? PORT.HEIGHT_DUAL : PORT.HEIGHT_SINGLE)}
+    >
       {/* The name takes its own line: at 2-up on a 390px phone the block is
           ~155px wide, and "Diversity" plus its RX pill will not share one. */}
       <span className={PORT.NAME}>{port.name}</span>
 
-      {/* Never `flex-wrap`. `PORT.HEIGHT` is a PIN, not a floor, and the pin's
+      {/* Never `flex-wrap`. `PORT.HEIGHT_*` is a PIN, not a floor, and the pin's
           budget (132px inside the 14px padding) spends 20px on the name, 26px on
           this line and 60px on two stacked metrics. A wrapped chip would add
           28px and push the last metric out of a box that cannot grow. The chip
@@ -345,7 +349,7 @@ export function PortStripCard({
   const { t } = useTranslation("cellular");
 
   return (
-    <Card className={CARD_SHELL}>
+    <Card className={cn(CARD_SHELL, CARD_FILL)}>
       <CardHeader className={CARD_HEADER}>
         <CardTitle className={CARD_TITLE}>
           {t("antenna_alignment.ports.title")}
@@ -355,14 +359,17 @@ export function PortStripCard({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className={CARD_CONTENT}>
+      {/* `flex-1`, so when this card is stretched to meet the console the slack
+          lands between the grid and the cross-link, which then holds the card's
+          bottom edge (`mt-auto`), rather than under the link. */}
+      <CardContent className={cn(CARD_CONTENT, PORT.CONTAINER, "flex-1")}>
         <motion.div className={PORT.GRID} variants={staggerRows}>
           {ANTENNA_PORTS.map((_port, index) => (
             <PortBlock key={index} index={index} spa={spa} mode={mode} />
           ))}
         </motion.div>
 
-        <p className="text-xs text-on-surface-variant">
+        <p className="mt-auto text-xs text-on-surface-variant">
           {t("antenna_alignment.ports.twin_hint")}{" "}
           <Link
             href="/cellular/antenna-statistics"

@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils";
 
 import { ConditionScreen } from "../condition-screen";
 import {
+  CARD_FILL,
   CARD_HEADER,
   CARD_SHELL,
   CONSOLE,
-  CHAINS_ROW,
   CONSOLE_COLUMN,
   CONSOLE_SPLIT,
   PORT,
@@ -44,7 +44,7 @@ import {
 //      popped a real card in ABOVE them once data landed, which reads as the
 //      layout breaking rather than filling. The skeleton now mirrors the full
 //      two-column composition: the console column, then the work column's
-//      Positions rows and Receive Chains grid.
+//      Positions card and Receive Chains grid.
 // =============================================================================
 
 /**
@@ -109,28 +109,36 @@ export function AlignmentSkeleton({ label }: { label?: string }) {
           {/* Positions: three comparison ROWS at every width, never a tile grid. */}
           <Card className={CARD_SHELL}>
             <HeaderGhost />
-            <div className={SLOT.STACK}>
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className={SKELETON_SHAPE.SLOT_ROW} />
-              ))}
+            <div className="flex flex-col gap-3">
+              {/* The control row: type selector left, Record right. `ICON_TARGET`
+                  height, which is what sets the loaded row's height. */}
+              <div className="flex h-11 items-center justify-between gap-2">
+                <Skeleton className={SKELETON_SHAPE.CONTROL_ROW} />
+                <Skeleton className={SKELETON_SHAPE.ACTION} />
+              </div>
+              <div className={SLOT.STACK}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className={SKELETON_SHAPE.SLOT_ROW} />
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          {/* Receive chains: the second card in the work column, and its slack
+              absorber, exactly as loaded (`CARD_FILL`, `PORT.CONTAINER`). */}
+          <Card className={cn(CARD_SHELL, CARD_FILL)}>
+            <HeaderGhost />
+            {/* The container is the grid's PARENT: an element cannot query
+                its own width. */}
+            <div className={PORT.CONTAINER}>
+              <div className={PORT.GRID}>
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className={SKELETON_SHAPE.PORT_BLOCK} />
+                ))}
+              </div>
             </div>
           </Card>
         </div>
-      </div>
-
-      {/* Receive chains: full width BENEATH the split, not a third card in the
-          work column — 2-up on a phone, 4-up once the row can fund it. Mirrors
-          the loaded card's own `CHAINS_ROW` + `PORT.GRID`, so the ghost cannot
-          reflow into a different shape than the thing it stands in for. */}
-      <div className={CHAINS_ROW}>
-        <Card className={CARD_SHELL}>
-          <HeaderGhost wraps />
-          <div className={PORT.GRID}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className={SKELETON_SHAPE.PORT_BLOCK} />
-            ))}
-          </div>
-        </Card>
       </div>
     </>
   );

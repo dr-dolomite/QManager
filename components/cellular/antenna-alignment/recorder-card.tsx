@@ -259,24 +259,21 @@ function PositionRow({
           computed against a card ground, not against `primary-container`, and
           the row's non-chromatic channels (bar length, the sr-only verdict) are
           already carrying the quality. */}
-      <span
-        className={cn(
-          SLOT.SCORE,
-          snapshot && score?.value !== null && !isBest && qualityInkClass(quality)
-        )}
-      >
-        {score && score.value !== null && !isRecording
-          ? score.value
-          : /* A never-recorded row says so ONCE, in the lane. The em dash here
-               was the same statement a second time, and it was what pushed
-               "Not recorded" into wrapping across two lines inside a 64px pill.
-               Recording and unrankable rows keep the dash: there the lane is
-               showing progress or a track, so the dash is the only thing
-               holding the numeral column. */
-            snapshot || isRecording
-            ? "—"
-            : null}
-      </span>
+      {/* A never-recorded row says so ONCE, in the lane, and drops the score
+          column entirely so "Not recorded" starts on the column's left edge —
+          an empty 52px column left it floating mid-row, unattached to the label
+          it describes. Recording and unrankable rows keep the dash: there the
+          lane is showing progress or a track, so the dash holds the column. */}
+      {(snapshot || isRecording) && (
+        <span
+          className={cn(
+            SLOT.SCORE,
+            snapshot && score?.value !== null && !isBest && qualityInkClass(quality)
+          )}
+        >
+          {score && score.value !== null && !isRecording ? score.value : "—"}
+        </span>
+      )}
       {snapshot && score?.value !== null && (
         <span className="sr-only">{t(`antenna_alignment.quality.${quality}`)}</span>
       )}
@@ -531,14 +528,14 @@ export function PositionsCard({
       </CardHeader>
 
       <CardContent className={cn(CARD_CONTENT, "@container/card gap-3")}>
-        {/* Type selector and reset share the top row, justified apart: the
-            tabs frame what the rows below mean (angles vs. positions), reset
-            is the rare destructive escape hatch, and the two have nothing to
-            say to each other so they anchor opposite edges instead of
-            clustering. Record lives at the bottom of the card, after the rows
-            and the recommendation, as the card's closing call to action
-            rather than a control bar sitting above empty slots. */}
-        <div className="flex items-center justify-between gap-2">
+        {/* One control row on the card's top edge: the type selector frames
+            what the rows mean (angles vs. positions) on the left, and the
+            actions hold the right edge — reset, then THE card's one primary
+            button, which records into the next empty slot. Record used to close
+            the card from the bottom, where the equal-height lock left it
+            floating over ~200px of empty card. On a narrow card the actions
+            wrap to their own line, still on the right edge. */}
+        <div className="flex flex-wrap items-center gap-2">
           <ToggleGroup
             type="single"
             variant="outline"
@@ -558,16 +555,32 @@ export function PositionsCard({
             </ToggleGroupItem>
           </ToggleGroup>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={ICON_TARGET}
-            onClick={() => setPending({ kind: "reset" })}
-            disabled={isRecording || filledCount === 0}
-            aria-label={t("antenna_alignment.recorder.reset")}
-          >
-            <MaterialSymbol name="restart_alt" size={GLYPH.ACTION} />
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={ICON_TARGET}
+              onClick={() => setPending({ kind: "reset" })}
+              disabled={isRecording || filledCount === 0}
+              aria-label={t("antenna_alignment.recorder.reset")}
+            >
+              <MaterialSymbol name="restart_alt" size={GLYPH.ACTION} />
+            </Button>
+
+            <Button
+              size="action"
+              className="shrink-0"
+              disabled={recordBlockedReason !== null}
+              onClick={() => {
+                if (nextEmpty !== -1) recordInto(nextEmpty);
+              }}
+            >
+              <MaterialSymbol name={RECORD_GLYPH.idle} size={GLYPH.ACTION} />
+              {antennaType === "directional"
+                ? t("antenna_alignment.recorder.record_angle")
+                : t("antenna_alignment.recorder.record_position")}
+            </Button>
+          </div>
         </div>
 
         <motion.div className={SLOT.STACK} variants={staggerRows}>
@@ -640,37 +653,16 @@ export function PositionsCard({
           </p>
         )}
 
-        {/* THE card's one primary button, at the bottom as its closing call to
-            action. It records into the next empty slot, which is what removes
-            two of the three saturated pills the outgoing tile grid stacked
-            down the phone. Its disabled-reason hint shares the button's row,
-            justified apart and vertically centered against it, rather than
-            sitting in a line of its own underneath. */}
-        <div className="flex flex-col gap-2 @sm/card:flex-row @sm/card:items-center @sm/card:justify-between">
-          {recordBlockedReason ? (
-            <p
-              role="status"
-              className="text-xs leading-relaxed text-pretty text-on-surface-variant"
-            >
-              {recordBlockedReason}
-            </p>
-          ) : (
-            <span />
-          )}
-
-          <Button
-            size="action" className="w-full @sm/card:w-fit @sm/card:shrink-0"
-            disabled={recordBlockedReason !== null}
-            onClick={() => {
-              if (nextEmpty !== -1) recordInto(nextEmpty);
-            }}
+        {/* Why Record is disabled, under the rows it is waiting on. Mounted
+            only while it applies, so an idle card ends on its last row. */}
+        {recordBlockedReason && (
+          <p
+            role="status"
+            className="text-xs leading-relaxed text-pretty text-on-surface-variant"
           >
-            <MaterialSymbol name={RECORD_GLYPH.idle} size={GLYPH.ACTION} />
-            {antennaType === "directional"
-              ? t("antenna_alignment.recorder.record_angle")
-              : t("antenna_alignment.recorder.record_position")}
-          </Button>
-        </div>
+            {recordBlockedReason}
+          </p>
+        )}
       </CardContent>
 
       {/* Unrecoverable, and often reached after fifteen minutes on a ladder —
