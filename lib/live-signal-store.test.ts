@@ -339,6 +339,56 @@ describe("live signal store", () => {
     expect(h.leases[h.leases.length - 1]).toBe("aim");
   });
 
+  it("a fresh aim subscriber stays aim and renews every 5 s with no input", async () => {
+    const h = harness();
+    h.store.subscribe("aim");
+    await flush();
+    await h.advance(5000);
+    await h.advance(5000);
+    expect(h.leases).toEqual(["aim", "aim", "aim"]);
+    expect(h.store.leasedTier()).toBe("aim");
+  });
+
+  it("aim joining a long-quiet watch subscriber starts a fresh idle window", async () => {
+    const h = harness();
+    h.store.subscribe("watch");
+    await flush();
+    // No aim subscriber, so no idle timer runs; the last input ages anyway.
+    await h.advance(LIVE_IDLE_DEMOTE_MS + 60_000);
+    h.leases.length = 0;
+    h.store.subscribe("aim");
+    await flush();
+    await h.advance(30_000);
+    expect(h.leases.every((t) => t === "aim")).toBe(true);
+    expect(h.store.leasedTier()).toBe("aim");
+    await h.advance(LIVE_IDLE_DEMOTE_MS);
+    expect(h.store.leasedTier()).toBe("watch");
+  });
+
+  it("setTier to aim on a long-quiet store starts a fresh idle window", async () => {
+    const h = harness();
+    const sub = h.store.subscribe("watch");
+    await flush();
+    await h.advance(LIVE_IDLE_DEMOTE_MS + 60_000);
+    sub.setTier("aim");
+    await flush();
+    await h.advance(30_000);
+    expect(h.store.leasedTier()).toBe("aim");
+  });
+
+  it("a tab foregrounded after a long hidden spell leases aim again", async () => {
+    const h = harness();
+    h.store.subscribe("aim");
+    await flush();
+    await h.setVisible(false);
+    await h.advance(LIVE_IDLE_DEMOTE_MS + 60_000);
+    h.leases.length = 0;
+    await h.setVisible(true);
+    expect(h.leases).toEqual(["aim"]);
+    await h.advance(30_000);
+    expect(h.store.leasedTier()).toBe("aim");
+  });
+
   it("input before the deadline postpones the demotion", async () => {
     const h = harness();
     h.store.subscribe("aim");

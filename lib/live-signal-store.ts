@@ -14,7 +14,9 @@ import type {
 //
 //   - Tier = fastest subscriber (`aim` beats `watch`). `aim` demotes to
 //     `watch` after 10 minutes without pointer/keyboard input and is restored
-//     by the next input.
+//     by the next input. A new subscriber, a tier change to `aim` and the tab
+//     becoming visible each count as activity, so a fresh `aim` always gets
+//     its full 10 minutes (the last input of a long-quiet store is stale).
 //   - The lease is POSTed at subscribe, every `renew_s`, and on becoming
 //     visible. The file is polled by a non-overlapping timeout chain at the
 //     lease's `period_ms`. A hidden tab stops both.
@@ -452,6 +454,13 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     }
   };
 
+  /** Presence without an input event: restart the idle window. The caller
+   *  re-tiers and re-arms. */
+  const markActive = () => {
+    lastInputMs = deps.now();
+    idle = false;
+  };
+
   const handleVisibility = (visible: boolean) => {
     if (subs.size === 0) return;
     if (!visible) {
@@ -462,7 +471,9 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     }
     failures = 0;
     unavailable = false;
+    markActive();
     start();
+    armIdle();
     emit();
   };
 
@@ -472,9 +483,8 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
     const sub: Sub = { tier };
     const first = subs.size === 0;
     subs.add(sub);
+    markActive();
     if (first) {
-      lastInputMs = deps.now();
-      idle = false;
       failures = 0;
       unavailable = false;
       removeVisibility = deps.onVisibilityChange(handleVisibility);
@@ -491,6 +501,7 @@ export function createLiveSignalStore(deps: LiveSignalStoreDeps) {
       setTier: (next: LiveTier) => {
         if (!subs.has(sub) || sub.tier === next) return;
         sub.tier = next;
+        if (next === "aim") markActive();
         armIdle();
         retier();
       },
