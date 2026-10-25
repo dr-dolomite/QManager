@@ -31,9 +31,11 @@ fi
 # ---------------------------------------------------------------------------
 # Authentication — source cgi_auth.sh with fail-closed fallbacks if missing
 # ---------------------------------------------------------------------------
-if [ -f /usr/lib/qmanager/cgi_auth.sh ]; then
-    . /usr/lib/qmanager/cgi_auth.sh
-else
+[ -f /usr/lib/qmanager/cgi_auth.sh ] && . /usr/lib/qmanager/cgi_auth.sh
+# require_auth is the library's last function, so an empty or truncated file
+# (e.g. zeroed by power loss after an unsynced deploy) sources cleanly but
+# leaves it undefined. Treat that exactly like a missing library.
+if ! type require_auth >/dev/null 2>&1; then
     # Fails closed on purpose: a missing auth library must never become a bypass.
     require_auth() {
         echo "Status: 500 Internal Server Error"
