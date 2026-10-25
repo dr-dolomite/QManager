@@ -65,6 +65,11 @@ ensure_updater_executable() {
     return 0
 }
 
+# True when opkg owns this install (sdxpinn-qmanager ipk). See install.sh.
+package_managed() {
+    [ -f /usr/lib/opkg/info/sdxpinn-qmanager.control ]
+}
+
 get_current_version() {
     if [ -f "$VERSION_FILE" ]; then
         tr -d '[:space:]' < "$VERSION_FILE"
@@ -193,6 +198,31 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     auto_enabled=$(uci_update_get auto_update_enabled "0")
     auto_time=$(uci_update_get auto_update_time "03:00")
 
+    # A package (ipk) install updates through opkg, so there is nothing to
+    # check on GitHub and every tarball action below is refused.
+    if package_managed; then
+        jq -n \
+            --arg cv "$current_version" \
+            --argjson prerelease "$include_prerelease" \
+            --arg auto_time "$auto_time" \
+            '{
+                success: true, current_version: $cv,
+                latest_version: null, update_available: false,
+                changelog: null, current_changelog: null,
+                download_url: null, download_size: null,
+                available_versions: [], download_state: null,
+                include_prerelease: ($prerelease == 1),
+                auto_update_enabled: false,
+                auto_update_time: $auto_time,
+                previous_install_failed: false,
+                pending_version: null,
+                check_error: null,
+                managed_by: "opkg",
+                package_name: "sdxpinn-qmanager"
+            }'
+        exit 0
+    fi
+
     # Interrupted-install detection. A live updater owns the marker mid-install,
     # so only a marker with no updater behind it counts as a failure.
     pending_version=""
@@ -231,7 +261,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 auto_update_time: $auto_time,
                 previous_install_failed: $pif,
                 pending_version: (if $pv == "" then null else $pv end),
-                check_error: "Unable to check for updates. Check your internet connection."
+                check_error: "Unable to check for updates. Check your internet connection.",
+                managed_by: "tarball"
             }'
         exit 0
     fi
@@ -268,7 +299,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 auto_update_time: $auto_time,
                 previous_install_failed: $pif,
                 pending_version: (if $pv == "" then null else $pv end),
-                check_error: $err
+                check_error: $err,
+                managed_by: "tarball"
             }'
         exit 0
     fi
@@ -374,7 +406,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             auto_update_time: $auto_time,
             previous_install_failed: $pif,
             pending_version: (if $pv == "" then null else $pv end),
-            check_error: null
+            check_error: null,
+            managed_by: "tarball"
         }'
     exit 0
 fi
@@ -390,6 +423,15 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         cgi_error "missing_action" "action field is required"
         exit 0
     fi
+
+    case "$ACTION" in
+        download|install_staged|install|rollback|save_auto_update)
+            if package_managed; then
+                cgi_error "package_managed" "QManager is installed as the sdxpinn-qmanager package; update it with opkg"
+                exit 0
+            fi
+            ;;
+    esac
 
     # --- Save pre-release preference ---
     if [ "$ACTION" = "save_prerelease" ]; then

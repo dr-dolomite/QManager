@@ -337,6 +337,13 @@ preflight() {
 
     log_info "qmanager_update v2 started (mode=$MODE, pid=$$)"
 
+    # An ipk install is updated by opkg; a tarball install over it would leave
+    # opkg's file list wrong (install.sh refuses too). Checked before the
+    # watchdog stops so a refused run changes nothing.
+    if [ -f /usr/lib/opkg/info/sdxpinn-qmanager.control ]; then
+        die "QManager is managed by the package manager; update it with opkg"
+    fi
+
     # Stop the watchdog early — it might try to recover from "network down"
     # during our install and cause trouble.
     if [ -x /etc/init.d/qmanager_watchcat ]; then
