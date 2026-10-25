@@ -1796,6 +1796,13 @@ migrate_tailscale_net() {
         return 0
     fi
 
+    # The Tiny build's own init owns its zone and rules. Apply nothing and
+    # tear nothing down: an old pref-1990 rule is kernel-only and harmless.
+    if ( . "$lib"; command -v ts_net_owned >/dev/null 2>&1 && ! ts_net_owned ); then
+        info "Tailscale Tiny build manages its own network setup — leaving as-is"
+        return 0
+    fi
+
     # Subshell: the lib's names and any failure stay out of the installer.
     # Rules are cheap; the zone only reloads fw4 when it actually changed.
     if (

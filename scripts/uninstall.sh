@@ -352,10 +352,16 @@ remove_backend() {
     # tailscale_net.enabled toggle, so run it whenever the lib exists; it must
     # run before /usr/lib/qmanager is wiped below. Subshell keeps the lib's
     # names out of this script and a failure non-fatal.
+    # A Tiny-build Tailscale (opkg) outlives QManager and its init relies on
+    # the 'tailscale' zone, so there only QManager's own ip rules go.
     if [ -f "$LIB_DIR/tailscale_net.sh" ]; then
         (
             . "$LIB_DIR/tailscale_net.sh"
-            ts_net_teardown
+            if ts_net_owned; then
+                ts_net_teardown
+            else
+                ts_net_remove_rules
+            fi
         ) >>"$LOG_FILE" 2>&1 || true
         info "Cleaned up Tailscale network fixes (if present)"
     fi

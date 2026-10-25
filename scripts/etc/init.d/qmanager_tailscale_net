@@ -4,7 +4,8 @@
 # =============================================================================
 # The pref-1990 ip rules are kernel-only and gone after every reboot; the fw4
 # zone is UCI and normally survives, but is re-checked too. Runs once, exits.
-# Gated on a Tailscale binary being present and quecmanager.tailscale_net.enabled
+# Gated on a Tailscale binary being present, the install not being the Tiny
+# build (its own init owns zone + rules) and quecmanager.tailscale_net.enabled
 # not being 0 (default on). See /usr/lib/qmanager/tailscale_net.sh.
 # =============================================================================
 
@@ -30,6 +31,10 @@ start() {
 
     if [ ! -x /usr/bin/tailscale ] && ! command -v tailscale >/dev/null 2>&1; then
         logger -t qmanager_tailscale_net "Tailscale not installed, skipping"
+        return 0
+    fi
+    if ! ts_net_owned; then
+        logger -t qmanager_tailscale_net "Tailscale Tiny build manages its own network setup, skipping"
         return 0
     fi
     if ! ts_net_enabled; then
