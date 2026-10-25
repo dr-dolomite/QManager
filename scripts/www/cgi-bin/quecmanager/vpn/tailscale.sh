@@ -181,6 +181,66 @@ _ts_cgi_exit() {
 }
 trap '_ts_cgi_exit' EXIT
 
+# --- Helper: Tiny-build connect over the LocalAPI ----------------------------
+# The Tiny build omits the IPN bus, so `tailscale up` / `login` return without
+# setting prefs or starting a login. Same result as `tailscale up
+# --accept-dns=false` through EditPrefs, so no other pref (SSH, exit node) is
+# reset: WantRunning on, CorpDNS off, then an interactive login when the node
+# needs one. Prints the CGI response.
+TS_LOCALAPI_SOCK="/var/run/tailscale/tailscaled.sock"
+# ts_localapi METHOD PATH [JSON] — prints the HTTP status code.
+ts_localapi() {
+    curl -s --max-time 5 --unix-socket "$TS_LOCALAPI_SOCK" -o /dev/null -w '%{http_code}' \
+        -X "$1" -H 'Content-Type: application/json' -d "${3:-}" \
+        "http://local-tailscaled.sock/localapi/v0/$2" 2>/dev/null
+}
+
+ts_tiny_connect() {
+    local code
+    local st
+    local state
+    local url
+    local n
+    local asked
+    code=$(ts_localapi PATCH prefs '{"WantRunningSet":true,"WantRunning":true,"CorpDNSSet":true,"CorpDNS":false}')
+    case "$code" in
+        2*) : ;;
+        *)
+            qlog_error "LocalAPI prefs edit failed (HTTP ${code:-none})"
+            cgi_error "connect_failed" "Could not reach the Tailscale daemon"
+            return 0
+            ;;
+    esac
+    asked=0
+    n=0
+    while [ "$n" -lt 10 ]; do
+        st=$(tailscale status --json 2>/dev/null)
+        state=$(printf '%s' "$st" | jq -r '.BackendState // ""' 2>/dev/null)
+        url=$(printf '%s' "$st" | jq -r '.AuthURL // ""' 2>/dev/null)
+        if [ "$state" = "Running" ]; then
+            rm -f "$AUTH_URL_FILE"
+            qlog_info "Tailscale already authenticated"
+            jq -n '{"success": true, "already_authenticated": true}'
+            return 0
+        fi
+        if [ -n "$url" ]; then
+            printf '%s' "$url" | qm_atomic_write "$AUTH_URL_FILE"
+            qlog_info "Auth URL generated, waiting for user authentication"
+            jq -n --arg auth_url "$url" '{"success": true, "auth_url": $auth_url}'
+            return 0
+        fi
+        if [ "$state" = "NeedsLogin" ] && [ "$asked" = "0" ]; then
+            ts_localapi POST login-interactive >/dev/null
+            asked=1
+        fi
+        sleep 1
+        n=$((n + 1))
+    done
+    qlog_error "Timed out waiting for auth URL"
+    cgi_error "auth_timeout" "Timed out waiting for auth URL. Check if tailscaled is running."
+    return 0
+}
+
 # =============================================================================
 # GET — Fetch installation status, daemon state, connection info, peers
 # =============================================================================
@@ -706,6 +766,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # Clean up old temp files
         rm -f "$AUTH_URL_FILE" "$TS_UP_OUTPUT"
         qm_run_dir >/dev/null || { cgi_error "start_failed" "Cannot prepare work dir"; exit 0; }
+
+        # The Tiny build omits the IPN bus; connect through the LocalAPI.
+        if [ "$(ts_variant)" = "tiny" ]; then
+            ts_tiny_connect
+            exit 0
+        fi
 
         # CRITICAL: NEVER use --accept-routes or --advertise-routes — accepting
         # routes disconnects the device from the network entirely and requires
