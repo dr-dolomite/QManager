@@ -174,6 +174,7 @@ def main():
     preinst = ("#!/bin/sh\n"
                "# opkg preinst: install.sh, entered at ipk_preinst (stop services,\n"
                "# retire legacy features) before opkg unpacks the new files.\n"
+               "[ -n \"$IPKG_INSTROOT\" ] && exit 0\n"
                "QM_INSTALL_ENTRY=ipk_preinst\n" + body)
 
     control_text = "\n".join([
