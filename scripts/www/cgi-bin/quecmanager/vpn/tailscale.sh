@@ -1109,6 +1109,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                     uci -q delete network.tailscale && uci -q commit network
                 fi
                 rm -f /etc/config/tailscale /etc/config/tailscale-opkg 2>/dev/null
+                # Only once the package is really gone: its init owns them.
+                [ -f /usr/lib/opkg/info/tailscale-tiny.control ] || ts_net_remove_tiny_rules
             fi
         fi
 

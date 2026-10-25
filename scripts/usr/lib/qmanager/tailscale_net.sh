@@ -222,6 +222,27 @@ ts_net_remove_rules() {
     return 0
 }
 
+# ts_net_remove_tiny_rules — after the Tiny package is removed: its init moved
+# tailscaled's rules to prefs 1310-1370 (ahead of mwan3) and nothing deletes
+# them once the package is gone. Only rules carrying tailscaled's fwmark or
+# table 52 are touched, v4 and v6. Never call it while Tiny is installed.
+ts_net_remove_tiny_rules() {
+    local fam
+    local p
+    local n
+    for fam in -4 -6; do
+        for p in 1310 1330 1350 1370; do
+            n=0
+            while [ "$n" -lt 4 ] && ip "$fam" rule show pref "$p" 2>/dev/null \
+                    | grep -qE 'fwmark 0x80000/0xff0000|lookup 52( |$)'; do
+                ip "$fam" rule del pref "$p" 2>/dev/null || break
+                n=$((n + 1))
+            done
+        done
+    done
+    return 0
+}
+
 # ts_net_apply [--no-reload] — rules + zone; fw4 reload only when the zone changed.
 ts_net_apply() {
     ts_net_ensure_rules
