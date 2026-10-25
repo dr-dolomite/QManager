@@ -67,7 +67,7 @@ Temperature is read exclusively from the SoC thermal sysfs (`/sys/class/thermal/
 
 The poller global for this value is `t1_temperature` (renamed from `t2_temperature` when the read moved from Tier 2 to Tier 1.5). The `.temperature` key in `/tmp/qmanager_status.json` and `device.temperature` in the API response are unchanged.
 
-> ℹ️ NOTE: `scripts/debug_poller_at.sh` lines 56–57 still reference `AT+QTEMP` as a Tier 3 probe. That file is a development diagnostic, not production code, and its cleanup is tracked separately — do not treat it as evidence that AT+QTEMP is safe to call.
+> ℹ️ NOTE: `tools/debug_poller_at.sh` (dev-only, not packaged) lines 54–55 still reference `AT+QTEMP` as a Tier 3 probe. That file is a development diagnostic, not production code, and its cleanup is tracked separately — do not treat it as evidence that AT+QTEMP is safe to call.
 
 ### No `setsid`
 
