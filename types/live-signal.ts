@@ -3,7 +3,7 @@
 // client-side snapshot the shared store hands to consumers.
 // =============================================================================
 
-/** Lease tier. Both sample at 1 s today (`aim`'s 200 ms is parked). */
+/** Lease tier. Both sample at 1 s today (`aim`'s 200 ms was dropped). */
 export type LiveTier = "aim" | "watch";
 
 export type LiveQmiState = "up" | "down" | "unavailable";
