@@ -47,7 +47,7 @@ A shallow tier is the honest answer, not a failure. Every field after `installed
 ## Page shapes and the three data states
 
 - **Other VPN installed** (`other_vpn_installed`, gated on `!isLoading`): header and one `Banner` naming the other VPN with a link to its page. No band, no cards.
-- **`notInstalled`**: the install hero alone (`install-card.tsx`), no band, no peers. It carries a manual shell command with a copy button as the fallback when the in-page install cannot work.
+- **`notInstalled`**: the install card alone (`install-card.tsx`, a plain card, not a hero), no band, no peers. Header: action title and a muted Not installed badge (the page header's Refresh pill covers re-checking, so the card has none). Body: one tile holding the manual shell command with a copy button, the fallback when the in-page install cannot work; it stays visible after a failure, with the error notice above it. Foot: the data-cost line on the left edge, Install on the right (Try again after a failure). There is no install transcript, so a live run only changes the foot status and the button. While the first read is in flight the page paints `InstallCardSkeleton` instead of the installed layout when the last answer remembered for this tab (`last-known.ts`, `sessionStorage`) was "not installed".
 - **Loading**: `StatusBandSkeleton`, `ConnectionCardSkeleton`, `DeviceCardSkeleton`, and the peers card's own skeleton, all built from `shapes.ts` constants.
 - **Empty**: connected with zero peers renders the peers card's empty `ConditionBlock` (`muted`), not a blank table.
 - **Error**: no status at all (`!status && !isLoading`) renders a destructive `ConditionBlock` with Retry. The peers card is a separate surface and mounts with its own condition. A failed poll on top of good data is a non-blocking notice, never a replacement for the content.
@@ -64,7 +64,8 @@ A shallow tier is the honest answer, not a failure. Every field after `installed
 | `connection-card.tsx` | Connect / Disconnect, Start / Stop service, Uninstall (only while not connected), Start on boot row (`SegmentedField`), setup-key field |
 | `device-card.tsx` | Identity rows (FQDN, NetBird IP, interface); values mono as opaque strings |
 | `peers-card.tsx` | The peer table |
-| `install-card.tsx` | Not-installed hero, install progress, manual command |
+| `install-card.tsx` | The not-installed card and its skeleton: header badge, manual-command tile, `CardFoot` (cost left, Install right) |
+| `last-known.ts` | The remembered installed flag that picks the first-paint skeleton |
 | `danger-card.tsx` | `UninstallButton` (`AlertDialog` confirm, trailing end of the Connection rail) and `RebootDialog` |
 | `condition-block.tsx` | Loading-adjacent empty and error blocks (the block is the state) |
 | `shapes.ts` | Class constants, view maps, table geometry |
