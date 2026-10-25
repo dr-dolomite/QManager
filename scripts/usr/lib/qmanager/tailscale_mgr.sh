@@ -826,6 +826,10 @@ _ts_worker_exit() {
     if [ "$TS_SWAP_PENDING" = "1" ] && [ -n "$TS_SPACE_MODE" ]; then
         ts_restore_binaries
         hash -r 2>/dev/null
+        # The Tiny postinst re-enabled boot; put the user's choice back.
+        if [ "$TS_SPACE_MODE" = "tiny" ] && [ -n "$TS_TINY_BOOT" ]; then
+            _ts_tiny_boot_set "$TS_TINY_BOOT"
+        fi
         _ts_restart_old "$TS_OLD_VER"
     fi
     rm -rf "$(_ts_work_dir)"
@@ -839,6 +843,7 @@ _ts_worker_begin() {
     TS_SPACE_MODE=""
     TS_KEEP_BACKUP=0
     TS_WAS_RUNNING=0
+    TS_TINY_BOOT=""
     TS_OLD_VER=""
     TS_LATEST_VER=""
     TS_LATEST_TARBALL=""
@@ -1034,15 +1039,23 @@ _ts_update_body() {
 
 # --- Tiny source (opkg) --------------------------------------------------------
 
+# _ts_opkg_busy — rc 0 while another opkg run holds its lock. opkg unlinks the
+# file on exit; a file left by a crashed run is not busy if it can be locked.
+_ts_opkg_busy() {
+    [ -f /var/lock/opkg.lock ] || return 1
+    command -v flock >/dev/null 2>&1 || return 0
+    ! flock -n /var/lock/opkg.lock true 2>/dev/null
+}
+
 # _ts_opkg_wait — wait up to 30 s for another opkg run to finish.
 _ts_opkg_wait() {
     local n
     n=0
-    while [ -f /var/lock/opkg.lock ] && [ "$n" -lt 30 ]; do
+    while _ts_opkg_busy && [ "$n" -lt 30 ]; do
         sleep 1
         n=$((n + 1))
     done
-    [ ! -f /var/lock/opkg.lock ]
+    ! _ts_opkg_busy
 }
 
 # _ts_opkg_refresh — opkg update, then require the Tiny package to resolve.
@@ -1091,6 +1104,17 @@ _ts_tiny_boot_set() {
         uci -q set tailscale.settings.service_enabled="$1" 2>/dev/null
         uci -q commit tailscale 2>/dev/null
     fi
+}
+
+# _ts_tiny_daemon_stale — rc 0 when a running tailscaled still executes a
+# binary that has since been replaced on flash.
+_ts_tiny_daemon_stale() {
+    local p
+    for p in $(pidof tailscaled 2>/dev/null); do
+        case "$p" in ''|*[!0-9]*) continue ;; esac
+        ls -l "/proc/$p/exe" 2>/dev/null | grep -q '(deleted)' && return 0
+    done
+    return 1
 }
 
 _ts_install_body_tiny() {
@@ -1148,6 +1172,10 @@ _ts_update_body_tiny() {
     local opkg_rc
     installed=$(ts_tiny_pkg_version)
     TS_OLD_VER=$(ts_installed_version)
+    if [ -z "$installed" ]; then
+        _ts_fail update_failed "Could not read the installed Tiny build's version"
+        return 1
+    fi
 
     ts_progress running "Checking for updates..."
     if ! ts_latest_refresh; then
@@ -1176,6 +1204,7 @@ _ts_update_body_tiny() {
     pidof tailscaled >/dev/null 2>&1 && was_running=1
     TS_WAS_RUNNING="$was_running"
     boot=$(_ts_tiny_boot_get)
+    TS_TINY_BOOT="$boot"
 
     bak=$(_ts_backup_dir)
     if ! qm_root_dir "$bak" 0700 || ! cp "$TS_TINY_BIN_DIR/tailscaled" "$bak/tailscaled" 2>/dev/null; then
@@ -1192,6 +1221,9 @@ _ts_update_body_tiny() {
         opkg install --force-reinstall "$TS_TINY_PKG" || opkg_rc=1
     else
         opkg install "$TS_TINY_PKG" || opkg_rc=1
+        # rc 0 with the old package still recorded: opkg saw nothing newer
+        # (its lists did not load). Not an update.
+        [ "$(ts_tiny_pkg_version)" = "$TS_LATEST_VER" ] || opkg_rc=1
     fi
     # Whatever opkg did, its postinst enabled boot and started the daemon:
     # put the user's choice back.
@@ -1204,7 +1236,13 @@ _ts_update_body_tiny() {
     hc_mode="nodaemon"
     if [ "$was_running" = "1" ]; then
         hc_mode=""
-        pidof tailscaled >/dev/null 2>&1 || /etc/init.d/tailscale start >/dev/null 2>&1
+        if ! pidof tailscaled >/dev/null 2>&1; then
+            /etc/init.d/tailscale start >/dev/null 2>&1
+        elif _ts_tiny_daemon_stale; then
+            # The CLI is the same multicall binary, so only the daemon's exe
+            # can tell an old process apart from the new one.
+            /etc/init.d/tailscale restart >/dev/null 2>&1
+        fi
     fi
 
     # opkg failed before touching the binary (download, signature, space):

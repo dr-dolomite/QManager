@@ -647,7 +647,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         check_worker_lock
         up_installed=$(ts_compare_version)
         up_latest=$(ts_latest_cache_read)
-        if [ -n "$up_latest" ] && ! ts_version_gt "$up_latest" "$up_installed"; then
+        # An unreadable installed version goes to the worker, which reports it.
+        if [ -n "$up_latest" ] && [ -n "$up_installed" ] && ! ts_version_gt "$up_latest" "$up_installed"; then
             cgi_error "up_to_date" "Tailscale is already up to date"
             exit 0
         fi
