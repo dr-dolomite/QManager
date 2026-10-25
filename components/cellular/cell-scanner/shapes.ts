@@ -109,7 +109,7 @@ export const LEDGER = {
   STATUS_BODY: "text-xs text-on-surface-variant text-pretty",
   /** The complete posture: the check beside the figure, held at the top of the cell. */
   SUMMARY_ROOT:
-    "grid grid-cols-[auto_minmax(0,1fr)] content-start items-center gap-x-3 px-4 py-3.5 @2xl/section:px-5 @2xl/section:py-[18px]",
+    "grid grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-3 px-4 py-3.5 @2xl/section:px-5 @2xl/section:py-[18px]",
   /** The run's total, never a count of rendered rows. */
   SUMMARY_FIG: "flex min-w-0 items-baseline gap-1.5",
   SUMMARY_FIG_NUM:
@@ -121,29 +121,34 @@ export const LEDGER = {
 
   /** Its own container, so a row responds to the rows region's width, not the card's. */
   ROWS_ROOT: "@container/rows flex min-w-0 flex-col",
-  /** Wide-only column header; `aria-hidden` at the call site. */
-  HEAD: "hidden text-xs font-medium text-on-surface-variant @lg/rows:grid @lg/rows:grid-cols-[minmax(0,1.25fr)_3.25rem_minmax(0,1fr)_6rem_5.25rem] @lg/rows:gap-x-3.5 @lg/rows:px-5 @lg/rows:pt-3 @lg/rows:pb-2",
-  HEAD_BEST: "col-start-4 col-span-2 text-right",
+  /** Two labels on the row's two edges; `aria-hidden` at the call site. */
+  HEAD: "flex items-center justify-between gap-x-4 px-4 pt-3 pb-1.5 text-xs font-medium text-on-surface-variant @lg/rows:px-5",
 
-  /** A two-line receipt on a phone, one five-track grid from `@lg/rows`. */
-  ROW: "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3.5 @lg/rows:grid-cols-[minmax(0,1.25fr)_3.25rem_minmax(0,1fr)_6rem_5.25rem] @lg/rows:gap-x-3.5 @lg/rows:gap-y-0 @lg/rows:px-5 @lg/rows:py-[11px]",
+  /**
+   * Two edges at every width: identity holds the left (name over its count and
+   * bands), the reading holds the right. No middle tracks, so a wide card never
+   * opens a gap between a group and its value.
+   */
+  ROW: "flex items-center justify-between gap-x-4 px-4 py-3 @lg/rows:px-5",
   /** Appended from the second rendered row on. */
   ROW_DIVIDER: "border-t border-border",
 
-  NAME: "col-start-1 row-start-1 flex min-w-0 items-center gap-2",
+  IDENT: "flex min-w-0 flex-col gap-1",
+  NAME: "flex min-w-0 items-center gap-2",
   NAME_TEXT: "min-w-0 truncate text-sm font-semibold",
   /** A provider the modem named only by its numeric codes. */
   NAME_TEXT_MACHINE: "min-w-0 truncate font-mono text-[13px] font-semibold",
-  /** Display-contents from `@lg/rows`, so its two children fall into the count and bands tracks. */
-  META: "col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @lg/rows:contents",
-  CELLS:
-    "tabular-nums text-[13px] font-semibold whitespace-nowrap text-on-surface-variant @lg/rows:text-sm @lg/rows:font-normal @lg/rows:text-on-surface @lg/rows:text-right",
-  CELLS_UNIT: "font-medium text-on-surface-variant @lg/rows:hidden",
+  META: "flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1",
+  CELLS: "tabular-nums text-xs font-semibold whitespace-nowrap",
+  CELLS_UNIT: "font-medium text-on-surface-variant",
   BANDS: "flex min-w-0 flex-wrap items-center gap-1",
-  CHIP: "col-start-2 row-start-2 flex justify-self-end @lg/rows:col-auto @lg/rows:row-auto",
-  DBM: "col-start-2 row-start-1 flex items-baseline gap-0.5 justify-self-end @lg/rows:col-auto @lg/rows:row-auto",
-  DBM_VALUE:
-    "whitespace-nowrap text-right tabular-nums font-semibold text-[15px] @lg/rows:text-sm",
+  /** dBm over its chip on a phone; chip then dBm on one line from `@sm/rows`. */
+  READING:
+    "flex flex-none flex-col-reverse items-end gap-1.5 @sm/rows:flex-row @sm/rows:items-center @sm/rows:gap-3",
+  CHIP: "flex",
+  /** A fixed slot so every row's numerals end on the same edge. */
+  DBM: "flex items-baseline justify-end gap-0.5 @sm/rows:min-w-[5.25rem]",
+  DBM_VALUE: "whitespace-nowrap tabular-nums font-semibold text-[15px]",
   DBM_UNIT: "text-xs font-semibold text-on-surface-variant",
   DBM_NONE: "text-on-surface-variant",
 

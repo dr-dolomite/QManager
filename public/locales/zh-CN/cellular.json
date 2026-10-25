@@ -1504,8 +1504,6 @@
       "progress_label": "预计扫描进度",
       "ledger": {
         "col_carrier": "运营商",
-        "col_cells": "小区",
-        "col_bands": "频段",
         "col_best": "最佳信号",
         "your_sim": "你的 SIM",
         "cells_unit_one": "个小区",

@@ -261,8 +261,6 @@ export function FullScanner() {
         emptyText={t("cell_scanner.run.summary_empty")}
         head={{
           carrier: t("cell_scanner.run.ledger.col_carrier"),
-          cells: t("cell_scanner.run.ledger.col_cells"),
-          bands: t("cell_scanner.run.ledger.col_bands"),
           best: t("cell_scanner.run.ledger.col_best"),
         }}
         simTagLabel={t("cell_scanner.run.ledger.your_sim")}

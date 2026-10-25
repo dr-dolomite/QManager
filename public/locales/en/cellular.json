@@ -1504,8 +1504,6 @@
       "progress_label": "Estimated sweep progress",
       "ledger": {
         "col_carrier": "Carrier",
-        "col_cells": "Cells",
-        "col_bands": "Bands",
         "col_best": "Best signal",
         "your_sim": "Your SIM",
         "cells_unit_one": "cell",

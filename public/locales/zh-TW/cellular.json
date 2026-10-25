@@ -1504,8 +1504,6 @@
       "progress_label": "預估掃描進度",
       "ledger": {
         "col_carrier": "電信業者",
-        "col_cells": "小區",
-        "col_bands": "頻段",
         "col_best": "最佳訊號",
         "your_sim": "你的 SIM",
         "cells_unit_one": "個小區",

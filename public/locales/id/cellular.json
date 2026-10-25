@@ -1504,8 +1504,6 @@
       "progress_label": "Perkiraan kemajuan pemindaian",
       "ledger": {
         "col_carrier": "Operator",
-        "col_cells": "Sel",
-        "col_bands": "Band",
         "col_best": "Sinyal terbaik",
         "your_sim": "SIM Anda",
         "cells_unit_one": "sel",

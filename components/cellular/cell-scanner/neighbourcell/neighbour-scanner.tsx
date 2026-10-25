@@ -150,7 +150,6 @@ export function NeighbourScanner() {
         emptyText={t("cell_scanner.neighbour.run.summary_empty")}
         head={{
           carrier: t("cell_scanner.neighbour.columns.cell_type"),
-          cells: t("cell_scanner.run.ledger.col_cells"),
           best: t("cell_scanner.run.ledger.col_best"),
         }}
         dbmUnit={t("cell_scanner.run.ledger.dbm_unit")}

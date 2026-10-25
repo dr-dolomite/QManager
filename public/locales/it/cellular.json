@@ -1504,8 +1504,6 @@
       "progress_label": "Avanzamento stimato della scansione",
       "ledger": {
         "col_carrier": "Operatore",
-        "col_cells": "Celle",
-        "col_bands": "Bande",
         "col_best": "Segnale migliore",
         "your_sim": "La tua SIM",
         "cells_unit_one": "cella",

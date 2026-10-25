@@ -43,11 +43,9 @@ export interface LedgerRowsProps {
   isLoading?: boolean;
   /** Shown instead of rows when a completed run produced none. */
   emptyText: string;
-  /** The wide-only column header. `bands` may be omitted for a route with no band column. */
+  /** The two edge labels: what the rows group by, and their reading. */
   head: {
     carrier: string;
-    cells: string;
-    bands?: string;
     best: string;
   };
   /** "Your SIM". */
@@ -63,18 +61,22 @@ function LedgerRowSkeleton({ withDivider }: { withDivider: boolean }) {
       className={cn(LEDGER.ROW, withDivider && LEDGER.ROW_DIVIDER)}
       aria-hidden="true"
     >
-      <div className={LEDGER.NAME}>
-        <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_NAME} />
+      <div className={LEDGER.IDENT}>
+        <div className={LEDGER.NAME}>
+          <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_NAME} />
+        </div>
+        <div className={LEDGER.META}>
+          <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_CELLS} />
+          <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_BANDS} />
+        </div>
       </div>
-      <div className={LEDGER.META}>
-        <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_CELLS} />
-        <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_BANDS} />
-      </div>
-      <div className={LEDGER.CHIP}>
-        <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_CHIP} />
-      </div>
-      <div className={LEDGER.DBM}>
-        <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_DBM} />
+      <div className={LEDGER.READING}>
+        <div className={LEDGER.CHIP}>
+          <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_CHIP} />
+        </div>
+        <div className={LEDGER.DBM}>
+          <Skeleton className={SKELETON_SHAPE.LEDGER_ROW_DBM} />
+        </div>
       </div>
     </div>
   );
@@ -95,55 +97,59 @@ function LedgerRowView({
 
   return (
     <div className={cn(LEDGER.ROW, withDivider && LEDGER.ROW_DIVIDER)}>
-      <div className={LEDGER.NAME}>
-        <span
-          className={
-            row.nameVoice === "machine"
-              ? LEDGER.NAME_TEXT_MACHINE
-              : LEDGER.NAME_TEXT
-          }
-        >
-          {row.name}
-        </span>
-        {row.isSim && simTagLabel ? (
-          <Tag variant="neutral" className="flex-none gap-1">
-            <MaterialSymbol name="sim_card" size={12} />
-            {simTagLabel}
-          </Tag>
-        ) : null}
-      </div>
-
-      <div className={LEDGER.META}>
-        <span className={LEDGER.CELLS}>
-          {row.cells}
-          <span className={LEDGER.CELLS_UNIT}> {row.cellsUnit}</span>
-        </span>
-        {row.bands.length > 0 ? (
-          <div className={LEDGER.BANDS}>
-            {row.bands.map((band) => (
-              <Tag key={band} variant="neutral">
-                {band}
-              </Tag>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className={LEDGER.CHIP}>
-        <SignalBadge strength={row.strength} />
-      </div>
-
-      <div className={LEDGER.DBM}>
-        {measured ? (
-          <>
-            <span className={LEDGER.DBM_VALUE}>{row.dbmText}</span>
-            <span className={LEDGER.DBM_UNIT}>{dbmUnit}</span>
-          </>
-        ) : (
-          <span className={LEDGER.DBM_NONE} aria-hidden="true">
-            —
+      <div className={LEDGER.IDENT}>
+        <div className={LEDGER.NAME}>
+          <span
+            className={
+              row.nameVoice === "machine"
+                ? LEDGER.NAME_TEXT_MACHINE
+                : LEDGER.NAME_TEXT
+            }
+          >
+            {row.name}
           </span>
-        )}
+          {row.isSim && simTagLabel ? (
+            <Tag variant="neutral" className="flex-none gap-1">
+              <MaterialSymbol name="sim_card" size={12} />
+              {simTagLabel}
+            </Tag>
+          ) : null}
+        </div>
+
+        <div className={LEDGER.META}>
+          <span className={LEDGER.CELLS}>
+            {row.cells}
+            <span className={LEDGER.CELLS_UNIT}> {row.cellsUnit}</span>
+          </span>
+          {row.bands.length > 0 ? (
+            <div className={LEDGER.BANDS}>
+              {row.bands.map((band) => (
+                <Tag key={band} variant="neutral">
+                  {band}
+                </Tag>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className={LEDGER.READING}>
+        <div className={LEDGER.CHIP}>
+          <SignalBadge strength={row.strength} />
+        </div>
+
+        <div className={LEDGER.DBM}>
+          {measured ? (
+            <>
+              <span className={LEDGER.DBM_VALUE}>{row.dbmText}</span>
+              <span className={LEDGER.DBM_UNIT}>{dbmUnit}</span>
+            </>
+          ) : (
+            <span className={LEDGER.DBM_NONE} aria-hidden="true">
+              —
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -165,9 +171,7 @@ export function LedgerRows({
       {showHead ? (
         <div className={LEDGER.HEAD} aria-hidden="true">
           <span>{head.carrier}</span>
-          <span className="text-right">{head.cells}</span>
-          <span>{head.bands ?? ""}</span>
-          <span className={LEDGER.HEAD_BEST}>{head.best}</span>
+          <span>{head.best}</span>
         </div>
       ) : null}
 
