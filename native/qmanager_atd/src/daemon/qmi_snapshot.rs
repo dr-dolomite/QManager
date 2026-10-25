@@ -47,6 +47,10 @@
 //!   from the sum, which a delta consumer would see as a counter reset). The
 //!   bytes are empty unless `qmi_wds_ok` is `1`. `qmi_wds_mux` is the mux id
 //!   of the default call whenever one is detected.
+//!   An IPv6-only call (no IPv4 default route, 0.6.1) takes its mux id from
+//!   the IPv6 table (`data_call`) and reads the IPv6 client alone; the IPv4
+//!   client is read only while an IPv4 default route exists or it read ok
+//!   last cycle.
 //!
 //! Cadence. Every 2 s, or faster while the live channel (`live.rs`) holds a
 //! lease: 1 s for both `watch` and `aim` (aim's 5 Hz is parked, see
@@ -90,6 +94,8 @@ pub struct Paths {
     pub live: LivePaths,
     /// `/proc/net/route` (the default call's mux id).
     pub route: String,
+    /// `/proc/net/ipv6_route` (the mux id of an IPv6-only call).
+    pub route6: String,
     /// `/sys/class/net/rmnet_ipa0` (the bind endpoint's presence check).
     pub ipa_dev: String,
 }
@@ -102,6 +108,7 @@ impl Paths {
             json: JSON_PATH.into(),
             live: LivePaths::production(),
             route: data_call::ROUTE_PATH.into(),
+            route6: data_call::ROUTE6_PATH.into(),
             ipa_dev: data_call::IPA_DEV_PATH.into(),
         }
     }
@@ -373,7 +380,7 @@ impl Sampler {
 
     /// This cycle's Data Used counters (see the module doc). Never fails.
     fn read_wds(&mut self, reg: &Registry) -> WdsView {
-        let call = data_call::discover(&self.paths.route, &self.paths.ipa_dev);
+        let call = data_call::discover(&self.paths.route, &self.paths.route6, &self.paths.ipa_dev);
         let mux = match call.mux {
             Some(m) => m,
             None => {
@@ -402,6 +409,12 @@ impl Sampler {
         let mut now_ok = [false; 2];
         for (k, fam) in IpFamily::ALL.iter().enumerate() {
             let was_ok = self.wds_prev_ok.get(k).copied().unwrap_or(false);
+            // An IPv6-only call (no IPv4 default route) reads the IPv6 client
+            // alone; a v4 family that read ok last cycle stays read, so its
+            // route flapping never shrinks the sum.
+            if *fam == IpFamily::V4 && !call.v4 && !was_ok {
+                continue;
+            }
             match reg.wds_packet_bytes(*fam, t) {
                 Ok(b) => {
                     any_ok = true;
@@ -594,7 +607,7 @@ mod tests {
             long_flag: p("long"),
         };
         // No route file and no rmnet_ipa0 here: no call, nothing bound.
-        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live, route: p("route"), ipa_dev: p("rmnet_ipa0") }
+        Paths { run_dir: None, env: p("q.env"), json: p("q.json"), live, route: p("route"), route6: p("route6"), ipa_dev: p("rmnet_ipa0") }
     }
 
     fn log() -> Arc<Logger> {
@@ -1105,6 +1118,150 @@ mod tests {
             .filter_map(|x| x.msg.tlv(0x11).and_then(|v| v.first().copied()))
             .collect();
         assert_eq!(binds, vec![1, 1, 6, 6], "both clients bound to mux 1, then both to mux 6");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// An IPv6 default route on rmnet_data<n> (the v6-only call's table).
+    fn set_route6(p: &Paths, n: u8) {
+        let z = "0".repeat(32);
+        let r = format!("{z} 00 {z} 00 {z} 00000400 00000001 00000000 00450003 rmnet_data{n}
+");
+        std::fs::write(&p.route6, r).unwrap();
+    }
+
+    fn wds_msgs(net: &crate::qmi::fake::FakeNet, id: u16) -> usize {
+        net.sent().iter().filter(|x| x.svc == crate::qmi::SVC_WDS && x.msg.id == id).count()
+    }
+
+    fn bind_muxes(net: &crate::qmi::fake::FakeNet) -> Vec<u8> {
+        net.sent()
+            .iter()
+            .filter(|x| x.svc == crate::qmi::SVC_WDS && x.msg.id == 0x00A2)
+            .filter_map(|x| x.msg.tlv(0x11).and_then(|v| v.first().copied()))
+            .collect()
+    }
+
+    #[test]
+    fn an_ipv6_only_call_binds_and_reads_the_ipv6_client_alone() {
+        let (d, p) = call_dir("wds-v6only", None, true);
+        set_route6(&p, 0);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(1_000, SeqCst);
+        md.tx6.store(10, SeqCst);
+        // A v4 client would answer; it must never be asked.
+        md.rx4.store(777, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "1000", "10", "1"].map(String::from));
+        assert_eq!((wds_msgs(&net, 0x00A2), wds_msgs(&net, 0x004D), wds_msgs(&net, 0x0024)), (1, 1, 1), "the v6 client only");
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Unbound);
+        assert_eq!(reg.wds_bind_state(IpFamily::V6), WdsBind::Bound { mux: 1, subs_ok: true });
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_ipv6_only_call_follows_its_mux_and_grows_into_dual_stack() {
+        let (d, p) = call_dir("wds-v6mux", None, true);
+        set_route6(&p, 0);
+        let (env_p, p2) = (p.env.clone(), paths(&d));
+        let (net, md) = wds_net();
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(500, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        // The call comes back on another PDN: rebind to its mux.
+        set_route6(&p2, 4);
+        s.sample_at(&reg, Tier::None);
+        let pr = env_of(&env_p);
+        assert_eq!((get(&pr, "qmi_wds_ok"), get(&pr, "qmi_wds_rx_bytes"), get(&pr, "qmi_wds_mux")), ("1", "500", "5"));
+        assert_eq!(bind_muxes(&net), vec![1, 5]);
+        // An IPv4 default appears on the same PDN: the v4 client joins the sum.
+        set_route(&p2, 4);
+        md.rx4.store(200, SeqCst);
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "700", "0", "5"].map(String::from));
+        assert_eq!(bind_muxes(&net), vec![1, 5, 5], "v6 stays bound, v4 binds once");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_flapping_ipv4_route_does_not_shrink_the_sum_while_v4_reads_ok() {
+        let (d, p) = call_dir("wds-v4flap", Some(0), true);
+        set_route6(&p, 0);
+        let (env_p, p2) = (p.env.clone(), paths(&d));
+        let (net, md) = wds_net();
+        md.rx4.store(100, SeqCst);
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(50, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(get(&env_of(&env_p), "qmi_wds_rx_bytes"), "150");
+        // The v4 default route is gone for a moment, the call is not.
+        std::fs::remove_file(&p2.route).unwrap();
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "150", "0", "1"].map(String::from));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_ipv6_only_call_rebinds_after_an_ssr_and_still_leaves_v4_alone() {
+        let (d, p) = call_dir("wds-v6ssr", None, true);
+        set_route6(&p, 0);
+        let env_p = p.env.clone();
+        let (net, md) = wds_net();
+        md.v6_call.store(true, SeqCst);
+        md.rx6.store(9, SeqCst);
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(get(&env_of(&env_p), "qmi_wds_ok"), "1");
+        for (svc, _) in reg.states() {
+            net.del_server(svc);
+        }
+        let end = Instant::now() + Duration::from_secs(2);
+        while reg.states().iter().any(|(_, st)| *st == SvcState::Up) && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        for (i, svc) in crate::qmi::SERVICES.iter().enumerate() {
+            net.add_server(*svc, 0, 0xA0 + i as u32);
+        }
+        let end = Instant::now() + Duration::from_secs(2);
+        while !(reg.states().iter().all(|(_, st)| *st == SvcState::Up)
+            && reg.wds_bind_state(IpFamily::V6) == WdsBind::Bound { mux: 1, subs_ok: true })
+            && Instant::now() < end
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["1", "9", "0", "1"].map(String::from));
+        assert_eq!(reg.wds_bind_state(IpFamily::V4), WdsBind::Unbound);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_ipv6_table_without_a_data_route_is_no_call() {
+        let (d, p) = call_dir("wds-v6none", None, true);
+        let z = "0".repeat(32);
+        // The RM551E's table today: reject default on lo, link-local on LAN.
+        std::fs::write(
+            &p.route6,
+            format!("{z} 00 {z} 00 {z} ffffffff 00000001 00000000 00200200 lo
+fe800000000000000000000000000000 40 {z} 00 {z} 00000100 00000001 00000000 00000001 eth0
+"),
+        )
+        .unwrap();
+        let env_p = p.env.clone();
+        let (net, _md) = wds_net();
+        let reg = start_registry_wds(&net);
+        let mut s = Sampler::new(p, log());
+        s.sample_at(&reg, Tier::None);
+        assert_eq!(wds_vals(&env_of(&env_p)), ["", "", "", ""].map(String::from));
+        assert!(net.sent().iter().all(|x| x.svc != crate::qmi::SVC_WDS));
         let _ = std::fs::remove_dir_all(&d);
     }
 
