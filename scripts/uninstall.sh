@@ -366,7 +366,10 @@ remove_backend() {
         ) >>"$LOG_FILE" 2>&1 || true
         info "Cleaned up Tailscale network fixes (if present)"
     fi
-    uci -q delete quecmanager.tailscale_net 2>/dev/null && uci -q commit quecmanager 2>/dev/null || true
+    # A package removal keeps the whole namespace (see UCI config below).
+    if [ "$DO_PACKAGE" != "1" ]; then
+        uci -q delete quecmanager.tailscale_net 2>/dev/null && uci -q commit quecmanager 2>/dev/null || true
+    fi
 
     # --- Official (tarball) Tailscale install cleanup ---
     # An official-variant Tailscale install (QManager static-tarball, not opkg)
