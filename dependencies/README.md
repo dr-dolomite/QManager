@@ -42,7 +42,7 @@ readelf -l ../../dependencies/qmanager_atd | grep -i INTERP   # -> (nothing)
 file ../../dependencies/qmanager_atd   # ELF 64-bit LSB executable, ARM aarch64, statically linked
 ```
 
-Shipped build: **0.6.1** (WDS packet counter for Data Used, with IPv6-only call support), 668064 bytes, md5 `150f6ebc629b186f168ae5ad1f269861` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 278 host tests green, verified static as above). The previous shipped build was 0.5.0 (NAS Config Signal Info v2 held by the broker, so the live file carries SINR and NR), 650560 bytes, md5 `1552dcf62e2aa318ac4819fc03f382c6`. Before that 0.4.1 (live signal at 1 Hz in both tiers, 5 Hz `aim` parked), 647904 bytes, md5 `14112f99eb2a68dce66db6f3aa5ce90b`. Before that, 0.4.0 (5 Hz `aim`) was 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656`.
+Shipped build: **0.6.1** (WDS packet counter for Data Used, with IPv6-only call support), 668064 bytes, md5 `de71a292e8160465b4895988fe32d995` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 278 host tests green on the merged tree, verified static as above). The previous shipped build was 0.5.0 (NAS Config Signal Info v2 held by the broker, so the live file carries SINR and NR), 650560 bytes, md5 `1552dcf62e2aa318ac4819fc03f382c6`. Before that 0.4.1 (live signal at 1 Hz in both tiers, 5 Hz `aim` parked), 647904 bytes, md5 `14112f99eb2a68dce66db6f3aa5ce90b`. Before that, 0.4.0 (5 Hz `aim`) was 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656`.
 
 Build on a Linux filesystem (e.g. copy the crate into `~/`), not across
 `/mnt/<drive>`, and commit the binary together with any source change.
