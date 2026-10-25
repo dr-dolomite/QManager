@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useTranslation } from "react-i18next";
 import {
   CheckCircle2Icon,
   CircleHelpIcon,
@@ -12,9 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SwapLabel } from "@/components/ui/swap-label";
 import { cn } from "@/lib/utils";
 
 import {
@@ -22,8 +19,6 @@ import {
   DISC_TRANSITION,
   EYEBROW,
   SKELETON,
-  STATUS_LABEL_KEY,
-  STATUS_VARIANT,
   TILE,
   TILE_CAPTION,
   TILE_CAPTION_MONO,
@@ -117,19 +112,3 @@ export const STATUS_GLYPH = {
   unknown: CircleHelpIcon,
 } satisfies Record<TailscaleView, LucideIcon>;
 
-export function ConnectionChip({ view }: { view: TailscaleView }) {
-  const { t } = useTranslation("common");
-  const variant = STATUS_VARIANT[view];
-  const Glyph = STATUS_GLYPH[view];
-
-  return (
-    <Badge variant={variant} role="status">
-      {/* The accessible name stays OUTSIDE the swap so it is not remounted. */}
-      <span className="sr-only">{t("tailscale.status.aria")}</span>
-      <SwapLabel swapKey={`${variant}-${view}`} className="gap-1">
-        <Glyph className="size-3" />
-        {t(STATUS_LABEL_KEY[view])}
-      </SwapLabel>
-    </Badge>
-  );
-}

@@ -8,6 +8,7 @@ import {
   CopyIcon,
   Loader2Icon,
   PackageIcon,
+  RefreshCcwIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 
@@ -49,9 +50,9 @@ import {
 // Install — the not-installed card. The only card on this shape.
 // -----------------------------------------------------------------------------
 // Header (action title, quiet status), one tile holding the manual route, then
-// the card foot: the cost on the left edge, the commit on the right. The page
-// header owns Refresh, so the card carries no second one. There is no install
-// transcript to show, so a live run only changes the foot.
+// the card foot: the cost on the left edge, the commit on the right. The card
+// header carries a Refresh icon, as Tailscale's does. There is no
+// install transcript to show, so a live run only changes the foot.
 // -----------------------------------------------------------------------------
 
 /** The header the card and its skeleton share, so the swap never shifts. */
@@ -107,10 +108,14 @@ function CommandRow({ command }: { command: string }) {
 export function InstallCard({
   installResult,
   runInstall,
+  onRefresh,
+  isRefreshing,
   installHint,
 }: {
   installResult: InstallResult;
   runInstall: () => Promise<void>;
+  onRefresh: () => void;
+  isRefreshing: boolean;
   installHint?: string;
 }) {
   const { t } = useTranslation("monitoring");
@@ -172,6 +177,22 @@ export function InstallCard({
             <PackageIcon className="size-3" aria-hidden />
             {t("netbird.status.notInstalled")}
           </Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRefresh}
+            disabled={running || isRefreshing}
+            aria-label={t("netbird.page.refresh")}
+            title={t("netbird.page.refresh")}
+          >
+            <RefreshCcwIcon
+              className={cn(
+                "size-4",
+                isRefreshing && "motion-safe:animate-spin",
+              )}
+            />
+          </Button>
         </div>
       </InstallHeader>
 

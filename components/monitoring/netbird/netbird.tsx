@@ -15,7 +15,6 @@ import {
 
 import { MonitoringPageHeader } from "@/components/monitoring/page-header";
 import { Banner } from "@/components/ui/banner";
-import { Button } from "@/components/ui/button";
 import { useNetBird, type NetBirdStatus } from "@/hooks/use-netbird";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -35,13 +34,10 @@ import {
   NOTICE_GLYPH,
   NOTICE_TONE,
   PAGE_ROOT,
-  PILL_GLYPH,
-  PILL_REST,
   STATUS_LABEL_KEY,
   type NetbirdView,
 } from "./shapes";
 import {
-  ConnectionChip,
   STATUS_GLYPH,
   StatusBand,
   StatusBandSkeleton,
@@ -210,6 +206,8 @@ const NetBirdComponent = () => {
         <InstallCard
           installResult={installResult}
           runInstall={runInstall}
+          onRefresh={reload}
+          isRefreshing={isLoading}
           installHint={status?.install_hint}
         />
       </motion.div>
@@ -265,6 +263,8 @@ const NetBirdComponent = () => {
               setBootEnabled={hook.setBootEnabled}
               uninstall={uninstall}
               onUninstalled={() => setShowReboot(true)}
+              onRefresh={reload}
+              isRefreshing={isLoading}
             />
           ) : (
             <ConnectionCardSkeleton />
@@ -292,29 +292,6 @@ const NetBirdComponent = () => {
         <MonitoringPageHeader
           title={t("netbird.page.title")}
           description={t("netbird.page.description")}
-          actions={
-            <>
-              {view === "notInstalled" || blockedByOtherVpn ? null : (
-                <ConnectionChip view={view} />
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={reload}
-                disabled={isLoading}
-                size="action"
-                className={PILL_REST}
-              >
-                <RefreshCcwIcon
-                  className={cn(
-                    PILL_GLYPH,
-                    isLoading && "motion-safe:animate-spin",
-                  )}
-                />
-                {t("netbird.page.refresh")}
-              </Button>
-            </>
-          }
         />
       </motion.div>
 

@@ -14,7 +14,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SwapLabel } from "@/components/ui/swap-label";
 import { cn } from "@/lib/utils";
 
 import {
@@ -22,8 +21,6 @@ import {
   DISC_TRANSITION,
   EYEBROW,
   SKELETON,
-  STATUS_LABEL_KEY,
-  STATUS_VARIANT,
   TILE,
   TILE_CAPTION,
   TILE_CAPTION_MONO,
@@ -115,23 +112,6 @@ export const STATUS_GLYPH = {
   notInstalled: PackageIcon,
   unknown: CircleHelpIcon,
 } satisfies Record<NetbirdView, LucideIcon>;
-
-export function ConnectionChip({ view }: { view: NetbirdView }) {
-  const { t } = useTranslation("monitoring");
-  const variant = STATUS_VARIANT[view];
-  const Glyph = STATUS_GLYPH[view];
-
-  return (
-    <Badge variant={variant} role="status">
-      {/* The accessible name stays OUTSIDE the swap so it is not remounted. */}
-      <span className="sr-only">{t("netbird.status.aria")}</span>
-      <SwapLabel swapKey={`${variant}-${view}`} className="gap-1">
-        <Glyph className="size-3" />
-        {t(STATUS_LABEL_KEY[view])}
-      </SwapLabel>
-    </Badge>
-  );
-}
 
 /** A control-plane link (management or signal): "Connected" is translated, any
  *  other word is the daemon's own and is shown as it came. */

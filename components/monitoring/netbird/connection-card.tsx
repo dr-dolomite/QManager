@@ -3,7 +3,12 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { CheckIcon, Loader2Icon, TriangleAlertIcon } from "lucide-react";
+import {
+  CheckIcon,
+  Loader2Icon,
+  RefreshCcwIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +66,8 @@ export interface ConnectionCardProps {
   setBootEnabled: (enabled: boolean) => Promise<NetBirdActionResult>;
   uninstall: () => Promise<NetBirdActionResult>;
   onUninstalled: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 }
 
 /** The lucide check that SegmentedField reserves on every segment. */
@@ -127,6 +134,8 @@ export function ConnectionCard({
   setBootEnabled,
   uninstall,
   onUninstalled,
+  onRefresh,
+  isRefreshing,
 }: ConnectionCardProps) {
   const { t } = useTranslation("monitoring");
   const [setupKey, setSetupKey] = React.useState("");
@@ -271,13 +280,29 @@ export function ConnectionCard({
             {t("netbird.connection.description")}
           </CardDescription>
         </div>
-        {version ? (
-          <div className={CARD_HEAD_ACTIONS}>
+        <div className={CARD_HEAD_ACTIONS}>
+          {version ? (
             <Tag variant="neutral" className={cn(HEAD_TAG, "font-mono")}>
               {t("netbird.connection.version", { version })}
             </Tag>
-          </div>
-        ) : null}
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label={t("netbird.page.refresh")}
+            title={t("netbird.page.refresh")}
+          >
+            <RefreshCcwIcon
+              className={cn(
+                "size-4",
+                isRefreshing && "motion-safe:animate-spin",
+              )}
+            />
+          </Button>
+        </div>
       </CardHeader>
 
       <CardContent className={cn(CARD_PAD, CARD_BODY)}>

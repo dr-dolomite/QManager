@@ -15,13 +15,6 @@ export const PAGE_ROOT = "@container/main flex flex-col gap-5 px-4 pb-6 lg:px-6"
 export const COLS =
   "grid grid-cols-1 items-stretch gap-5 *:data-[slot=card]:h-full @3xl/main:grid-cols-2";
 
-/** The rest tone for a header or card-header pill. */
-export const PILL_REST =
-  "bg-surface-container text-on-surface-variant hover:bg-surface-container-high";
-
-/** The lucide glyph inside a pill. */
-export const PILL_GLYPH = "size-4";
-
 /** The `size="action"` Button height, so the rail's skeleton mirrors it. */
 const ACTION_HEIGHT = "h-[2.625rem]";
 
