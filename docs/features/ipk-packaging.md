@@ -158,14 +158,14 @@ Install over a tarball v0.1.35 install, `opkg remove`, then reinstall:
 
 - **Tarball-to-package migration works.** `opkg install` exits 0; opkg overwrites the tarball's files, and `--configure` pruned 124 stale `/www` files (old Next.js chunks) while keeping LuCI's `cgi-bin` and `luci-static`. `qmanager`, `qmanager_atd` and `qmanager_sites` run; `/www/index.html` is QManager's and `index.html.old` is LuCI's 838 B page; `VERSION` = `v0.1.35`, no `VERSION.pending`; no watchcat lock left; UCI choices preserved.
 - Software Update GET returns `managed_by:"opkg"`; POST `download` returns `package_managed`; `sh /usr/share/qmanager/install.sh` refuses with exit 1; `system/pending_reboot.sh` reports `package:true` once, then `false`.
-- **`opkg remove`**: exit 0, LuCI's `index.html` back, no QManager processes, no payload path left, `/etc/qmanager` kept. The UCI keep and the cron keep above came out of this run: the first remove dropped `tailscale_net` and the cron lines, and both were fixed afterwards. The reinstall with the fix came back to the same 66-line UCI.
+- **`opkg remove`**: exit 0, LuCI's `index.html` back, no QManager processes, no payload path left, `/etc/qmanager` kept. The UCI keep and the cron keep above came out of this run: the first remove dropped `tailscale_net` and the cron lines, and both were fixed afterwards. With the final ipk, a second remove left `crontab -l` and `uci show quecmanager` byte-identical, and the reinstall picked both up unchanged.
 - `/etc/qmanager/VERSION` is removed on deconfigure and rewritten by the next install (expected).
+- `opkg install --force-reinstall` of the same version is a full remove (the installed prerm runs, not the upgrade skip) followed by a fresh install.
 
 ## Known unverified assumptions
 
 1. **`Replaces` auto-removal of an old QuecManager package.** The test unit never had `sdxpinn-quecmanager(-beta)` installed, so `Conflicts`+`Replaces` removing it on install is untested. If it does not, `opkg remove` the old package first.
-2. **The cron keep on package removal** was written after the device run. It needs one more `opkg remove` to confirm.
-3. **Feed CI against Cameron's real key and branch protection.** The workflow passed a full rehearsal in a fork with a throwaway key (build, sign, verify, idempotent re-run); the sign job's failure paths are not exercised.
+2. **Feed CI against Cameron's real key and branch protection.** The workflow passed a full rehearsal in a fork with a throwaway key (build, sign, verify, idempotent re-run); the sign job's failure paths are not exercised.
 
 ## Related
 
