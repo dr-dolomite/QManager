@@ -569,13 +569,13 @@
       "noDetail": "当前 NetBird 版本不提供逐节点详情。更新 NetBird 后即可查看。"
     },
     "install": {
-      "title": "NetBird",
+      "title": "安装 NetBird",
       "description": "一种网状 VPN，无需开放端口即可随时随地访问本调制解调器。",
-      "conditionTitle": "未安装 NetBird",
-      "conditionDescription": "安装时会通过当前会话所用的蜂窝链路下载 NetBird 软件包，因此会消耗流量，且安装期间连接会变慢。",
       "install": "安装 NetBird",
       "installing": "安装中…",
-      "checkAgain": "重新检测",
+      "retry": "重试",
+      "installingNow": "正在安装 NetBird，请保持此页面打开。",
+      "cost": "会消耗移动数据，安装期间连接会变慢。",
       "done": "NetBird 已安装。",
       "failed": "安装未完成。",
       "manualLabel": "或在命令行中安装",

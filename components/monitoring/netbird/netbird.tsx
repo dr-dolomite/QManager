@@ -24,7 +24,8 @@ import { ConditionBlock } from "./condition-block";
 import { ConnectionCard, ConnectionCardSkeleton } from "./connection-card";
 import { RebootDialog } from "./danger-card";
 import { DeviceCard, DeviceCardSkeleton } from "./device-card";
-import { InstallCard } from "./install-card";
+import { InstallCard, InstallCardSkeleton } from "./install-card";
+import { rememberNetbirdInstalled, useLastKnownInstalled } from "./last-known";
 import { PeersCard } from "./peers-card";
 import {
   COLS,
@@ -84,6 +85,13 @@ const NetBirdComponent = () => {
 
   const [showReboot, setShowReboot] = React.useState(false);
   const view = deriveView(status);
+  const lastKnownInstalled = useLastKnownInstalled();
+
+  // Only a real read is worth remembering.
+  const installedNow = status?.installed;
+  React.useEffect(() => {
+    if (installedNow !== undefined) rememberNetbirdInstalled(installedNow);
+  }, [installedNow]);
 
   const reload = React.useCallback(() => {
     // `refresh` is the hook's fetch; a click event must never reach its argument.
@@ -202,9 +210,16 @@ const NetBirdComponent = () => {
         <InstallCard
           installResult={installResult}
           runInstall={runInstall}
-          onRefresh={reload}
           installHint={status?.install_hint}
         />
+      </motion.div>
+    );
+  } else if (!status && isLoading && lastKnownInstalled === false) {
+    // A modem that had nothing installed last time would otherwise paint the
+    // whole installed layout and collapse it into one card.
+    body = (
+      <motion.div variants={staggerItem}>
+        <InstallCardSkeleton />
       </motion.div>
     );
   } else if (!status && !isLoading) {

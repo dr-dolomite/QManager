@@ -569,13 +569,13 @@
       "noDetail": "This NetBird version does not list per-peer details. Update NetBird to see them."
     },
     "install": {
-      "title": "NetBird",
-      "description": "A mesh VPN for reaching this modem from anywhere, without opening a port.",
-      "conditionTitle": "NetBird is not installed",
-      "conditionDescription": "Installing downloads the NetBird package over the same cellular link this session is running on, so it uses your data allowance and the connection will be slower while it runs.",
+      "title": "Install NetBird",
+      "description": "A mesh VPN for reaching this modem from anywhere, no open port.",
       "install": "Install NetBird",
       "installing": "Installing…",
-      "checkAgain": "Check again",
+      "retry": "Try again",
+      "installingNow": "Installing NetBird. Keep this page open.",
+      "cost": "Uses mobile data; the connection slows while it runs.",
       "done": "NetBird installed.",
       "failed": "The install did not finish.",
       "manualLabel": "Or install from a shell",

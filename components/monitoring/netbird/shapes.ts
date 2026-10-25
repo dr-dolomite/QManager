@@ -122,12 +122,7 @@ export const STATUS_LABEL_KEY = {
 export const CARD_SHELL =
   "@container/card gap-5 rounded-card border-0 bg-card py-6 shadow-[var(--shadow-whisper)]!";
 
-/** The anchor card on the surface: 20px radius, 28px pad, one per route. */
-export const HERO_SHELL =
-  "@container/card gap-5 rounded-hero border-0 bg-card py-7 shadow-[var(--shadow-whisper)]!";
-
 export const CARD_PAD = "px-6";
-export const HERO_PAD = "px-7";
 
 export const CARD_TITLE = "min-w-0 text-lg leading-tight";
 
@@ -140,6 +135,10 @@ export const CARD_HEAD =
 export const CARD_HEAD_TEXT = "flex min-w-0 flex-col gap-1.5";
 export const CARD_HEAD_ACTIONS =
   "flex flex-none flex-wrap gap-2 @md/card:ml-auto @md/card:justify-end";
+
+/** One foot status: the glyph and its sentence stay one item, so they never
+ *  split across lines when the foot wraps on a narrow card. */
+export const STATUS_LINE = "flex items-start gap-2 [&>svg]:mt-0.5";
 
 /** The one region inside a stretched card that absorbs the slack. */
 export const CARD_BODY = "flex flex-1 flex-col gap-4";
@@ -226,12 +225,15 @@ export const TABLE = {
 // The install panel
 // -----------------------------------------------------------------------------
 
-/** One labelled machine-voice row, replacing the "or install manually" ritual. */
+/**
+ * The manual install route, the install card's one inner tile. The label sits
+ * on the left edge and the command (machine voice) beside it with its copy
+ * button; on a narrow card they stack.
+ */
 export const COMMAND = {
-  ROOT: "flex w-full flex-col gap-1.5",
-  LABEL:
-    "text-on-surface-variant text-[0.6875rem] font-semibold tracking-[0.02em] uppercase",
-  BOX: "flex items-center gap-2 rounded-tile bg-surface-container px-4 py-2.5",
+  ROOT: `${SWITCH_ROW.ROOT} ${SWITCH_ROW.REST}`,
+  LABEL: `${SWITCH_ROW.TITLE} flex-none`,
+  BOX: "flex min-w-0 flex-1 items-center gap-2",
   TEXT: "text-on-surface min-w-0 flex-1 overflow-x-auto font-mono text-xs select-all",
   COPY: "text-on-surface-variant hover:bg-surface-container-high flex-none",
 } as const;

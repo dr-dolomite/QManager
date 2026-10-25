@@ -569,13 +569,13 @@
       "noDetail": "目前的 NetBird 版本不提供逐節點詳細資訊。更新 NetBird 後即可查看。"
     },
     "install": {
-      "title": "NetBird",
+      "title": "安裝 NetBird",
       "description": "一種網狀 VPN，無需開放連接埠即可隨時隨地存取本數據機。",
-      "conditionTitle": "未安裝 NetBird",
-      "conditionDescription": "安裝時會透過目前工作階段所用的行動網路連結下載 NetBird 套件，因此會消耗流量，且安裝期間連線會變慢。",
       "install": "安裝 NetBird",
       "installing": "安裝中…",
-      "checkAgain": "重新檢查",
+      "retry": "重試",
+      "installingNow": "正在安裝 NetBird，請保持此頁面開啟。",
+      "cost": "會消耗行動數據，安裝期間連線會變慢。",
       "done": "NetBird 已安裝。",
       "failed": "安裝未完成。",
       "manualLabel": "或在命令列中安裝",

@@ -569,13 +569,13 @@
       "noDetail": "Questa versione di NetBird non elenca i dettagli dei singoli peer. Aggiorna NetBird per vederli."
     },
     "install": {
-      "title": "NetBird",
+      "title": "Installa NetBird",
       "description": "Una VPN mesh per raggiungere questo modem da ovunque, senza aprire porte.",
-      "conditionTitle": "NetBird non è installato",
-      "conditionDescription": "L'installazione scarica il pacchetto NetBird tramite lo stesso collegamento cellulare su cui gira questa sessione, quindi consuma traffico dati e la connessione sarà più lenta durante l'operazione.",
       "install": "Installa NetBird",
       "installing": "Installazione…",
-      "checkAgain": "Controlla di nuovo",
+      "retry": "Riprova",
+      "installingNow": "Installazione di NetBird in corso. Tieni aperta questa pagina.",
+      "cost": "Usa i dati mobili; la connessione rallenta durante l'operazione.",
       "done": "NetBird installato.",
       "failed": "L'installazione non è terminata.",
       "manualLabel": "Oppure installa da shell",

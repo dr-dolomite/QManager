@@ -8,10 +8,10 @@ import {
   CopyIcon,
   Loader2Icon,
   PackageIcon,
-  RefreshCcwIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,33 +20,59 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CardFoot } from "@/components/ui/card-foot";
+import { Skeleton } from "@/components/ui/skeleton";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import type { InstallResult } from "@/types/video-optimizer";
 
-import { ConditionBlock } from "./condition-block";
 import {
   CARD_BODY,
   CARD_DESC,
   CARD_HEAD,
+  CARD_HEAD_ACTIONS,
   CARD_HEAD_TEXT,
+  CARD_PAD,
+  CARD_SHELL,
   CARD_TITLE,
   COMMAND,
-  HERO_PAD,
-  HERO_SHELL,
   NOTICE,
   NOTICE_BODY,
   NOTICE_GLYPH,
   NOTICE_TONE,
-  PILL_REST,
-  RAIL,
+  SKELETON,
+  STATUS_LINE,
+  STATUS_VARIANT,
 } from "./shapes";
 
 // -----------------------------------------------------------------------------
-// Install — the not-installed hero. The only card on this shape.
+// Install — the not-installed card. The only card on this shape.
+// -----------------------------------------------------------------------------
+// Header (action title, quiet status), one tile holding the manual route, then
+// the card foot: the cost on the left edge, the commit on the right. The page
+// header owns Refresh, so the card carries no second one. There is no install
+// transcript to show, so a live run only changes the foot.
 // -----------------------------------------------------------------------------
 
-/** One labelled machine-voice row for the manual route. */
+/** The header the card and its skeleton share, so the swap never shifts. */
+function InstallHeader({ children }: { children?: React.ReactNode }) {
+  const { t } = useTranslation("monitoring");
+  return (
+    <CardHeader className={cn(CARD_PAD, CARD_HEAD)}>
+      <div className={CARD_HEAD_TEXT}>
+        <CardTitle className={CARD_TITLE}>
+          {t("netbird.install.title")}
+        </CardTitle>
+        <CardDescription className={CARD_DESC}>
+          {t("netbird.install.description")}
+        </CardDescription>
+      </div>
+      {children}
+    </CardHeader>
+  );
+}
+
+/** The manual route: its label on the left edge, the command and copy button beside it. */
 function CommandRow({ command }: { command: string }) {
   const { t } = useTranslation("monitoring");
 
@@ -81,16 +107,16 @@ function CommandRow({ command }: { command: string }) {
 export function InstallCard({
   installResult,
   runInstall,
-  onRefresh,
   installHint,
 }: {
   installResult: InstallResult;
   runInstall: () => Promise<void>;
-  onRefresh: () => void;
   installHint?: string;
 }) {
   const { t } = useTranslation("monitoring");
   const running = installResult.status === "running";
+  const failed = installResult.status === "error";
+  const done = installResult.status === "complete";
   const command = installHint || t("netbird.install.manualCommand");
 
   // One toast per finished install, fired when a run we watched ends. A result
@@ -109,38 +135,50 @@ export function InstallCard({
     }
   }, [installResult.status, installResult.message, t]);
 
+  // The foot's left edge says what is true right now: the run, the finish, or
+  // the one consequence that applies before and after a failed attempt.
+  const status = running ? (
+    <span className={STATUS_LINE}>
+      <Loader2Icon
+        className="size-4 flex-none motion-safe:animate-spin"
+        aria-hidden
+      />
+      <span>{t("netbird.install.installingNow")}</span>
+    </span>
+  ) : done ? (
+    <span className={STATUS_LINE}>
+      <CheckCircle2Icon
+        className="text-success-on-surface size-4 flex-none"
+        aria-hidden
+      />
+      <span>{installResult.message ?? t("netbird.install.done")}</span>
+    </span>
+  ) : (
+    <span className={STATUS_LINE}>
+      <TriangleAlertIcon
+        className="text-warning-on-surface size-4 flex-none"
+        aria-hidden
+      />
+      <span>{t("netbird.install.cost")}</span>
+    </span>
+  );
+
   return (
-    <Card className={HERO_SHELL}>
-      <CardHeader className={cn(HERO_PAD, CARD_HEAD)}>
-        <div className={CARD_HEAD_TEXT}>
-          <CardTitle className={CARD_TITLE}>
-            {t("netbird.install.title")}
-          </CardTitle>
-          <CardDescription className={CARD_DESC}>
-            {t("netbird.install.description")}
-          </CardDescription>
+    <Card className={CARD_SHELL}>
+      <InstallHeader>
+        <div className={CARD_HEAD_ACTIONS}>
+          <Badge variant={STATUS_VARIANT.notInstalled} role="status">
+            <span className="sr-only">{t("netbird.status.aria")}</span>
+            <PackageIcon className="size-3" aria-hidden />
+            {t("netbird.status.notInstalled")}
+          </Badge>
         </div>
-      </CardHeader>
+      </InstallHeader>
 
-      {/* No card-level `aria-live`: the notices below are already live regions. */}
-      <CardContent className={cn(HERO_PAD, CARD_BODY)}>
-        <ConditionBlock
-          tone="muted"
-          icon={PackageIcon}
-          title={t("netbird.install.conditionTitle")}
-          description={t("netbird.install.conditionDescription")}
-        />
-
-        {installResult.status === "complete" ? (
-          <div role="status" className={cn(NOTICE, NOTICE_TONE.success)}>
-            <CheckCircle2Icon className={NOTICE_GLYPH} />
-            <span className={NOTICE_BODY}>
-              {installResult.message ?? t("netbird.install.done")}
-            </span>
-          </div>
-        ) : null}
-
-        {installResult.status === "error" ? (
+      {/* No card-level `aria-live`: the notice and the foot status are already
+          live regions, and nesting them announces twice. */}
+      <CardContent className={cn(CARD_PAD, CARD_BODY)}>
+        {failed ? (
           <div role="alert" className={cn(NOTICE, NOTICE_TONE.destructive)}>
             <TriangleAlertIcon className={NOTICE_GLYPH} />
             <span className={NOTICE_BODY}>
@@ -152,12 +190,18 @@ export function InstallCard({
           </div>
         ) : null}
 
-        <div className={cn(RAIL, "justify-center")}>
+        <CommandRow command={command} />
+      </CardContent>
+
+      <CardFoot
+        className={CARD_PAD}
+        status={status}
+        actions={
           <Button
             type="button"
             size="action"
             onClick={() => runInstall()}
-            disabled={running}
+            disabled={running || done}
           >
             {running ? (
               <Loader2Icon className="size-4 motion-safe:animate-spin" />
@@ -168,23 +212,31 @@ export function InstallCard({
                 contract, and this surface ships in five locales. */}
             {running
               ? t("netbird.install.installing")
-              : t("netbird.install.install")}
+              : failed
+                ? t("netbird.install.retry")
+                : t("netbird.install.install")}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="action"
-            className={PILL_REST}
-            onClick={onRefresh}
-            disabled={running}
-          >
-            <RefreshCcwIcon className="size-4" />
-            {t("netbird.install.checkAgain")}
-          </Button>
-        </div>
+        }
+      />
+    </Card>
+  );
+}
 
-        <CommandRow command={command} />
+/** Mirrors the card above from the same constants: real header copy, the
+ *  tile's pinned minimum height, and a foot holding the action's height. */
+export function InstallCardSkeleton() {
+  return (
+    <Card className={CARD_SHELL}>
+      <InstallHeader />
+      <CardContent className={cn(CARD_PAD, CARD_BODY)} aria-hidden>
+        <Skeleton className={SKELETON.SWITCH} />
       </CardContent>
+      <CardFoot
+        className={CARD_PAD}
+        liveStatus={false}
+        aria-hidden="true"
+        actions={<Skeleton className={cn(SKELETON.ACTION, "w-40")} />}
+      />
     </Card>
   );
 }

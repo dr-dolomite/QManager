@@ -569,13 +569,13 @@
       "noDetail": "Versi NetBird ini tidak menampilkan detail per peer. Perbarui NetBird untuk melihatnya."
     },
     "install": {
-      "title": "NetBird",
+      "title": "Instal NetBird",
       "description": "VPN mesh untuk menjangkau modem ini dari mana saja, tanpa membuka port.",
-      "conditionTitle": "NetBird belum terinstal",
-      "conditionDescription": "Instalasi mengunduh paket NetBird melalui tautan seluler yang sama dengan sesi ini, sehingga memakai kuota data dan koneksi akan lebih lambat selama prosesnya.",
       "install": "Instal NetBird",
       "installing": "Menginstal…",
-      "checkAgain": "Periksa lagi",
+      "retry": "Coba lagi",
+      "installingNow": "Menginstal NetBird. Biarkan halaman ini tetap terbuka.",
+      "cost": "Memakai data seluler; koneksi melambat selama berlangsung.",
       "done": "NetBird terinstal.",
       "failed": "Instalasi tidak selesai.",
       "manualLabel": "Atau instal dari shell",
