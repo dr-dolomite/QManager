@@ -222,7 +222,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let rp = d.join("route");
-        std::fs::write(&rp, route(&["rmnet_data4	00000000	00000000	0001	0	0	0	00000000	0	0	0"])).unwrap();
+        std::fs::write(&rp, route(&["rmnet_data4\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"])).unwrap();
         let r6 = d.join("ipv6_route");
         let ipa = d.join("rmnet_ipa0");
         let (rs, r6s, ipas) = (rp.to_str().unwrap(), r6.to_str().unwrap(), ipa.to_str().unwrap());
@@ -242,8 +242,7 @@ mod tests {
     }
 
     fn route6(rows: &[String]) -> String {
-        rows.iter().map(|r| format!("{r}
-")).collect()
+        rows.iter().map(|r| format!("{r}\n")).collect()
     }
 
     /// The RM551E table today (v4 call only): nothing on rmnet_data.
@@ -290,6 +289,7 @@ mod tests {
         for row in [
             // Reject default, down, non-default prefix, non-data iface, bad names, overflow.
             r6(Z, "00", "ffffffff", "00200200", "rmnet_data0"),
+            r6(Z, "00", "ffffffff", "00200201", "rmnet_data0"),
             r6(Z, "00", "00000400", "00450002", "rmnet_data0"),
             r6("20010db8000000010000000000000000", "40", "00000100", "00000001", "rmnet_data0"),
             r6(Z, "00", "00000400", "00450003", "br-lan"),
@@ -312,6 +312,8 @@ mod tests {
         let global = |n: u8| r6("20010db8000000010000000000000000", "40", "00000100", "00000001", &format!("rmnet_data{n}"));
         let ll = r6("fe800000000000000000000000000000", "40", "00000100", "00000001", "rmnet_data2");
         let mc = r6("ff000000000000000000000000000000", "08", "00000100", "00000001", "rmnet_data2");
+        // An up reject route is not a call either.
+        assert_eq!(global_mux6(&route6(&[r6("20010db8000000010000000000000000", "40", "00000100", "00000201", "rmnet_data0")])), None);
         assert_eq!(global_mux6(&route6(&[ll.clone(), mc.clone(), global(0), global(0)])), Some(1));
         // Link-local and multicast alone are not a call.
         assert_eq!(global_mux6(&route6(&[ll, mc])), None);
@@ -330,14 +332,14 @@ mod tests {
         let (rp, r6p, ipa) = (d.join("route"), d.join("ipv6_route"), d.join("rmnet_ipa0"));
         std::fs::create_dir(&ipa).unwrap();
         let (rs, r6s, ipas) = (rp.to_str().unwrap(), r6p.to_str().unwrap(), ipa.to_str().unwrap());
-        let v4_none = route(&["br-lan	0001A8C0	00000000	0001	0	0	0	00FFFFFF	0	0	0"]);
+        let v4_none = route(&["br-lan\t0001A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0"]);
         let v6_data2 = route6(&[r6(Z, "00", "00000400", "00450003", "rmnet_data2")]);
         std::fs::write(&rp, &v4_none).unwrap();
         std::fs::write(&r6p, &v6_data2).unwrap();
         // v6-only: mux from the v6 default, no v4 backing.
         assert_eq!(discover(rs, r6s, ipas), Call { mux: Some(3), v4: false, ep: Some(EP_IPA) });
         // A v4 default appears on another interface: v4 wins and backs the mux.
-        std::fs::write(&rp, route(&["rmnet_data0	00000000	00000000	0001	0	0	0	00000000	0	0	0"])).unwrap();
+        std::fs::write(&rp, route(&["rmnet_data0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"])).unwrap();
         assert_eq!(discover(rs, r6s, ipas), Call { mux: Some(1), v4: true, ep: Some(EP_IPA) });
         // Neither table: no call; unreadable ipv6 file is just "none".
         std::fs::write(&rp, &v4_none).unwrap();

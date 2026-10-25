@@ -1124,8 +1124,7 @@ mod tests {
     /// An IPv6 default route on rmnet_data<n> (the v6-only call's table).
     fn set_route6(p: &Paths, n: u8) {
         let z = "0".repeat(32);
-        let r = format!("{z} 00 {z} 00 {z} 00000400 00000001 00000000 00450003 rmnet_data{n}
-");
+        let r = format!("{z} 00 {z} 00 {z} 00000400 00000001 00000000 00450003 rmnet_data{n}\n");
         std::fs::write(&p.route6, r).unwrap();
     }
 
@@ -1250,9 +1249,7 @@ mod tests {
         // The RM551E's table today: reject default on lo, link-local on LAN.
         std::fs::write(
             &p.route6,
-            format!("{z} 00 {z} 00 {z} ffffffff 00000001 00000000 00200200 lo
-fe800000000000000000000000000000 40 {z} 00 {z} 00000100 00000001 00000000 00000001 eth0
-"),
+            format!("{z} 00 {z} 00 {z} ffffffff 00000001 00000000 00200200 lo\nfe800000000000000000000000000000 40 {z} 00 {z} 00000100 00000001 00000000 00000001 eth0\n"),
         )
         .unwrap();
         let env_p = p.env.clone();
