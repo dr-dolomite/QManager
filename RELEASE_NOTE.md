@@ -16,6 +16,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 - **Live LTE SINR on the dashboard.** The LTE signal quality (SINR) on the dashboard now updates every second along with the other LTE values while you watch it.
 - **Steadier modem status during scans and SIM switches.** The dashboard keeps showing current LTE signal readings while a network scan or a SIM switch is running, instead of pausing until it finishes.
 - **Antenna Alignment fits on one screen.** Receive Chains now sits under Positions beside the live reading, so on a desktop the whole page is visible without scrolling. Record moved up next to the Directional / Omni switch, and each empty position says "Not recorded" right beside its label.
+- **A calmer Live Aim card.** The live reading is smaller, with how far you are from your best position right beside it and an "At peak" marker when you are there. The aim score now sits in a single row shaped like your recorded positions, and the trace is drawn in a neutral colour. On a phone, the pinned reading no longer covers the page title before you scroll, it shows the distance to your peak, and Receive Chains uses one full-width column.
 - **Easier-to-read scan results.** The results summary on Neighbourcell Scan and Full Scan now puts each group's name and cell count on the left and its best signal on the right, with every dBm figure lined up on one edge, so you can compare readings at a glance.
 
 ## 📥 Installation
