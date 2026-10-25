@@ -460,8 +460,10 @@ remove_backend() {
     # wholesale rm -rf "$CONF_DIR" when DO_CONFIG=purge.
 
     # --- Cron jobs ---
-    if crontab -l 2>/dev/null | grep -q qmanager; then
-        crontab -l 2>/dev/null | grep -v qmanager | crontab - 2>/dev/null || true
+    # -i: the scheduled-reboot header comment ("# QManager Scheduled Reboot")
+    # carries no lowercase marker and would otherwise outlive the job.
+    if crontab -l 2>/dev/null | grep -qi qmanager; then
+        crontab -l 2>/dev/null | grep -vi qmanager | crontab - 2>/dev/null || true
         info "Removed qmanager cron jobs"
     fi
 }
@@ -507,6 +509,8 @@ remove_runtime_state() {
     for f in /tmp/qmanager_status.json \
              /tmp/qmanager_ping.json \
              /tmp/qmanager_ping_history \
+             /tmp/qmanager_ping_history.json \
+             /tmp/qmanager_pci_state.json \
              /tmp/qmanager_ping_attaching \
              /tmp/qmanager_dns.json \
              /tmp/qmanager_signal_history.json \
