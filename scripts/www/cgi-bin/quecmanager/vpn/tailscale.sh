@@ -21,7 +21,9 @@
 #
 # Install / update logic lives in /usr/lib/qmanager/tailscale_mgr.sh and the
 # reachability fixes (fw4 zone + pref-1990 ip rule) in tailscale_net.sh; this
-# CGI only validates, dispatches and orphans the background workers.
+# CGI only validates, dispatches and orphans the background workers. Two
+# install sources: official (QManager owns init + fixes) and tiny (the opkg
+# package owns both; ts_net_owned gates every fix).
 #
 # Endpoint: GET/POST /cgi-bin/quecmanager/vpn/tailscale.sh
 # Install location: /www/cgi-bin/quecmanager/vpn/tailscale.sh
@@ -44,8 +46,8 @@ TS_INSTALL_RESULT="/tmp/qmanager_tailscale_install.json"
 [ -f /usr/lib/qmanager/tailscale_net.sh ] && . /usr/lib/qmanager/tailscale_net.sh
 [ -f /usr/lib/qmanager/tailscale_mgr.sh ] && . /usr/lib/qmanager/tailscale_mgr.sh
 
-# The rollback test knob is shell-only; a request can never set it.
-unset TS_TEST_FAIL_HEALTH
+# The test knobs are shell-only; a request can never set them.
+unset TS_TEST_FAIL_HEALTH TS_TEST_FORCE_UPDATE
 
 if ! command -v ts_variant >/dev/null 2>&1 || ! command -v ts_net_enabled >/dev/null 2>&1; then
     cgi_error "library_missing" "Tailscale support library is missing"
@@ -135,7 +137,9 @@ get_ts_version() {
 # previous run's terminal state), then the worker takes the lock over.
 spawn_ts_worker() {
     local op
+    local source
     op="$1"
+    source="${2:-official}"
     if ! qm_run_dir >/dev/null; then
         cgi_error "${op}_failed" "Cannot prepare the install state directory"
         exit 0
@@ -147,11 +151,12 @@ spawn_ts_worker() {
     fi
     : > "$TS_INSTALL_LOG"
     TS_OP="$op"
+    TS_SOURCE="$source"
     ts_progress running "Starting..." >/dev/null
     if [ "$op" = "update" ]; then
         ( ts_do_update ) </dev/null >>"$TS_INSTALL_LOG" 2>&1 &
     else
-        ( ts_do_install ) </dev/null >>"$TS_INSTALL_LOG" 2>&1 &
+        ( ts_do_install "$source" ) </dev/null >>"$TS_INSTALL_LOG" 2>&1 &
     fi
 }
 
@@ -160,6 +165,7 @@ spawn_ts_worker() {
 # and fw4 is reloaded from the EXIT trap, after the response has been written.
 TS_FW_RELOAD_PENDING=0
 ts_net_prep() {
+    ts_net_owned || return 0
     ts_net_enabled || return 0
     ts_net_ensure_rules
     if ! ts_net_zone_present; then
@@ -193,14 +199,20 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         exit 0
     fi
 
+    # Whether the firmware trusts the Tiny build's signed feed (picker gate).
+    tiny_available="false"
+    ts_tiny_available && tiny_available="true"
+
     # --- Tier 1: Not installed -----------------------------------------------
     if ! is_installed; then
         qlog_info "Tailscale not installed"
         jq -n \
             --argjson other_vpn_installed "$other_vpn_installed" \
+            --argjson tiny_available "$tiny_available" \
             '{
                 success: true,
                 installed: false,
+                tiny_available: $tiny_available,
                 other_vpn_installed: $other_vpn_installed,
                 other_vpn_name: "NetBird"
             }'
@@ -211,21 +223,28 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
     boot_enabled=$(get_boot_enabled)
     install_variant=$(ts_variant)
 
-    # Update facts. latest_version comes from the cache only (check_update
-    # refreshes it); this GET never waits on the network.
-    latest_version=$(ts_latest_cache_read)
+    # Update facts. latest_version comes from the source's cache only
+    # (check_update refreshes it); this GET never waits on the network.
     update_available="false"
     legacy_build="false"
+    latest_version=""
     case "$install_variant" in
-        official)
-            if [ -n "$latest_version" ] && ts_version_gt "$latest_version" "$ts_version"; then
+        official|tiny)
+            TS_SOURCE="$install_variant"
+            latest_version=$(ts_latest_cache_read)
+            if [ -n "$latest_version" ] && ts_version_gt "$latest_version" "$(ts_compare_version)"; then
                 update_available="true"
             fi
             ;;
-        tiny|opkg) legacy_build="true" ;;
+        opkg) legacy_build="true" ;;
     esac
-    net_fixes_enabled="false"
-    ts_net_enabled && net_fixes_enabled="true"
+    # Network fixes belong to QManager only off the Tiny build (whose own init
+    # owns the zone and rules); null is dropped from the payload below.
+    net_fixes_enabled="null"
+    if ts_net_owned; then
+        net_fixes_enabled="false"
+        ts_net_enabled && net_fixes_enabled="true"
+    fi
 
     # --- Tier 2: Installed but daemon not running ----------------------------
     if ! is_daemon_running; then
@@ -240,6 +259,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             --argjson update_available "$update_available" \
             --argjson legacy_build "$legacy_build" \
             --argjson net_fixes_enabled "$net_fixes_enabled" \
+            --argjson tiny_available "$tiny_available" \
             --argjson other_vpn_installed "$other_vpn_installed" \
             '{
                 success: true,
@@ -252,9 +272,10 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 update_available: $update_available,
                 legacy_build: $legacy_build,
                 net_fixes_enabled: $net_fixes_enabled,
+                tiny_available: $tiny_available,
                 other_vpn_installed: $other_vpn_installed,
                 other_vpn_name: "NetBird"
-            }'
+            } | if .net_fixes_enabled == null then del(.net_fixes_enabled) else . end'
         exit 0
     fi
 
@@ -280,6 +301,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             --argjson update_available "$update_available" \
             --argjson legacy_build "$legacy_build" \
             --argjson net_fixes_enabled "$net_fixes_enabled" \
+            --argjson tiny_available "$tiny_available" \
             '{
                 success: true,
                 installed: $installed,
@@ -291,9 +313,10 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 update_available: $update_available,
                 legacy_build: $legacy_build,
                 net_fixes_enabled: $net_fixes_enabled,
+                tiny_available: $tiny_available,
                 backend_state: "Unknown",
                 error_detail: "Could not retrieve status from tailscale daemon"
-            }'
+            } | if .net_fixes_enabled == null then del(.net_fixes_enabled) else . end'
         exit 0
     fi
 
@@ -378,6 +401,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --argjson update_available "$update_available" \
         --argjson legacy_build "$legacy_build" \
         --argjson net_fixes_enabled "$net_fixes_enabled" \
+        --argjson tiny_available "$tiny_available" \
         --argjson exit_node_advertised "$exit_node_advertised" \
         --argjson ssh_enabled "$ssh_enabled" \
         --argjson self "$self_json" \
@@ -396,6 +420,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             update_available: $update_available,
             legacy_build: $legacy_build,
             net_fixes_enabled: $net_fixes_enabled,
+            tiny_available: $tiny_available,
             backend_state: $backend_state,
             exit_node_advertised: $exit_node_advertised,
             ssh_enabled: $ssh_enabled,
@@ -406,7 +431,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             health: $health,
             other_vpn_installed: $other_vpn_installed,
             other_vpn_name: "NetBird"
-        }'
+        } | if .net_fixes_enabled == null then del(.net_fixes_enabled) else . end'
     exit 0
 fi
 
@@ -425,18 +450,23 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # -------------------------------------------------------------------------
-    # action: install — official static build, background worker
+    # action: install — {source?: "official"|"tiny"}, background worker.
+    # "variant" is accepted as an alias for older clients; absent = official.
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "install" ]; then
-        # Only the official build is installable; "tiny" is retired.
-        VARIANT=$(printf '%s' "$POST_DATA" | jq -r '.variant | if . == null then empty else tostring end')
-        case "$VARIANT" in
-            ""|official) : ;;
+        SOURCE=$(printf '%s' "$POST_DATA" | jq -r '(.source // .variant) | if . == null then empty else tostring end')
+        case "$SOURCE" in
+            "") SOURCE="official" ;;
+            official|tiny) : ;;
             *)
-                cgi_error "invalid_variant" "variant must be 'official'"
+                cgi_error "invalid_variant" "source must be 'official' or 'tiny'"
                 exit 0
                 ;;
         esac
+        if [ "$SOURCE" = "tiny" ] && ! ts_tiny_available; then
+            cgi_error "feed_unavailable" "The Tiny build is not available on this device"
+            exit 0
+        fi
 
         check_worker_lock
 
@@ -452,8 +482,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             exit 0
         fi
 
-        qlog_info "Starting Tailscale installation (official)"
-        spawn_ts_worker install
+        qlog_info "Starting Tailscale installation ($SOURCE)"
+        spawn_ts_worker install "$SOURCE"
         cgi_success
         exit 0
     fi
@@ -506,6 +536,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "set_net_fixes" ]; then
         check_migration_lock
+        # The Tiny build's init owns its zone and rules; a teardown here would
+        # delete the zone it relies on.
+        if is_installed && ! ts_net_owned; then
+            cgi_error "not_applicable" "Network fixes are managed by the Tiny build"
+            exit 0
+        fi
         nf_value=$(printf '%s' "$POST_DATA" | jq -r '.enabled | if . == null then empty else tostring end')
         case "$nf_value" in
             true) nf_uci=1 ;;
@@ -548,12 +584,19 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # -------------------------------------------------------------------------
-    # action: check_update — latest official version, cached (6 h, 30 min
-    # after a failed check). force:true always asks pkgs.tailscale.com.
+    # action: check_update — latest version of the installed source (official:
+    # pkgs.tailscale.com, tiny: the feed index), cached (6 h, 30 min after a
+    # failed check). force:true always asks the source.
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "check_update" ]; then
         cu_force=$(printf '%s' "$POST_DATA" | jq -r 'if .force == true then "1" else "0" end' 2>/dev/null)
-        cu_installed=$(get_ts_version)
+        cu_variant=$(ts_variant)
+        if [ "$cu_variant" = "opkg" ]; then
+            cgi_error "legacy_build" "This Tailscale build cannot be updated here"
+            exit 0
+        fi
+        TS_SOURCE="$cu_variant"
+        cu_installed=$(ts_compare_version)
         if [ "$cu_force" = "1" ] || ts_latest_cache_due; then
             # Bounded for a synchronous request: 2 attempts of 20 s.
             TS_FETCH_RETRY=1
@@ -569,7 +612,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         fi
         cu_checked=$(_ts_num "$(_ts_cache_field checked_at)")
         cu_available="false"
-        if [ "$(ts_variant)" = "official" ] && ts_version_gt "$cu_latest" "$cu_installed"; then
+        if ts_version_gt "$cu_latest" "$cu_installed"; then
             cu_available="true"
         fi
         jq -n \
@@ -588,24 +631,28 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # -------------------------------------------------------------------------
-    # action: update — official builds only, background worker. The worker
-    # re-checks the version, swaps binaries, restarts, health-checks and rolls
-    # back on failure (progress via install_status, op "update").
+    # action: update — official and tiny, background worker. The worker
+    # re-checks the version, installs (binary swap or opkg), restarts,
+    # health-checks and rolls back on failure (install_status, op "update").
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "update" ]; then
-        if [ "$(ts_variant)" != "official" ]; then
-            cgi_error "legacy_build" "This Tailscale build cannot be updated here. Uninstall it, then install the official build."
-            exit 0
-        fi
+        up_variant=$(ts_variant)
+        case "$up_variant" in
+            official|tiny) TS_SOURCE="$up_variant" ;;
+            *)
+                cgi_error "legacy_build" "This Tailscale build cannot be updated here. Uninstall it, then install it again."
+                exit 0
+                ;;
+        esac
         check_worker_lock
-        up_installed=$(get_ts_version)
+        up_installed=$(ts_compare_version)
         up_latest=$(ts_latest_cache_read)
         if [ -n "$up_latest" ] && ! ts_version_gt "$up_latest" "$up_installed"; then
             cgi_error "up_to_date" "Tailscale is already up to date"
             exit 0
         fi
-        qlog_info "Starting Tailscale update from $up_installed"
-        spawn_ts_worker update
+        qlog_info "Starting Tailscale update from $up_installed ($up_variant)"
+        spawn_ts_worker update "$up_variant"
         cgi_success
         exit 0
     fi
@@ -962,7 +1009,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # remove the binaries, the heredoc-written init script, its rc.d symlinks
         # and the UCI section directly. Everything else goes through the existing
         # 6-package smart opkg removal.
-        if [ "$(ts_variant)" = "official" ]; then
+        un_variant=$(ts_variant)
+        if [ "$un_variant" = "official" ]; then
             qlog_info "Removing official (tarball) Tailscale install"
             rm -f /usr/bin/tailscale /usr/bin/tailscaled /etc/init.d/tailscale
             rm -f /usr/bin/.tailscale.old /usr/bin/.tailscaled.old /usr/bin/.tailscale.new /usr/bin/.tailscaled.new
@@ -984,13 +1032,24 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             else
                 qlog_info "No Tailscale packages found to remove"
             fi
+            if [ "$un_variant" = "tiny" ]; then
+                # The package's init created network.tailscale (proto none on
+                # tailscale0); its zone goes with ts_net_teardown below. opkg
+                # keeps a modified conffile, and a leftover file resurrects
+                # the UCI section.
+                if [ "$(uci -q get network.tailscale.proto)" = "none" ] \
+                        && [ "$(uci -q get network.tailscale.device)" = "tailscale0" ]; then
+                    uci -q delete network.tailscale && uci -q commit network
+                fi
+                rm -f /etc/config/tailscale /etc/config/tailscale-opkg 2>/dev/null
+            fi
         fi
 
         # Clean up state from official, legacy and tiny locations (marker lives
         # in /etc/tailscale, removed here).
         rm -rf /var/lib/tailscale/ /etc/tailscale/
         rm -f /tmp/qmanager_tailscale_auth_url /tmp/qmanager_tailscale_up_output /var/run/qmanager/tailscale_up_output /tmp/qmanager_tailscale_up_pid
-        rm -f "$TS_LATEST_CACHE"
+        rm -f "$TS_LATEST_CACHE" "$TS_TINY_CACHE"
 
         # Verify removal (check actual binary paths, not command -v which can be cached).
         hash -r 2>/dev/null
