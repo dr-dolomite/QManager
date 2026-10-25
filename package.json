@@ -9,6 +9,8 @@
     "lint": "eslint",
     "package": "bun run icons:check && bun --bun next build && bash build.sh",
     "package:lang": "bun run scripts-dev/build-lang-pack.ts",
+    "package:ipk": "bun run package && bun run ipk",
+    "ipk": "bash scripts-dev/ipk/build-ipk.sh",
     "i18n:check": "bun run lib/i18n/check.ts",
     "test:i18n": "bun test lib/i18n",
     "icons:subset": "bun run scripts-dev/subset-icons.ts",
