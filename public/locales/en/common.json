@@ -646,6 +646,7 @@
       "netbird": "NetBird is removed. A reboot clears its leftover firewall rules.",
       "mbn": "The new carrier profile takes effect after the modem restarts.",
       "ipa_offload": "The Hardware Offload change takes effect after the next reboot.",
+      "package_install": "QManager was updated. A reboot finishes the update.",
       "default": "Some changes take effect after the next reboot."
     },
     "dismiss_dialog": {

@@ -646,6 +646,7 @@
       "netbird": "NetBird 已移除。重启可清除残留的防火墙规则。",
       "mbn": "新的运营商配置文件将在调制解调器重启后生效。",
       "ipa_offload": "硬件卸载的更改将在下次重启后生效。",
+      "package_install": "QManager 已更新。重启后完成更新。",
       "default": "部分更改将在下次重启后生效。"
     },
     "dismiss_dialog": {

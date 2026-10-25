@@ -646,6 +646,7 @@
       "netbird": "NetBird 已移除。重新啟動可清除殘留的防火牆規則。",
       "mbn": "新的電信業者設定檔會在數據機重新啟動後生效。",
       "ipa_offload": "硬體卸載的變更將在下次重新啟動後生效。",
+      "package_install": "QManager 已更新。重新啟動後完成更新。",
       "default": "部分變更將在下次重新啟動後生效。"
     },
     "dismiss_dialog": {
