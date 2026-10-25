@@ -1,23 +1,31 @@
 #!/bin/sh
 # =============================================================================
-# tailscale_mgr.sh — Tailscale install / update pipeline (official builds only)
+# tailscale_mgr.sh — Tailscale install / update pipeline (two sources)
 # =============================================================================
-# Official static arm64 builds come from pkgs.tailscale.com/stable (GitHub
+# Official: static arm64 builds from pkgs.tailscale.com/stable (GitHub
 # releases carry no binaries). Every build is staged in RAM, sha256-verified
 # (fail closed) and smoke-tested before anything under /usr/bin is touched.
-#
 # Updates swap binaries in place (.new + rename), restart through
 # /etc/init.d/tailscale (its stop_service is a no-op, so tailscaled.state,
 # WantRunning and the command line are preserved and the node stays logged
 # in), then health-check and roll back to the kept old binaries on failure.
 #
+# Tiny: iamromulan's tailscale-tiny opkg package, offered only when the
+# firmware already trusts his signed feed (ts_tiny_available). opkg verifies
+# the feed signature and the ipk checksum. The package is installed as-is:
+# its own init script, config and network setup, none of QManager's
+# (no qm_write_ts_initd, no UCI seed, no tailscale_net.sh). Updates go through
+# opkg with a RAM copy of the old binary for rollback, and put the user's
+# boot-enable choice back afterwards (the package postinst always enables).
+#
 # Entry points run inside a background worker (the CGI orphans it):
-#   ts_do_install   ts_do_update
-# Test knob (shell only, the CGI unsets it): TS_TEST_FAIL_HEALTH=1 forces
-# ts_wait_healthy to fail so the rollback path can be exercised.
+#   ts_do_install <official|tiny>   ts_do_update
+# Test knobs (shell only, the CGI unsets them): TS_TEST_FAIL_HEALTH=1 forces
+# ts_wait_healthy to fail so the rollback path can be exercised;
+# TS_TEST_FORCE_UPDATE=1 makes a Tiny update reinstall the current version.
 #
 # Never changes tailscaled's parameters; tailscale_initd.sh is the only init
-# writer.
+# writer, and only for the official source.
 # =============================================================================
 
 [ -n "$_TS_MGR_LOADED" ] && return 0
@@ -36,6 +44,16 @@ TS_PKGS_BASE="https://pkgs.tailscale.com/stable"
 TS_LATEST_TTL=21600
 TS_LATEST_FAIL_TTL=1800
 TS_OP="${TS_OP:-install}"
+# official | tiny. Selects the latest-version fetcher and cache; workers set it.
+TS_SOURCE="${TS_SOURCE:-official}"
+
+TS_TINY_PKG="tailscale-tiny"
+TS_TINY_ARCH="aarch64_cortex-a53"
+TS_TINY_BIN_DIR="/usr/sbin"
+TS_TINY_CACHE="/var/run/qmanager/tailscale_tiny_latest.json"
+TS_OPKG_STATUS="/usr/lib/opkg/status"
+# Both the feed name and its usign key comment start with this.
+TS_TINY_FEED_TAG="iamromulan"
 
 # --- small helpers -----------------------------------------------------------
 
@@ -93,10 +111,11 @@ ts_progress() {
         --arg detail "${3:-}" \
         --arg error "${4:-}" \
         --arg op "$TS_OP" \
+        --arg source "$TS_SOURCE" \
         '{success: $ok, status: $status, message: $message, op: $op}
          + (if $detail != "" then {detail: $detail} else {} end)
          + (if $error != "" then {error: $error} else {} end)
-         + (if $status == "complete" then {variant: "official"} else {} end)' 2>/dev/null)
+         + (if $status == "complete" then {variant: $source} else {} end)' 2>/dev/null)
     if [ -n "$json" ]; then
         if command -v qm_atomic_write >/dev/null 2>&1; then
             printf '%s' "$json" | qm_atomic_write "$TS_PROGRESS_FILE"
@@ -190,7 +209,7 @@ ts_variant() {
             official|tiny) echo "$marker"; return 0 ;;
         esac
     fi
-    if opkg list-installed 2>/dev/null | awk '{print $1}' | grep -qx 'tailscale-tiny'; then
+    if [ -f "/usr/lib/opkg/info/$TS_TINY_PKG.control" ]; then
         echo "tiny"
         return 0
     fi
@@ -199,6 +218,73 @@ ts_variant() {
 
 ts_installed_version() {
     tailscale version 2>/dev/null | head -n 1 | awk '{print $1}'
+}
+
+# _ts_pkgver_norm RAW — opkg version to dotted numeric ("1.104.2-r1" ->
+# "1.104.2.1", "1.104.2" unchanged), "" when not numeric.
+_ts_pkgver_norm() {
+    local v
+    local rel
+    v="$1"
+    case "$v" in *:*) v="${v#*:}" ;; esac
+    case "$v" in
+        *-*)
+            rel="${v#*-}"
+            rel="${rel#r}"
+            v="${v%%-*}.$rel"
+            ;;
+    esac
+    case "$v" in ''|*[!0-9.]*) return 0 ;; esac
+    printf '%s' "$v"
+}
+
+# ts_tiny_pkg_version — installed tailscale-tiny package version, normalized.
+ts_tiny_pkg_version() {
+    local raw
+    raw=$(awk -v p="$TS_TINY_PKG" '
+        /^Package: / { inpkg = ($2 == p) }
+        inpkg && /^Version: / { print $2; exit }
+    ' "$TS_OPKG_STATUS" 2>/dev/null | tr -d '\r')
+    _ts_pkgver_norm "$raw"
+}
+
+# ts_compare_version — the version update checks compare against: the package
+# version on Tiny (catches -rN rebuilds), the binary version otherwise.
+ts_compare_version() {
+    if [ "$(ts_variant)" = "tiny" ]; then
+        ts_tiny_pkg_version
+    else
+        ts_installed_version
+    fi
+}
+
+# ts_tiny_feed_url — https URL of the iamromulan feed from the device's own
+# opkg config. Nothing is ever added; no feed line means no Tiny source.
+ts_tiny_feed_url() {
+    awk -v tag="$TS_TINY_FEED_TAG" '
+        $1 == "src/gz" && index($2, tag) == 1 && $3 ~ /^https:\/\// { print $3; exit }
+    ' /etc/opkg/customfeeds.conf /etc/opkg/distfeeds.conf 2>/dev/null | tr -d '\r'
+}
+
+# ts_tiny_available — rc 0 when the firmware already trusts the Tiny feed:
+# feed line, its usign key, signature checking on, and the package's arch.
+ts_tiny_available() {
+    local k
+    local keyed
+    command -v opkg >/dev/null 2>&1 || return 1
+    [ -n "$(ts_tiny_feed_url)" ] || return 1
+    grep -q '^option check_signature' /etc/opkg.conf 2>/dev/null || return 1
+    cat /etc/opkg/arch.conf /etc/opkg.conf 2>/dev/null \
+        | awk -v a="$TS_TINY_ARCH" '$1 == "arch" && $2 == a { f = 1 } END { exit !f }' || return 1
+    keyed=1
+    for k in /etc/opkg/keys/*; do
+        [ -f "$k" ] || continue
+        if head -n 1 "$k" 2>/dev/null | grep -q "untrusted comment: $TS_TINY_FEED_TAG"; then
+            keyed=0
+            break
+        fi
+    done
+    return "$keyed"
 }
 
 # ts_version_gt A B — rc 0 when dotted-numeric A > B. Non-numeric input is never greater.
@@ -220,11 +306,54 @@ ts_version_gt() {
 
 # --- latest version ----------------------------------------------------------
 
-# ts_fetch_latest — print "<version>\t<tarball>" for the official arm64 build.
+# The latest-version cache of the current TS_SOURCE.
+_ts_cache_file() {
+    if [ "$TS_SOURCE" = "tiny" ]; then
+        printf '%s' "$TS_TINY_CACHE"
+    else
+        printf '%s' "$TS_LATEST_CACHE"
+    fi
+}
+
+# _ts_tiny_fetch_latest — print "<version>\t<ipk>" from the feed's Packages
+# index. Display / comparison only: the install itself goes through opkg,
+# which verifies the signed index.
+_ts_tiny_fetch_latest() {
+    local url
+    local idx
+    local raw
+    local ipk
+    local ver
+    url=$(ts_tiny_feed_url)
+    [ -n "$url" ] || return 1
+    idx=$(curl -fsSL --proto =https --proto-redir =https --retry "${TS_FETCH_RETRY:-2}" --max-time 20 \
+        --max-filesize 1048576 "$url/Packages" 2>/dev/null) || return 1
+    raw=$(printf '%s\n' "$idx" | tr -d '\r' | awk -v p="$TS_TINY_PKG" '
+        /^Package: / { inpkg = ($2 == p) }
+        inpkg && /^Version: / { v = $2 }
+        inpkg && /^Filename: / { f = $2 }
+        END { if (v != "" && f != "") print v "\t" f }
+    ')
+    ver=$(_ts_pkgver_norm "$(printf '%s' "$raw" | cut -f1)")
+    ipk=$(printf '%s' "$raw" | cut -f2)
+    [ -n "$ver" ] || return 1
+    case "$ipk" in
+        "$TS_TINY_PKG"_*.ipk) : ;;
+        *) return 1 ;;
+    esac
+    case "$ipk" in */*) return 1 ;; esac
+    printf '%s\t%s\n' "$ver" "$ipk"
+}
+
+# ts_fetch_latest — print "<version>\t<artifact>" for the current source.
 ts_fetch_latest() {
     local meta
     local ver
     local tarball
+    if [ "$TS_SOURCE" = "tiny" ]; then
+        _ts_tiny_fetch_latest
+        return $?
+    fi
     meta=$(curl -fsSL --proto =https --proto-redir =https --retry "${TS_FETCH_RETRY:-2}" --max-time 20 "$TS_PKGS_BASE/?mode=json" 2>/dev/null) || return 1
     ver=$(printf '%s' "$meta" | jq -r '(.TarballsVersion // .Version) | if . == null then empty else tostring end' 2>/dev/null)
     case "$ver" in ''|*[!0-9.]*) return 1 ;; esac
@@ -243,7 +372,9 @@ ts_latest_refresh() {
     local prev_tar
     local prev_ok_at
     local json
+    local cache
     now=$(_ts_now)
+    cache=$(_ts_cache_file)
     TS_LATEST_VER=""
     TS_LATEST_TARBALL=""
     qm_run_dir >/dev/null 2>&1
@@ -252,27 +383,29 @@ ts_latest_refresh() {
         TS_LATEST_TARBALL=$(printf '%s' "$line" | cut -f2)
         json=$(jq -cn --arg v "$TS_LATEST_VER" --arg t "$TS_LATEST_TARBALL" --argjson now "$now" \
             '{version: $v, tarball: $t, checked_at: $now, ok_at: $now, ok: true}')
-        [ -n "$json" ] && printf '%s' "$json" | qm_atomic_write "$TS_LATEST_CACHE"
+        [ -n "$json" ] && printf '%s' "$json" | qm_atomic_write "$cache"
         return 0
     fi
     prev_ver=""
     prev_tar=""
     prev_ok_at=0
-    if qm_trusted_file "$TS_LATEST_CACHE"; then
-        prev_ver=$(jq -r '.version // ""' "$TS_LATEST_CACHE" 2>/dev/null)
-        prev_tar=$(jq -r '.tarball // ""' "$TS_LATEST_CACHE" 2>/dev/null)
-        prev_ok_at=$(_ts_num "$(jq -r '.ok_at // 0' "$TS_LATEST_CACHE" 2>/dev/null)")
+    if qm_trusted_file "$cache"; then
+        prev_ver=$(jq -r '.version // ""' "$cache" 2>/dev/null)
+        prev_tar=$(jq -r '.tarball // ""' "$cache" 2>/dev/null)
+        prev_ok_at=$(_ts_num "$(jq -r '.ok_at // 0' "$cache" 2>/dev/null)")
     fi
     json=$(jq -cn --arg v "$prev_ver" --arg t "$prev_tar" --argjson now "$now" --argjson okat "$prev_ok_at" \
         '{version: $v, tarball: $t, checked_at: $now, ok_at: $okat, ok: false}')
-    [ -n "$json" ] && printf '%s' "$json" | qm_atomic_write "$TS_LATEST_CACHE"
+    [ -n "$json" ] && printf '%s' "$json" | qm_atomic_write "$cache"
     return 1
 }
 
 # _ts_cache_field NAME — print a cache field ("" when absent/untrusted).
 _ts_cache_field() {
-    qm_trusted_file "$TS_LATEST_CACHE" || return 1
-    jq -r --arg k "$1" '.[$k] | if . == null then empty else tostring end' "$TS_LATEST_CACHE" 2>/dev/null
+    local cache
+    cache=$(_ts_cache_file)
+    qm_trusted_file "$cache" || return 1
+    jq -r --arg k "$1" '.[$k] | if . == null then empty else tostring end' "$cache" 2>/dev/null
 }
 
 # ts_latest_cache_read — print the cached version if the last good check is
@@ -477,16 +610,19 @@ _ts_backup_dir() {
     printf '%s/tailscale_bak' "$(qm_run_dir 2>/dev/null)"
 }
 
-# _ts_install_one SRC NAME — cp to .NAME.new, sync, rename over NAME.
+# _ts_install_one SRC NAME [DIR] — cp to DIR/.NAME.new, sync, rename over
+# DIR/NAME. DIR defaults to TS_BIN_DIR.
 _ts_install_one() {
     local tmp
-    tmp="$TS_BIN_DIR/.$2.new"
+    local dir
+    dir="${3:-$TS_BIN_DIR}"
+    tmp="$dir/.$2.new"
     rm -f "$tmp"
     if cp "$1" "$tmp" 2>/dev/null && chmod 755 "$tmp"; then
         # Data on flash before the name points at it (UBIFS writeback: an
         # unsynced rename can survive a power cut as a 0-byte binary).
         sync
-        mv -f "$tmp" "$TS_BIN_DIR/$2" && return 0
+        mv -f "$tmp" "$dir/$2" && return 0
     fi
     rm -f "$tmp"
     return 1
@@ -553,6 +689,21 @@ ts_restore_binaries() {
                 fi
             done
             ;;
+        tiny)
+            # Same reasoning as tmp: stop first so the new binary's inode is
+            # freed before the old one is written back. The package's CLI is
+            # a symlink to the daemon; recreate it if the upgrade lost it.
+            bak=$(_ts_backup_dir)
+            [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale stop >/dev/null 2>&1
+            killall tailscaled 2>/dev/null
+            if [ -f "$bak/tailscaled" ]; then
+                rm -f "$TS_TINY_BIN_DIR/tailscaled" "$TS_TINY_BIN_DIR/.tailscaled.new"
+                _ts_install_one "$bak/tailscaled" tailscaled "$TS_TINY_BIN_DIR" || rc=1
+            else
+                rc=1
+            fi
+            [ -e "$TS_BIN_DIR/tailscale" ] || ln -sf ../sbin/tailscaled "$TS_BIN_DIR/tailscale" 2>/dev/null
+            ;;
     esac
     sync
     TS_SWAP_PENDING=0
@@ -569,6 +720,11 @@ _ts_restart_old() {
     else
         echo "Tailscale $1 restarted but did not report healthy within 20 s"
     fi
+}
+
+# _ts_md5 FILE — md5 of FILE, "" if missing.
+_ts_md5() {
+    md5sum "$1" 2>/dev/null | awk '{print $1}'
 }
 
 # _ts_ino FILE — inode number, "" if missing.
@@ -604,7 +760,8 @@ ts_recover_interrupted() {
 
 ts_drop_backup() {
     rm -f "$TS_BIN_DIR/.tailscale.old" "$TS_BIN_DIR/.tailscaled.old" \
-        "$TS_BIN_DIR/.tailscale.new" "$TS_BIN_DIR/.tailscaled.new"
+        "$TS_BIN_DIR/.tailscale.new" "$TS_BIN_DIR/.tailscaled.new" \
+        "$TS_TINY_BIN_DIR/.tailscaled.new"
     rm -rf "$(_ts_backup_dir)"
     TS_SWAP_PENDING=0
 }
@@ -709,20 +866,34 @@ _ts_worker_begin() {
 # Each runs its body under the lock, then cleans up explicitly (the EXIT trap
 # covers a worker killed mid-way). rc 0 on success.
 
+# ts_do_install <official|tiny>
 ts_do_install() {
     local rc
+    TS_SOURCE="official"
+    [ "$1" = "tiny" ] && TS_SOURCE="tiny"
     _ts_worker_begin install || return 1
-    _ts_install_body
+    if [ "$TS_SOURCE" = "tiny" ]; then
+        _ts_install_body_tiny
+    else
+        _ts_install_body
+    fi
     rc=$?
     _ts_worker_exit
     trap - EXIT INT TERM
     return "$rc"
 }
 
+# ts_do_update — the source follows the installed variant.
 ts_do_update() {
     local rc
+    TS_SOURCE="official"
+    [ "$(ts_variant)" = "tiny" ] && TS_SOURCE="tiny"
     _ts_worker_begin update || return 1
-    _ts_update_body
+    if [ "$TS_SOURCE" = "tiny" ]; then
+        _ts_update_body_tiny
+    else
+        _ts_update_body
+    fi
     rc=$?
     _ts_worker_exit
     trap - EXIT INT TERM
@@ -858,5 +1029,213 @@ _ts_update_body() {
         ts_net_ensure_rules
     fi
     ts_progress complete "Tailscale updated to $TS_STAGE_VER"
+    return 0
+}
+
+# --- Tiny source (opkg) --------------------------------------------------------
+
+# _ts_opkg_wait — wait up to 30 s for another opkg run to finish.
+_ts_opkg_wait() {
+    local n
+    n=0
+    while [ -f /var/lock/opkg.lock ] && [ "$n" -lt 30 ]; do
+        sleep 1
+        n=$((n + 1))
+    done
+    [ ! -f /var/lock/opkg.lock ]
+}
+
+# _ts_opkg_refresh — opkg update, then require the Tiny package to resolve.
+# A partial failure (an unrelated mirror down) is fine once Cameron's feed
+# loaded; opkg rejects a list whose signature does not verify.
+_ts_opkg_refresh() {
+    if ! _ts_opkg_wait; then
+        _ts_fail "$(_ts_generic_code)" "Another package operation is running" "Try again in a minute"
+        return 1
+    fi
+    ts_progress running "Updating package lists..."
+    opkg update || echo "Some package lists could not be updated"
+    if ! opkg info "$TS_TINY_PKG" 2>/dev/null | grep -q "^Package: $TS_TINY_PKG"; then
+        _ts_fail feed_unavailable "Could not load the Tiny build's package list" "Check the internet connection and retry"
+        return 1
+    fi
+    return 0
+}
+
+# _ts_tiny_boot_get — 1 when Tailscale starts on boot, else 0 (UCI flag
+# first, like the CGI's get_boot_enabled; init.d enabled as the fallback).
+_ts_tiny_boot_get() {
+    local v
+    v=$(uci -q get tailscale.settings.service_enabled 2>/dev/null)
+    case "$v" in
+        1) printf '1'; return 0 ;;
+        0) printf '0'; return 0 ;;
+    esac
+    if [ -x /etc/init.d/tailscale ] && /etc/init.d/tailscale enabled; then
+        printf '1'
+    else
+        printf '0'
+    fi
+}
+
+# _ts_tiny_boot_set 0|1 — init.d enable/disable plus the UCI flag, in lockstep.
+_ts_tiny_boot_set() {
+    if [ -x /etc/init.d/tailscale ]; then
+        if [ "$1" = "1" ]; then
+            /etc/init.d/tailscale enable >/dev/null 2>&1
+        else
+            /etc/init.d/tailscale disable >/dev/null 2>&1
+        fi
+    fi
+    if uci -q get tailscale.settings >/dev/null 2>&1; then
+        uci -q set tailscale.settings.service_enabled="$1" 2>/dev/null
+        uci -q commit tailscale 2>/dev/null
+    fi
+}
+
+_ts_install_body_tiny() {
+    local free_kb
+    local tmp_kb
+    local v
+    if ! ts_tiny_available; then
+        _ts_fail feed_unavailable "The Tiny build is not available on this device"
+        return 1
+    fi
+    ts_progress running "Checking disk space..."
+    free_kb=$(_ts_df_free_kb "$TS_TINY_BIN_DIR")
+    tmp_kb=$(_ts_df_free_kb /tmp)
+    if [ "$free_kb" -lt 28672 ]; then
+        _ts_fail insufficient_space "Not enough free space on flash" "Need 28 MB, $((free_kb / 1024)) MB free"
+        return 1
+    fi
+    if [ "$tmp_kb" -lt 32768 ]; then
+        _ts_fail insufficient_space "Not enough free memory to download Tailscale" "Need about 32 MB free"
+        return 1
+    fi
+
+    _ts_opkg_refresh || return 1
+
+    ts_progress running "Installing the Tiny build..."
+    if ! opkg install "$TS_TINY_PKG"; then
+        opkg remove "$TS_TINY_PKG" >/dev/null 2>&1
+        _ts_fail install_failed "The package manager could not install the Tiny build"
+        return 1
+    fi
+    hash -r 2>/dev/null
+    if [ ! -x "$TS_TINY_BIN_DIR/tailscaled" ] || ! command -v tailscale >/dev/null 2>&1; then
+        opkg remove "$TS_TINY_PKG" >/dev/null 2>&1
+        _ts_fail install_failed "Package installed but Tailscale was not found"
+        return 1
+    fi
+
+    mkdir -p /etc/tailscale
+    printf 'tiny\n' | qm_durable_write "$TS_INSTALL_MARKER"
+    v=$(ts_installed_version)
+    ts_progress complete "Tailscale ${v:-Tiny} installed successfully"
+    return 0
+}
+
+_ts_update_body_tiny() {
+    local installed
+    local free_kb
+    local mem_kb
+    local old_kb
+    local was_running
+    local boot
+    local bak
+    local new_v
+    local hc_mode
+    local opkg_rc
+    installed=$(ts_tiny_pkg_version)
+    TS_OLD_VER=$(ts_installed_version)
+
+    ts_progress running "Checking for updates..."
+    if ! ts_latest_refresh; then
+        _ts_fail update_check_failed "Could not check the Tiny build's package feed" "The feed is unreachable or its format changed"
+        return 1
+    fi
+    if [ "$TS_TEST_FORCE_UPDATE" != "1" ] && ! ts_version_gt "$TS_LATEST_VER" "$installed"; then
+        _ts_fail up_to_date "Tailscale is already up to date" "$installed"
+        return 1
+    fi
+
+    # Flash: the new binary is written while the running daemon still pins
+    # the old inode. RAM: the rollback copy plus opkg's download.
+    free_kb=$(_ts_df_free_kb "$TS_TINY_BIN_DIR")
+    mem_kb=$(_ts_mem_avail_kb)
+    old_kb=$(_ts_size_kb "$TS_TINY_BIN_DIR/tailscaled")
+    if [ "$free_kb" -lt 28672 ] || [ "$mem_kb" -lt $((old_kb + 98304)) ]; then
+        _ts_fail insufficient_space "Not enough free space to update Tailscale" \
+            "$((free_kb / 1024)) MB free on flash, $((mem_kb / 1024)) MB free memory"
+        return 1
+    fi
+
+    _ts_opkg_refresh || return 1
+
+    was_running=0
+    pidof tailscaled >/dev/null 2>&1 && was_running=1
+    TS_WAS_RUNNING="$was_running"
+    boot=$(_ts_tiny_boot_get)
+
+    bak=$(_ts_backup_dir)
+    if ! qm_root_dir "$bak" 0700 || ! cp "$TS_TINY_BIN_DIR/tailscaled" "$bak/tailscaled" 2>/dev/null; then
+        rm -rf "$bak"
+        _ts_fail update_failed "Could not keep a copy of the current version" "Tailscale ${TS_OLD_VER} was kept"
+        return 1
+    fi
+    TS_SPACE_MODE="tiny"
+    TS_SWAP_PENDING=1
+
+    ts_progress running "Installing Tailscale $TS_LATEST_VER..."
+    opkg_rc=0
+    if [ "$TS_TEST_FORCE_UPDATE" = "1" ]; then
+        opkg install --force-reinstall "$TS_TINY_PKG" || opkg_rc=1
+    else
+        opkg install "$TS_TINY_PKG" || opkg_rc=1
+    fi
+    # Whatever opkg did, its postinst enabled boot and started the daemon:
+    # put the user's choice back.
+    hash -r 2>/dev/null
+    _ts_tiny_boot_set "$boot"
+    if [ "$was_running" = "0" ] && [ -x /etc/init.d/tailscale ]; then
+        /etc/init.d/tailscale stop >/dev/null 2>&1
+    fi
+
+    hc_mode="nodaemon"
+    if [ "$was_running" = "1" ]; then
+        hc_mode=""
+        pidof tailscaled >/dev/null 2>&1 || /etc/init.d/tailscale start >/dev/null 2>&1
+    fi
+
+    # opkg failed before touching the binary (download, signature, space):
+    # nothing to roll back.
+    if [ "$opkg_rc" = "1" ] && [ -f "$TS_TINY_BIN_DIR/tailscaled" ] \
+            && [ "$(_ts_md5 "$bak/tailscaled")" = "$(_ts_md5 "$TS_TINY_BIN_DIR/tailscaled")" ]; then
+        TS_SWAP_PENDING=0
+        ts_drop_backup
+        _ts_fail update_failed "The package manager could not install the update" "Tailscale $TS_OLD_VER was kept"
+        return 1
+    fi
+    new_v=$(ts_installed_version)
+
+    ts_progress running "Checking Tailscale..."
+    if [ "$opkg_rc" = "1" ] || [ -z "$new_v" ] || ! ts_wait_healthy "$new_v" 30 $hc_mode; then
+        ts_progress running "Update failed its health check, rolling back..."
+        if ! ts_restore_binaries; then
+            TS_KEEP_BACKUP=1
+            _ts_fail update_failed "Update failed and the previous version could not be fully restored"
+            return 1
+        fi
+        hash -r 2>/dev/null
+        _ts_tiny_boot_set "$boot"
+        _ts_restart_old "$TS_OLD_VER"
+        ts_drop_backup
+        _ts_fail update_rolled_back "Update failed, Tailscale $TS_OLD_VER was restored"
+        return 1
+    fi
+
+    TS_SWAP_PENDING=0
+    ts_drop_backup
+    ts_progress complete "Tailscale updated to $new_v"
     return 0
 }
