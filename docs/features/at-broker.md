@@ -585,7 +585,21 @@ Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`), `qmanager_atd` 0.3.
 | Daemon stopped (fallback) | `qmi bundle` rc 0 in 9 ms, same JSON paths as the daemon |
 | Lifecycle, old init.d on device | Socket and proto removed. `/tmp/qmanager_qmi.json` and `qmi.env` stay (the old script does not clean them); the repo `stop_service` does |
 
-Not run on device: install, OTA re-install and uninstall (static review only).
+Install, OTA re-install and uninstall were run later; see [Lifecycle on device (0.6.0)](#lifecycle-on-device-060-2026-10-25).
+
+## Lifecycle on device (0.6.0, 2026-10-25)
+
+RM551E, broker 0.6.0 (md5 `f99b6538…`), tarball built from the repo scripts with the device's 0.6.0 binary swapped in (the committed `dependencies/qmanager_atd` is still 0.5.0, so an OTA from the repo tarball as built would downgrade the broker). No reboot, no `AT+CFUN`. A 1 s sampler recorded every artifact below during each run. Earlier gate: [`live-signal.md`](live-signal.md#lifecycle) (0.4.1).
+
+| Step | Command | Measured |
+|---|---|---|
+| OTA over the running broker, lease stamp and lock held | `install.sh --skip-packages --no-reboot` | Within 1 to 2 s of the stop the broker, socket, `.proto`, `qmi.env`, `qmanager_qmi.json`, live dir, lease stamp, lock and `qmi.stamp` were all gone (the token had already expired before the stop) and `/www/qmlive` was removed. `install_frontend` re-linked `/www/qmlive` 3 s later (dangling for about 11 s until the new broker created `live/`). New broker 14 s after the stop with `proto=3 version=0.6.0 qmi=1 live=1`, links `qcmd`/`qsms`/`qmi` intact (no `.qcmd.*` temps), sidecars republished, `qmi.stamp` back after the poller's first read, poller and ping up, no warnings |
+| Uninstall | `uninstall.sh --force --keep-config --no-reboot` | Broker, three links, `/usr/lib/qmanager`, CGI tree, UCI namespace, init.d and rc.d links, `/var/run/qmanager` (all sidecars and live files), `/www/qmlive`, nft DPI chain and `/etc/qmanager/supported_bands_hw.env` gone; stock `index.html` restored. `/usrdata/qmanager/data_used.json` kept (only `--purge` removes it) |
+| Fresh install | `install.sh --skip-packages --no-reboot` | Broker 0.6.0 up, links, `/www/qmlive`, sidecars, `qmi.stamp` all back; Data Used kept its counter and `source: "wds"`; `qcmd`, `qsms status` and `qmi bundle` answer. UCI is re-seeded with defaults, so the user's `/etc/config/quecmanager` has to be restored afterwards (done from a copy; byte-identical) |
+
+Leftovers the first uninstall run found, fixed in `uninstall.sh` and re-checked by a second uninstall/install pass: `/tmp/qmanager_ping_history.json`, `/tmp/qmanager_pci_state.json` and the `# QManager Scheduled Reboot` cron header (the `grep -v qmanager` was case-sensitive). After the first uninstall a `find` for those names showed only `/etc/qmanager`, `/usrdata` and the harmless `/tmp/lock/procd_qmanager*.lock` files plus the leftovers above; after the second, the sampled artifacts and both fixed leftovers were gone and the same `find` showed nothing outside `/etc/qmanager` and `/usrdata` (output seen during the run, not saved).
+
+Not run: `--purge` (deletes the password hash and profiles; `remove_config` reviewed statically), `--frontend-only` (it stops every service and never restarts them; the OTA path does not use it), and an OTA over an `init.d` older than the `service_stopped` cleanup (`install.sh` stops services with the installed, old script, so sidecars it never cleaned would survive; not reproducible on a device that already has the new script).
 
 ## Rollback
 
