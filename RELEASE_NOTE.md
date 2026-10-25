@@ -10,6 +10,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 
 ## ✅ Improvements
 
+- **Security hardening.** QManager now refuses every protected request if its sign-in check is damaged or incomplete, instead of only when it is missing. The Traffic Engine download is pinned to a known zapret release and must match its checksum before it installs. The public IP lookup on About Device now verifies the server's certificate.
 - **Data Used is back on the dashboard.** The Device & Speed card shows total download and upload again, and it now counts everything the modem moves, including traffic from devices on your LAN, using the modem's own counter. Older figures could read low because they missed that traffic. If QManager ever has to fall back to a less complete counter, a small hint beside the total says the figure may be low.
 - **Data Used no longer has a reset button.** The total simply counts from when QManager was installed.
 - **Live LTE SINR on the dashboard.** The LTE signal quality (SINR) on the dashboard now updates every second along with the other LTE values while you watch it.
