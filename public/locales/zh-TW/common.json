@@ -524,6 +524,7 @@
       "updateDialogDescription": "新版本啟動期間，隧道會重新連線數秒。",
       "updateLogTitle": "更新記錄",
       "communityBuild": "社群版",
+      "tinyBuild": "Tiny 版",
       "netFixesTitle": "網路修復",
       "netFixesDescription": "讓您 tailnet 中的裝置能夠存取這台數據機及其區域網路。"
     },
@@ -572,11 +573,25 @@
     "install": {
       "title": "Tailscale",
       "description": "安裝 Tailscale 官方版本。這是一種 mesh VPN，免開放連接埠即可從任何地方存取這台數據機。",
+      "descriptionChoice": "安裝你選擇的 Tailscale 版本。這是一種 mesh VPN，免開放連接埠即可從任何地方存取這台數據機。",
       "conditionTitle": "尚未安裝 Tailscale",
       "conditionDescription": "安裝會透過目前這條行動網路連線下載 Tailscale 安裝套件，因此會消耗您的流量，安裝期間連線也會變慢。",
       "install": "安裝 Tailscale",
       "installing": "安裝中…",
       "checkAgain": "再次檢查",
+      "sourceLabel": "版本",
+      "sourceHintLabel": "關於版本",
+      "sourceHint": "Tiny 版本佔用的快閃記憶體空間約為一半，並自帶服務與網路設定。之後如需切換版本，請先解除安裝再重新安裝。",
+      "source": {
+        "official": {
+          "title": "官方",
+          "description": "Tailscale 自家的版本，搭配 QManager 的服務與網路設定。"
+        },
+        "tiny": {
+          "title": "Tiny",
+          "description": "由 iamromulan 打包的更小社群版本，自行設定服務與網路規則。"
+        }
+      },
       "done": "Tailscale 已安裝。",
       "failed": "安裝未完成。",
       "logTitle": "安裝紀錄",
@@ -629,8 +644,8 @@
       "description": "同一時間只能安裝一個 VPN。請先在 <link>NetBird 頁面</link>解除安裝 {{other_vpn}}。"
     },
     "legacy": {
-      "title": "舊版社群版本",
-      "description": "這台數據機執行的是 Tailscale 舊版社群版本。請先解除安裝，再重新安裝，即可切換到官方版本。"
+      "title": "不受支援的版本",
+      "description": "這台數據機執行的 Tailscale 版本無法由 QManager 更新。請先解除安裝，再重新安裝，即可選擇受支援的版本。"
     }
   },
   "pending_reboot": {

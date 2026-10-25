@@ -524,6 +524,7 @@
       "updateDialogDescription": "Tunnel tersambung ulang selama beberapa detik saat versi baru dimulai.",
       "updateLogTitle": "Log pembaruan",
       "communityBuild": "Build komunitas",
+      "tinyBuild": "Build Tiny",
       "netFixesTitle": "Perbaikan jaringan",
       "netFixesDescription": "Memungkinkan perangkat tailnet Anda menjangkau modem ini dan LAN-nya."
     },
@@ -572,11 +573,25 @@
     "install": {
       "title": "Tailscale",
       "description": "Memasang versi resmi dari Tailscale, mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
+      "descriptionChoice": "Memasang build Tailscale pilihan Anda, mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
       "conditionTitle": "Tailscale belum terinstal",
       "conditionDescription": "Instalasi mengunduh paket Tailscale lewat koneksi seluler yang sama dengan sesi ini, jadi ini memakai kuota data Anda dan koneksi akan lebih lambat selama berlangsung.",
       "install": "Instal Tailscale",
       "installing": "Menginstal…",
       "checkAgain": "Periksa lagi",
+      "sourceLabel": "Build",
+      "sourceHintLabel": "Tentang build",
+      "sourceHint": "Build Tiny memakai sekitar setengah ruang flash dan membawa layanan serta pengaturan jaringannya sendiri. Untuk berganti build nanti, copot lalu pasang ulang.",
+      "source": {
+        "official": {
+          "title": "Resmi",
+          "description": "Build milik Tailscale sendiri, dengan layanan dan pengaturan jaringan dari QManager."
+        },
+        "tiny": {
+          "title": "Tiny",
+          "description": "Build komunitas yang lebih kecil dari iamromulan, yang mengatur layanan dan aturan jaringannya sendiri."
+        }
+      },
       "done": "Tailscale terinstal.",
       "failed": "Instalasi tidak selesai.",
       "logTitle": "Log instalasi",
@@ -629,8 +644,8 @@
       "description": "Hanya satu VPN yang dapat diinstal dalam satu waktu. Copot {{other_vpn}} dari <link>halaman NetBird</link> terlebih dahulu."
     },
     "legacy": {
-      "title": "Build komunitas lama",
-      "description": "Modem ini menjalankan build komunitas Tailscale yang lama. Copot lalu pasang ulang untuk beralih ke build resmi."
+      "title": "Build tidak didukung",
+      "description": "Modem ini menjalankan build Tailscale yang tidak dapat diperbarui QManager. Copot lalu pasang ulang untuk memilih build yang didukung."
     }
   },
   "pending_reboot": {

@@ -524,6 +524,7 @@
       "updateDialogDescription": "Il tunnel si riconnette per qualche secondo mentre si avvia la nuova versione.",
       "updateLogTitle": "Registro dell'aggiornamento",
       "communityBuild": "Versione community",
+      "tinyBuild": "Versione Tiny",
       "netFixesTitle": "Correzioni di rete",
       "netFixesDescription": "Permette ai dispositivi della tua tailnet di raggiungere questo modem e la sua LAN."
     },
@@ -572,11 +573,25 @@
     "install": {
       "title": "Tailscale",
       "description": "Installa la versione ufficiale di Tailscale, una mesh VPN per raggiungere questo modem da ovunque, senza aprire una porta.",
+      "descriptionChoice": "Installa la versione di Tailscale che scegli, una mesh VPN per raggiungere questo modem da ovunque, senza aprire una porta.",
       "conditionTitle": "Tailscale non è installato",
       "conditionDescription": "L'installazione scarica i pacchetti Tailscale sulla stessa connessione cellulare su cui gira questa sessione, quindi consuma il tuo traffico dati e la connessione sarà più lenta durante l'operazione.",
       "install": "Installa Tailscale",
       "installing": "Installazione…",
       "checkAgain": "Controlla di nuovo",
+      "sourceLabel": "Versione",
+      "sourceHintLabel": "Informazioni sulle versioni",
+      "sourceHint": "La versione Tiny occupa circa metà dello spazio in flash e porta con sé il proprio servizio e la propria configurazione di rete. Per cambiare versione in seguito, disinstalla e installa di nuovo.",
+      "source": {
+        "official": {
+          "title": "Ufficiale",
+          "description": "La versione di Tailscale, con il servizio e la configurazione di rete di QManager."
+        },
+        "tiny": {
+          "title": "Tiny",
+          "description": "Una versione community più piccola di iamromulan, che configura da sé il servizio e le regole di rete."
+        }
+      },
       "done": "Tailscale installato.",
       "failed": "L'installazione non è andata a buon fine.",
       "logTitle": "Log di installazione",
@@ -629,8 +644,8 @@
       "description": "È possibile installare una sola VPN alla volta. Disinstalla prima {{other_vpn}} dalla pagina <link>NetBird</link>."
     },
     "legacy": {
-      "title": "Versione community precedente",
-      "description": "Questo modem usa la versione community precedente di Tailscale. Disinstallala e installala di nuovo per passare alla versione ufficiale."
+      "title": "Versione non supportata",
+      "description": "Questo modem usa una versione di Tailscale che QManager non può aggiornare. Disinstallala e installala di nuovo per scegliere una versione supportata."
     }
   },
   "pending_reboot": {

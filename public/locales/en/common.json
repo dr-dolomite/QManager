@@ -524,6 +524,7 @@
       "updateDialogDescription": "The tunnel reconnects for a few seconds while the new version starts.",
       "updateLogTitle": "Update Log",
       "communityBuild": "Community build",
+      "tinyBuild": "Tiny build",
       "netFixesTitle": "Network fixes",
       "netFixesDescription": "Lets your tailnet devices reach this modem and its LAN."
     },
@@ -572,11 +573,25 @@
     "install": {
       "title": "Tailscale",
       "description": "Installs the official build from Tailscale, a mesh VPN for reaching this modem from anywhere without opening a port.",
+      "descriptionChoice": "Installs the Tailscale build you pick, a mesh VPN for reaching this modem from anywhere without opening a port.",
       "conditionTitle": "Tailscale is not installed",
       "conditionDescription": "Installing downloads the Tailscale packages over the same cellular link this session is running on, so it uses your data allowance and the connection will be slower while it runs.",
       "install": "Install Tailscale",
       "installing": "Installing…",
       "checkAgain": "Check again",
+      "sourceLabel": "Build",
+      "sourceHintLabel": "About the builds",
+      "sourceHint": "The Tiny build takes about half the flash space and brings its own service and network setup. To switch builds later, uninstall and install again.",
+      "source": {
+        "official": {
+          "title": "Official",
+          "description": "Tailscale's own build, with QManager's service and network setup."
+        },
+        "tiny": {
+          "title": "Tiny",
+          "description": "A smaller community build by iamromulan that sets up its own service and network rules."
+        }
+      },
       "done": "Tailscale installed.",
       "failed": "The install did not finish.",
       "logTitle": "Install Log",
@@ -629,8 +644,8 @@
       "description": "Only one VPN can be installed at a time. Uninstall {{other_vpn}} from the <link>NetBird page</link> first."
     },
     "legacy": {
-      "title": "Older community build",
-      "description": "This modem runs the older community build of Tailscale. Uninstall it and install again to switch to the official build."
+      "title": "Unsupported build",
+      "description": "This modem runs a Tailscale build QManager cannot update. Uninstall it and install again to choose a supported build."
     }
   },
   "pending_reboot": {
