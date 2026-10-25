@@ -53,4 +53,5 @@ Revert the commits (discovery-only). Previous 0.6.0 binary keeps working with th
 4. Parity: 100 MB download from the modem (and one LAN client download) moves rx by about that amount; compare with `QCMAP_CLI` v6 statistics (family 10) over a few minutes.
 5. `/cgi-bin/quecmanager/network/data_used.sh` reports `source:"wds"`; no regression of the dashboard row.
 6. Dual-stack switch (APN type IPv4v6): v4 client binds, sum continues without a drop; back to IPv4-only: unchanged from today.
-7. SSR (only with your OK): after the recovery the v6 client rebinds and `ok` returns to 1.
+7. IP passthrough / policy routing: while IPPT is on, `cat /proc/net/route` must still show the IPv4 default on `rmnet_data<N>` in the main table. If it does not (v4 call alive, no v4 default row) while an IPv6 default exists, the sampler would count the IPv6 client alone as `wds` and undercount; add a guard before shipping.
+8. SSR (only with your OK): after the recovery the v6 client rebinds and `ok` returns to 1.
