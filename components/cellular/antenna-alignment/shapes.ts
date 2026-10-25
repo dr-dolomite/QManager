@@ -322,10 +322,11 @@ export const SLOT = {
 // -----------------------------------------------------------------------------
 
 /**
- * 2-up on a narrow card, 4-up on a wide one. The outgoing strip ran one column
- * at phone width, 743px for the card that answers "am I aiming with all the
- * chains I think I have" — a question asked FIRST, at a scroll position reached
- * last.
+ * One column on a phone card, 2-up from `@md/card`, 4-up on a wide card. The
+ * phone runs one column by user call (2026-10-25): a 2x2 of ~140px squares
+ * cramped every tile, while full-width tiles keep the bar long enough to read.
+ * The 743px one-column strip this once replaced had tall, unpinned tiles; these
+ * keep their `HEIGHT_*` pin.
  */
 export const PORT = {
   /** Declared on the Chains card's content, so the grid steps on its own width. */
@@ -340,14 +341,21 @@ export const PORT = {
    * grid step against the narrowest cell it produces in the column it actually
    * lives in.** 768px of card content gives a ~180px block, ~150px inside.
    */
-  GRID: "grid grid-cols-2 gap-2.5 @2xl/card:gap-3.5 @3xl/card:grid-cols-4",
+  GRID: "grid grid-cols-1 gap-2.5 @md/card:grid-cols-2 @2xl/card:gap-3.5 @3xl/card:grid-cols-4",
   ROOT: "flex flex-col gap-2 rounded-tile bg-surface-container px-3.5 py-3.5 @2xl/card:px-4",
   /**
    * Pinned per radio mode: one metric (LTE-only or SA) or two (EN-DC). A single
    * pin sized for two left every LTE tile ~40px of empty floor.
    */
-  HEIGHT_SINGLE: "h-[7.375rem]",
-  HEIGHT_DUAL: "h-40",
+  HEIGHT_SINGLE: "h-[5.75rem] @md/card:h-[7.375rem]",
+  HEIGHT_DUAL: "h-[8.125rem] @md/card:h-40",
+  /**
+   * Name and RX line. One row on a one-column phone card, where the tile is
+   * ~295px wide and both fit; stacked from `@md/card`, where a 2-up block is
+   * too narrow for "Diversity" beside its RX pill. The pins above move with it
+   * (26px per tile).
+   */
+  HEAD: "flex min-w-0 items-center justify-between gap-2 @md/card:flex-col @md/card:items-stretch @md/card:justify-start",
   NAME: "min-w-0 truncate text-sm font-semibold",
   RX: "inline-flex shrink-0 items-center rounded-pill bg-surface-container-high px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.09em] text-on-surface-variant",
 
@@ -447,7 +455,7 @@ export const SKELETON_SHAPE = {
   LEG_ROW: "h-10 w-full rounded-pill",
   SLOT_ROW: "h-16 w-full rounded-pill",
   /** The single-metric pin: the mode is unknown until the first snapshot. */
-  PORT_BLOCK: "h-[7.375rem] w-full rounded-tile",
+  PORT_BLOCK: "h-[5.75rem] w-full rounded-tile @md/card:h-[7.375rem]",
   CONTROL_ROW: "h-[2.125rem] w-56 rounded-pill",
   /** `Button size="action"`, 42px. */
   ACTION: "h-[2.625rem] w-36 rounded-pill",

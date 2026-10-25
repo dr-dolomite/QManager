@@ -64,8 +64,9 @@ import type { RadioMode } from "./utils";
 //   * It ran ONE COLUMN at phone width. Measured on the first screenshots ever
 //     taken of this page: 743px tall, starting at y=1586 on a 390px phone. The
 //     densest card on the page (~38 elements) — a footnote outweighing the live
-//     instrument, at a scroll position reached last if ever. It is now 2-up on a
-//     phone and 4-up on a wide surface (`PORT.GRID`), roughly 476px at 390px.
+//     instrument, at a scroll position reached last if ever. Its tiles are now
+//     pinned and compact; the phone runs them one column at full card width,
+//     2-up from `@md/card` and 4-up on a wide card (`PORT.GRID`).
 //
 //   * The port name and its RX pill shared a line. At 2-up on a 390px phone a
 //     block is ~155px wide and "Diversity" + "DRX" does not fit, so the name now
@@ -267,39 +268,41 @@ function PortBlock({
       variants={staggerRowItem}
       className={cn(PORT.ROOT, mode === "endc" ? PORT.HEIGHT_DUAL : PORT.HEIGHT_SINGLE)}
     >
-      {/* The name takes its own line: at 2-up on a 390px phone the block is
-          ~155px wide, and "Diversity" plus its RX pill will not share one. */}
-      <span className={PORT.NAME}>{port.name}</span>
+      {/* One line with the RX pill on a one-column phone card; its own line
+          from 2-up, where "Diversity" plus its RX pill will not share one. */}
+      <div className={PORT.HEAD}>
+        <span className={PORT.NAME}>{port.name}</span>
 
-      {/* Never `flex-wrap`. `PORT.HEIGHT_*` is a PIN, not a floor, and the pin's
-          budget (132px inside the 14px padding) spends 20px on the name, 26px on
-          this line and 60px on two stacked metrics. A wrapped chip would add
-          28px and push the last metric out of a box that cannot grow. The chip
-          truncates its label instead — which is safe here and nowhere else,
-          because the glyph is the channel that actually carries the state. */}
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className={PORT.RX}>{port.rx}</span>
+        {/* Never `flex-wrap`. `PORT.HEIGHT_*` is a PIN, not a floor, and the pin's
+            budget (132px inside the 14px padding) spends 20px on the name, 26px on
+            this line and 60px on two stacked metrics. A wrapped chip would add
+            28px and push the last metric out of a box that cannot grow. The chip
+            truncates its label instead — which is safe here and nowhere else,
+            because the glyph is the channel that actually carries the state. */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={PORT.RX}>{port.rx}</span>
 
-        {/* An idle chain gets a STATED verdict at full contrast — never an
-            opacity wash. `do_not_disturb_on` is its own glyph, because two
-            states in one slot may not share one: the tonal containers measure
-            ~1.03:1 apart and the glyph is the only channel that survives
-            grayscale and deuteranopia. */}
-        <Badge
-          variant={reporting ? qualityBadgeVariant(verdict) : "muted"}
-          className="min-w-0"
-        >
-          <MaterialSymbol
-            name={reporting ? QUALITY_GLYPH[verdict] : "do_not_disturb_on"}
-            size={GLYPH.CHIP}
-            filled
-          />
-          <span className="min-w-0 truncate">
-            {reporting
-              ? t(`antenna_alignment.quality.${verdict}`)
-              : t("antenna_alignment.ports.not_reporting")}
-          </span>
-        </Badge>
+          {/* An idle chain gets a STATED verdict at full contrast — never an
+              opacity wash. `do_not_disturb_on` is its own glyph, because two
+              states in one slot may not share one: the tonal containers measure
+              ~1.03:1 apart and the glyph is the only channel that survives
+              grayscale and deuteranopia. */}
+          <Badge
+            variant={reporting ? qualityBadgeVariant(verdict) : "muted"}
+            className="min-w-0"
+          >
+            <MaterialSymbol
+              name={reporting ? QUALITY_GLYPH[verdict] : "do_not_disturb_on"}
+              size={GLYPH.CHIP}
+              filled
+            />
+            <span className="min-w-0 truncate">
+              {reporting
+                ? t(`antenna_alignment.quality.${verdict}`)
+                : t("antenna_alignment.ports.not_reporting")}
+            </span>
+          </Badge>
+        </div>
       </div>
 
       {/* No `reporting` branch around this. A silent chain draws the same
