@@ -82,6 +82,16 @@ def read_version(repo):
     return raw, version
 
 
+def to_lf(data):
+    """CRLF -> LF for text, as the feed repo's "ipk-source/** text=auto eol=lf"
+    stores it, so the local ipk matches the CI-built one. Text = git's test:
+    no NUL in the first 8000 bytes and no lone CR."""
+    if b"\r\n" not in data or b"\0" in data[:8000]:
+        return data
+    lf = data.replace(b"\r\n", b"\n")
+    return data if b"\r" in lf else lf
+
+
 def target_for(rel):
     """Map a tarball member (below qmanager_install/) to its payload path."""
     if rel in ("install.sh", "uninstall.sh"):
@@ -138,7 +148,7 @@ def main():
             if member.issym():
                 payload[target] = ("link", member.linkname)
             elif member.isfile():
-                payload[target] = ("file", tar.extractfile(member).read())
+                payload[target] = ("file", to_lf(tar.extractfile(member).read()))
     if unmapped:
         fail("tarball members with no package path: " + ", ".join(sorted(unmapped)[:10]))
     for must in ("www/cgi-bin/quecmanager", "usr/bin/qmanager_atd", "usr/lib/qmanager",
