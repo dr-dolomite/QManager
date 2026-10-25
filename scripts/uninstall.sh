@@ -323,7 +323,11 @@ remove_backend() {
     done
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
         /var/run/qmanager_atd.restart /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
-        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live         /var/run/qmanager/qmi_live_aim /var/run/qmanager/qmi_live_watch         /var/run/qmanager/qmi_live_aim.* /var/run/qmanager/qmi_live_watch.*         /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.*         /var/run/qmanager/qmi_live.lock /var/run/qmanager/qmi.stamp \
+        /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live \
+        /var/run/qmanager/qmi_live_aim /var/run/qmanager/qmi_live_watch \
+        /var/run/qmanager/qmi_live_aim.* /var/run/qmanager/qmi_live_watch.* \
+        /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.* \
+        /var/run/qmanager/qmi_live.lock /var/run/qmanager/qmi.stamp \
         "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* "$BIN_DIR"/.qmi.* 2>/dev/null || true
 
     for f in "$BIN_DIR"/qmanager_*; do
