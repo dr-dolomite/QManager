@@ -571,25 +571,25 @@
       "offlineDescription": "连接 Tailscale 后即可查看你 tailnet 上的其他设备。"
     },
     "install": {
-      "title": "Tailscale",
-      "description": "安装 Tailscale 官方版本。这是一种 mesh VPN，无需开放端口即可从任何地方访问这台调制解调器。",
-      "descriptionChoice": "安装你选择的 Tailscale 版本。这是一种 mesh VPN，无需开放端口即可从任何地方访问这台调制解调器。",
-      "conditionTitle": "尚未安装 Tailscale",
-      "conditionDescription": "安装会通过当前这条蜂窝连接下载 Tailscale 安装包，因此会消耗你的流量，安装期间连接也会变慢。",
+      "title": "安装 Tailscale",
+      "description": "一种 mesh VPN，无需开放端口即可从任何地方访问这台调制解调器。",
       "install": "安装 Tailscale",
       "installing": "正在安装…",
-      "checkAgain": "再次检查",
+      "retry": "重试",
+      "installingBuild": "正在安装 {{build}} 版本，请保持此页面打开。",
+      "cost": "会消耗移动数据，安装期间连接会变慢。",
+      "switchLater": "之后如需切换，请先卸载再重新安装。",
       "sourceLabel": "版本",
       "sourceHintLabel": "关于版本",
-      "sourceHint": "Tiny 版本占用的闪存空间约为一半，并自带服务和网络配置。之后如需切换版本，请先卸载再重新安装。",
+      "sourceHint": "Tiny 版本自带服务和网络配置，官方版本使用 QManager 的配置。",
       "source": {
         "official": {
           "title": "官方",
-          "description": "Tailscale 自家的版本，搭配 QManager 的服务和网络配置。"
+          "description": "完整大小。Tailscale 官方版本。"
         },
         "tiny": {
           "title": "Tiny",
-          "description": "由 iamromulan 打包的更小社区版本，自行配置服务和网络规则。"
+          "description": "闪存占用约为一半。由 iamromulan 打包的社区版本。"
         }
       },
       "done": "Tailscale 已安装。",

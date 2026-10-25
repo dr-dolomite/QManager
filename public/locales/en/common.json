@@ -571,25 +571,25 @@
       "offlineDescription": "Connect Tailscale to see the other devices on your tailnet."
     },
     "install": {
-      "title": "Tailscale",
-      "description": "Installs the official build from Tailscale, a mesh VPN for reaching this modem from anywhere without opening a port.",
-      "descriptionChoice": "Installs the Tailscale build you pick, a mesh VPN for reaching this modem from anywhere without opening a port.",
-      "conditionTitle": "Tailscale is not installed",
-      "conditionDescription": "Installing downloads the Tailscale packages over the same cellular link this session is running on, so it uses your data allowance and the connection will be slower while it runs.",
+      "title": "Install Tailscale",
+      "description": "A mesh VPN for reaching this modem from anywhere, no open port.",
       "install": "Install Tailscale",
       "installing": "Installing…",
-      "checkAgain": "Check again",
+      "retry": "Try again",
+      "installingBuild": "Installing the {{build}} build. Keep this page open.",
+      "cost": "Uses mobile data; the connection slows while it runs.",
+      "switchLater": "To switch later, uninstall and reinstall.",
       "sourceLabel": "Build",
       "sourceHintLabel": "About the builds",
-      "sourceHint": "The Tiny build takes about half the flash space and brings its own service and network setup. To switch builds later, uninstall and install again.",
+      "sourceHint": "The Tiny build brings its own service and network setup. The Official build uses QManager's.",
       "source": {
         "official": {
           "title": "Official",
-          "description": "Tailscale's own build, with QManager's service and network setup."
+          "description": "Full size. Tailscale's own build."
         },
         "tiny": {
           "title": "Tiny",
-          "description": "A smaller community build by iamromulan that sets up its own service and network rules."
+          "description": "About half the flash. Community build by iamromulan."
         }
       },
       "done": "Tailscale installed.",

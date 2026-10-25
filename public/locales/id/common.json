@@ -571,25 +571,25 @@
       "offlineDescription": "Hubungkan Tailscale untuk melihat perangkat lain di tailnet Anda."
     },
     "install": {
-      "title": "Tailscale",
-      "description": "Memasang versi resmi dari Tailscale, mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
-      "descriptionChoice": "Memasang build Tailscale pilihan Anda, mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
-      "conditionTitle": "Tailscale belum terinstal",
-      "conditionDescription": "Instalasi mengunduh paket Tailscale lewat koneksi seluler yang sama dengan sesi ini, jadi ini memakai kuota data Anda dan koneksi akan lebih lambat selama berlangsung.",
+      "title": "Instal Tailscale",
+      "description": "Mesh VPN untuk menjangkau modem ini dari mana saja tanpa membuka port.",
       "install": "Instal Tailscale",
       "installing": "Menginstal…",
-      "checkAgain": "Periksa lagi",
+      "retry": "Coba lagi",
+      "installingBuild": "Menginstal build {{build}}. Biarkan halaman ini tetap terbuka.",
+      "cost": "Memakai data seluler; koneksi melambat selama berlangsung.",
+      "switchLater": "Untuk berganti nanti, copot lalu pasang ulang.",
       "sourceLabel": "Build",
       "sourceHintLabel": "Tentang build",
-      "sourceHint": "Build Tiny memakai sekitar setengah ruang flash dan membawa layanan serta pengaturan jaringannya sendiri. Untuk berganti build nanti, copot lalu pasang ulang.",
+      "sourceHint": "Build Tiny membawa layanan dan pengaturan jaringannya sendiri. Build Resmi memakai milik QManager.",
       "source": {
         "official": {
           "title": "Resmi",
-          "description": "Build milik Tailscale sendiri, dengan layanan dan pengaturan jaringan dari QManager."
+          "description": "Ukuran penuh. Build milik Tailscale sendiri."
         },
         "tiny": {
           "title": "Tiny",
-          "description": "Build komunitas yang lebih kecil dari iamromulan, yang mengatur layanan dan aturan jaringannya sendiri."
+          "description": "Sekitar setengah ruang flash. Build komunitas dari iamromulan."
         }
       },
       "done": "Tailscale terinstal.",

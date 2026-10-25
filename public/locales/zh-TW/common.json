@@ -571,25 +571,25 @@
       "offlineDescription": "連線 Tailscale 即可查看您 tailnet 上的其他裝置。"
     },
     "install": {
-      "title": "Tailscale",
-      "description": "安裝 Tailscale 官方版本。這是一種 mesh VPN，免開放連接埠即可從任何地方存取這台數據機。",
-      "descriptionChoice": "安裝你選擇的 Tailscale 版本。這是一種 mesh VPN，免開放連接埠即可從任何地方存取這台數據機。",
-      "conditionTitle": "尚未安裝 Tailscale",
-      "conditionDescription": "安裝會透過目前這條行動網路連線下載 Tailscale 安裝套件，因此會消耗您的流量，安裝期間連線也會變慢。",
+      "title": "安裝 Tailscale",
+      "description": "一種 mesh VPN，免開放連接埠即可從任何地方存取這台數據機。",
       "install": "安裝 Tailscale",
       "installing": "安裝中…",
-      "checkAgain": "再次檢查",
+      "retry": "重試",
+      "installingBuild": "正在安裝 {{build}} 版本，請保持此頁面開啟。",
+      "cost": "會消耗行動數據，安裝期間連線會變慢。",
+      "switchLater": "之後如需切換，請先解除安裝再重新安裝。",
       "sourceLabel": "版本",
       "sourceHintLabel": "關於版本",
-      "sourceHint": "Tiny 版本佔用的快閃記憶體空間約為一半，並自帶服務與網路設定。之後如需切換版本，請先解除安裝再重新安裝。",
+      "sourceHint": "Tiny 版本自帶服務與網路設定，官方版本使用 QManager 的設定。",
       "source": {
         "official": {
           "title": "官方",
-          "description": "Tailscale 自家的版本，搭配 QManager 的服務與網路設定。"
+          "description": "完整大小。Tailscale 官方版本。"
         },
         "tiny": {
           "title": "Tiny",
-          "description": "由 iamromulan 打包的更小社群版本，自行設定服務與網路規則。"
+          "description": "快閃記憶體佔用約為一半。由 iamromulan 打包的社群版本。"
         }
       },
       "done": "Tailscale 已安裝。",

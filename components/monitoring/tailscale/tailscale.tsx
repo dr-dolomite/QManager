@@ -24,7 +24,8 @@ import { ConditionBlock } from "./condition-block";
 import { ConnectionCard, ConnectionCardSkeleton } from "./connection-card";
 import { RebootDialog } from "./danger-card";
 import { DeviceCard, DeviceCardSkeleton } from "./device-card";
-import { InstallCard } from "./install-card";
+import { InstallCard, InstallCardSkeleton } from "./install-card";
+import { rememberTailscaleInstalled, useLastKnownInstalled } from "./last-known";
 import { PeersCard } from "./peers-card";
 import {
   COLS,
@@ -86,6 +87,13 @@ const TailscaleComponent = () => {
 
   const [showReboot, setShowReboot] = React.useState(false);
   const view = deriveView(status);
+  const lastKnownInstalled = useLastKnownInstalled();
+
+  // Only a real read is worth remembering; a busy lock still says "installed".
+  const installedNow = status?.installed;
+  React.useEffect(() => {
+    if (installedNow !== undefined) rememberTailscaleInstalled(installedNow);
+  }, [installedNow]);
 
   const reload = React.useCallback(() => {
     // `refresh` is the hook's fetch; a click event must never reach its argument.
@@ -207,8 +215,17 @@ const TailscaleComponent = () => {
           installResult={installResult}
           runInstall={runInstall}
           onRefresh={reload}
+          isRefreshing={isLoading}
           tinyAvailable={status?.tiny_available ?? false}
         />
+      </motion.div>
+    );
+  } else if (!status && isLoading && lastKnownInstalled === false) {
+    // A modem that had nothing installed last time would otherwise paint the
+    // whole installed layout and collapse it into one card.
+    body = (
+      <motion.div variants={staggerItem}>
+        <InstallCardSkeleton />
       </motion.div>
     );
   } else if (!status && !isLoading) {

@@ -134,12 +134,7 @@ export const STATUS_LABEL_KEY = {
 export const CARD_SHELL =
   "@container/card gap-5 rounded-card border-0 bg-card py-6 shadow-[var(--shadow-whisper)]!";
 
-/** The anchor card on the surface: 20px radius, 28px pad, one per route. */
-export const HERO_SHELL =
-  "@container/card gap-5 rounded-hero border-0 bg-card py-7 shadow-[var(--shadow-whisper)]!";
-
 export const CARD_PAD = "px-6";
-export const HERO_PAD = "px-7";
 
 export const CARD_TITLE = "min-w-0 text-lg leading-tight";
 
@@ -155,6 +150,10 @@ export const CARD_HEAD =
 export const CARD_HEAD_TEXT = "flex min-w-0 flex-col gap-1.5";
 export const CARD_HEAD_ACTIONS =
   "flex flex-none flex-wrap gap-2 @md/card:ml-auto @md/card:justify-end";
+
+/** One foot status: the glyph and its sentence stay one item, so they never
+ *  split across lines when the foot wraps on a narrow card. */
+export const STATUS_LINE = "flex items-start gap-2 [&>svg]:mt-0.5";
 
 /** The one region inside a stretched card that absorbs the slack. */
 export const CARD_BODY = "flex flex-1 flex-col gap-4";
@@ -255,13 +254,17 @@ export const LOG_PANEL = {
   PLACEHOLDER: "text-on-surface-variant",
 } as const;
 
-/** The install-source picker: a labelled segmented pair over one sentence. */
-export const SOURCE = {
-  ROOT: "flex w-full flex-col items-center gap-2 text-center",
+/**
+ * The install card's Build tile. It reuses the setting tile's geometry, so the
+ * label and its tip sit left and the segmented pair right, and it stacks on a
+ * narrow card. The description recedes under the label (not an opacity wash).
+ */
+export const BUILD = {
+  ROOT: `${SWITCH_ROW.ROOT} ${SWITCH_ROW.REST}`,
   LABEL_ROW: "flex items-center gap-1",
-  LABEL:
-    "text-on-surface-variant text-[0.6875rem] font-semibold tracking-[0.02em] uppercase",
-  DESC: "text-on-surface-variant max-w-sm text-xs leading-[1.5] text-pretty",
+  DESC: "text-on-surface-variant mt-0.5 text-xs leading-[1.5] text-pretty",
+  /** The consequence of choosing: a second, quieter line. */
+  NOTE: "text-on-surface-variant mt-0.5 block text-xs leading-[1.5]",
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -354,6 +357,8 @@ export const SKELETON = {
   TILE: `${TILE.HEIGHT} rounded-tile`,
   METRIC: `${METRIC_HEIGHT} rounded-pill`,
   SWITCH: `${SWITCH_MIN_HEIGHT} rounded-tile`,
+  /** The Build tile at rest on a wide card: label, two description lines, 14px pad. */
+  BUILD: "h-[5.5rem] rounded-tile",
   ACTION: `${ACTION_HEIGHT} rounded-pill`,
   HEAD: `${HEAD_HEIGHT} rounded-inline`,
   /** Table rows are hairline-separated with NO gap between them, so the
