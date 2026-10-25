@@ -64,7 +64,7 @@ Loss bounds: an unplanned reboot loses at most one flush window (5 min); a plann
 
 `since` and `updated` are wall clock and stored as 0 while the clock is below `DU_SANE_EPOCH` (1700000000, the 1970 boot window); the card then shows no date.
 
-> ℹ️ NOTE: An IPv6-only call (no IPv4 default route) has no mux for the broker to bind, so it counts as no call and the sampler falls back to `netdev`.
+> ℹ️ NOTE: An IPv6-only call (no IPv4 default route) takes its mux from the IPv6 default route on `rmnet_data<N>` (broker 0.6.1) and reads the IPv6 client alone, so it stays on `wds`. Only a call whose IPv6 table shows no such route (or two data interfaces and no default) still counts as no call and falls back to `netdev`. Not yet verified on a live IPv6-only call.
 
 ## File schema
 
