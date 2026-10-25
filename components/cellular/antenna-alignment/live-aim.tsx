@@ -26,14 +26,18 @@ import {
   signalToProgress,
   worstSignalQuality,
 } from "@/types/modem-status";
-import type { SignalPerAntenna, SignalThresholds } from "@/types/modem-status";
+import type {
+  SignalPerAntenna,
+  SignalQuality,
+  SignalThresholds,
+} from "@/types/modem-status";
 import {
   QUALITY_GLYPH,
   qualityInkClass,
   qualityMeterTone,
 } from "../signal-quality-display";
 import { LiveSparkline } from "./live-sparkline";
-import { CONDENSED, CONSOLE, GLYPH, LIVE } from "./shapes";
+import { CONDENSED, CONSOLE, GLYPH, LIVE, SLOT } from "./shapes";
 import type { LiveLead } from "./use-live-lead";
 import { SCORE_WEIGHTS, normalizeValue, scoreLive } from "./utils";
 
@@ -47,13 +51,15 @@ import { SCORE_WEIGHTS, normalizeValue, scoreLive } from "./utils";
 // screen — pinned in a sticky column on a wide surface, and condensed into a
 // 64px pill readout on a phone once the card itself scrolls away.
 //
-// It is deliberately an INSTRUMENT, not a headline figure, and what earns a 52px
-// numeral here is DECOMPOSABILITY: the score never appears alone. It arrives
-// with the two weighted legs that produced it, the weights themselves, its
-// session peak, its change since the last measurement, and the modem's own
-// timestamp — and when a leg is missing, `partial` says so out loud rather than
-// letting a one-leg score pass as a two-leg one. A number you can take apart is
-// an instrument; a number you can only admire is decoration.
+// It is deliberately an INSTRUMENT, not a headline figure. One numeral leads
+// (the live serving RSRP, 40px, with its distance back to the session peak on
+// the same line), and the composite score sits under it as a "Now" row in the
+// recorder's own anatomy, never as a second headline. The score never appears
+// alone: it arrives with the two weighted legs that produced it, the weights
+// themselves, its session-best tick and its change since the last
+// measurement, and when a leg is missing, `partial` says so out loud rather
+// than letting a one-leg score pass as a two-leg one. A number you can take
+// apart is an instrument; a number you can only admire is decoration.
 //
 // The composite is the SAME function the recorder ranks by (`scoreLive` wraps
 // `scoreSnapshot`), so "what am I reading now" and "what did I record there" are
@@ -70,11 +76,10 @@ import { SCORE_WEIGHTS, normalizeValue, scoreLive } from "./utils";
 // NO VALUE TICK ON THIS CARD, deliberately, and this is the one place the
 // product's tick gesture is declined. The tick dips a figure to 0.35 opacity for
 // 700ms to mark "this just moved". Correct on a dashboard glanced at for a
-// second; wrong here, where the figure changes every ~4s and the user is staring
-// at it continuously — it would be dimmed roughly a fifth of the time they are
-// reading it, outdoors, in sunlight. The change signal is the delta chip and the
-// meter retarget instead: one authored moment rather than a per-poll flicker on
-// the one number that matters.
+// second; wrong here, where the figures change every 1-2 s and the user is
+// staring at them continuously — they would be dimmed much of the time they are
+// being read, outdoors, in sunlight. The change signal is the delta and the
+// meter retarget instead: one authored moment rather than a per-poll flicker.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -309,13 +314,53 @@ function LiveStateChip({ state }: { state: LiveLead["state"] }) {
 
 const fmtDb = (value: number) => value.toFixed(1);
 
+/** `toPeak` within rounding of zero: the reading is the session best. */
+const atPeak = (toPeak: number) => toPeak > -0.05;
+
+/**
+ * The steering cue: how far the reading sits below the session peak.
+ *
+ * It holds the numeral row's right edge because it is the figure a sweep is
+ * steered by ("turn back, you were 2 dB better over there"), and as a 12px
+ * grey caption under the meter it was the quietest text on the card. At the
+ * peak it becomes a FACT, so it takes a filled `info` chip with its own glyph
+ * (the Fact-Is-Info Rule) rather than a "0.0 dB" nobody reads as good news.
+ */
+function ToPeak({ toPeak, peak }: { toPeak: number; peak: number }) {
+  const { t } = useTranslation("cellular");
+
+  if (atPeak(toPeak)) {
+    return (
+      <Badge variant="info" className="shrink-0">
+        <MaterialSymbol name="my_location" size={GLYPH.CHIP} filled />
+        {t("antenna_alignment.aim.live.at_peak")}
+      </Badge>
+    );
+  }
+
+  return (
+    <div className={LIVE.TO_PEAK}>
+      <span className={LIVE.TO_PEAK_VALUE} aria-hidden="true">
+        {fmtDb(toPeak)} dB
+      </span>
+      <span className={LIVE.TO_PEAK_CAPTION} aria-hidden="true">
+        {t("antenna_alignment.aim.peak")} {fmtDb(peak)} dBm
+      </span>
+      <span className="sr-only">
+        {t("antenna_alignment.aim.live.from_peak", { delta: fmtDb(toPeak) })}
+      </span>
+    </div>
+  );
+}
+
 /**
  * The serving-cell RSRP, every second, with its 30 s trace.
  *
  * This is a DIFFERENT measurement from the RSRP leg below, and the labelling
  * keeps them apart: the lead is the serving cell as the modem reports it across
  * all receive chains (the LTE anchor in NSA); the leg is Main / PRX alone, from
- * the 2 s per-port snapshot. Neither is ever presented as the other.
+ * the 2 s per-port snapshot, under its own "From Main / PRX" label. Neither is
+ * ever presented as the other.
  *
  * Stale, paused and connecting keep the last figure on screen in neutral ink,
  * with the meter and trace dimmed, and a chip saying why. They never blank it:
@@ -355,54 +400,34 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
       </div>
 
       <div className={LIVE.NUMERAL_ROW}>
-        {/* Ramp ink is legal here because the meter sits directly beneath. No
-            value tick and no tween: the figure moves every second and is watched
-            continuously, so any per-change gesture would be permanent. */}
-        <span
-          className={cn(CONSOLE.SCORE, CONSOLE.SCORE_BOX, ink)}
-          aria-label={
-            reading === null
-              ? t("antenna_alignment.aim.live.no_reading")
-              : `${t("antenna_alignment.aim.live.sr", {
-                  value: fmtDb(reading),
-                })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
-          }
-        >
-          {reading === null ? "—" : fmtDb(reading)}
-        </span>
-        {/* A unit beside a dash would label a reading that does not exist. */}
-        {reading !== null && (
-          <span className={LIVE.UNIT} aria-hidden="true">
-            dBm
+        <div className={LIVE.NUMERAL}>
+          {/* Ramp ink is legal here because the meter sits directly beneath. No
+              value tick and no tween: the figure moves every second and is
+              watched continuously, so any per-change gesture would be
+              permanent. */}
+          <span
+            className={cn(CONSOLE.SCORE, CONSOLE.SCORE_BOX, ink)}
+            aria-label={
+              reading === null
+                ? t("antenna_alignment.aim.live.no_reading")
+                : `${t("antenna_alignment.aim.live.sr", {
+                    value: fmtDb(reading),
+                  })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
+            }
+          >
+            {reading === null ? "—" : fmtDb(reading)}
           </span>
-        )}
-      </div>
-
-      {/* Peak and distance-to-peak caption the meter, as on the score below. */}
-      {lead.peak !== null && (
-        <div
-          className={cn(
-            "flex flex-wrap items-center justify-between gap-x-4 gap-y-1",
-            CONSOLE.CAPTION,
-          )}
-        >
-          <span>
-            {t("antenna_alignment.aim.peak")}{" "}
-            <span className="font-semibold tabular-nums text-on-surface">
-              {fmtDb(lead.peak)} dBm
-            </span>
-          </span>
-          {lead.toPeak !== null && (
-            <span className="tabular-nums">
-              {lead.toPeak > -0.05
-                ? t("antenna_alignment.aim.live.at_peak")
-                : t("antenna_alignment.aim.live.from_peak", {
-                    delta: fmtDb(lead.toPeak),
-                  })}
+          {/* A unit beside a dash would label a reading that does not exist. */}
+          {reading !== null && (
+            <span className={LIVE.UNIT} aria-hidden="true">
+              dBm
             </span>
           )}
         </div>
-      )}
+        {lead.toPeak !== null && lead.peak !== null && (
+          <ToPeak toPeak={lead.toPeak} peak={lead.peak} />
+        )}
+      </div>
 
       <div className={cn(LIVE.MUTABLE, muted && LIVE.MUTED)}>
         <div className={CONSOLE.METER_LANE}>
@@ -432,11 +457,125 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
       </div>
 
       {/* The console's slack absorber: the trace grows when the work column is
-          taller, so the difference becomes resolution, not a gap. */}
+          taller, so the difference becomes resolution, not a gap. Neutral ink:
+          it used to wear the NEWEST sample's ramp colour across all 30 s, which
+          painted history with a verdict it never had and put a third red mark
+          beside the numeral and meter that already carry it. */}
       <div className={cn(LIVE.SPARK_SLOT, LIVE.MUTABLE, muted && LIVE.MUTED)}>
-        <LiveSparkline points={lead.points} peak={lead.peak} inkClass={ink} />
+        <LiveSparkline
+          points={lead.points}
+          peak={lead.peak}
+          inkClass={LIVE.SPARK_INK}
+        />
       </div>
     </section>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// The score, as a "Now" row
+// -----------------------------------------------------------------------------
+
+/**
+ * The composite score in the recorder row's anatomy: label, 28px score, a bar
+ * with the session-best tick, and the change since the last measurement.
+ *
+ * It used to be a 32px ramp-red numeral over its own full-width meter, under a
+ * 52px ramp-red lead: two headline figures in one card, both alarm red at the
+ * cell edge. As a row it reads as what it is, the measurement you would record
+ * from here, on the same 0-100 scale as the Position rows beside it.
+ */
+function NowRow({
+  score,
+  quality,
+  tone,
+  peak,
+  delta,
+  showDelta,
+}: {
+  score: number | null;
+  quality: SignalQuality;
+  tone: ReturnType<typeof qualityMeterTone>;
+  peak: number | null;
+  delta: number | null;
+  showDelta: boolean;
+}) {
+  const { t } = useTranslation("cellular");
+
+  return (
+    <div className={CONSOLE.NOW_ROW}>
+      <span className={CONSOLE.NOW_LABEL}>{t("antenna_alignment.aim.now")}</span>
+
+      {/* Ramp ink is legal because the bar sits immediately beside it. The
+          quality word rides the `aria-label`: it REPLACES the element's
+          contents for assistive tech, so a nested `sr-only` would be lost. */}
+      <span
+        className={cn(SLOT.SCORE, qualityInkClass(quality))}
+        aria-label={
+          score === null
+            ? t("antenna_alignment.aim.no_reading")
+            : `${t("antenna_alignment.aim.score_sr", { score })} ${t(
+                `antenna_alignment.quality.${quality}`,
+              )}`
+        }
+      >
+        {score === null ? "—" : score}
+      </span>
+
+      <div className={CONSOLE.NOW_LANE}>
+        <div className={CONSOLE.METER_LANE}>
+          {/* A null composite is an EMPTY TRACK, never a zero-length fill. */}
+          <div className="min-w-0 flex-1" aria-hidden="true">
+            <MetricBar
+              value={score}
+              max={100}
+              warnAt={101}
+              dangerAt={101}
+              colorOverride={tone}
+              track="surface-container-high"
+            />
+          </div>
+          {/* The session best, snapped rather than tweened: a new high is a
+              discrete event, and `left` stays out of transitions. */}
+          {peak !== null && score !== null && peak > score && (
+            <span
+              aria-hidden="true"
+              className={CONSOLE.PEAK_TICK}
+              style={{ left: `calc(${peak}% - 1px)` }}
+            />
+          )}
+        </div>
+        {peak !== null && (
+          <span className="sr-only">
+            {t("antenna_alignment.aim.peak")} {peak}
+          </span>
+        )}
+      </div>
+
+      {/* Not a status: signal dropping while you rotate is expected, so the
+          direction rides the glyph in caption ink, never a hue. */}
+      <span className={CONSOLE.NOW_DELTA}>
+        {showDelta && delta !== null && (
+          <>
+            <MaterialSymbol
+              name={delta > 0 ? "arrow_upward" : "arrow_downward"}
+              size={GLYPH.CHIP}
+              filled
+              aria-hidden="true"
+            />
+            <span aria-hidden="true">{Math.abs(delta)}</span>
+            <span className="sr-only">
+              {t(
+                delta > 0
+                  ? "antenna_alignment.aim.delta_up"
+                  : "antenna_alignment.aim.delta_down",
+                { delta: Math.abs(delta) },
+              )}
+            </span>
+          </>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -447,16 +586,13 @@ function LiveLeadBlock({ lead, showTag }: { lead: LiveLead; showTag: boolean }) 
 export function AimConsole({
   spa,
   snapshotTs,
-  updatedAt,
   lead,
 }: {
-  /** The live serving-cell lead, or null to render the console as before. */
+  /** The live serving-cell lead, or null to render the console without it. */
   lead: LiveLead | null;
   spa: SignalPerAntenna;
   /** The modem's own timestamp for this snapshot, in seconds. */
   snapshotTs: number | null;
-  /** Already-formatted clock time of the snapshot, or null. */
-  updatedAt: string | null;
 }) {
   const { t } = useTranslation("cellular");
   const {
@@ -475,9 +611,8 @@ export function AimConsole({
   return (
     <Card className={CONSOLE.SHELL}>
       {/* The identity tag sits on the TITLE's line, immediately after the words
-          it qualifies — "Live Aim · 5G NR" is one phrase. Flung to the far right
-          of a wide card it was a floating label with no referent. No icon here:
-          icons belong to chips and actions, never to a CardHeader. */}
+          it qualifies. No icon here: icons belong to chips and actions, never
+          to a CardHeader. */}
       <CardHeader className="gap-1 px-0">
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className={CONSOLE.TITLE}>
@@ -490,84 +625,27 @@ export function AimConsole({
           )}
         </div>
         <CardDescription className={CONSOLE.DESCRIPTION}>
-          {t(
-            lead
-              ? "antenna_alignment.aim.description_live"
-              : "antenna_alignment.aim.description",
-          )}
+          {t("antenna_alignment.aim.description")}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-5 px-0">
         {lead && <LiveLeadBlock lead={lead} showTag={radio !== "lte"} />}
-        {lead && <div className={LIVE.DIVIDER} aria-hidden="true" />}
 
-        {/* --- Score, delta, peak ------------------------------------------- */}
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-end gap-4">
-            <div className="flex shrink-0 flex-col gap-1">
-              <span className={CONSOLE.EYEBROW}>
-                {t("antenna_alignment.aim.score_label")}
-              </span>
-              <div className="flex items-baseline gap-1">
-                {/* The one figure the aiming user steers by, so it takes the
-                    ramp ink — and it is legal to tint precisely because the
-                    composite meter sits directly beneath it. A ramp colour
-                    with no bar beside it is a bug, not a shortcut.
-
-                    The quality word rides the `aria-label` rather than an
-                    `sr-only` span: an `aria-label` REPLACES an element's
-                    contents for assistive tech, so a nested `sr-only` here
-                    would never be announced at all. */}
-                <span
-                  className={cn(
-                    lead ? LIVE.SCORE_SECONDARY : CONSOLE.SCORE,
-                    lead ? LIVE.SCORE_BOX_SECONDARY : CONSOLE.SCORE_BOX,
-                    qualityInkClass(overallQuality),
-                  )}
-                  aria-label={
-                    score.value === null
-                      ? t("antenna_alignment.aim.no_reading")
-                      : `${t("antenna_alignment.aim.score_sr", {
-                          score: score.value,
-                        })} ${t(`antenna_alignment.quality.${overallQuality}`)}`
-                  }
-                >
-                  {score.value === null ? "—" : score.value}
-                </span>
-
-                {/* The delta rides the numeral's own line at a minimal gap,
-                    rather than living in a chip a full row away from the
-                    figure it is a footnote to. It is NOT a status — signal
-                    dropping while you rotate is expected information, not a
-                    fault — so it stays a plain glyph-plus-figure pair and its
-                    DIRECTION rides the glyph rather than a hue, which is also
-                    what makes it survive deuteranopia and grayscale. */}
-                {showDelta && (
-                  <span
-                    className="mb-1.5 flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums text-on-surface-variant"
-                    aria-hidden="true"
-                  >
-                    <MaterialSymbol
-                      name={delta! > 0 ? "arrow_upward" : "arrow_downward"}
-                      size={GLYPH.CHIP}
-                      filled
-                    />
-                    {delta! > 0 ? `+${delta}` : `${delta}`}
-                  </span>
-                )}
-                {showDelta && (
-                  <span className="sr-only">
-                    {delta! > 0
-                      ? t("antenna_alignment.aim.delta_up")
-                      : t("antenna_alignment.aim.delta_down")}
-                  </span>
-                )}
-              </div>
-            </div>
-
+        {/* --- The score ---------------------------------------------------- */}
+        <section className={CONSOLE.SECTION}>
+          <div className={CONSOLE.SECTION_HEAD}>
+            <span className={CONSOLE.EYEBROW}>
+              {t("antenna_alignment.aim.score_label")}
+            </span>
+            {/* Cadence and scale live behind the tip, not on the surface:
+                beside a 1 Hz lead the 2 s score needs saying once, quietly, or
+                its stillness reads as a stalled feed. */}
+            <HintIcon label={t("antenna_alignment.aim.score_hint_label")}>
+              {t("antenna_alignment.aim.score_hint")}
+            </HintIcon>
             {score.partial && score.value !== null && (
-              <div className="flex min-w-0 flex-1 flex-col items-start pb-1">
+              <span className="ml-auto flex shrink-0">
                 <Badge variant="info">
                   <MaterialSymbol name="info" size={GLYPH.CHIP} filled />
                   {t("antenna_alignment.aim.partial", {
@@ -578,109 +656,49 @@ export function AimConsole({
                     ),
                   })}
                 </Badge>
-              </div>
+              </span>
             )}
           </div>
+          <NowRow
+            score={score.value}
+            quality={overallQuality}
+            tone={overallTone}
+            peak={peak}
+            delta={delta}
+            showDelta={showDelta}
+          />
+        </section>
 
-          {/* Peak and timestamp caption the METER, and sit immediately above it
-              so "Peak 84" is adjacent to the tick that marks it. */}
-          {(peak !== null || updatedAt) && (
-            <div
-              className={cn(
-                "flex flex-wrap items-center justify-between gap-x-4 gap-y-1",
-                CONSOLE.CAPTION,
-              )}
-            >
-              {peak !== null ? (
-                <span>
-                  {t("antenna_alignment.aim.peak")}{" "}
-                  <span className="font-semibold tabular-nums text-on-surface">
-                    {peak}
-                  </span>
-                </span>
-              ) : (
-                <span />
-              )}
-              {updatedAt && (
-                <span>
-                  {t("antenna_alignment.aim.updated")}{" "}
-                  <span className="tabular-nums">{updatedAt}</span>
-                  {/* Beside a 1 Hz lead the score's slower clock is said once,
-                      quietly, or its stillness reads as a stalled feed. */}
-                  {lead && (
-                    <> ({t("antenna_alignment.aim.score_cadence")})</>
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* --- Composite meter with the session peak mark ----------------- */}
-          <div className={CONSOLE.METER_LANE}>
-            {/* A null composite is NOT zero percent — it is an EMPTY TRACK.
-                MetricBar renders the track alone and omits the fill element
-                entirely for `value={null}`, which is the one channel — length —
-                the ramp is explicitly not allowed to carry on its own. */}
-            <div className="min-w-0 flex-1" aria-hidden="true">
-              <MetricBar
-                value={score.value}
-                max={100}
-                warnAt={101}
-                dangerAt={101}
-                /* Only reachable when `score.value` is null too (see
-                   `overallQuality`), where no fill is painted from it. */
-                colorOverride={overallTone}
-                /* 8px, not the 4px row-level quality bar: this meter is the
-                   card's subject, read at arm's length outdoors, and it is the
-                   bar the peak mark is registered against. */
-                track="surface-container-high"
-              />
-            </div>
-            {/* The peak mark is positioned with `left`, and it is deliberately
-                NOT transitioned. DESIGN.md's Transform-Only Rule keeps layout
-                properties out of animations, and an instant jump is also the
-                honest gesture: a new session high is a discrete event, and
-                having the mark snap is what makes it legible as "that is the
-                best you have managed" rather than as a second bar creeping
-                along. */}
-            {peak !== null && score.value !== null && peak > score.value && (
-              <span
-                aria-hidden="true"
-                className={CONSOLE.PEAK_TICK}
-                style={{ left: `calc(${peak}% - 1px)` }}
-              />
-            )}
+        {/* --- The two weighted legs ---------------------------------------- */}
+        {/* Labelled with the chain they come from, directly above them; that
+            was a sentence at the card's foot, read last if at all. `mt-auto`
+            holds the card's bottom edge when there is no live trace to absorb
+            a taller work column. */}
+        <section className={cn(CONSOLE.SECTION, !lead && "mt-auto")}>
+          <div className={CONSOLE.SECTION_HEAD}>
+            <span className={CONSOLE.EYEBROW}>
+              {t("antenna_alignment.aim.from_chain")}
+            </span>
           </div>
-        </div>
-
-        {/* --- The two weighted legs --------------------------------------- */}
-        <div className="flex flex-col gap-2">
-          <LegRow
-            label={t("radio_info.bands.metric.rsrp")}
-            weight={SCORE_WEIGHTS.rsrp}
-            value={rsrp}
-            unit="dBm"
-            thresholds={RSRP_THRESHOLDS}
-            index={0}
-          />
-          <LegRow
-            label={t(`radio_info.bands.metric.${sinrLabelKey}`)}
-            weight={SCORE_WEIGHTS.sinr}
-            value={sinr}
-            unit="dB"
-            thresholds={SINR_THRESHOLDS}
-            index={1}
-          />
-        </div>
-
-        {/* Which chain the whole card is about. It WRAPS — this line truncated
-            to "Main / PRX is the chain the score is …" in the outgoing build,
-            which cut the sentence exactly where its meaning starts. */}
-        {/* `mt-auto` holds the card's bottom edge when there is no live trace
-            to absorb a taller work column. */}
-        <p className={cn(CONSOLE.CAPTION, "mt-auto text-pretty leading-relaxed")}>
-          {t("antenna_alignment.aim.primary_chain")}
-        </p>
+          <div className={CONSOLE.LEGS}>
+            <LegRow
+              label={t("radio_info.bands.metric.rsrp")}
+              weight={SCORE_WEIGHTS.rsrp}
+              value={rsrp}
+              unit="dBm"
+              thresholds={RSRP_THRESHOLDS}
+              index={0}
+            />
+            <LegRow
+              label={t(`radio_info.bands.metric.${sinrLabelKey}`)}
+              weight={SCORE_WEIGHTS.sinr}
+              value={sinr}
+              unit="dB"
+              thresholds={SINR_THRESHOLDS}
+              index={1}
+            />
+          </div>
+        </section>
       </CardContent>
     </Card>
   );
@@ -823,8 +841,14 @@ export function CondensedAim({
 }
 
 /**
- * The pinned pill while the live lead is shown: the same anatomy as the score
- * pill (key, figure, glyph, lane), carrying the figure that leads the card.
+ * The pinned pill while the live lead is shown: figure, glyph, lane, and the
+ * distance back to the peak on the right edge. The steering cue travels with
+ * the figure, because a phone held at a mast is exactly where it is needed.
+ *
+ * No key label here, unlike the score pill. That label exists so a 64px pill
+ * of numeral plus bar does not read as a Position row come loose; the "dBm"
+ * unit already says this is not a 0-100 score, and the width a key cost came
+ * out of the lane.
  *
  * When the feed is not live the quality glyph gives way to the state's own
  * glyph, in neutral ink, so a frozen figure on a pinned bar cannot pass as a
@@ -843,21 +867,24 @@ function CondensedLive({ lead, shown }: { lead: LiveLead; shown: boolean }) {
       aria-hidden={!shown}
     >
       <div className={CONDENSED.BAR} aria-live="off">
-        <span className={CONDENSED.KEY}>
-          {t("antenna_alignment.aim.live.label")}
-        </span>
-
-        <span
-          className={cn(CONDENSED.SCORE, ink)}
-          aria-label={
-            reading === null
-              ? t("antenna_alignment.aim.live.no_reading")
-              : `${t("antenna_alignment.aim.live.sr", {
-                  value: fmtDb(reading),
-                })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
-          }
-        >
-          {reading === null ? "—" : fmtDb(reading)}
+        <span className={CONDENSED.FIGURE}>
+          <span
+            className={cn(CONDENSED.SCORE, ink)}
+            aria-label={
+              reading === null
+                ? t("antenna_alignment.aim.live.no_reading")
+                : `${t("antenna_alignment.aim.live.sr", {
+                    value: fmtDb(reading),
+                  })} ${t(`antenna_alignment.quality.${lead.quality}`)}`
+            }
+          >
+            {reading === null ? "—" : fmtDb(reading)}
+          </span>
+          {reading !== null && (
+            <span className={CONDENSED.UNIT} aria-hidden="true">
+              dBm
+            </span>
+          )}
         </span>
 
         <MaterialSymbol
@@ -892,6 +919,29 @@ function CondensedLive({ lead, shown }: { lead: LiveLead; shown: boolean }) {
             track="muted"
           />
         </div>
+
+        {/* At the peak the cue is the console's own `my_location` glyph in
+            primary ink: a chip would not fit the pill without starving the
+            lane, and the glyph is the one the card's "At peak" chip wears. */}
+        {lead.toPeak !== null &&
+          (atPeak(lead.toPeak) ? (
+            <MaterialSymbol
+              name="my_location"
+              size={GLYPH.INLINE}
+              filled
+              className="shrink-0 text-primary-on-surface"
+              aria-label={t("antenna_alignment.aim.live.at_peak")}
+            />
+          ) : (
+            <span className={CONDENSED.TO_PEAK}>
+              <span aria-hidden="true">{fmtDb(lead.toPeak)} dB</span>
+              <span className="sr-only">
+                {t("antenna_alignment.aim.live.from_peak", {
+                  delta: fmtDb(lead.toPeak),
+                })}
+              </span>
+            </span>
+          ))}
       </div>
     </div>
   );
