@@ -228,7 +228,7 @@ Run 2026-10-22 on an RM551E-GL (fw `RM551EGL00AAR02A01M8G`, 5G-NSA: B1 20 MHz PC
 
 **Latency target.** The ≤ 10 ms target is met at p50 (6.5 ms idle, 8.3–9.3 ms under load). p95 is about 12 ms. That is client process-start cost: `qmi --version` alone is 2.3–3.6 ms p50, and the bundle minus the exec floor is 5.4 ms p50. The held lock and the scan add nothing measurable, so the intent (QMI is not blocked by AT work) holds. Whether the target is client wall time or broker time is still open, and the shell cannot measure daemon-side time.
 
-Lifecycle on device (2026-10-22, init.d + at_engine.sh from development-home): start re-creates `/usr/bin/qmi` (also over a regular file), restarts are idempotent with no `.qmi.*` temps, stop removes qmi.env, qmanager_qmi.json, the lease, socket and capability file while leaving the rest of `/var/run/qmanager` alone, and the env passes `cq_env_source` after restart. Full install, OTA re-install and uninstall were not run (uninstall reviewed statically).
+Lifecycle on device (2026-10-22, init.d + at_engine.sh from development-home): start re-creates `/usr/bin/qmi` (also over a regular file), restarts are idempotent with no `.qmi.*` temps, stop removes qmi.env, qmanager_qmi.json, the lease, socket and capability file while leaving the rest of `/var/run/qmanager` alone, and the env passes `cq_env_source` after restart. Full install, OTA re-install and uninstall ran on 2026-10-25 with broker 0.6.0; see [`at-broker.md`](at-broker.md#lifecycle-on-device-060-2026-10-25).
 
 Host: `cargo test --release` 222 tests (236 with `--features poll`) at 0.3.0; 267 (281 with `--features poll`) at 0.6.0, including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
 
