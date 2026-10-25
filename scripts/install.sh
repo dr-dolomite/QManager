@@ -1503,8 +1503,13 @@ start_services() {
 restore_running_services() {
     local name
     for name in $RUNNING_BEFORE_STOP; do
+        # Under --configure the list comes back from a /tmp file, so only a
+        # plain qmanager* service name may reach the init.d call below.
         case "$name" in
             qmanager_atd|qmanager|qmanager_sites) continue ;;
+            *[!A-Za-z0-9_]*) continue ;;
+            qmanager*) ;;
+            *) continue ;;
         esac
         [ -x "$INITD_DIR/$name" ] || continue
         "$INITD_DIR/$name" start >>"$LOG_FILE" 2>&1 \
@@ -2185,7 +2190,9 @@ prune_unshipped() {
     local list item name f
     local n=0
 
-    [ -d "$dir" ] && [ -f "$IPK_MANIFEST" ] || return 0
+    # -s, not -f: with an empty first file awk's NR == FNR reads the file
+    # list as the manifest.
+    [ -d "$dir" ] && [ -s "$IPK_MANIFEST" ] || return 0
     list=$(mktemp /tmp/qm_prune.XXXXXX) || return 0
 
     for item in "$dir"/*; do
@@ -2221,7 +2228,9 @@ preflight_configure() {
     step "Pre-flight checks"
 
     [ "$(id -u)" -eq 0 ] || die "This script must be run as root"
-    [ -f "$IPK_MANIFEST" ] || die "Package manifest not found: $IPK_MANIFEST"
+    # Every "does the package ship this?" test reads the manifest, so an empty
+    # or cut-short one would delete the install. It always lists itself.
+    [ -s "$IPK_MANIFEST" ] && grep -qxF "${IPK_MANIFEST#/}" "$IPK_MANIFEST"         || die "Package manifest is missing or damaged: $IPK_MANIFEST"
 
     local fw=""
     local cache
@@ -2267,9 +2276,28 @@ ipk_preinst() {
     trap - EXIT INT TERM
 }
 
+# The preinst stopped every service, so a postinst that dies part-way must
+# not leave the modem without its daemons until the next reboot.
+configure_exit() {
+    local rc=$?
+    trap - EXIT INT TERM
+    if [ "$rc" != "0" ] && [ "$SERVICES_STARTED" != "1" ]; then
+        warn "Package configure failed (exit $rc); restarting services"
+        DO_START=1
+        start_services || true
+    fi
+    rm -f "$WATCHCAT_LOCK" /tmp/qm_prune.* 2>/dev/null || true
+    exit "$rc"
+}
+
 # postinst (--configure): every post-copy phase of the tarball install, run
 # over the files opkg just placed.
 configure_main() {
+    SERVICES_STARTED=0
+    trap configure_exit EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
     IN_OPKG=1
     CONFIGURE=1
     DO_FRONTEND=1
@@ -2329,6 +2357,7 @@ configure_main() {
     if [ "$DO_START" = "1" ]; then
         start_services
     fi
+    SERVICES_STARTED=1
     rm -f "$WATCHCAT_LOCK" 2>/dev/null || true
 
     finalize_version
@@ -2343,12 +2372,6 @@ configure_main() {
 # --- Main --------------------------------------------------------------------
 
 main() {
-    # Always release the watchcat lock on exit so a failed install doesn't
-    # leave watchcat permanently in LOCKED state. /tmp clears on reboot but
-    # if the user retries without rebooting, a stale lock would brick
-    # connectivity monitoring until next boot.
-    trap 'rm -f "$WATCHCAT_LOCK" 2>/dev/null || true' EXIT INT TERM
-
     DO_FRONTEND=1
     DO_BACKEND=1
     DO_ENABLE=1
@@ -2393,6 +2416,14 @@ main() {
         error "To switch to a manual install, run first: opkg remove $IPK_PACKAGE"
         exit 1
     fi
+
+    # Always release the watchcat lock on exit so a failed install doesn't
+    # leave watchcat permanently in LOCKED state. /tmp clears on reboot but
+    # if the user retries without rebooting, a stale lock would brick
+    # connectivity monitoring until next boot. Set only past --help and the
+    # package refusal: a refused run must not drop a lock a running opkg
+    # transaction holds between preinst and postinst.
+    trap 'rm -f "$WATCHCAT_LOCK" 2>/dev/null || true' EXIT INT TERM
 
     log_init
 
