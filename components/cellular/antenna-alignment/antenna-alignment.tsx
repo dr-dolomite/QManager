@@ -106,8 +106,16 @@ export default function AntennaAlignmentComponent() {
     const el = sentinelRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
 
+    // Condensed only once the sentinel has left ABOVE the viewport. On a phone
+    // the console's bottom edge starts below the fold, so "not intersecting"
+    // alone pinned the pill over the page title at rest.
     const observer = new IntersectionObserver(
-      ([entry]) => setCondensed(entry != null && !entry.isIntersecting),
+      ([entry]) =>
+        setCondensed(
+          entry != null &&
+            !entry.isIntersecting &&
+            entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0),
+        ),
       { rootMargin: SENTINEL_MARGIN, threshold: 0 },
     );
     observer.observe(el);
