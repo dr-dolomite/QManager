@@ -41,7 +41,7 @@ The maintainer scripts do not re-implement the installer. They call modes of `in
 | opkg hook | What runs | Notes |
 |---|---|---|
 | preinst | `install.sh` itself, embedded by `assemble_ipk_source.py` behind `QM_INSTALL_ENTRY=ipk_preinst` | The new files are not on disk yet, so it cannot be a path call. Runs `mark_version_pending`, `retire_bandwidth_monitor`, `retire_low_power`, `stop_services`, writes `/tmp/qmanager_ipk_running`. The watchcat maintenance lock is released on failure only; on success the postinst holds it across the unpack. |
-| postinst | `/bin/sh /usr/share/qmanager/install.sh --configure` | Exits immediately when `IPKG_INSTROOT` is set (image builds). |
+| postinst | `/bin/sh /usr/share/qmanager/install.sh --configure` | If it fails part-way, its EXIT trap (`configure_exit`) restarts the services the preinst stopped and drops the watchcat lock, so the modem is never left without its daemons. |
 | prerm | `/bin/sh /usr/share/qmanager/uninstall.sh --deconfigure \|\| true` | `remove` only; an `upgrade` skips it because the new preinst handles the stop. |
 | postrm | `sync` | `remove` only. `/usr`, `/www`, `/etc` are UBIFS, so the removal is committed to flash. |
 
@@ -50,6 +50,12 @@ The maintainer scripts do not re-implement the installer. They call modes of `in
 **Why the maintainer scripts never call opkg, prompt, or reboot.** opkg holds its own lock while they run (a nested `opkg` call deadlocks), `opkg` can hand a script the terminal (`prompt_web_port` also checks `IN_OPKG`), and a reboot would kill the install mid-transaction. `IN_OPKG=1` makes `retire_bandwidth_monitor` skip its `opkg remove websocat` (the `Conflicts`/`Replaces` pair covers it). The firmware gate is a warning, never a `die`: `Architecture: sdxpinn` already limits the package to the SDX75 family, and a failing postinst leaves a half-configured package behind.
 
 **Deferred reboot, not a reboot.** The postinst ends by touching `/tmp/qmanager_pending_reboot_package`. `system/pending_reboot.sh` returns `{ "verizon": bool, "package": bool }`, deleting each flag as it reports it (clear-on-read), and `use-boot-pending-reboot.ts` turns `package: true` into `requestRebootLater("package_install")`, which raises the persistent banner (`common.json` `pending_reboot.description.package_install`). Same deferred-reboot pattern as [`config-backup-restore.md`](config-backup-restore.md) and [`diagnostics.md`](diagnostics.md) (IPA offload). The tarball/OTA path reboots after every install; the package path cannot, so the banner is how the user finishes the update. The flag is `/tmp`, so a reboot clears it.
+
+**Every maintainer script exits at once when `IPKG_INSTROOT` is set**, the preinst included. An offline-root install with `--force-postinstall` runs all four on the build host; without the guard the preinst would stop and kill services there.
+
+**A failed unpack after a successful preinst leaves services stopped** until reboot (or until the package is installed again): the postinst never runs, and `/tmp/qmanager_watchcat.lock` stays until `/tmp` clears. opkg has no hook between the two to restore them.
+
+**The services file is untrusted input.** `/tmp/qmanager_ipk_running` carries the preinst's running-services snapshot to the postinst, which runs as root. `restore_running_services` only starts plain `qmanager*` names from it.
 
 ### `/www/index.html` is not shipped
 
@@ -61,7 +67,7 @@ The maintainer scripts do not re-implement the installer. They call modes of `in
 
 ### The manifest and pruning
 
-`/usr/share/qmanager/manifest` lists every payload path (root-relative, no leading slash, including itself). `--configure` uses it two ways:
+`/usr/share/qmanager/manifest` lists every payload path (root-relative, no leading slash, including itself). The self-entry is a sentinel: `preflight_configure` refuses an empty manifest or one that does not list itself, because a cut-short manifest would make every "is this shipped?" test fail and delete the install. `--configure` uses it two ways:
 
 - `src_has <path>`: `cleanup_legacy_scripts` asks the manifest, not a source tree, whether a `qmanager_*` binary, init.d script or library is still shipped; unshipped ones are legacy and are removed.
 - `prune_unshipped`: removes regular files and symlinks under `/www` (keeping `cgi-bin luci-static index.html index.html.old qmlive`) and under `/www/cgi-bin/quecmanager` that the manifest does not list, then empty directories. **Why:** a tarball install over which the package lands leaves files opkg does not track, and a Next.js chunk or CGI removed in a later release would otherwise live forever.
@@ -148,7 +154,8 @@ These were not exercised on a live device when this was written; the plan reserv
 
 1. **opkg and files prerm already deleted.** `--deconfigure` removes the packaged files before opkg's deletion pass. Whether the device's opkg treats the missing paths as a no-op (expected) or warns/fails is untested.
 2. **`Replaces` auto-removal of an old QuecManager package.** The test unit never had `sdxpinn-quecmanager(-beta)` installed, so `Conflicts`+`Replaces` removing it on install is untested. If it does not, `opkg remove` the old package first.
-3. **Feed CI end to end.** The workflow was built and rehearsed separately; this repo only produces the inputs.
+3. **Tarball-to-package migration** relies on opkg overwriting existing files it does not own.
+4. **Feed CI end to end.** The workflow was built and rehearsed separately; this repo only produces the inputs.
 
 ## Related
 
