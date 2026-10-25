@@ -36,6 +36,9 @@
 #   --keep-config        Keep /etc/qmanager/ (default: ask)
 #   --purge              Remove /etc/qmanager/ without asking
 #   --no-reboot          Do not reboot after uninstall
+#   --ignore-package     Uninstall an opkg-managed (sdxpinn-qmanager) install
+#   --deconfigure        Package mode (ipk prerm): --force --keep-config
+#                        --no-reboot; opkg then deletes its own files
 #   --help, -h           Show this help
 # =============================================================================
 
@@ -54,6 +57,10 @@ CONF_DIR="/etc/qmanager"
 SESSION_DIR="/tmp/qmanager_sessions"
 VERSION_FILE="/etc/qmanager/VERSION"
 VERSION_PENDING="/etc/qmanager/VERSION.pending"
+
+# Present while opkg owns the install (see install.sh, Package lifecycle)
+IPK_PACKAGE="sdxpinn-qmanager"
+IPK_INFO="/usr/lib/opkg/info/$IPK_PACKAGE.control"
 
 # --- Colors & Icons ----------------------------------------------------------
 
@@ -577,6 +584,8 @@ remove_runtime_state() {
           /tmp/qmanager_sim_failover \
           /tmp/qmanager_sim_swap_detected \
           /tmp/qmanager_pending_reboot_verizon \
+          /tmp/qmanager_pending_reboot_package \
+          /tmp/qmanager_ipk_running \
           /tmp/qm_spin_out \
           /tmp/qm_tmo_out.* \
           /tmp/qmanager_dns_out.* \
@@ -729,6 +738,8 @@ Options:
   --keep-config        Always keep /etc/qmanager/ (no prompt)
   --purge              Always remove /etc/qmanager/ (no prompt)
   --no-reboot          Do not reboot after uninstall
+  --ignore-package     Uninstall an opkg-managed (sdxpinn-qmanager) install
+  --deconfigure        Package mode (ipk prerm); opkg removes the files
   --help, -h           Show this help
 
 What is removed:
@@ -754,9 +765,13 @@ main() {
     DO_FORCE=0
     DO_CONFIG="ask"   # "ask" | "keep" | "purge"
     DO_REBOOT=1
+    DO_PACKAGE=0
+    DO_IGNORE_PACKAGE=0
 
     while [ $# -gt 0 ]; do
         case "$1" in
+            --deconfigure)   DO_PACKAGE=1; DO_FORCE=1; DO_CONFIG="keep"; DO_REBOOT=0 ;;
+            --ignore-package) DO_IGNORE_PACKAGE=1 ;;
             --force)         DO_FORCE=1 ;;
             --keep-config)   DO_CONFIG="keep" ;;
             --purge)         DO_CONFIG="purge" ;;
@@ -770,6 +785,14 @@ main() {
         esac
         shift
     done
+
+    # opkg owns an ipk install's files and must run the removal itself, or its
+    # package list keeps claiming files that are gone.
+    if [ -f "$IPK_INFO" ] && [ "$DO_PACKAGE" = "0" ] && [ "$DO_IGNORE_PACKAGE" = "0" ]; then
+        error "QManager is installed as the $IPK_PACKAGE package."
+        error "Remove it with: opkg remove $IPK_PACKAGE"
+        exit 1
+    fi
 
     log_init
 
