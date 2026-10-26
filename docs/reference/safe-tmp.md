@@ -81,6 +81,13 @@ either: UBIFS can commit the rename before the temp's data. So:
   atomically and sourced only when trusted; otherwise they are re-queried.
 - Flags and state a daemon acts on (watchcat revert flag, SIM failover file)
   are written atomically; the daemon drops an untrusted one.
+- The AT long flag `/tmp/qmanager_long_running` is read through
+  `qm_trusted_file` (poller, watchdog `wd_state.sh` / `wd_tiers.sh`,
+  `qmi_merge.sh`, the scan-start CGIs); an untrusted entry counts as absent. The
+  broker applies the same rule in Rust (`safefs::open_own`: regular file, owned
+  by the euid, single link; a planted FIFO or foreign file is replaced). The
+  `fs.protected_fifos` / `fs.protected_regular` sysctls are defence in depth,
+  not the fix. See [`at-broker.md`](../features/at-broker.md).
 - `/tmp/qmanager_sessions` is created by `qm_create_session` (root 0700), not
   by the installer; `qm_validate_session` rejects a session whose dir or file
   is not root-owned. Login returns `session_failed` when the dir cannot be made
