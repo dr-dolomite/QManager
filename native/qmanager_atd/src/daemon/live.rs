@@ -386,7 +386,7 @@ impl Live {
     }
 
     fn scan_up(&self) -> bool {
-        std::fs::symlink_metadata(&self.paths.long_flag).is_ok()
+        crate::at::exec::long_flag_trusted(&self.paths.long_flag)
     }
 
     /// Makes the public dir trustworthy and puts the empty index in it.

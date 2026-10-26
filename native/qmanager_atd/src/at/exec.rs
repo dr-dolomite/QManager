@@ -48,15 +48,46 @@ const STALE_FLAG_AGE: Duration = Duration::from_secs(15);
 
 /// True while a long command holds the modem (the scan_in_progress gate).
 pub fn long_running() -> bool {
-    std::path::Path::new(LONG_FLAG).exists()
+    long_flag_trusted(LONG_FLAG)
+}
+
+/// The one rule for "the long flag is up", shared by every client and the
+/// live sampler: lstat (never a link's target) shows a regular file with one
+/// link, owned by root or by us. /tmp is 1777, so anything else at the path
+/// is a plant that would otherwise force scan_in_progress on every short
+/// command. Root because the broker writes the flag and runs as root on the
+/// device; our own uid so a client sees a flag its same-user broker wrote
+/// (tests, dev runs). A non-root plant can never be uid 0.
+pub fn long_flag_trusted(path: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let euid = unsafe { libc::geteuid() };
+    std::fs::symlink_metadata(path)
+        .map_or(false, |m| m.file_type().is_file() && m.nlink() == 1 && (m.uid() == 0 || m.uid() == euid))
 }
 
 /// Removes a long flag left by a holder that died mid-command (killed broker,
 /// broker restart during a scan). Without this every short command answers
 /// scan_in_progress until the main service restarts. Safe only when nobody
-/// holds the modem lock and the flag is older than STALE_FLAG_AGE.
+/// holds the modem lock and the flag is older than STALE_FLAG_AGE. A planted
+/// entry (not a trusted flag) is removed at once, whatever its age; a planted
+/// directory is not removed recursively, only logged and left.
 pub fn clear_stale_long_flag(lock: &LockFile, log: &Logger) {
-    let age = match std::fs::symlink_metadata(LONG_FLAG).and_then(|m| m.modified()) {
+    clear_long_flag_at(LONG_FLAG, lock, log)
+}
+
+fn clear_long_flag_at(path: &str, lock: &LockFile, log: &Logger) {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    if !long_flag_trusted(path) {
+        match std::fs::remove_file(path) {
+            Ok(()) => log.warn(&format!("Removed untrusted entry at long-command flag {path}")),
+            Err(e) => log.warn(&format!("Untrusted entry at long-command flag {path} left in place ({e})")),
+        }
+        return;
+    }
+    let age = match meta.modified() {
         Ok(t) => t.elapsed().unwrap_or(Duration::ZERO),
         Err(_) => return,
     };
@@ -64,7 +95,7 @@ pub fn clear_stale_long_flag(lock: &LockFile, log: &Logger) {
         return;
     }
     if let Some(_held) = lock.acquire(Duration::ZERO) {
-        if std::fs::remove_file(LONG_FLAG).is_ok() {
+        if std::fs::remove_file(path).is_ok() {
             log.warn(&format!("Removed stale long-command flag (age {}s, modem lock free)", age.as_secs()));
         }
     }
@@ -276,5 +307,65 @@ mod tests {
             assert!(t.elapsed() < Duration::from_millis(500), "{cmd:?} waited {:?}", t.elapsed());
         }
         let _ = std::fs::remove_file(p);
+    }
+
+    fn tmp(name: &str) -> String {
+        let p = std::env::temp_dir().join(format!("qatd-exec-{name}-{}", std::process::id()));
+        let p = p.to_str().unwrap().to_string();
+        let _ = std::fs::remove_file(&p);
+        let _ = std::fs::remove_dir_all(&p);
+        p
+    }
+
+    #[test]
+    fn only_an_own_regular_file_counts_as_the_long_flag() {
+        let p = tmp("flag");
+        assert!(!long_flag_trusted(&p), "absent");
+        std::fs::write(&p, b"AT+QSCAN=3,1\n").unwrap();
+        assert!(long_flag_trusted(&p), "own regular file");
+        // Hardlinked: nlink 2.
+        let link = tmp("flag-hl");
+        std::fs::hard_link(&p, &link).unwrap();
+        assert!(!long_flag_trusted(&link));
+        assert!(!long_flag_trusted(&p));
+        std::fs::remove_file(&link).unwrap();
+        // Symlink to a regular file: lstat, never the target.
+        let sl = tmp("flag-sl");
+        std::os::unix::fs::symlink(&p, &sl).unwrap();
+        assert!(!long_flag_trusted(&sl));
+        std::fs::remove_file(&sl).unwrap();
+        std::fs::remove_file(&p).unwrap();
+        crate::common::safefs::tests::mkfifo(&p);
+        assert!(!long_flag_trusted(&p), "FIFO");
+        std::fs::remove_file(&p).unwrap();
+        std::fs::create_dir(&p).unwrap();
+        assert!(!long_flag_trusted(&p), "directory");
+        std::fs::remove_dir(&p).unwrap();
+    }
+
+    #[test]
+    fn a_planted_long_flag_is_cleared_at_start_whatever_its_age() {
+        let lp = tmp("clear-lock");
+        let lock = LockFile::open(&lp).unwrap();
+        let log = Logger::new("test");
+        let p = tmp("clear-flag");
+        // A fresh trusted flag is kept (it may belong to a starting caller).
+        std::fs::write(&p, b"AT+QSCAN=3,1\n").unwrap();
+        clear_long_flag_at(&p, &lock, &log);
+        assert!(std::path::Path::new(&p).exists());
+        std::fs::remove_file(&p).unwrap();
+        // A fresh FIFO is removed at once, even with the lock held elsewhere.
+        let other = LockFile::open(&lp).unwrap();
+        let _held = other.acquire(Duration::ZERO).unwrap();
+        crate::common::safefs::tests::mkfifo(&p);
+        clear_long_flag_at(&p, &lock, &log);
+        assert!(std::fs::symlink_metadata(&p).is_err(), "FIFO removed");
+        // A directory is left in place, not removed recursively.
+        std::fs::create_dir(&p).unwrap();
+        std::fs::write(format!("{p}/keep"), b"k").unwrap();
+        clear_long_flag_at(&p, &lock, &log);
+        assert!(std::path::Path::new(&format!("{p}/keep")).exists());
+        let _ = std::fs::remove_dir_all(&p);
+        let _ = std::fs::remove_file(&lp);
     }
 }
