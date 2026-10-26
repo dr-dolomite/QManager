@@ -595,7 +595,8 @@ remove_runtime_state() {
 
     # PID files in /var/run (config-restore and language-install workers) and
     # the Tailscale install/update lock in /var/lock
-    rm -f /var/lock/qmanager_tailscale_migrate.lock \
+    rm -f /var/lock/qmanager.pid \
+          /var/lock/qmanager_tailscale_migrate.lock \
           /var/run/qmanager_config_restore.pid \
           /var/run/qmanager_language_install.pid \
           2>/dev/null || true

@@ -900,6 +900,13 @@ retire_low_power() {
     return 0
 }
 
+# The broker no longer writes /var/lock/qmanager.pid and nothing reads it; a
+# stale copy from an older build (or one a local user planted) is cleared.
+retire_broker_pidfile() {
+    rm -f /var/lock/qmanager.pid 2>/dev/null || true
+    return 0
+}
+
 install_packages() {
     step "Installing required packages"
 
@@ -2198,6 +2205,7 @@ main() {
 
     # Same rules; also before stop_services so qcmd can still restore CFUN=1.
     retire_low_power
+    retire_broker_pidfile
 
     if [ "$DO_PACKAGES" = "1" ]; then
         install_packages
