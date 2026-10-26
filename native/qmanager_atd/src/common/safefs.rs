@@ -3,43 +3,97 @@
 //! path (/tmp/qmanager_long_running, /var/lock/qmanager.lock). A root process
 //! writing through it would clobber an arbitrary file. Legacy qcmd's
 //! `echo … > "$LONG_FLAG"` had this flaw; the broker must not.
+//!
+//! A symlink is not the only plant. A FIFO blocks a plain open forever (the
+//! AT lane would freeze holding the modem lock), and a hardlink or someone
+//! else's file would be truncated or handed to us. So every state file is
+//! opened O_NONBLOCK, fstat-checked, and healed (unlinked, recreated O_EXCL)
+//! when it is not ours. The `fs.protected_fifos/regular=2` sysctl shipped by
+//! the installer is defence in depth only: it misses root-owned plants, the
+//! boot window before sysctl runs, post-uninstall and kernels before 4.19.
 
-use std::fs::{File, OpenOptions};
+use std::fs::{File, Metadata, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 
 /// Open flags shared by every QManager state file the broker touches.
 pub const NOFOLLOW: i32 = libc::O_NOFOLLOW | libc::O_CLOEXEC;
 
-fn open_nofollow(path: &str, create_new: bool) -> io::Result<File> {
-    let mut o = OpenOptions::new();
-    o.write(true).mode(0o644).custom_flags(NOFOLLOW);
-    if create_new {
-        o.create_new(true);
-    } else {
-        o.create(true).truncate(true);
-    }
-    o.open(path)
+/// NOFOLLOW plus O_NONBLOCK: a planted FIFO fails the open (ENXIO, write-only
+/// with no reader) or opens without waiting (O_RDWR) instead of blocking. A
+/// regular file ignores O_NONBLOCK.
+const STATE_FLAGS: i32 = NOFOLLOW | libc::O_NONBLOCK;
+
+fn euid() -> u32 {
+    unsafe { libc::geteuid() }
 }
 
-fn is_symlink_refusal(e: &io::Error) -> bool {
-    // O_NOFOLLOW on a symlink fails with ELOOP.
-    e.raw_os_error() == Some(libc::ELOOP)
+/// A state file we may write or lock: a regular file owned by the effective
+/// user with exactly one link (nlink > 1 means a hardlink to some other file).
+pub fn is_own_file(m: &Metadata) -> bool {
+    m.file_type().is_file() && m.uid() == euid() && m.nlink() == 1
 }
 
-/// Writes `contents` to `path` without ever following a symlink at `path`. If
-/// a symlink is planted there, it is unlinked (unlink never follows) and the
-/// file is recreated with O_CREAT|O_EXCL so a racing re-plant also fails.
-pub fn write_nofollow(path: &str, contents: &[u8]) -> io::Result<()> {
-    let mut f = match open_nofollow(path, false) {
-        Ok(f) => f,
-        Err(e) if is_symlink_refusal(&e) => {
-            std::fs::remove_file(path)?;
-            open_nofollow(path, true)?
+/// Open errors that mean something hostile sits at the path and can be healed
+/// by unlinking it: ELOOP (symlink, O_NOFOLLOW), ENXIO (FIFO with no reader,
+/// or a socket / device node), EISDIR (a directory: the heal refuses it),
+/// EACCES (protected_fifos/regular refusing someone else's entry in a sticky
+/// dir). A genuine EACCES on the directory itself fails again at the unlink
+/// or the O_EXCL create, so it still surfaces as an error.
+fn is_plant(e: &io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(libc::ELOOP | libc::ENXIO | libc::EISDIR | libc::EACCES))
+}
+
+/// Opens (creating if absent) a state file that is guaranteed to be our own
+/// regular file, without ever blocking or following a link. Anything else at
+/// the path is unlinked once and the file recreated O_CREAT|O_EXCL, so a
+/// racing re-plant fails the create instead of being trusted. A directory is
+/// never removed: Err, left in place. No retry loop: one heal, then Err.
+pub(crate) fn open_own(path: &str, read: bool, mode: u32) -> io::Result<File> {
+    let open = |create_new: bool| {
+        let mut o = OpenOptions::new();
+        o.read(read).write(true).mode(mode).custom_flags(STATE_FLAGS);
+        if create_new {
+            o.create_new(true);
+        } else {
+            o.create(true);
         }
-        Err(e) => return Err(e),
+        o.open(path)
     };
+    match open(false) {
+        Ok(f) if f.metadata().map_or(false, |m| is_own_file(&m)) => return Ok(f),
+        Ok(_) => {}
+        Err(e) if is_plant(&e) => {}
+        Err(e) => return Err(e),
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_dir() => {
+            return Err(io::Error::from_raw_os_error(libc::EISDIR));
+        }
+        Ok(_) => std::fs::remove_file(path)?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    let f = open(true)?;
+    if f.metadata().map_or(false, |m| is_own_file(&m)) {
+        Ok(f)
+    } else {
+        Err(io::Error::new(io::ErrorKind::PermissionDenied, "state file not trustworthy"))
+    }
+}
+
+/// Writes `contents` to `path` as our own regular file (see `open_own`): a
+/// planted symlink, FIFO, hardlink or foreign file is replaced, never written
+/// through or truncated. Truncation happens only after the fstat check.
+pub fn write_nofollow(path: &str, contents: &[u8]) -> io::Result<()> {
+    let mut f = open_own(path, false, 0o644)?;
+    f.set_len(0)?;
     f.write_all(contents)
+}
+
+/// The O_EXCL temp file for `write_atomic`.
+fn create_temp(path: &str) -> io::Result<File> {
+    OpenOptions::new().write(true).create_new(true).mode(0o644).custom_flags(STATE_FLAGS).open(path)
 }
 
 /// Replaces `path` with `contents` atomically: written to `<path>.new`
@@ -53,7 +107,7 @@ pub fn write_nofollow(path: &str, contents: &[u8]) -> io::Result<()> {
 pub fn write_atomic(path: &str, contents: &[u8]) -> io::Result<()> {
     let tmp = format!("{path}.new");
     clear_temp(&tmp);
-    if let Err(e) = open_nofollow(&tmp, true).and_then(|mut f| f.write_all(contents)) {
+    if let Err(e) = create_temp(&tmp).and_then(|mut f| f.write_all(contents)) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
     }
@@ -85,8 +139,8 @@ fn clear_temp(tmp: &str) {
 /// Called before every publish, so the steady state is one lstat: an own
 /// directory is only chmodded when its mode is wrong.
 pub fn ensure_own_dir(dir: &str, mode: u32) -> io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let euid = unsafe { libc::geteuid() };
+    use std::os::unix::fs::PermissionsExt;
+    let euid = euid();
     if let Ok(m) = std::fs::symlink_metadata(dir) {
         if m.file_type().is_dir() && m.uid() == euid {
             if m.mode() & 0o7777 == mode {
@@ -116,7 +170,7 @@ pub fn one_line(s: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
 
@@ -153,6 +207,89 @@ mod tests {
         assert_eq!(std::fs::read(&flag).unwrap(), b"attacker text");
         let _ = std::fs::remove_file(&victim);
         let _ = std::fs::remove_file(&flag);
+    }
+
+    pub(crate) fn mkfifo(p: &str) {
+        let c = std::ffi::CString::new(p).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o644) }, 0);
+    }
+
+    /// Runs `f` on a thread; panics if it has not returned within 2 s.
+    pub(crate) fn within_2s<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(2)).expect("blocked on a planted entry")
+    }
+
+    #[test]
+    fn a_planted_fifo_is_replaced_without_blocking() {
+        let p = tmp("fifo");
+        let _ = std::fs::remove_file(&p);
+        mkfifo(&p);
+        let q = p.clone();
+        within_2s(move || write_nofollow(&q, b"AT+QSCAN=3,1\n")).unwrap();
+        assert!(std::fs::symlink_metadata(&p).unwrap().file_type().is_file());
+        assert_eq!(std::fs::read(&p).unwrap(), b"AT+QSCAN=3,1\n");
+        // With a reader attached the open succeeds (no ENXIO); the fstat check
+        // must still refuse to write into the FIFO.
+        std::fs::remove_file(&p).unwrap();
+        mkfifo(&p);
+        let c = std::ffi::CString::new(p.as_str()).unwrap();
+        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK) };
+        assert!(fd >= 0);
+        let q = p.clone();
+        within_2s(move || write_nofollow(&q, b"x")).unwrap();
+        let mut buf = [0u8; 8];
+        let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        assert!(n <= 0, "nothing written into the FIFO");
+        unsafe { libc::close(fd) };
+        assert_eq!(std::fs::read(&p).unwrap(), b"x");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn a_planted_hardlink_never_truncates_its_target() {
+        let victim = tmp("hl-victim");
+        let flag = tmp("hl-flag");
+        let _ = std::fs::remove_file(&flag);
+        std::fs::write(&victim, b"SECRET").unwrap();
+        std::fs::hard_link(&victim, &flag).unwrap();
+        write_nofollow(&flag, b"attacker text").unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"SECRET", "victim untouched");
+        let m = std::fs::symlink_metadata(&flag).unwrap();
+        assert!(m.file_type().is_file() && m.nlink() == 1, "its own file now");
+        assert_eq!(std::fs::read(&flag).unwrap(), b"attacker text");
+        let _ = std::fs::remove_file(&victim);
+        let _ = std::fs::remove_file(&flag);
+    }
+
+    #[test]
+    fn a_planted_directory_is_refused_and_left_alone() {
+        let d = tmp("plant-dir");
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir(&d).unwrap();
+        std::fs::write(format!("{d}/keep"), b"k").unwrap();
+        assert!(write_nofollow(&d, b"x").is_err());
+        assert!(std::path::Path::new(&format!("{d}/keep")).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_foreign_owned_file_is_replaced() {
+        // chown needs root; skipped otherwise.
+        if euid() != 0 {
+            return;
+        }
+        let p = tmp("foreign");
+        std::fs::write(&p, b"theirs").unwrap();
+        std::os::unix::fs::chown(&p, Some(65534), Some(65534)).unwrap();
+        write_nofollow(&p, b"ours").unwrap();
+        let m = std::fs::symlink_metadata(&p).unwrap();
+        assert_eq!(m.uid(), 0);
+        assert_eq!(std::fs::read(&p).unwrap(), b"ours");
+        let _ = std::fs::remove_file(&p);
     }
 
     #[test]
