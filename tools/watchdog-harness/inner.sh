@@ -46,8 +46,9 @@ export WD_LIB_DIR
 . "$H_STAGE/qmanager_watchcat"
 
 # Must come after the daemon pulled in safe_tmp.sh: the sandbox user is not
-# root, so the root-ownership gate is stubbed open (plan 3.2).
-qm_trusted_file() { return 0; }
+# root, so only the root-ownership half of the gate is stubbed open (plan 3.2):
+# a missing file must still read as absent (the long-running flag check).
+qm_trusted_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
 
 # wd_sleep backgrounds a real sleep, which the fake clock cannot see: map it to
 # the synchronous fake `sleep` unless the scenario sets SC_REAL_SLEEP=1 (then it
