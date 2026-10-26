@@ -11,7 +11,6 @@ use crate::common::safefs::{one_line, write_nofollow};
 use std::time::{Duration, Instant};
 
 pub const LONG_FLAG: &str = "/tmp/qmanager_long_running";
-pub const PID_FILE: &str = "/var/lock/qmanager.pid";
 
 pub const SHORT_DEADLINE: Duration = Duration::from_secs(20);
 pub const LONG_DEADLINE: Duration = Duration::from_secs(300);
@@ -173,11 +172,8 @@ impl<D: Device> Executor<'_, D> {
                 return Err(Code::ModemBusy);
             }
         };
-        let _ = write_nofollow(PID_FILE, format!("{}\n", std::process::id()).as_bytes());
         let mut s = Session { ch: &mut *self.ch, log: self.log, end: Instant::now() + SESSION_LIMIT };
-        let out = f(&mut s);
-        let _ = std::fs::remove_file(PID_FILE);
-        Ok(out)
+        Ok(f(&mut s))
     }
 
     pub fn run(&mut self, cmd: &str) -> Outcome {
@@ -215,7 +211,6 @@ impl<D: Device> Executor<'_, D> {
                 return Outcome::Err(Code::ModemBusy);
             }
         };
-        let _ = write_nofollow(PID_FILE, format!("{}\n", std::process::id()).as_bytes());
 
         if long {
             let _ = write_nofollow(LONG_FLAG, format!("{}\n", one_line(cmd)).as_bytes());
@@ -223,7 +218,6 @@ impl<D: Device> Executor<'_, D> {
             // Warm-up flush, like qcmd:191-192. A failure here is modem_not_ready.
             if let Err(e) = self.ch.exchange("AT", Instant::now() + Duration::from_secs(3)) {
                 let _ = std::fs::remove_file(LONG_FLAG);
-                let _ = std::fs::remove_file(PID_FILE);
                 self.log.error(&format!("Modem warm-up failed before: {cmd} ({e:?})"));
                 return Outcome::Err(Code::ModemNotReady);
             }
@@ -244,7 +238,6 @@ impl<D: Device> Executor<'_, D> {
             let _ = std::fs::remove_file(LONG_FLAG);
             self.log.info(&format!("Long command completed: {cmd}"));
         }
-        let _ = std::fs::remove_file(PID_FILE);
         outcome
     }
 }

@@ -1,6 +1,6 @@
 //! File writes that never follow symlinks. /tmp and /var/lock are both 1777 on
 //! the device, so any local process can pre-plant a symlink at a well-known
-//! path (/tmp/qmanager_long_running, /var/lock/qmanager.pid). A root process
+//! path (/tmp/qmanager_long_running, /var/lock/qmanager.lock). A root process
 //! writing through it would clobber an arbitrary file. Legacy qcmd's
 //! `echo … > "$LONG_FLAG"` had this flaw; the broker must not.
 
