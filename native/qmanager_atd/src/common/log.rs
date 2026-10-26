@@ -3,7 +3,7 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Level {
@@ -87,7 +87,10 @@ impl Logger {
     }
 
     fn rotate(&self) {
-        let size = fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0);
+        // lstat: only our regular log rotates, never a planted link's target.
+        let size = fs::symlink_metadata(&self.path)
+            .map(|m| if m.file_type().is_file() { m.len() } else { 0 })
+            .unwrap_or(0);
         if size < MAX_BYTES {
             return;
         }
@@ -118,7 +121,8 @@ impl Logger {
         // thread (the AT lane included) logs through, so it must never block:
         // O_NONBLOCK makes a planted FIFO fail the open (ENXIO, no reader) or
         // open without waiting, and anything but a regular file is refused,
-        // dropping the line. A regular file ignores O_NONBLOCK.
+        // dropping the line, as is a file someone else owns (a planted file
+        // must not collect our log). A regular file ignores O_NONBLOCK.
         if let Ok(mut f) = OpenOptions::new()
             .create(true)
             .append(true)
@@ -126,7 +130,8 @@ impl Logger {
             .custom_flags(crate::common::safefs::NOFOLLOW | libc::O_NONBLOCK)
             .open(&self.path)
         {
-            if f.metadata().map_or(false, |m| m.file_type().is_file()) {
+            let euid = unsafe { libc::geteuid() };
+            if f.metadata().map_or(false, |m| m.file_type().is_file() && m.uid() == euid) {
                 let _ = f.write_all(line.as_bytes());
             }
         }
