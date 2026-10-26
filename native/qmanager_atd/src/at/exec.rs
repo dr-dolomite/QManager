@@ -101,6 +101,24 @@ fn clear_long_flag_at(path: &str, lock: &LockFile, log: &Logger) {
     }
 }
 
+/// Raises the long flag before a long command. The watchdog, poller and scan
+/// CGIs read only a trusted flag; a long command run without one looks like
+/// an idle modem and could be "recovered" mid-scan. So if the flag cannot be
+/// written even after healing (a planted directory, say), the command is
+/// refused as modem_busy and any partial file is removed.
+fn raise_long_flag(path: &str, cmd: &str, log: &Logger) -> Result<(), Code> {
+    match write_nofollow(path, format!("{}\n", one_line(cmd)).as_bytes()) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            if std::fs::symlink_metadata(path).map_or(false, |m| m.file_type().is_file()) {
+                let _ = std::fs::remove_file(path);
+            }
+            log.error(&format!("Cannot raise long-command flag for: {cmd} ({e})"));
+            Err(Code::ModemBusy)
+        }
+    }
+}
+
 fn log_drained(log: &Logger, drained: &[u8], cmd: &str) {
     let d = String::from_utf8_lossy(drained);
     let d: String = d.chars().take(120).filter(|&c| c != '\r').map(|c| if c == '\n' { ' ' } else { c }).collect();
@@ -244,7 +262,9 @@ impl<D: Device> Executor<'_, D> {
         };
 
         if long {
-            let _ = write_nofollow(LONG_FLAG, format!("{}\n", one_line(cmd)).as_bytes());
+            if let Err(code) = raise_long_flag(LONG_FLAG, cmd, self.log) {
+                return Outcome::Err(code);
+            }
             self.log.info(&format!("Long command started: {cmd}"));
             // Warm-up flush, like qcmd:191-192. A failure here is modem_not_ready.
             if let Err(e) = self.ch.exchange("AT", Instant::now() + Duration::from_secs(3)) {
@@ -340,6 +360,20 @@ mod tests {
         std::fs::remove_file(&p).unwrap();
         std::fs::create_dir(&p).unwrap();
         assert!(!long_flag_trusted(&p), "directory");
+        std::fs::remove_dir(&p).unwrap();
+    }
+
+    #[test]
+    fn an_unwritable_long_flag_refuses_the_long_command() {
+        let log = Logger::new("test");
+        let p = tmp("raise");
+        assert!(raise_long_flag(&p, "AT+QSCAN=3,1", &log).is_ok());
+        assert!(long_flag_trusted(&p));
+        std::fs::remove_file(&p).unwrap();
+        // A planted directory cannot be healed: busy, directory untouched.
+        std::fs::create_dir(&p).unwrap();
+        assert!(matches!(raise_long_flag(&p, "AT+QSCAN=3,1", &log), Err(Code::ModemBusy)));
+        assert!(std::fs::symlink_metadata(&p).unwrap().file_type().is_dir());
         std::fs::remove_dir(&p).unwrap();
     }
 
