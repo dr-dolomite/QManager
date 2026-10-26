@@ -3,9 +3,9 @@
 //! Same semantics as qcmd's flock_wait: non-blocking tries on a 100 ms grain
 //! until the budget runs out, then one final try.
 
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -25,15 +25,17 @@ impl LockFile {
         if let Some(dir) = std::path::Path::new(path).parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o644)
-            // /var/lock is 1777 on the device: never follow a planted symlink.
-            .custom_flags(crate::common::safefs::NOFOLLOW)
-            .open(path)?;
+        // /var/lock is 1777 on the device. A planted symlink, FIFO, hardlink or
+        // foreign file would block the open, stop the broker starting, or let
+        // its owner hold our flock; `open_own` replaces it with our own regular
+        // file. The daemon's legit lock passes the check, so a fallback client
+        // opening it while the daemon holds the flock never unlinks it.
+        let file = crate::common::safefs::open_own(path, true, 0o600)?;
+        // 0600 so no other user can open it to flock it; tightens a 0644 file
+        // left by older builds. BusyBox flock in the health check runs as root.
+        if file.metadata()?.permissions().mode() & 0o777 != 0o600 {
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        }
         Ok(LockFile { file })
     }
 
@@ -86,5 +88,44 @@ mod tests {
         drop(held);
         assert!(b.acquire(Duration::from_millis(50)).is_some());
         let _ = std::fs::remove_file(p);
+    }
+
+    #[test]
+    fn a_planted_fifo_never_blocks_the_lock_and_is_replaced() {
+        use std::os::unix::fs::MetadataExt;
+        let p = std::env::temp_dir().join(format!("qatd-lock-fifo-{}", std::process::id()));
+        let p = p.to_str().unwrap().to_string();
+        let _ = std::fs::remove_file(&p);
+        crate::common::safefs::tests::mkfifo(&p);
+        let q = p.clone();
+        let a = crate::common::safefs::tests::within_2s(move || LockFile::open(&q)).unwrap();
+        let m = std::fs::symlink_metadata(&p).unwrap();
+        assert!(m.file_type().is_file(), "FIFO replaced by a regular file");
+        assert_eq!(m.mode() & 0o777, 0o600);
+        // The legit file is reused, not unlinked: both handles share one inode,
+        // so the flock still excludes.
+        let b = LockFile::open(&p).unwrap();
+        assert_eq!(std::fs::symlink_metadata(&p).unwrap().ino(), m.ino());
+        let held = a.acquire(Duration::ZERO).unwrap();
+        assert!(b.acquire(Duration::ZERO).is_none());
+        drop(held);
+        assert!(b.acquire(Duration::ZERO).is_some());
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn a_planted_hardlink_is_not_used_as_the_lock() {
+        use std::os::unix::fs::MetadataExt;
+        let victim = std::env::temp_dir().join(format!("qatd-lock-victim-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("qatd-lock-hl-{}", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        std::fs::write(&victim, b"SECRET").unwrap();
+        std::fs::hard_link(&victim, &p).unwrap();
+        let _l = LockFile::open(p.to_str().unwrap()).unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"SECRET");
+        assert_eq!(std::fs::symlink_metadata(&p).unwrap().nlink(), 1);
+        assert_eq!(std::fs::symlink_metadata(&victim).unwrap().nlink(), 1);
+        let _ = std::fs::remove_file(&p);
+        let _ = std::fs::remove_file(&victim);
     }
 }
