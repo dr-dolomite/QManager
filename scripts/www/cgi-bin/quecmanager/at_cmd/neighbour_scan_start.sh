@@ -1,5 +1,6 @@
 #!/bin/sh
 . /usr/lib/qmanager/cgi_base.sh
+[ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
 # =============================================================================
 # neighbour_scan_start.sh — CGI Endpoint: Start Neighbour Cell Scan
 # =============================================================================
@@ -75,7 +76,7 @@ fi
 rm -f "$PID_FILE"
 
 # --- Check: modem already busy with another long command? --------------------
-if [ -f "$LONG_FLAG" ]; then
+if qm_trusted_file "$LONG_FLAG"; then
     CURRENT_CMD=$(cat "$LONG_FLAG" 2>/dev/null)
     qlog_warn "Modem busy with long command: $CURRENT_CMD"
     cgi_error "modem_busy" "Modem is busy with another long command"

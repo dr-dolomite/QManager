@@ -2757,7 +2757,7 @@ poll_cycle() {
     # --- Scan / SIM-switch early return -------------------------------------
     # A long-running scan or an in-progress SIM slot switch IS active AT-bearing
     # work owned elsewhere; back off AT this cycle and report the Active tier.
-    if [ -f "$LONG_FLAG" ] || [ "$_sim_switch_active" = "1" ]; then
+    if qm_trusted_file "$LONG_FLAG" || [ "$_sim_switch_active" = "1" ]; then
         if [ "$system_state" != "scan_in_progress" ]; then
             qlog_state_change "system_state" "$system_state" "scan_in_progress"
         fi

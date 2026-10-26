@@ -96,7 +96,7 @@ execute_tier2() {
     fi
 
     # Pre-check: long-running command
-    if [ -f "$LONG_RUNNING_FLAG" ]; then
+    if qm_trusted_file "$LONG_RUNNING_FLAG"; then
         qlog_warn "TIER 2 SKIPPED: long-running AT command active"
         return 1
     fi

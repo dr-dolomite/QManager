@@ -145,7 +145,7 @@ qmi_overlay_apply() {
     [ "$_QMI_OK" = "1" ] || return 1
     [ "$_QMI_STATE" = "up" ] || return 1
     [ "$qmi_registered" = "1" ] || return 1
-    [ -f "$QMI_SCAN_FLAG" ] && return 1
+    qm_trusted_file "$QMI_SCAN_FLAG" && return 1
     [ -f "$QMI_SIMSW_FLAG" ] && return 1
     # After a scan the deep/idle tier keeps reporting scan_in_progress until its
     # next AT read; stay AT-only until then so the snapshot stays coherent.

@@ -563,12 +563,18 @@ t_at_concurrent() {
 t_at_long_flag() {
     local f=/tmp/qmanager_long_running
     local age
-    if [ ! -e "$f" ]; then
+    if [ ! -e "$f" ] && [ ! -L "$f" ]; then
         echo "$f absent" >> "$OUT"
         echo "pass|no long command running"
         return
     fi
     ls -l "$f" >> "$OUT" 2>&1
+    # The broker writes this as root; anything else is not a scan in progress
+    # and the poller and watchdog ignore it too.
+    if ! qm_trusted_file "$f"; then
+        echo "warn|untrusted entry at $f (not root-owned or not a regular file), ignored"
+        return
+    fi
     age=$(( $(date +%s) - $(stat -c %Y "$f" 2>/dev/null || date +%s) ))
     [ "$age" -lt 0 ] && age=0
     echo "age=${age}s" >> "$OUT"
