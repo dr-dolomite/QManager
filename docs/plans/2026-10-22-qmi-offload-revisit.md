@@ -41,7 +41,7 @@ Model tiering: Opus orchestrates and owns the Rust QRTR core. Sonnet builds the 
 4. Optional: port the live neighbour aim strip from the fork onto `nas.cell` (UI via Impeccable, canon per DESIGN.md).
 
 ### Out of scope
-Replacing per-antenna, NR-NSA, MIMO or EN-DC CA reads (impossible on this firmware), the vendor 0x4C–0x4E probe (declined before), and bundling `qmicli`.
+Replacing per-antenna, NR-NSA, MIMO or EN-DC CA reads (impossible on this firmware; corrected 2026-10-29: the NR PCI in NSA is in NAS `0x004D` TLV `0x54`, see [`../research/qmi-nr-sweep.md`](../research/qmi-nr-sweep.md)), the vendor 0x4C–0x4E probe (declined before), and bundling `qmicli`.
 
 ## Risks
 - QRTR clients coexist with netmgrd/QCMAP. The spike verified this, but a long-lived socket in atd is new. Mitigation: open and close per request in Phase 1.

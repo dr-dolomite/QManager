@@ -6,7 +6,7 @@
 ## TL;DR
 
 1. **Most of the AT latency is a `qcmd` bug, not the AT lane or the lock design.** Every `qcmd` call takes about **1,000 ms**, while the same AT command over the same lane under the same lock takes **5–8 ms**. The extra second comes from BusyBox `timeout`: its watcher process inherits the lock FD 9 and keeps `/var/lock/qmanager.lock` held for about 1 s after `atcli_smd11` exits. Measured below. The poller makes several `qcmd` calls per 2 s cycle, so the lock is busy most of the time, which explains the 52 lock timeouts in 47 minutes.
-2. **QMI NAS over QRTR works and is very fast.** Requests take 0.2–1 ms, there is no lock, and it runs alongside netmgrd, QCMAP and ql_nw_service without disturbing them. But it **does not cover the hot-path fields QManager relies on most**: per-antenna RSRP/RSRQ/SINR (`Get Tx Rx Info` returns NOT_SUPPORTED), NR PCI in NSA, NR band, CA SCC list (in EN-DC), MIMO layers, NR timing advance, TX power and CQI.
+2. **QMI NAS over QRTR works and is very fast.** Requests take 0.2–1 ms, there is no lock, and it runs alongside netmgrd, QCMAP and ql_nw_service without disturbing them. But it **does not cover the hot-path fields QManager relies on most**: per-antenna RSRP/RSRQ/SINR (`Get Tx Rx Info` returns NOT_SUPPORTED), NR PCI in NSA (corrected 2026-10-29: it is in `0x004D` TLV `0x54`, see [`qmi-nr-sweep.md`](qmi-nr-sweep.md)), NR band, CA SCC list (in EN-DC), MIMO layers, NR timing advance, TX power and CQI.
 3. **Recommendation: path (a), preceded by a one-line `qcmd` fix.** Details in [Recommendation](#recommendation).
 
 ## How the spike was run
@@ -50,7 +50,7 @@ Latency columns:
 | LTE intra neighbours | `QENG neighbourcell` (PCI 295, 254) | 0x0043 → 0x13 cell list (PCI, RSRQ, RSRP, RSSI, srxlev) | **partial**: QMI listed only the serving PCI 295; AT also listed 254 | 1016 / ~6 ms | 0.28 / 1.13 ms |
 | LTE inter neighbours | QENG neighbourcell (none) | 0x0043 → 0x14 (0 freqs) | n/a (none on either side) | ″ | ″ |
 | NR5G ARFCN | QENG / QCAINFO SCC (528030) | 0x0043 → TLV **0x2E** u32 (528030). Also `0x004D` Sys Info → TLV 0x60 | **yes** (TLV IDs found empirically) | ″ | ″ |
-| NR5G PCI (NSA) | QENG / QCAINFO (262) | none found in 0x0043, 0x004D or 0x0024 | **no** | — | — |
+| NR5G PCI (NSA) | QENG / QCAINFO (262) | none found in 0x0043, 0x004D or 0x0024. **Corrected 2026-10-29:** `0x004D` TLV `0x54` u16 = 262, one of the undecoded TLVs below ([`qmi-nr-sweep.md`](qmi-nr-sweep.md)) | **no** at the time; candidate now | — | — |
 | NR5G band | QCAINFO "NR5G BAND 41" | not in 0x0031 (only the LTE anchor is listed). Can be derived from the ARFCN with a band table | **no** (derivable only) | — | — |
 | CA component list (PCC/SCC) | `QCAINFO` (PCC B1 + SCC n41) | `0x00AC` Get LTE CPHY CA Info → **QMI_ERR_INFO_UNAVAILABLE (0x4A)** in EN-DC (no LTE SCell). This message covers LTE SCells only and never NR SCCs | **no** for NR SCC; LTE-CA untested | 1014 / 6.3 ms | 0.19 ms (error) |
 | Per-antenna RSRP / RSRQ / SINR, LTE (4 ch) | `QRSRP;+QRSRQ;+QSINR` | `0x005A` Get Tx Rx Info (radio = LTE) → **QMI_ERR_NOT_SUPPORTED (0x5E)** | **no** | 1015 / 6.4 ms | 0.20 ms (error) |
@@ -227,7 +227,7 @@ The message tables sit at 0x132c1a (requests), 0x132a52 (responses) and 0x132992
    - Nothing publishes such data over a socket, ubus or a file.
    - The baseband's ATCoP (AT command processor) answers `QENG`, `QCAINFO`, `QRSRP` and `QNWCFG` itself, as established earlier. That leaves only two routes to those fields: AT on smd11, or standard NAS QMI for the subset the spike already covered.
 2. **The vendor service (0xE3) is a control channel, not a telemetry API.** Its known messages are GNSS, sleep, flash test, debug auth, version sync and an AT-text relay. The relay (0x39/0x3A) is the same AT engine reached another way, with no structured fields, so it doesn't help.
-3. **A Rust tool that speaks the vendor service would not replace the expensive AT polls.** The gaps the spike found (per-antenna RSRP, NR SCC, MIMO, TA, NR PCI/band in NSA) stay AT-only on this firmware. The single open lead is 0x4C/0x4D/0x4E (below).
+3. **A Rust tool that speaks the vendor service would not replace the expensive AT polls.** The gaps the spike found (per-antenna RSRP, NR SCC, MIMO, TA, NR band in NSA) stay AT-only on this firmware. (NR PCI in NSA was later found in NAS `0x004D` TLV `0x54`; see [`qmi-nr-sweep.md`](qmi-nr-sweep.md).) The single open lead is 0x4C/0x4D/0x4E (below).
 4. **The cost case is also weaker now.** The `qcmd` FD-9 fix shipped (`c2ae24a8`, about 1 s → about 50 ms per call, validated on the device), which removed most of the lock contention that motivated this work.
 
 ### Recommended Rust scope (if pursued; nothing built)

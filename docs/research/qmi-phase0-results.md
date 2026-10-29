@@ -24,7 +24,7 @@ The gate is ≥95 % agreement with AT on fresh, active-tier samples.
 | LTE/NR Signal Info (`0x004F`) generally | | **Cached:** LTE RSRP produced 4 distinct values in 30 min. Indications with default thresholds: 1 per 60 s | NO-GO when polled. Realtime needs `Config Signal Info v2` (`0x006C`), which is a config write and needs approval. |
 | NR RSRP / SINR / RSRQ (NSA) | `0x004F` | 60 % / 83 % / 100 %, bias +2.5 dB | NO-GO (cached) |
 | NR ARFCN (NSA) | `0x0043` TLV 0x2E | matches AT | GO |
-| NR PCI / band (NSA) | `0x0043` TLV 0x2F, per REA, the NR5G serving-cell struct | **TLV absent in NSA.** Expected in SA (untested) | NO-GO in NSA |
+| NR PCI / band (NSA) | `0x0043` TLV 0x2F, per REA, the NR5G serving-cell struct | **TLV absent in NSA.** Expected in SA (untested) | NO-GO in NSA for `0x0043`. **Corrected 2026-10-29:** the NR PCI is in `0x004D` TLV `0x54` (candidate, 30/30 vs AT); band stays unavailable. See [`qmi-nr-sweep.md`](qmi-nr-sweep.md). |
 | Per-antenna RSRP/RSRQ/SINR | `0x005A` Get Tx Rx Info | `QMI_ERR_NOT_SUPPORTED` (0x5E) for LTE and NR with every request variant | **NO-GO** (firmware). Stays AT. |
 | LTE timing advance | `0x0043` TLV 0x1E (IDL lone u32) / 0x2D / 0x26 | AT read 4 then 5; no TLV tracked it consistently | unresolved |
 | WDS current settings / packet stats | `WDS 0x002D` / `0x0024` | `0x000F` / `0x0046` (needs the data-session owner) | NO-GO |
@@ -72,5 +72,5 @@ So the QRTR reset is an exact, instant SSR signal, which could be useful for the
 - **REA IDL decode** of `/usr/lib/libqmiservices.so` (stripped; layouts recovered from the compact IDL byte stream):
   - `0x0043` TLV 0x2F = NR5G serving cell (PLMN, TAC, u64 cell ID, PCI, RSRQ, RSRP, SNR); 0x30 = NR neighbours; 0x1E = lone u32 (libqmi calls it LTE TA).
   - `0x00AC` TLVs 0x10–0x19.
-  - `0x004D`: no PCI, band or ARFCN anywhere.
+  - `0x004D`: no PCI, band or ARFCN anywhere. **Wrong (2026-10-29):** this decode stopped short of the newer TLVs. The IDL runs to TLV `0x6C`; `0x54` (u16) holds the NR PCI and `0x60` (u32) the NR ARFCN. Band is indeed absent. See [`qmi-nr-sweep.md`](qmi-nr-sweep.md).
   - `0x005A` has 8 RX-chain structs, but the firmware refuses the message.
