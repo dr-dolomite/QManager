@@ -16,7 +16,7 @@ Inputs: `qmi_merge.sh`, `qmanager_poller` (`poll_tier2` region ~2885-2925, `writ
 The staleness is already labelled: `device.ca_read_mono` (Prometheus exports `qmanager_carrier_components_age_seconds`). The only real beneficiary is the first `status.json` frame after a deep to active wake (shows hours-old CA for about one 2 s cycle) and the 15 s idle window.
 
 ## 2. Live evidence (read-only, RM551E, tier `deep`, LTE only)
-`qmi.env`: `qmi_ca_count=2`, PCC B28/9485/PCI 135/20 MHz, SCC1 B3/1350/PCI 135/15 MHz, `active=0` (configured, not activated). `status.json`: `ca_count=1`, carrier_components PCC B28 + SCC B3 with identical identity, plus per-carrier rsrp/rsrq/rssi/sinr AT-only. So identity parity holds and SCC count = `qmi_ca_count - 1`; AT counts configured SCCs too. NSA with an NR leg was not observed (no NR on the unit now).
+`qmi.env`: `qmi_ca_count=2`, PCC B28/9485/PCI 135/20 MHz, SCC1 B3/1350/PCI 135/15 MHz, `active=0` (configured, not activated). `status.json`: `ca_count=1`, carrier_components PCC B28 + SCC B3 with identical identity, plus per-carrier rsrp/rsrq/rssi/sinr AT-only (**corrected 2026-10-29:** LTE per-carrier RSRP/RSRQ/RSSI are in `0x0043` TLVs `0x13`/`0x14`, equal to QCAINFO; SCC SINR is `0` in QCAINFO anyway. See [`../research/qmi-ca-per-carrier.md`](../research/qmi-ca-per-carrier.md)). So identity parity holds and SCC count = `qmi_ca_count - 1`; AT counts configured SCCs too. NSA with an NR leg was not observed (no NR on the unit now).
 
 ## 3. What a safe narrow form would have to be
 Only the LTE entries of `t2_carrier_components`, `t2_ca_count/active`, `t2_total_bandwidth_mhz`, `t2_bandwidth_details` can come from QMI. To honour the hard constraints the overlay would need to:

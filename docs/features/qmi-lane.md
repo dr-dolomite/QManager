@@ -92,6 +92,7 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | LTE PCI, EARFCN, TAC, cell ID, band, bandwidth | GO | Cell Location `0x0043` + RF Band `0x0031`. Band/bandwidth are the RF entry on the serving EARFCN, else the first LTE entry, else the CA PCC. `cell` also gives eNodeB id, sector, MCC/MNC (exact digit strings). |
 | Registration, RAT, PS/CS attach | GO | Serving System `0x0024`; also gates the signal fields. |
 | LTE CA (PCC + SCCs: EARFCN, PCI, band, bandwidth, active) | GO | `0x00AC`. Count is at least 1 when LTE is up. SCC state 1 = configured, 2 = activated (`active`). **NR SCC is not in this message.** |
+| LTE per-carrier RSRP/RSRQ/RSSI (PCC + SCCs) | candidate, **not decoded** | `0x0043` TLV `0x13` (PCC) and TLV `0x14` (one entry per SCC frequency, join on EARFCN + PCI from `0x00AC`). Equal to QCAINFO after truncation to whole dB on 30/30 pairs (2026-10-29, one SCC). See [`../research/qmi-ca-per-carrier.md`](../research/qmi-ca-per-carrier.md). |
 | LTE RSRP | GO, live | Serving row of `0x0043` (0.1 dB), source `cell_location`. |
 | LTE RSRQ, RSSI | partial, live | Different rounding/averaging than AT. |
 | LTE SINR | live while held (0.5.0) | Signal Info `0x004F`, source `signal_info`. Cached until the signal config is held; not yet compared with AT on the device. |
@@ -105,7 +106,7 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | WDS current settings | not available | Needs data-session ownership; `0x002D` stays excluded. |
 | IDs, revision, op mode, time, card, slots, profiles, DSD | GO candidates | Answer in 0.1-0.6 ms; not compared field by field. |
 
-In NSA, QMI cannot replace `QENG servingcell` or `QCAINFO`: it fills the gaps where AT is absent (idle/deep tiers, scan and SIM-switch suppression, busy streaks).
+In NSA, QMI cannot replace `QENG servingcell` or `QCAINFO` today: it fills the gaps where AT is absent (idle/deep tiers, scan and SIM-switch suppression, busy streaks). For `QCAINFO`, the only field with no QMI source found is the NR bandwidth; the per-carrier LTE signal and the NR PCI are candidates the broker does not decode yet (2026-10-29).
 
 ### Status and how to validate later
 

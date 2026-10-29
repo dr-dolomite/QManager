@@ -48,7 +48,7 @@ Latency columns:
 | LTE band | QENG (1) / QCAINFO "LTE BAND 1" | 0x0031 → 0x01 `active_band_class` 120 (= E-UTRA band 1, i.e. class − 119) | **yes** (needs a map) | ″ | ″ |
 | LTE bandwidth | QENG UL/DL enum (5, 5); QCAINFO 100 RB | 0x0031 → 0x12 bandwidth enum 5 (= 20 MHz). Also 0x0043 TLV 0x26 = 5 | **yes** (DL; UL not separate) | ″ | ″ |
 | LTE intra neighbours | `QENG neighbourcell` (PCI 295, 254) | 0x0043 → 0x13 cell list (PCI, RSRQ, RSRP, RSSI, srxlev) | **partial**: QMI listed only the serving PCI 295; AT also listed 254 | 1016 / ~6 ms | 0.28 / 1.13 ms |
-| LTE inter neighbours | QENG neighbourcell (none) | 0x0043 → 0x14 (0 freqs) | n/a (none on either side) | ″ | ″ |
+| LTE inter neighbours | QENG neighbourcell (none) | 0x0043 → 0x14 (0 freqs) | n/a (none on either side). **Corrected 2026-10-29:** with CA, TLV `0x14` carries each LTE SCC frequency with its RSRP/RSRQ/RSSI, equal to QCAINFO ([`qmi-ca-per-carrier.md`](qmi-ca-per-carrier.md)) | ″ | ″ |
 | NR5G ARFCN | QENG / QCAINFO SCC (528030) | 0x0043 → TLV **0x2E** u32 (528030). Also `0x004D` Sys Info → TLV 0x60 | **yes** (TLV IDs found empirically) | ″ | ″ |
 | NR5G PCI (NSA) | QENG / QCAINFO (262) | none found in 0x0043, 0x004D or 0x0024. **Corrected 2026-10-29:** `0x004D` TLV `0x54` u16 = 262, one of the undecoded TLVs below ([`qmi-nr-sweep.md`](qmi-nr-sweep.md)) | **no** at the time; candidate now | — | — |
 | NR5G band | QCAINFO "NR5G BAND 41" | not in 0x0031 (only the LTE anchor is listed). Can be derived from the ARFCN with a band table | **no** (derivable only) | — | — |

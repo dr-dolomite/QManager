@@ -54,6 +54,8 @@ Types come from the IDL encoding. The device's libqmi 1.32.4 knows the NR5G Sys 
 |---|---|---|
 | Other QRTR services | **not probed** | `qrtr-lookup` lists about 40 services on node 3, including 88 (ML Context Event Exchange), 89, 92, 5025 (unnamed), Smart Transmit 87, RF radiated performance 41 and the vendor service 227 (0xE3). `libqmiservices.so` has no IDL for 88, 89, 92 or 5025, so any probe would be blind (unknown message semantics); not done. |
 | Vendor 0xE3 `0x4C`/`0x4D`/`0x4E` | still declined | Unchanged from the spike: empty requests with unknown semantics and no caller. |
+| Other services and sysfs | **swept 2026-10-29** | Thermal throttling (TMD and sysfs cooling devices), DMS band lists, DSD per-APN status, remoteproc state and more: [`modem-data-sources.md`](modem-data-sources.md). |
+| LTE per-carrier signal | **found 2026-10-29** | `0x0043` TLV `0x14` holds each LTE SCC's RSRP/RSRQ/RSSI, equal to QCAINFO. See [`qmi-ca-per-carrier.md`](qmi-ca-per-carrier.md). |
 | DIAG DCI | **tried 2026-10-29: works** | A native client on the device's `libdiag` captured `0xB193` (LTE per-RX RSRP/RSRQ/RSSI, all 4 chains, matches AT), `0xB97F` (NR PCI, ARFCN and per-SSB-beam RSRP/RSRQ for RX0/RX1 only) and `0xB8A7` (NR CSF, not decoded). Not worth productising today. Details: [`diag-dci-nr.md`](diag-dci-nr.md). |
 
 ## Corrections to earlier docs
