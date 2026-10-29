@@ -99,7 +99,7 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | NR RSRP/RSRQ/SINR (NSA) | live while held (0.5.0) | Signal Info. The 60-83 % agreement with AT was measured on the cached values (Phase 0), not re-measured with the config held. NR RSRP is the **mean of the NR RX chains**, not QENG's strongest chain. |
 | NR PCI (NSA) | candidate, **not decoded** | `0x004D` Sys Info TLV `0x54` (u16) matched QENG's NR PCI on 30/30 reads (2026-10-29), but with one cell only, so tracking a change is unproven. `0x0043` TLV `0x2F` stays absent in NSA. The broker does not read `0x004D`, so `cell.nr.pci` is `null` today. |
 | NR band | not available | No QMI TLV carries it (`0x0031` lists only the LTE anchor, `0x004D` has no band). Derivable from the NR ARFCN with a band table. |
-| Per-antenna RSRP/RSRQ/SINR | not available | `0x005A` answers `QMI_ERR_NOT_SUPPORTED` on this firmware. Stays AT. |
+| Per-antenna RSRP/RSRQ/SINR | not available | `0x005A` answers `QMI_ERR_NOT_SUPPORTED` on this firmware. Stays AT. Outside QMI, DIAG DCI carries LTE 4-chain and NR 2-chain values (research only, [`../research/diag-dci-nr.md`](../research/diag-dci-nr.md)). |
 | LTE timing advance | not available | No TLV tracked AT consistently. Stays AT (on-demand radio details). |
 | WDS packet stats | GO (0.6.0, broker-only) | Needs a client bound to the data call; the broker binds its own (above). Matches `QCMAP_CLI` within one read. Not reachable by the `qmi` verb. |
 | WDS current settings | not available | Needs data-session ownership; `0x002D` stays excluded. |

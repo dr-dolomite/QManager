@@ -54,7 +54,7 @@ Types come from the IDL encoding. The device's libqmi 1.32.4 knows the NR5G Sys 
 |---|---|---|
 | Other QRTR services | **not probed** | `qrtr-lookup` lists about 40 services on node 3, including 88 (ML Context Event Exchange), 89, 92, 5025 (unnamed), Smart Transmit 87, RF radiated performance 41 and the vendor service 227 (0xE3). `libqmiservices.so` has no IDL for 88, 89, 92 or 5025, so any probe would be blind (unknown message semantics); not done. |
 | Vendor 0xE3 `0x4C`/`0x4D`/`0x4E` | still declined | Unchanged from the spike: empty requests with unknown semantics and no caller. |
-| DIAG DCI | **not tried; needs approval** | The device ships `diag-router`, `libdiag` and `diag_dci_sample`, and the modem serves `DIAG service (MODEM:DCI)` over QRTR; there is no `/dev/diag` node. A DCI client can subscribe to NR5G ML1/RRC log packets, which carry NR PCI, per-RX-chain RSRP and the NR SCC config. It turns on modem log masks (volatile, but a live state change), the packet formats are versioned and undocumented, and it is CPU-heavier than QMI. Treat it as the last route for per-antenna NR, not a first step. |
+| DIAG DCI | **tried 2026-10-29: works** | A native client on the device's `libdiag` captured `0xB193` (LTE per-RX RSRP/RSRQ/RSSI, all 4 chains, matches AT), `0xB97F` (NR PCI, ARFCN and per-SSB-beam RSRP/RSRQ for RX0/RX1 only) and `0xB8A7` (NR CSF, not decoded). Not worth productising today. Details: [`diag-dci-nr.md`](diag-dci-nr.md). |
 
 ## Corrections to earlier docs
 
@@ -71,4 +71,5 @@ Types come from the IDL encoding. The device's libqmi 1.32.4 knows the NR5G Sys 
 | `0x54` / `0x5E` / `0x50` in SA | Modem camped in SA (needs the user's OK: the mode change drops the data connection) | Same pairing against the QENG SA row; check `0x5E` against the NR cell ID and `0x50` against the NR TAC. |
 | `0x54` with no NR leg | LTE-only (EN-DC released) | Confirm `0x54` is absent or zero rather than stale. |
 | `0x00D2` TLV `0x1C` as an NR carrier list | NR-CA (two NR carriers) | Compare the list with the `QCAINFO` NR rows. |
-| Per-antenna NR | Only DIAG DCI is left | Needs a separate approval; see above. |
+| Per-antenna NR RX2/RX3 | DCI `0xB97F` leaves them zero | Try another NR code (for example `0xB975` in SA, or a newer firmware) with the same client; see [`diag-dci-nr.md`](diag-dci-nr.md). |
+| NR CQI / rank from DCI | `0xB8A7` captured, layout unknown | Capture while the NR rank or CQI changes (compare with the MIMO layers the poller already reads) and map the bits. |
