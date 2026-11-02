@@ -37,7 +37,7 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 
 ## 💙 Thank You
 
-Special thanks to Outright0181 for supporting the project.
+Special thanks to radiomean for supporting the project.
 
 Bug reports and feature requests welcome on [GitHub Issues](https://github.com/dr-dolomite/QManager/issues).
 
