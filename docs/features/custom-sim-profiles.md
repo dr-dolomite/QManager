@@ -263,7 +263,7 @@ Manual Activate is completely exempt from this queue: `apply.sh`'s spawn path is
 
 ## ICCID Canonicalization — Compare-Time Only
 
-`iccid_canonicalize()` (`scripts/usr/lib/qmanager/sim_db.sh`) strips space/CR/LF like `sim_db_normalize`, then strips **one** trailing BCD pad nibble (`F`/`f`) if present. An ICCID whose final significant digit is odd is padded to 20 nibbles with a trailing `F` per the ISO/IEC 7812 BCD convention; different read paths in this codebase disagreed on whether they kept that pad character, which caused an odd-length-ICCID SIM to never match its own profile.
+`iccid_canonicalize()` (`scripts/usr/lib/qmanager/sim_db.sh`) strips space/CR/LF like `sim_db_normalize`, then strips **every** trailing BCD pad nibble (`F`/`f`). An ICCID shorter than 20 nibbles is padded with trailing `F` (one `F`, or `FF` on some SIMs/modems, e.g. `…742FF`) per the ISO/IEC 7812 BCD convention; different read paths in this codebase disagreed on whether they kept that pad character, which caused an odd-length-ICCID SIM to never match its own profile.
 
 > ⚠️ WARNING: This function is for **comparison only**. It must never be used to rewrite a value that gets *stored* — `sim_db_add` / the known-SIMs set continue to use `sim_db_normalize` and preserve full byte-parity (see [known-sims.md](known-sims.md)). Canonicalizing at storage time would break the `grep -qxF` whole-line membership test's byte-parity requirement.
 

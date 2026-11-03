@@ -35,9 +35,12 @@ else
     iccid_canonicalize() {
         local _simdb_canon
         _simdb_canon=$(printf '%s' "$1" | tr -d ' \r\n')
-        case "$_simdb_canon" in
-            *[Ff]) _simdb_canon=${_simdb_canon%?} ;;
-        esac
+        while :; do
+            case "$_simdb_canon" in
+                *[Ff]) _simdb_canon=${_simdb_canon%?} ;;
+                *) break ;;
+            esac
+        done
         printf '%s' "$_simdb_canon"
     }
     sim_db_add() { :; }
