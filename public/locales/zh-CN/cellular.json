@@ -705,7 +705,7 @@
         "network_mode_label": "网络模式",
         "network_mode_aria": "网络模式",
         "lte_bands_label": "LTE 频段锁定",
-        "lte_bands_placeholder": "例如：1, 3, 7, 28（留空 = 自动）",
+        "lte_bands_placeholder": "例如：1, 3, 7, 28",
         "sa_bands_label": "NR5G-SA 频段锁定",
         "sa_bands_placeholder": "例如：41, 78",
         "nsa_bands_label": "NR5G-NSA 频段锁定",
@@ -751,7 +751,7 @@
       "error_title": "无法加载您的场景"
     },
     "dialog": {
-      "description": "频段字段留空即由调制解调器自动选择。",
+      "description": "频段字段留空则保持该频段锁定不变。",
       "name_required": "请为场景命名。",
       "icon_label": "图标"
     },

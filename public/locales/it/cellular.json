@@ -705,7 +705,7 @@
         "network_mode_label": "Modalità di rete",
         "network_mode_aria": "Modalità di rete",
         "lte_bands_label": "LTE Blocco cinturino",
-        "lte_bands_placeholder": "ad esempio, 1, 3, 7, 28 (vuoto = Auto)",
+        "lte_bands_placeholder": "ad esempio, 1, 3, 7, 28",
         "sa_bands_label": "Blocco cinturino NR5G-SA",
         "sa_bands_placeholder": "ad esempio, 41, 78",
         "nsa_bands_label": "Blocco cinturino NR5G-NSA",
@@ -751,7 +751,7 @@
       "error_title": "Impossibile caricare i tuoi scenari"
     },
     "dialog": {
-      "description": "Lascia vuoto un campo banda per lasciare la scelta al modem.",
+      "description": "Lascia vuoto un campo banda per mantenere invariato quel blocco banda.",
       "name_required": "Dai un nome allo scenario.",
       "icon_label": "Icona"
     },

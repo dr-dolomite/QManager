@@ -705,7 +705,7 @@
         "network_mode_label": "Mode Jaringan",
         "network_mode_aria": "Mode Jaringan",
         "lte_bands_label": "Kunci Band LTE",
-        "lte_bands_placeholder": "contoh: 1, 3, 7, 28 (kosong = Otomatis)",
+        "lte_bands_placeholder": "contoh: 1, 3, 7, 28",
         "sa_bands_label": "Kunci Band NR5G-SA",
         "sa_bands_placeholder": "Contoh., 41, 78",
         "nsa_bands_label": "Kunci Band NR5G-NSA",
@@ -751,7 +751,7 @@
       "error_title": "Tidak dapat memuat skenario Anda"
     },
     "dialog": {
-      "description": "Biarkan kolom band kosong agar modem yang memilih.",
+      "description": "Biarkan kolom band kosong untuk mempertahankan kunci band tersebut seperti sekarang.",
       "name_required": "Beri nama skenario.",
       "icon_label": "Ikon"
     },

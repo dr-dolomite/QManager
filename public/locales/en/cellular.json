@@ -705,7 +705,7 @@
         "network_mode_label": "Network Mode",
         "network_mode_aria": "Network Mode",
         "lte_bands_label": "LTE Band Lock",
-        "lte_bands_placeholder": "e.g., 1, 3, 7, 28 (empty = Auto)",
+        "lte_bands_placeholder": "e.g., 1, 3, 7, 28",
         "sa_bands_label": "NR5G-SA Band Lock",
         "sa_bands_placeholder": "e.g., 41, 78",
         "nsa_bands_label": "NR5G-NSA Band Lock",
@@ -751,7 +751,7 @@
       "error_title": "Couldn't load your scenarios"
     },
     "dialog": {
-      "description": "Leave a band field empty to let the modem choose.",
+      "description": "Leave a band field empty to keep that band lock as it is.",
       "name_required": "Give the scenario a name.",
       "icon_label": "Icon"
     },
