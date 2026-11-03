@@ -108,20 +108,33 @@ bun run ipk              # ipk only, from an existing qmanager-build/qmanager.ta
 
 `build-ipk.sh` needs Python 3.8+ (standard library only). It runs `assemble_ipk_source.py` (tarball → `qmanager-build/ipk-source/sdxpinn-qmanager/{CONTROL,root}`), `build_ipk.py` (tree → `.ipk`), then `check_ipk.py` (exit 1 unless the structure is right). `check_ipk.py` asserts: gzip container and member order, `debian-binary`, control fields (`Package`, `Architecture`, exact `Depends`, file name matches `Version`), the four scripts are 0755 with `#!/bin/sh` and no CR, preinst is `install.sh` behind `QM_INSTALL_ENTRY=ipk_preinst`, everything is root-owned, no `www/index.html`, `qmanager_atd` is a 0755 ELF, scripts have no CR, and the manifest equals the payload exactly.
 
-> ℹ️ NOTE: `scripts-dev/ipk/build_ipk.py` must stay **byte-identical** with the feed repo's `.github/scripts/build_ipk.py`. The ipk tested on a device must be the one feed CI ships. `.gitattributes` pins `scripts-dev/ipk/*` to LF so a Windows checkout cannot change the bytes. Edit one, copy to the other.
+> ℹ️ NOTE: `scripts-dev/ipk/build_ipk.py` must stay **byte-identical** with the feed repo's `.github/scripts/build_ipk.py` (checked against the merged upstream copy, `55f1bfd7`, 2026-11-03). `.gitattributes` pins `scripts-dev/ipk/*` to LF so a Windows checkout cannot change the bytes. Edit one, copy to the other, in a PR to each repo.
+>
+> The local ipk and the CI ipk have the **same contents, not the same bytes**: `build-ipk.sh` stamps mtimes with QManager's HEAD commit time, while CI uses the time of the last upstream commit touching `ipk-source/sdxpinn-qmanager`. Compare by file list and per-file hashes, not by the ipk's sha256.
 
 ## Releasing to the feed
 
-Devices follow the `SDXPINN` branch of `iamromulan/quectel-rgmii-toolkit` with signature checking on. A release is a PR plus a merge:
+Devices follow the `SDXPINN` branch of `iamromulan/quectel-rgmii-toolkit` with signature checking on. Feed CI ([iamromulan/quectel-rgmii-toolkit#218](https://github.com/iamromulan/quectel-rgmii-toolkit/pull/218), merged 2026-10-31) builds and signs on merge, so a release is our PR plus two merges by the feed owner. Nobody builds or signs by hand.
 
-1. `bun run package:ipk`. Check the `check_ipk.py` output.
-2. PR to `iamromulan/quectel-rgmii-toolkit:development-SDXPINN` that adds or refreshes `ipk-source/sdxpinn-qmanager/{CONTROL,root}` from `qmanager-build/ipk-source/sdxpinn-qmanager/` (version bump = `CONTROL/control`). Body: release notes.
-3. On merge, `.github/workflows/opkg-feed.yml` (push to `development-SDXPINN`, paths `ipk-source/**`, plus `workflow_dispatch`) runs:
-   - **build** job (no secrets): the central `build_ipk.py` for each changed package, then `build_feed.py`, which is incremental. Only rebuilt packages' stanzas are replaced in `opkg-feed/Packages`, new ones appended, `Packages.gz` regenerated, superseded ipks of rebuilt packages deleted.
-   - **sign** job (environment `feed-signing`, `contents: write`): verifies the pinned sha256 of `opkg-feed/usign_x64`, signs `Packages` with the `SDXPINN_USIGN_KEY` secret, verifies against `opkg-feed/iamromulan-SDXPINN-repo.key`, and bot-commits `opkg-feed/`.
-4. The feed owner merges `development-SDXPINN` into `SDXPINN`; devices see the release only then.
+1. **Bump `package.json` `version` to a final release** (`v0.1.36`, never `-draft`, `-testN` or `-beta`; see versioning below). `bun run package:ipk`; `check_ipk.py` must pass.
+2. **Sync the fork's `development-SDXPINN` with upstream first.** CI pushes bot commits (`CI: autobuild (…)`) to upstream, sometimes editing `ipk-source/<pkg>/CONTROL/control`. Branch from the synced tip.
+3. **PR to `iamromulan/quectel-rgmii-toolkit:development-SDXPINN`** that replaces `ipk-source/sdxpinn-qmanager/{CONTROL,root}` with `qmanager-build/ipk-source/sdxpinn-qmanager/` (copy the whole tree so removed files go too; commit with `-c core.autocrlf=false`). Touch **nothing else**, `opkg-feed/` above all: `Packages*`, the ipks and `opkg-feed/build-state.json` belong to the bot. Body: release notes in the QuecManager format. Ask for a merge commit or rebase, not squash, so authorship is kept.
+4. **On merge**, `.github/workflows/opkg-feed.yml` runs (push to `development-SDXPINN` with paths `ipk-source/**`):
+   - **build** job (no secrets, read-only): `plan_build.py` compares each `ipk-source/<dir>` git tree hash with `opkg-feed/build-state.json` and selects what changed (state, not history: re-runs, cancelled runs and force-pushes are safe, a re-run is a no-op). Then the central `build_ipk.py` per package and the incremental `build_feed.py` (only rebuilt stanzas replaced, new ones appended, `Packages.gz` regenerated, superseded ipks deleted).
+   - **sign** job (environment `feed-signing`, `contents: write`): checks out the exact commit the build used, verifies the pinned sha256 of `opkg-feed/usign_x64`, applies auto-bumped control files only if just the `Version:` line differs, cross-checks the new state against the source trees, signs `Packages` with secret **`OPKG_USIGN_KEY`** (one key for every feed branch), verifies against `opkg-feed/iamromulan-SDXPINN-repo.key`, and commits `CI: autobuild (sdxpinn-qmanager)` with one line per package (`added` / `upgraded` / `rebuilt` / `removed`). On a push race it rebases once and pushes only if the signature still verifies.
+5. **The feed owner merges `development-SDXPINN` into `SDXPINN`**; devices see the release only then.
 
-**Why central build scripts:** package content never runs in CI, and the sign job executes nothing from the repo, so a PR cannot reach the signing key.
+Manual runs (`workflow_dispatch`) take a form: `mode` `changed` (default) / `all` (rebuilds every package and overwrites hand-curated stanzas, deliberate only) / `listed` (+ `packages`), and `dry_run`.
+
+**Why central build scripts:** package content never runs in CI, and the sign job executes nothing from the repo except the hash-pinned `usign_x64`, so a PR cannot reach the signing key. There are no `pull_request` triggers.
+
+### Versioning rules the feed enforces
+
+opkg compares versions the dpkg way (`epoch:upstream-revision`, revision = after the last `-`), and `plan_build.py` uses the same algorithm.
+
+- **Always bump `Version`** when `root/` changes. If the source changed but `Version` equals the feed's, CI adds a package revision as a fallback (`0.1.36` → `0.1.36-1`, `-1` → `-2`, `-rN` keeps its style) and writes it back into upstream `CONTROL/control`. That build works, but the opkg version (`0.1.36-1`) no longer matches the `VERSION` stamped into `install.sh` (`v0.1.36`), and the fork must re-sync before the next PR.
+- **A lower version fails the build.** `0.1.36-draft`, `0.1.36-test1` and `0.1.36-beta` all sort **above** `0.1.36` (a non-empty revision beats an empty one), so shipping one to the feed would make the final `0.1.36` a downgrade that CI rejects. If a pre-release must reach the feed, use `~` (`0.1.36~beta1` sorts below `0.1.36`); otherwise keep pre-releases on the tarball channel.
+- **Deleting `ipk-source/sdxpinn-qmanager/` removes the package** (stanza and ipk) from the feed on the next `changed` run. Deleting files inside `root/` is an ordinary update.
 
 ## Install, upgrade, remove
 
@@ -165,7 +178,8 @@ Install over a tarball v0.1.35 install, `opkg remove`, then reinstall:
 ## Known unverified assumptions
 
 1. **`Replaces` auto-removal of an old QuecManager package.** The test unit never had `sdxpinn-quecmanager(-beta)` installed, so `Conflicts`+`Replaces` removing it on install is untested. If it does not, `opkg remove` the old package first.
-2. **Feed CI against Cameron's real key and branch protection.** The workflow passed a full rehearsal in a fork with a throwaway key (build, sign, verify, idempotent re-run); the sign job's failure paths are not exercised.
+2. **Feed CI on GitHub with the real key.** Merged upstream 2026-10-31. Our original workflow passed a fork rehearsal with a throwaway key; the feed owner's additions (state-based planning, auto-bump, deletions) were run locally with a throwaway key but not yet on GitHub. The first `sdxpinn-qmanager` PR will be the first real run: check the `CI: autobuild` commit, the job summary and `opkg update` + `opkg install` on a device after the `SDXPINN` merge.
+3. **The QManager package has not been PR'd upstream yet.** The feed owner asked (PR #218 comment) how QManager packaging will be published, since `build_ipk.py` points at `scripts-dev/ipk/`, which is only public once this branch merges into `development-home` and is pushed.
 
 ## Related
 

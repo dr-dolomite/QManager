@@ -1,6 +1,6 @@
 # QManager as an opkg ipk in iamromulan's SDXPINN feed
 
-Status: **plan, awaiting approval**. Large change (installer + OTA + lifecycle lockstep).
+Status: **approved and built** (branch `worktree-ipk-packaging`). The feed CI landed upstream as iamromulan/quectel-rgmii-toolkit#218 (2026-10-31) with the feed owner's changes: state-based planning (`plan_build.py` + `opkg-feed/build-state.json`) instead of a `Built-From` trailer, auto version bump, deletions, a dispatch form, `CI: autobuild` commits and the secret renamed `OPKG_USIGN_KEY`. This plan is history; the current flow is in [`../features/ipk-packaging.md`](../features/ipk-packaging.md#releasing-to-the-feed).
 
 ## What the recon established
 

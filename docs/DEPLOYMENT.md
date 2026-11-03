@@ -106,7 +106,7 @@ The device needs `sdxpinn-patch` (it adds the `sdxpinn` package architecture) an
 | Web port prompt | Asked on a fresh interactive install | Never asked (opkg may own the terminal); set it later with `qmanager_web_port` |
 | Reboot | Installer / OTA reboots | Never reboots; the app shows the deferred-reboot banner afterwards |
 | LuCI `index.html` | Backed up to `index.html.old` and replaced | Same, done by the postinst; `opkg remove` puts it back |
-| User config | `/etc/qmanager` and UCI kept across updates | Same across `opkg upgrade`. `opkg remove` keeps `/etc/qmanager` but deletes the UCI `quecmanager` settings |
+| User config | `/etc/qmanager` and UCI kept across updates | Same across `opkg upgrade`. `opkg remove` keeps `/etc/qmanager`, the UCI `quecmanager` settings and the cron jobs, so a reinstall picks them back up |
 
 ### The two channels are mutually exclusive
 
@@ -127,6 +127,8 @@ bun run ipk            # ipk only, from an existing qmanager-build/qmanager.tar.
 ```
 
 Requires Python 3.8+. The build is deterministic and ends with a structural check. To try a build on a device: `scp` the `.ipk` to `/tmp` and `opkg install /tmp/sdxpinn-qmanager_*.ipk`.
+
+Publishing goes through the feed repo's CI (build and sign on merge); the PR rules and the versioning the feed enforces (always bump, never ship `-draft`/`-testN`) are in [`features/ipk-packaging.md`](features/ipk-packaging.md#releasing-to-the-feed).
 
 ---
 
