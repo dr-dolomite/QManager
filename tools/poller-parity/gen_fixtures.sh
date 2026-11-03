@@ -389,6 +389,7 @@ single ca_info__blank_lines_between "$QC" \
 single ca_info__duplicate_pcc "$QC" \
  '+QCAINFO: "PCC",9485,100,"LTE BAND 28",1,135,-115,-12,-82,2' \
  '+QCAINFO: "PCC",504990,12,"NR5G BAND 78",271'
+single ca_info__glued_records "$QC"  '+QCAINFO: "PCC",396970,3,"NR5G BAND 25",999,-11,-11,1929'  '+QCAINFO: "SCC",520110,12,"NR5G BAND 41",1,495,1,14,528000+QCAINFO: "SCC",502110,11,"NR5G BAND 41",1,495,0,-,-,'
 single ca_info__no_space_after_prefix "$QC" '+QCAINFO:"PCC",9485,100,"LTE BAND 28",1,135,-115,-12,-82,2'
 single ca_info__lte_bandword_nospace "$QC" \
  '+QCAINFO: "PCC",9485,100,"LTEBAND 28",1,135,-115,-12,-82,2' \

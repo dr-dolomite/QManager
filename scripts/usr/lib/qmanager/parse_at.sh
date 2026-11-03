@@ -924,13 +924,14 @@ BEGIN {
     ESC["\""] = "\\\""
     lsc = 0; nsc = 0; seen = 0; pcc = 0; tot = 0; det = ""; arr = ""; bad = 0
 }
-{
-    ln = $0 ""
+# One QCAINFO record. Uses return, not next, so the caller can feed it the
+# pieces of a line the modem glued together.
+function proc(ln) {
     if (index(ln, "+QCAINFO: \"SCC\"")) {
         if (index(ln, "LTE BAND")) lsc++
         if (index(ln, "NR")) nsc++
     }
-    if (substr(ln, 1, 9) != "+QCAINFO:") next
+    if (substr(ln, 1, 9) != "+QCAINFO:") return
     seen = 1
     csv = ln
     gsub(/\+QCAINFO: /, "", csv)
@@ -968,7 +969,7 @@ BEGIN {
             if (nf >= 8) snr = nrsnr(f[8])
         }
     } else {
-        next
+        return
     }
     if (mhz > 0) {
         tot += mhz
@@ -986,6 +987,22 @@ BEGIN {
     o = o ",\"pci\":" nn(cc[6]) ",\"rsrp\":" nn(cc[7]) ",\"rsrq\":" nn(cc[8])
     o = o ",\"rssi\":" nn(cc[9]) ",\"sinr\":" nn(cc[10]) "}"
     arr = (arr == "") ? o : arr "," o
+}
+# The modem sometimes drops the line break between two records (seen on a
+# 4-carrier SA reply: ...,528000+QCAINFO: "SCC",502110,...), so every
+# "+QCAINFO:" glued straight onto the previous field (no space before it)
+# starts a new record. A marker after a space ("junk +QCAINFO: ...") is text.
+{
+    line = $0 ""
+    off = 1
+    while ((q = index(substr(line, off + 1), "+QCAINFO:")) > 0) {
+        k = off + q
+        if (substr(line, k - 1, 1) == " ") { off = k; continue }
+        proc(substr(line, 1, k - 1))
+        line = substr(line, k)
+        off = 1
+    }
+    proc(line)
 }
 END {
     print lsc

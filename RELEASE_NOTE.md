@@ -12,6 +12,7 @@ v0.1.35 adds real-time signal readings on Antenna Alignment and the dashboard, p
 
 ## ✅ Improvements
 
+- **Every carrier shows in Carrier Aggregation.** Some modems run two carriers together in a single line of their reply, which made QManager show only some of your connected bands (for example one n41 instead of two). All carriers are now listed.
 - **Profiles match SIMs that report extra padding.** Some SIMs report their ID with two trailing padding characters (ending in `FF`), which could stop a saved profile from matching its own SIM and skip auto-apply. These SIMs now match.
 - **Security hardening.** QManager now refuses every protected request if its sign-in check is damaged or incomplete, instead of only when it is missing. The Traffic Engine download is pinned to a known zapret release and must match its checksum before it installs. The public IP lookup on About Device now verifies the server's certificate.
 - **Hardened the modem command service.** Tampered temporary files can no longer stall AT commands or be used to overwrite other files.
