@@ -208,5 +208,19 @@
   "port_in_use": "Port tersebut sudah dipakai layanan lain.",
   "token_generation_failed": "Tidak dapat membuat token yang aman. Coba lagi.",
   "bad_tier": "Kecepatan sinyal langsung tidak didukung.",
-  "lease_failed": "Tidak dapat memulai sinyal langsung. Coba lagi."
+  "lease_failed": "Tidak dapat memulai sinyal langsung. Coba lagi.",
+  "ota_sha256_unverified": "Unduhan tidak dapat diperiksa terhadap checksum rilis, jadi tidak dipasang.",
+  "ota_invalid_url": "Alamat pembaruan bukan rilis resmi.",
+  "ota_stage_failed": "Tidak dapat menyiapkan ruang di modem untuk pembaruan.",
+  "ota_download_failed": "Unduhan gagal. Periksa koneksi internet dan SIM.",
+  "ota_archive_corrupt": "File yang diunduh rusak atau tidak lengkap. Unduh lagi.",
+  "ota_extract_failed": "File yang diunduh tidak dapat diekstrak.",
+  "ota_install_failed": "Penginstal melaporkan kesalahan.",
+  "ota_rollback_failed": "Gagal memulihkan versi sebelumnya.",
+  "ota_no_staged": "Tidak ada pembaruan yang diunduh. Unduh lagi.",
+  "ota_check_failed": "Tidak dapat menghubungi server rilis. Periksa koneksi internet.",
+  "ota_rate_limited": "Server rilis membatasi permintaan. Coba lagi nanti.",
+  "ota_opkg_managed": "QManager dipasang sebagai paket. Perbarui melalui pengelola paket.",
+  "ota_curl_missing": "Alat yang dibutuhkan pembaruan (curl) tidak terpasang di modem.",
+  "ota_bad_request": "Permintaan pembaruan tidak lengkap. Coba lagi."
 }

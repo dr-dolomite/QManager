@@ -208,5 +208,19 @@
   "port_in_use": "该端口已被其他服务占用。",
   "token_generation_failed": "无法创建安全令牌。请重试。",
   "bad_tier": "不支持的实时信号速率。",
-  "lease_failed": "无法启动实时信号，请重试。"
+  "lease_failed": "无法启动实时信号，请重试。",
+  "ota_sha256_unverified": "无法用发布校验和验证下载文件，因此未安装。",
+  "ota_invalid_url": "更新地址不是官方发布版本。",
+  "ota_stage_failed": "无法在调制解调器上为更新准备空间。",
+  "ota_download_failed": "下载失败。请检查网络连接和 SIM 卡。",
+  "ota_archive_corrupt": "下载的文件已损坏或不完整。请重新下载。",
+  "ota_extract_failed": "无法解压下载的文件。",
+  "ota_install_failed": "安装程序报告了错误。",
+  "ota_rollback_failed": "恢复上一版本失败。",
+  "ota_no_staged": "未找到已下载的更新。请重新下载。",
+  "ota_check_failed": "无法连接发布服务器。请检查网络连接。",
+  "ota_rate_limited": "发布服务器正在限制请求。请稍后重试。",
+  "ota_opkg_managed": "QManager 以软件包方式安装。请通过软件包管理器更新。",
+  "ota_curl_missing": "调制解调器上未安装更新所需的工具（curl）。",
+  "ota_bad_request": "更新请求不完整。请重试。"
 }

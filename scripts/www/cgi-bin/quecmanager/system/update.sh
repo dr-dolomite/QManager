@@ -217,6 +217,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 previous_install_failed: false,
                 pending_version: null,
                 check_error: null,
+                check_error_code: null,
                 managed_by: "opkg",
                 package_name: "sdxpinn-qmanager"
             }'
@@ -262,6 +263,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 previous_install_failed: $pif,
                 pending_version: (if $pv == "" then null else $pv end),
                 check_error: "Unable to check for updates. Check your internet connection.",
+                check_error_code: "ota_check_failed",
                 managed_by: "tarball"
             }'
         exit 0
@@ -300,6 +302,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 previous_install_failed: $pif,
                 pending_version: (if $pv == "" then null else $pv end),
                 check_error: $err,
+                check_error_code: "ota_rate_limited",
                 managed_by: "tarball"
             }'
         exit 0
@@ -407,6 +410,7 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
             previous_install_failed: $pif,
             pending_version: (if $pv == "" then null else $pv end),
             check_error: null,
+            check_error_code: null,
             managed_by: "tarball"
         }'
     exit 0

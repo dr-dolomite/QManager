@@ -208,5 +208,19 @@
   "port_in_use": "That port is already used by another service.",
   "token_generation_failed": "Couldn't create a secure token. Try again.",
   "bad_tier": "Unsupported live signal rate.",
-  "lease_failed": "Couldn't start the live signal. Try again."
+  "lease_failed": "Couldn't start the live signal. Try again.",
+  "ota_sha256_unverified": "The download could not be checked against the release checksum, so it was not installed.",
+  "ota_invalid_url": "The update address is not an official release.",
+  "ota_stage_failed": "Could not prepare space on the modem for the update.",
+  "ota_download_failed": "The download failed. Check the internet connection and the SIM.",
+  "ota_archive_corrupt": "The downloaded file is damaged or incomplete. Download it again.",
+  "ota_extract_failed": "The downloaded file could not be unpacked.",
+  "ota_install_failed": "The installer reported an error.",
+  "ota_rollback_failed": "Restoring the previous version failed.",
+  "ota_no_staged": "No downloaded update was found. Download it again.",
+  "ota_check_failed": "Could not reach the release server. Check the internet connection.",
+  "ota_rate_limited": "The release server is limiting requests. Try again later.",
+  "ota_opkg_managed": "QManager was installed as a package. Update it with the package manager.",
+  "ota_curl_missing": "A tool the update needs (curl) is not installed on the modem.",
+  "ota_bad_request": "The update request was incomplete. Try again."
 }

@@ -70,8 +70,9 @@ log_error() { log "ERROR" "$1"; }
 
 # Write a status atomically via temp + rename. Frontend polls this file, so
 # partial writes could produce invalid JSON — atomic rename avoids that.
+# $5 is an `errors` catalog code the UI translates; the message stays English for the log.
 write_status() {
-    local status="$1" msg="$2" version="$3" size="$4"
+    local status="$1" msg="$2" version="$3" size="$4" code="${5:-}"
     local tmp="$STATUS_FILE.tmp.$$"
 
     if command -v jq >/dev/null 2>&1; then
@@ -80,12 +81,16 @@ write_status() {
             --arg message "$msg" \
             --arg version "$version" \
             --arg size    "$size" \
-            '{status: $status, message: $message, version: $version, size: $size}' \
+            --arg error   "$code" \
+            '{status: $status, message: $message, version: $version, size: $size,
+              error: (if $error == "" then null else $error end)}' \
             > "$tmp" 2>/dev/null
     else
         # Fallback if jq is somehow missing — hand-built JSON
-        printf '{"status":"%s","message":"%s","version":"%s","size":"%s"}\n' \
-            "$status" "$msg" "$version" "$size" > "$tmp"
+        local error_json=null
+        [ -n "$code" ] && error_json="\"$code\""
+        printf '{"status":"%s","message":"%s","version":"%s","size":"%s","error":%s}\n' \
+            "$status" "$msg" "$version" "$size" "$error_json" > "$tmp"
     fi
 
     mv "$tmp" "$STATUS_FILE" 2>/dev/null || rm -f "$tmp"
@@ -106,7 +111,7 @@ cleanup() {
 die() {
     local msg="$1"
     log_error "$msg"
-    write_status "error" "$msg" "${VERSION:-}" ""
+    write_status "error" "$msg" "${VERSION:-}" "" "${2:-}"
     cleanup
     exit 1
 }
@@ -332,7 +337,7 @@ preflight() {
     echo "$$" | qm_atomic_write "$PID_FILE"
     trap 'cleanup' EXIT INT TERM
     if ! qm_run_dir >/dev/null || ! qm_root_dir "$UPDATE_WORK" 0700; then
-        die "Cannot create a private update work directory"
+        die "Cannot create a private update work directory" ota_stage_failed
     fi
 
     log_info "qmanager_update v2 started (mode=$MODE, pid=$$)"
@@ -341,7 +346,7 @@ preflight() {
     # opkg's file list wrong (install.sh refuses too). Checked before the
     # watchdog stops so a refused run changes nothing.
     if [ -f /usr/lib/opkg/info/sdxpinn-qmanager.control ]; then
-        die "QManager is managed by the package manager; update it with opkg"
+        die "QManager is managed by the package manager; update it with opkg" ota_opkg_managed
     fi
 
     # Stop the watchdog early — it might try to recover from "network down"
@@ -352,7 +357,7 @@ preflight() {
     fi
 
     if ! command -v curl >/dev/null 2>&1; then
-        die "curl is not installed — cannot proceed"
+        die "curl is not installed — cannot proceed" ota_curl_missing
     fi
 }
 
@@ -363,10 +368,10 @@ preflight() {
 mode_install() {
     local url="$1" version="$2" size="$3"
 
-    [ -n "$url" ]     || die "Missing download URL"
-    [ -n "$version" ] || die "Missing version argument"
+    [ -n "$url" ]     || die "Missing download URL" ota_bad_request
+    [ -n "$version" ] || die "Missing version argument" ota_bad_request
 
-    validate_url "$url" || die "Invalid download URL: $url"
+    validate_url "$url" || die "Invalid download URL: $url" ota_invalid_url
 
     VERSION="$version"
 
@@ -378,21 +383,21 @@ mode_install() {
     rm -f "$download_path"
 
     if ! http_download "$url" "$download_path"; then
-        die "Download failed. Check your internet connection and try again."
+        die "Download failed. Check your internet connection and try again." ota_download_failed
     fi
     log_info "Download complete"
 
     # --- Step 2: Verify archive ---
     if ! verify_archive "$download_path"; then
         rm -f "$download_path"
-        die "Downloaded archive is invalid. Please retry the download."
+        die "Downloaded archive is invalid. Please retry the download." ota_archive_corrupt
     fi
     log_info "Archive integrity verified"
 
     # B5.12: the direct install path is checksum-verified too
     if ! verify_sha256 "$download_path" "$(checksum_url_for "$url")" "$version"; then
         rm -f "$download_path"
-        die "Could not verify the download (SHA-256). Nothing was installed."
+        die "Could not verify the download (SHA-256). Nothing was installed." ota_sha256_unverified
     fi
 
     # --- Step 3: Save current version for rollback ---
@@ -405,18 +410,18 @@ mode_install() {
     log_info "Saved previous version for rollback: $current_ver"
 
     # --- Step 4: Extract and run install.sh ---
-    extract_fresh_root || die "Cannot create a private extract directory"
+    extract_fresh_root || die "Cannot create a private extract directory" ota_stage_failed
     if ! tar xzf "$download_path" -C "$EXTRACT_ROOT" 2>>"$LOG_FILE"; then
         rm -f "$download_path"
-        die "Failed to extract archive"
+        die "Failed to extract archive" ota_extract_failed
     fi
     rm -f "$download_path"
 
-    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory"
+    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory" ota_extract_failed
 
     log_info "Running install.sh --skip-packages --no-reboot"
     if ! run_install_with_progress "$version" "Installing QManager $version"; then
-        die "Installation failed. See $LOG_FILE for details."
+        die "Installation failed" ota_install_failed
     fi
     log_info "Install complete"
 
@@ -447,10 +452,10 @@ mode_install() {
 mode_download() {
     local url="$1" checksum_url="$2" version="$3"
 
-    [ -n "$url" ]     || die "Missing tarball URL"
-    [ -n "$version" ] || die "Missing version argument"
+    [ -n "$url" ]     || die "Missing tarball URL" ota_bad_request
+    [ -n "$version" ] || die "Missing version argument" ota_bad_request
 
-    validate_url "$url" || die "Invalid download URL: $url"
+    validate_url "$url" || die "Invalid download URL: $url" ota_invalid_url
 
     VERSION="$version"
 
@@ -461,14 +466,14 @@ mode_download() {
     rm -f "$STAGED_TARBALL"
 
     if ! http_download "$url" "$STAGED_TARBALL"; then
-        die "Download failed. Check your internet connection."
+        die "Download failed. Check your internet connection." ota_download_failed
     fi
     log_info "Download complete"
 
     # --- Step 2: Verify archive integrity ---
     if ! verify_archive "$STAGED_TARBALL"; then
         rm -f "$STAGED_TARBALL"
-        die "Downloaded archive is invalid. Please retry."
+        die "Downloaded archive is invalid. Please retry." ota_archive_corrupt
     fi
     log_info "Archive integrity verified"
 
@@ -476,7 +481,7 @@ mode_download() {
     write_status "verifying" "Verifying SHA-256..." "$version" ""
     if ! verify_sha256 "$STAGED_TARBALL" "$checksum_url" "$version"; then
         rm -f "$STAGED_TARBALL"
-        die "Could not verify the download (SHA-256 missing or mismatched). Nothing was staged."
+        die "Could not verify the download (SHA-256 missing or mismatched). Nothing was staged." ota_sha256_unverified
     fi
 
     # --- Step 4: Stage version marker ---
@@ -499,8 +504,8 @@ mode_download() {
 # =============================================================================
 
 mode_install_staged() {
-    [ -f "$STAGED_TARBALL" ]        || die "No staged tarball found. Download first."
-    [ -f "$STAGED_VERSION_MARKER" ] || die "No staged version marker found."
+    [ -f "$STAGED_TARBALL" ]        || die "No staged tarball found. Download first." ota_no_staged
+    [ -f "$STAGED_VERSION_MARKER" ] || die "No staged version marker found." ota_no_staged
 
     VERSION=$(cat "$STAGED_VERSION_MARKER" 2>/dev/null)
     log_info "Installing staged version: $VERSION"
@@ -515,20 +520,20 @@ mode_install_staged() {
     log_info "Saved previous version for rollback: $current_ver"
 
     # --- Step 2: Extract ---
-    extract_fresh_root || die "Cannot create a private extract directory"
+    extract_fresh_root || die "Cannot create a private extract directory" ota_stage_failed
     if ! tar xzf "$STAGED_TARBALL" -C "$EXTRACT_ROOT" 2>>"$LOG_FILE"; then
-        die "Failed to extract staged archive"
+        die "Failed to extract staged archive" ota_extract_failed
     fi
 
     # Successfully extracted — remove staged tarball to free RAM
     rm -f "$STAGED_TARBALL" "$STAGED_VERSION_MARKER"
 
-    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory"
+    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory" ota_extract_failed
 
     # --- Step 3: Run install.sh ---
     log_info "Running install.sh --skip-packages --no-reboot"
     if ! run_install_with_progress "$VERSION" "Installing QManager $VERSION"; then
-        die "Installation failed. See $LOG_FILE for details."
+        die "Installation failed" ota_install_failed
     fi
     log_info "Install complete"
 
@@ -558,10 +563,10 @@ mode_install_staged() {
 mode_rollback() {
     local url="$1" version="$2"
 
-    [ -n "$url" ]     || die "Missing rollback URL"
-    [ -n "$version" ] || die "Missing rollback version"
+    [ -n "$url" ]     || die "Missing rollback URL" ota_bad_request
+    [ -n "$version" ] || die "Missing rollback version" ota_bad_request
 
-    validate_url "$url" || die "Invalid rollback URL: $url"
+    validate_url "$url" || die "Invalid rollback URL: $url" ota_invalid_url
 
     VERSION="$version"
 
@@ -573,20 +578,20 @@ mode_rollback() {
     rm -f "$download_path"
 
     if ! http_download "$url" "$download_path"; then
-        die "Rollback download failed. Check your internet connection."
+        die "Rollback download failed. Check your internet connection." ota_download_failed
     fi
     log_info "Rollback download complete"
 
     # --- Step 2: Verify ---
     if ! verify_archive "$download_path"; then
         rm -f "$download_path"
-        die "Rollback archive is invalid"
+        die "Rollback archive is invalid" ota_archive_corrupt
     fi
 
     # B5.12: rollback downloads are checksum-verified too
     if ! verify_sha256 "$download_path" "$(checksum_url_for "$url")" "$version"; then
         rm -f "$download_path"
-        die "Could not verify the rollback download (SHA-256). Nothing was installed."
+        die "Could not verify the rollback download (SHA-256). Nothing was installed." ota_sha256_unverified
     fi
     log_info "Rollback archive verified"
 
@@ -600,18 +605,18 @@ mode_rollback() {
     log_info "Saved current version before rollback: $current_ver"
 
     # --- Step 4: Extract and install ---
-    extract_fresh_root || die "Cannot create a private extract directory"
+    extract_fresh_root || die "Cannot create a private extract directory" ota_stage_failed
     if ! tar xzf "$download_path" -C "$EXTRACT_ROOT" 2>>"$LOG_FILE"; then
         rm -f "$download_path"
-        die "Failed to extract rollback archive"
+        die "Failed to extract rollback archive" ota_extract_failed
     fi
     rm -f "$download_path"
 
-    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory"
+    cd "$EXTRACT_ROOT/qmanager_install" || die "Extraction produced no qmanager_install directory" ota_extract_failed
 
     log_info "Running install.sh --skip-packages --no-reboot"
     if ! run_install_with_progress "$version" "Restoring $version"; then
-        die "Rollback installation failed. See $LOG_FILE for details."
+        die "Rollback installation failed" ota_rollback_failed
     fi
     log_info "Rollback install complete"
 

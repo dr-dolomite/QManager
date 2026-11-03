@@ -208,5 +208,19 @@
   "port_in_use": "該連接埠已被其他服務佔用。",
   "token_generation_failed": "無法建立安全權杖。請重試。",
   "bad_tier": "不支援的即時訊號速率。",
-  "lease_failed": "無法啟動即時訊號，請重試。"
+  "lease_failed": "無法啟動即時訊號，請重試。",
+  "ota_sha256_unverified": "無法以發佈檢查碼驗證下載檔案，因此未安裝。",
+  "ota_invalid_url": "更新位址不是官方發佈版本。",
+  "ota_stage_failed": "無法在數據機上為更新準備空間。",
+  "ota_download_failed": "下載失敗。請檢查網路連線和 SIM 卡。",
+  "ota_archive_corrupt": "下載的檔案已損毀或不完整。請重新下載。",
+  "ota_extract_failed": "無法解壓縮下載的檔案。",
+  "ota_install_failed": "安裝程式回報了錯誤。",
+  "ota_rollback_failed": "還原上一版本失敗。",
+  "ota_no_staged": "找不到已下載的更新。請重新下載。",
+  "ota_check_failed": "無法連線至發佈伺服器。請檢查網路連線。",
+  "ota_rate_limited": "發佈伺服器正在限制要求。請稍後再試。",
+  "ota_opkg_managed": "QManager 以套件方式安裝。請透過套件管理員更新。",
+  "ota_curl_missing": "數據機上未安裝更新所需的工具（curl）。",
+  "ota_bad_request": "更新要求不完整。請重試。"
 }
