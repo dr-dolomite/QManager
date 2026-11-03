@@ -661,6 +661,7 @@
       "netbird": "NetBird è stato rimosso. Il riavvio elimina le regole del firewall residue.",
       "mbn": "Il nuovo profilo dell'operatore entra in vigore dopo il riavvio del modem.",
       "ipa_offload": "La modifica all'offload hardware avrà effetto dopo il prossimo riavvio.",
+      "package_install": "QManager è stato aggiornato. Un riavvio completa l'aggiornamento.",
       "default": "Alcune modifiche avranno effetto dopo il prossimo riavvio."
     },
     "dismiss_dialog": {

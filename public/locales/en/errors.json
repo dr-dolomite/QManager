@@ -134,6 +134,7 @@
   "not_installed": "Required service is not installed",
   "other_scan_running": "Another scan is using the modem. Wait for it to finish, then try again.",
   "other_vpn_installed": "Another VPN service is already installed",
+  "package_managed": "QManager is installed as a software package. Update it through the package manager.",
   "parse_failed": "Failed to parse command response",
   "partial_apply": "Profile applied with some steps failing — check the apply progress for details",
   "partial_failure": "Some items succeeded but others failed",

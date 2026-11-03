@@ -661,6 +661,7 @@
       "netbird": "NetBird telah dihapus. Reboot membersihkan sisa aturan firewall.",
       "mbn": "Profil operator baru berlaku setelah modem dinyalakan ulang.",
       "ipa_offload": "Perubahan Hardware Offload berlaku setelah reboot berikutnya.",
+      "package_install": "QManager telah diperbarui. Reboot untuk menyelesaikan pembaruan.",
       "default": "Beberapa perubahan berlaku setelah reboot berikutnya."
     },
     "dismiss_dialog": {

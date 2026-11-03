@@ -30,6 +30,13 @@ VERSION_FILE="/etc/qmanager/VERSION"
 PID_FILE="/tmp/qmanager_update.pid"
 UPDATER="/usr/bin/qmanager_update"
 
+# --- Guard: package (ipk) installs update through opkg -----------------------
+
+if [ -f /usr/lib/opkg/info/sdxpinn-qmanager.control ]; then
+    qlog_info "Auto-update skipped: QManager is managed by the package manager"
+    exit 0
+fi
+
 # --- Clock-step guard (issue #9) ---------------------------------------------
 # crond runs a job whose minute a boot-time clock step crosses; this worker can
 # end in an install + reboot, so it fails closed. See schedule_guard.sh.

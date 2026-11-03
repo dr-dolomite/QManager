@@ -26,7 +26,8 @@ export type UpdateView =
   | "verifying"
   | "staged"
   | "installing"
-  | "rebooting";
+  | "rebooting"
+  | "managed";
 
 export interface ViewInput {
   isLoading: boolean;
@@ -56,6 +57,8 @@ export function resolveView(input: ViewInput): UpdateView {
   // The KIND is the proof a read failed, not the text: the device is allowed to
   // fail without saying why, and `error` is null when it does.
   if ((errorKind !== null || error !== null) && !updateInfo) return "unreachable";
+  // A package install never runs a tarball update, so nothing below applies.
+  if (updateInfo?.managed_by === "opkg") return "managed";
   if (updateStatus.status === "rebooting") return "rebooting";
   if (isUpdating && updateStatus.status === "installing") return "installing";
   if (downloadState?.status === "verifying") return "verifying";
@@ -144,6 +147,8 @@ export function latestState(
           : "check_failed";
     case "up_to_date":
       return lastChecked === null ? "never_checked" : "up_to_date";
+    case "managed":
+      return "managed";
     default:
       return "never_checked";
   }

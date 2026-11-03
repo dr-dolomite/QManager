@@ -21,7 +21,8 @@ export type RebootSource =
   | "manual"
   | "software_update"
   | "ipa_offload"
-  | "ip_passthrough";
+  | "ip_passthrough"
+  | "package_install";
 
 const REBOOT_CGI = "/cgi-bin/quecmanager/system/reboot.sh";
 

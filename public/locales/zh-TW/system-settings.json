@@ -186,7 +186,8 @@
   "software_update": {
     "page": {
       "title": "軟體更新",
-      "description": "QManager 會檢查 GitHub 上是否有更新的版本，並直接在數據機上安裝。安裝會取代應用程式並重啟裝置，因此您正在閱讀本頁的工作階段會中斷，隨後自動恢復。"
+      "description": "QManager 會檢查 GitHub 上是否有更新的版本，並直接在數據機上安裝。安裝會取代應用程式並重啟裝置，因此您正在閱讀本頁的工作階段會中斷，隨後自動恢復。",
+      "description_managed": "QManager 以套件形式安裝，因此其更新來自套件管理員。"
     },
     "actions": {
       "check": "檢查更新",
@@ -207,12 +208,14 @@
     "band": {
       "head": "更新狀態",
       "chip_offline": "離線",
+      "chip_managed": "套件安裝",
       "chip_in_progress": "進行中",
       "installed": {
         "eyebrow": "已安裝",
         "caption_stable": "穩定版通道",
         "caption_prerelease": "預先發行通道",
-        "caption_interrupted": "安裝可能不完整"
+        "caption_interrupted": "安裝可能不完整",
+        "caption_package": "以套件形式安裝"
       },
       "latest": {
         "eyebrow": "最新版本",
@@ -226,14 +229,18 @@
         "caption_downloading_plain": "正在下載安裝套件…",
         "caption_verifying": "正在驗證安裝套件…",
         "caption_failed_download": "下載未能完成",
-        "caption_failed_install": "安裝未能完成"
+        "caption_failed_install": "安裝未能完成",
+        "eyebrow_managed": "更新",
+        "value_managed": "套件管理員",
+        "caption_managed": "不在此頁面檢查"
       },
       "auto": {
         "eyebrow": "自動更新",
         "value_on": "開啟",
         "value_off": "關閉",
         "caption_on": "每天在隨機時間檢查一次",
-        "caption_off": "僅手動更新"
+        "caption_off": "僅手動更新",
+        "caption_managed": "套件安裝不支援此功能"
       },
       "chip_failed": "失敗"
     },
@@ -398,6 +405,14 @@
       "unreachable": {
         "title": "無法存取更新服務",
         "description": "QManager 無法存取本數據機上的更新端點。已安裝的版本未被更動，這只是一次讀取失敗，並非損失。"
+      }
+    },
+    "managed": {
+      "title": "透過套件管理員更新",
+      "description": "像其他套件一樣，在 LuCI 的軟體頁面中升級 QManager。",
+      "package": {
+        "label": "套件",
+        "description": "它在套件清單中的名稱。"
       }
     },
     "time": {

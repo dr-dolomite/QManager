@@ -8,6 +8,8 @@ const ENDPOINT = "/cgi-bin/quecmanager/system/pending_reboot.sh";
 
 interface PendingRebootResponse {
   verizon: boolean;
+  /** Set by the package postinst after an install or upgrade. */
+  package?: boolean;
 }
 
 /**
@@ -34,6 +36,9 @@ export function useBootPendingReboot(): void {
         const data = (await resp.json()) as PendingRebootResponse;
         if (data.verizon) {
           requestRebootLater("verizon_revert");
+        }
+        if (data.package) {
+          requestRebootLater("package_install");
         }
       } catch {
         // Network or auth failure — silently ignore, banner is best-effort

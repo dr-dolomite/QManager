@@ -16,3 +16,5 @@ native/qmanager_atd/tests/parity/expected.txt -text
 
 # Bundled prebuilt binaries (committed directly):
 dependencies/qmanager_atd binary
+# ipk tooling: build_ipk.py must stay byte-identical with the feed repo copy
+scripts-dev/ipk/* text eol=lf

@@ -85,6 +85,53 @@ sh /tmp/qmanager_install/uninstall.sh
 
 ---
 
+## Package Install (opkg feed)
+
+QManager is also published as the `sdxpinn-qmanager` package in iamromulan's SDXPINN software feed. It installs the same files as the tarball installer, so the app behaves identically; only the owner of the files and the update path differ. Internals, the build and the release flow are in [`features/ipk-packaging.md`](features/ipk-packaging.md).
+
+```sh
+opkg update
+opkg install sdxpinn-qmanager     # pulls in jq and sdxpinn-patch (>= 3.0) if missing
+opkg upgrade sdxpinn-qmanager     # later releases
+opkg remove sdxpinn-qmanager      # uninstall
+```
+
+The device needs `sdxpinn-patch` (it adds the `sdxpinn` package architecture) and the feed in its opkg config. `Conflicts`/`Replaces` cover `sdxpinn-quecmanager`, `sdxpinn-quecmanager-beta`, `sms-tool`, `socat-at-bridge`, `socat` and `websocat`.
+
+| | Tarball installer | opkg package |
+|---|---|---|
+| Who copies the files | `install.sh` | opkg; `install.sh --configure` runs afterwards as the postinst |
+| Dependencies | `install.sh` installs `jq` and prompts for optional packages | `Depends: sdxpinn-patch (>= 3.0), jq` |
+| Updates | Software Update page (GitHub releases), or re-run the installer | `opkg upgrade`; the Software Update page shows a "Package install" state with no check or install controls |
+| Web port prompt | Asked on a fresh interactive install | Never asked (opkg may own the terminal); set it later with `qmanager_web_port` |
+| Reboot | Installer / OTA reboots | Never reboots; the app shows the deferred-reboot banner afterwards |
+| LuCI `index.html` | Backed up to `index.html.old` and replaced | Same, done by the postinst; `opkg remove` puts it back |
+| User config | `/etc/qmanager` and UCI kept across updates | Same across `opkg upgrade`. `opkg remove` keeps `/etc/qmanager`, the UCI `quecmanager` settings and the cron jobs, so a reinstall picks them back up |
+
+### The two channels are mutually exclusive
+
+While `/usr/lib/opkg/info/sdxpinn-qmanager.control` exists, `install.sh`, `uninstall.sh`, `qmanager_update`, `qmanager_auto_update` and the Software Update CGI refuse to act, because a tarball install over a package install would leave opkg's file list wrong. To switch to the tarball installer, remove the package first:
+
+```sh
+opkg remove sdxpinn-qmanager
+curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh
+```
+
+`install.sh --ignore-package` and `uninstall.sh --ignore-package` bypass the guard for recovery when the package record is left in a broken state. Do not use them as a normal path.
+
+### Building the package
+
+```sh
+bun run package:ipk    # next build + build.sh + ipk; writes qmanager-build/sdxpinn-qmanager_<version>_sdxpinn.ipk
+bun run ipk            # ipk only, from an existing qmanager-build/qmanager.tar.gz
+```
+
+Requires Python 3.8+. The build is deterministic and ends with a structural check. To try a build on a device: `scp` the `.ipk` to `/tmp` and `opkg install /tmp/sdxpinn-qmanager_*.ipk`.
+
+Publishing goes through the feed repo's CI (build and sign on merge); the PR rules and the versioning the feed enforces (always bump, never ship `-draft`/`-testN`) are in [`features/ipk-packaging.md`](features/ipk-packaging.md#releasing-to-the-feed).
+
+---
+
 ## Prerequisites
 
 ### Development Machine
@@ -465,6 +512,8 @@ scp -r scripts/etc/init.d/* root@192.168.224.1:/etc/init.d/
 # Set permissions and restart
 ssh root@192.168.224.1 'chmod +x /usr/bin/qmanager_* /usr/bin/qcmd && find /www/cgi-bin/quecmanager -name "*.sh" -exec chmod +x {} \; && /etc/init.d/qmanager start'
 ```
+
+> ℹ️ NOTE: The manual deploy steps in this section are for development against a tarball-style install. On a package install, update with `opkg upgrade sdxpinn-qmanager` (see [Package Install](#package-install-opkg-feed)).
 
 ### Full Update
 

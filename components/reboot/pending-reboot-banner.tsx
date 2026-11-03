@@ -48,6 +48,7 @@ const DESCRIBED_SOURCES: ReadonlySet<RebootSource> = new Set([
   "netbird",
   "mbn",
   "ipa_offload",
+  "package_install",
 ]);
 
 export function PendingRebootBanner() {

@@ -186,7 +186,8 @@
   "software_update": {
     "page": {
       "title": "Software Update",
-      "description": "QManager checks GitHub for a newer release and installs it on the modem itself. Installing replaces the app and restarts the device, so the session you are reading this in will drop and come back."
+      "description": "QManager checks GitHub for a newer release and installs it on the modem itself. Installing replaces the app and restarts the device, so the session you are reading this in will drop and come back.",
+      "description_managed": "QManager was installed as a software package, so its updates come from the package manager."
     },
     "actions": {
       "check": "Check for updates",
@@ -207,12 +208,14 @@
     "band": {
       "head": "Update status",
       "chip_offline": "Offline",
+      "chip_managed": "Package install",
       "chip_in_progress": "In progress",
       "installed": {
         "eyebrow": "Installed",
         "caption_stable": "Stable channel",
         "caption_prerelease": "Pre-release channel",
-        "caption_interrupted": "Install may be incomplete"
+        "caption_interrupted": "Install may be incomplete",
+        "caption_package": "Installed as a software package"
       },
       "latest": {
         "eyebrow": "Latest release",
@@ -226,14 +229,18 @@
         "caption_downloading_plain": "Downloading the package...",
         "caption_verifying": "Checking the package...",
         "caption_failed_download": "The download did not finish",
-        "caption_failed_install": "The install did not finish"
+        "caption_failed_install": "The install did not finish",
+        "eyebrow_managed": "Updates",
+        "value_managed": "Package manager",
+        "caption_managed": "Not checked on this page"
       },
       "auto": {
         "eyebrow": "Automatic updates",
         "value_on": "On",
         "value_off": "Off",
         "caption_on": "Daily check at a randomised time",
-        "caption_off": "Manual updates only"
+        "caption_off": "Manual updates only",
+        "caption_managed": "Not available for a package install"
       },
       "chip_failed": "Failed"
     },
@@ -398,6 +405,14 @@
       "unreachable": {
         "title": "Can't reach the update service",
         "description": "QManager couldn't reach the update endpoint on this modem. The build that is installed is untouched, so this is a read failure and not a loss."
+      }
+    },
+    "managed": {
+      "title": "Updates through the package manager",
+      "description": "Upgrade QManager from the Software page in LuCI, like any other package.",
+      "package": {
+        "label": "Package",
+        "description": "Its name in the package list."
       }
     },
     "time": {

@@ -57,6 +57,12 @@ export interface UpdateInfo {
    */
   previous_install_failed?: boolean;
   pending_version?: string | null;
+  /**
+   * `opkg` when QManager was installed as a package: the package manager owns
+   * updates and every tarball action is refused. Absent on older devices.
+   */
+  managed_by?: "opkg" | "tarball";
+  package_name?: string;
 }
 
 export interface UpdateStatus {

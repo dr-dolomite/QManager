@@ -10,9 +10,11 @@
 #   /tmp/qmanager_pending_reboot_verizon — written by auto_apply_profile when
 #       an active Verizon MPDN profile is auto-deactivated due to SIM mismatch
 #       at boot, requiring a modem reboot to restore full connectivity.
+#   /tmp/qmanager_pending_reboot_package — written by the sdxpinn-qmanager
+#       package postinst (install.sh --configure), which never reboots itself.
 #
 # Response:
-#   { "verizon": true|false }
+#   { "verizon": true|false, "package": true|false }
 #
 # Endpoint: GET /cgi-bin/quecmanager/system/pending_reboot.sh
 # Install location: /www/cgi-bin/quecmanager/system/pending_reboot.sh
@@ -37,4 +39,12 @@ if [ -f /tmp/qmanager_pending_reboot_verizon ]; then
     qlog_info "verizon pending-reboot flag consumed and cleared"
 fi
 
-jq -n --argjson v "$verizon_pending" '{verizon: $v}'
+# Package install/upgrade flag — written by the ipk postinst
+package_pending="false"
+if [ -f /tmp/qmanager_pending_reboot_package ]; then
+    package_pending="true"
+    rm -f /tmp/qmanager_pending_reboot_package
+    qlog_info "package pending-reboot flag consumed and cleared"
+fi
+
+jq -n --argjson v "$verizon_pending" --argjson p "$package_pending" '{verizon: $v, package: $p}'

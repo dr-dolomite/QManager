@@ -36,6 +36,9 @@
 #   --keep-config        Keep /etc/qmanager/ (default: ask)
 #   --purge              Remove /etc/qmanager/ without asking
 #   --no-reboot          Do not reboot after uninstall
+#   --ignore-package     Uninstall an opkg-managed (sdxpinn-qmanager) install
+#   --deconfigure        Package mode (ipk prerm): --force --keep-config
+#                        --no-reboot, and keeps the quecmanager UCI config
 #   --help, -h           Show this help
 # =============================================================================
 
@@ -54,6 +57,10 @@ CONF_DIR="/etc/qmanager"
 SESSION_DIR="/tmp/qmanager_sessions"
 VERSION_FILE="/etc/qmanager/VERSION"
 VERSION_PENDING="/etc/qmanager/VERSION.pending"
+
+# Present while opkg owns the install (see install.sh, Package lifecycle)
+IPK_PACKAGE="sdxpinn-qmanager"
+IPK_INFO="/usr/lib/opkg/info/$IPK_PACKAGE.control"
 
 # --- Colors & Icons ----------------------------------------------------------
 
@@ -365,7 +372,10 @@ remove_backend() {
         ) >>"$LOG_FILE" 2>&1 || true
         info "Cleaned up Tailscale network fixes (if present)"
     fi
-    uci -q delete quecmanager.tailscale_net 2>/dev/null && uci -q commit quecmanager 2>/dev/null || true
+    # A package removal keeps the whole namespace (see UCI config below).
+    if [ "$DO_PACKAGE" != "1" ]; then
+        uci -q delete quecmanager.tailscale_net 2>/dev/null && uci -q commit quecmanager 2>/dev/null || true
+    fi
 
     # --- Official (tarball) Tailscale install cleanup ---
     # An official-variant Tailscale install (QManager static-tarball, not opkg)
@@ -405,14 +415,20 @@ remove_backend() {
     fi
 
     # --- UCI config namespace ---
-    if uci -q get quecmanager >/dev/null 2>&1; then
-        uci -q delete quecmanager 2>/dev/null || true
-        uci commit 2>/dev/null || true
-        info "Removed UCI config (quecmanager.*)"
-    fi
-    if [ -f /etc/config/quecmanager ]; then
-        rm -f /etc/config/quecmanager
-        info "Removed /etc/config/quecmanager"
+    # A package removal keeps it, as OpenWrt packages keep /etc/config: a
+    # reinstall picks the settings back up and seed_uci_defaults only adds.
+    if [ "$DO_PACKAGE" = "1" ]; then
+        info "Kept UCI config (quecmanager.*) for a reinstall"
+    else
+        if uci -q get quecmanager >/dev/null 2>&1; then
+            uci -q delete quecmanager 2>/dev/null || true
+            uci commit 2>/dev/null || true
+            info "Removed UCI config (quecmanager.*)"
+        fi
+        if [ -f /etc/config/quecmanager ]; then
+            rm -f /etc/config/quecmanager
+            info "Removed /etc/config/quecmanager"
+        fi
     fi
 
     # --- Firewall rule files ---
@@ -471,6 +487,13 @@ remove_backend() {
     # system/settings.sh, system/update.sh and scenario_mgr.sh, plus the
     # legacy low-power lines. A new cron writer must extend this pattern.
     # A user's line that merely mentions QManager is kept.
+    # A package removal keeps them with the UCI config they mirror (only a
+    # settings save writes them): they no-op while /usr/bin/qmanager_* is gone
+    # and fire again after a reinstall.
+    if [ "$DO_PACKAGE" = "1" ]; then
+        info "Kept qmanager cron jobs for a reinstall"
+        return 0
+    fi
     local qm_cron_re
     qm_cron_re='/usr/bin/qmanager_|# qmanager_(tower_schedule|scheduled_reboot|auto_update|profile_scenario|low_power)|qmanager_low_power|^# QManager (Tower Lock Schedule|Scheduled Reboot|Profile Scenario Schedule|Low Power Mode)'
     if crontab -l 2>/dev/null | grep -qE "$qm_cron_re"; then
@@ -583,6 +606,8 @@ remove_runtime_state() {
           /tmp/qmanager_sim_failover \
           /tmp/qmanager_sim_swap_detected \
           /tmp/qmanager_pending_reboot_verizon \
+          /tmp/qmanager_pending_reboot_package \
+          /tmp/qmanager_ipk_running \
           /tmp/qm_spin_out \
           /tmp/qm_tmo_out.* \
           /tmp/qmanager_dns_out.* \
@@ -736,6 +761,8 @@ Options:
   --keep-config        Always keep /etc/qmanager/ (no prompt)
   --purge              Always remove /etc/qmanager/ (no prompt)
   --no-reboot          Do not reboot after uninstall
+  --ignore-package     Uninstall an opkg-managed (sdxpinn-qmanager) install
+  --deconfigure        Package mode (ipk prerm); opkg removes the files
   --help, -h           Show this help
 
 What is removed:
@@ -761,9 +788,13 @@ main() {
     DO_FORCE=0
     DO_CONFIG="ask"   # "ask" | "keep" | "purge"
     DO_REBOOT=1
+    DO_PACKAGE=0
+    DO_IGNORE_PACKAGE=0
 
     while [ $# -gt 0 ]; do
         case "$1" in
+            --deconfigure)   DO_PACKAGE=1; DO_FORCE=1; DO_CONFIG="keep"; DO_REBOOT=0 ;;
+            --ignore-package) DO_IGNORE_PACKAGE=1 ;;
             --force)         DO_FORCE=1 ;;
             --keep-config)   DO_CONFIG="keep" ;;
             --purge)         DO_CONFIG="purge" ;;
@@ -777,6 +808,14 @@ main() {
         esac
         shift
     done
+
+    # opkg owns an ipk install's files and must run the removal itself, or its
+    # package list keeps claiming files that are gone.
+    if [ -f "$IPK_INFO" ] && [ "$DO_PACKAGE" = "0" ] && [ "$DO_IGNORE_PACKAGE" = "0" ]; then
+        error "QManager is installed as the $IPK_PACKAGE package."
+        error "Remove it with: opkg remove $IPK_PACKAGE"
+        exit 1
+    fi
 
     log_init
 

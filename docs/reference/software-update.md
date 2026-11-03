@@ -20,6 +20,11 @@ up. This doc covers that union and why it is the whole contract, the two fixes a
 behind them, the decisions that look like omissions and are not, and what is deliberately left
 alone.
 
+> ℹ️ NOTE: The "did not touch the backend" statement describes the 2026-09-07 pass only. On
+> 2026-10-25 the package-install change (see [`../features/ipk-packaging.md`](../features/ipk-packaging.md))
+> **did edit** `update.sh`, `qmanager_update` and `qmanager_auto_update`: a package guard in each,
+> and the `managed_by` / `package_name` fields below. Their tarball behaviour is unchanged.
+
 ---
 
 ## Quick Reference
@@ -39,13 +44,14 @@ alone.
 | Geometry + tone | `components/system-settings/software-update/shapes.ts` (the family's **only** shape module) |
 | State resolution | `components/system-settings/software-update/derive.ts` (pure; no React, no classes) |
 | Hook + types | `hooks/use-software-update.ts` |
-| CGI endpoint | `GET`/`POST` `/cgi-bin/quecmanager/system/update.sh` — **frozen, not edited** |
+| CGI endpoint | `GET`/`POST` `/cgi-bin/quecmanager/system/update.sh` — OTA logic unchanged since the re-authoring; gained `managed_by` / `package_name` and the `package_managed` guard for ipk installs (see [Package-managed installs](#package-managed-installs-the-managed-view)) |
+| Managed card | `components/system-settings/software-update/managed-card.tsx` (the only body on a package install) |
 | Poll cadence | `POLL_INTERVAL = 2000` ms (`hooks/use-software-update.ts`) |
 | Interrupted-install marker | `/etc/qmanager/VERSION.pending` (read by the CGI, never by the client) |
 | Auto-update timer | `scripts/etc/systemd/system/qmanager-auto-update.timer` — `OnCalendar=daily` + `RandomizedDelaySec=3h` |
 | Band clock tick | `CLOCK_TICK_MS = 15_000` (the "Checked N ago" caption only) |
 | Icon family | **lucide** — `/system-settings` is a lucide route, no Material Symbols here |
-| i18n | 137 leaves under `software_update.*`, five packs |
+| i18n | 167 leaves under `software_update.*`, five packs |
 
 ---
 
@@ -54,14 +60,14 @@ alone.
 **Short version: every child of this page reads one string, and no component is allowed to look
 at a payload and decide for itself what is happening.**
 
-`derive.ts` exports `UpdateView`, a ten-member discriminated union — a closed set of names where
+`derive.ts` exports `UpdateView`, an eleven-member discriminated union — a closed set of names where
 exactly one is true at a time, so the compiler can force every consumer to handle all of them:
 
 ```ts
 export type UpdateView =
   | "loading" | "unreachable" | "check_failed" | "up_to_date"
   | "available" | "downloading" | "verifying" | "staged"
-  | "installing" | "rebooting";
+  | "installing" | "rebooting" | "managed";
 ```
 
 `software-update.tsx` computes it once with `resolveView()` and passes it down. Nothing below the
@@ -363,7 +369,7 @@ under deuteranopia; on this surface all four of the Latest tile's running states
 `primary` fill. The glyph is the only separator those states have, and a caption is not allowed
 to be the only difference between "fetching a file" and "replacing your system".
 
-Both now key onto distinct glyphs. The header badge reads `ANCHOR_CHIP[view]`, whose ten entries
+Both now key onto distinct glyphs. The header badge reads `ANCHOR_CHIP[view]`, whose eleven entries
 are pairwise distinct within each variant. `LATEST_FACE.installing` takes `PackageOpenIcon`
 while `LATEST_FACE.downloading` keeps the spinner.
 
@@ -371,7 +377,7 @@ The same rule then forced one more move. Adding a `verifying` face on `ShieldChe
 with `verified`, which already held it — two `primary` states in one slot separated only by their
 caption. `verified` moved to `PackageCheckIcon`, which also rhymes with `ANCHOR_CHIP.staged`.
 
-`ANCHOR_CHIP` is typed `Record<UpdateView, …>`, so an eleventh view cannot reach the slot without
+`ANCHOR_CHIP` is typed `Record<UpdateView, …>`, so a twelfth view cannot reach the slot without
 someone choosing its glyph.
 
 ### 2. The staged-install pill keeps its confirm dialog
@@ -450,6 +456,7 @@ Both dialogs write their two directions separately via `DIALOG_MOTION`, because 
 | `update-preferences-card.tsx` | Two switches, their own error notice, and the inert time constant |
 | `version-management-card.tsx` | The version select, its Install button, its confirm dialog, and the per-build size |
 | `card-skeleton.tsx` | The anchor and notes placeholders, both wearing real boxes |
+| `managed-card.tsx` | The package-install body: one card naming the package; replaces the update, notes, preferences and version cards |
 
 **`shapes.ts` RESTATES the family's numbers rather than importing them.** A sibling shape module
 is not a shared library; the *design system's numbers* are. `components/system-settings/shapes.ts`
@@ -493,9 +500,10 @@ because it uses a different card shell (`CARD_SHELL_HERO`) and a different field
 
 Deliberately untouched by this pass, and not to be picked up incidentally:
 
-- **`scripts/www/cgi-bin/quecmanager/system/update.sh` and the whole OTA pipeline** —
-  `qmanager_update`, `qmanager_auto_update`, `qmanager_auto_update_arm`, the timer units, the
-  sudoers rules, the installer. See
+- **The OTA pipeline's tarball behaviour** — `system/update.sh`, `qmanager_update`,
+  `qmanager_auto_update`, `qmanager_auto_update_arm`, the timer units, the sudoers rules, the
+  installer. (They were edited on 2026-10-25 only to add the package-install guard and the
+  `managed_by` fields; the download/verify/install flow is untouched.) See
   [`qmanager-independence.md`](./qmanager-independence.md) for the pipeline itself.
 - **The hook's fetch and poll logic.** The types gained two fields and `derive.ts`
   gained helpers; behaviour did not change. The 2 s poll cadence stays.
@@ -531,11 +539,11 @@ Deliberately untouched by this pass, and not to be picked up incidentally:
 
 ## i18n
 
-137 leaves under `software_update.*` in the `system-settings` namespace, across all five packs
+167 leaves under `software_update.*` in the `system-settings` namespace, across all five packs
 (`en`, `zh-CN`, `zh-TW`, `it`, `id`). The surface it replaced called `t()` **zero** times.
 
 Subtrees: `page`, `actions`, `band`, `card`, `delta`, `steps`, `notice`, `notes`, `preferences`,
-`versions`, `banner`, `states`, `time`, `toast`.
+`versions`, `banner`, `states`, `managed`, `time`, `toast`.
 
 - **Relative ages are keyed, not concatenated.** `formatRelativeTime()` in `derive.ts` takes `t`
   as an argument and resolves `software_update.time.*`, with `_one` variants for the singular.
@@ -550,6 +558,46 @@ Subtrees: `page`, `actions`, `band`, `card`, `delta`, `steps`, `notice`, `notes`
 > rewrites every line ending and produces a whole-file diff. `bun run i18n:check` is a hard gate
 > and exits 1 on a missing key or an empty value; it cannot see a hardcoded English literal, so
 > grep for those by hand. See [`i18n.md`](./i18n.md).
+
+---
+
+## Package-managed installs (the `managed` view)
+
+When QManager was installed as the `sdxpinn-qmanager` opkg package, opkg owns the files and the
+tarball OTA is refused everywhere. This page then has nothing to check or install, so it renders a
+different body. Why and how the package works: [`../features/ipk-packaging.md`](../features/ipk-packaging.md).
+
+**The contract (`system/update.sh`).** `package_managed()` is true when
+`/usr/lib/opkg/info/sdxpinn-qmanager.control` exists.
+
+| Case | Response |
+| ---- | -------- |
+| `GET`, package install | Returns before any GitHub call: `current_version`, `latest_version: null`, `update_available: false`, `changelog: null`, `current_changelog: null`, `download_url: null`, `download_size: null`, `available_versions: []`, `download_state: null`, `auto_update_enabled: false`, `previous_install_failed: false`, `pending_version: null`, `check_error: null`, plus `managed_by: "opkg"` and `package_name: "sdxpinn-qmanager"`. `include_prerelease` and `auto_update_time` still echo the stored values. |
+| `GET`, tarball install | Every other GET branch (check failure, GitHub error, normal) now also emits `managed_by: "tarball"`. No `package_name`. |
+| `POST` `download` / `install_staged` / `install` / `rollback` / `save_auto_update`, package install | `cgi_error "package_managed"` (HTTP 200 envelope; translated through `resolveErrorMessage`, see [`../features/error-codes.md`](../features/error-codes.md)). |
+| `POST` `save_prerelease` | Not gated; it only stores a preference. |
+
+`hooks/use-software-update.ts` types the new fields on `UpdateInfo` as optional
+(`managed_by?: "opkg" | "tarball"`, `package_name?: string`): an older device that predates them
+omits `managed_by`, which reads as a tarball install.
+
+**The view.** `resolveView` returns `"managed"` when `updateInfo?.managed_by === "opkg"`. The guard
+sits **after** `unreachable` (no data at all still wins) and **before** `rebooting` and every run
+state: a package install never runs a tarball update, so a stale `updateStatus` must not repaint
+the page. `latestState` maps `managed` to its own `managed` face (neutral tone, `PackageSearchIcon`).
+
+| Slot | Managed rendering |
+| ---- | ----------------- |
+| Header | `page.description_managed`; the check button is hidden (`offersCheck` is false for `managed`) |
+| Band chip | Filled `info` Badge, `BoxesIcon`, "Package install" (`ANCHOR_CHIP.managed` carries the same variant and glyph so the record stays exhaustive) |
+| Installed tile | Version from `current_version`, caption "Installed as a software package" |
+| Latest tile | Eyebrow "Updates", value "Package manager", caption "Not checked on this page", no version |
+| Automatic tile | "Off", caption "Not available for a package install" |
+| Body | `ManagedCard` only: title, description (upgrade from the Software page in LuCI) and one row naming the package (`package_name`, falling back to `sdxpinn-qmanager`) in a neutral `Tag` |
+
+Not rendered: the anchor card, step ladder, release notes, preferences and version management.
+`NOTICE_COPY.managed` is `null` and `SHOWS_NEXT.managed` is `false` for the same reason (the typed
+records force a decision for the new member).
 
 ---
 
