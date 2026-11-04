@@ -40,6 +40,16 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 
 **System Settings → Software Update.** No migration steps needed. The new Performance default takes effect after the next reboot, or right away if you apply it from the Ethernet Port card.
 
+### Install from the SDXPINN software feed
+
+QManager is now also the `sdxpinn-qmanager` package in iamromulan's SDXPINN feed. In LuCI, open **System → Software**, click **Update lists**, then install `sdxpinn-qmanager`, or run:
+
+```sh
+opkg update && opkg install sdxpinn-qmanager
+```
+
+This works on a fresh modem and over an existing QManager install, and your settings are kept. Reboot when QManager asks you to. Language packs you downloaded need to be installed again afterwards. From then on, update QManager from the same Software page (or `opkg upgrade sdxpinn-qmanager`); the in-app Software Update page will say the install is managed by the package manager. The package can appear in the feed a little later than this release.
+
 ## 💙 Thank You
 
 Special thanks to radiomean for supporting the project.
