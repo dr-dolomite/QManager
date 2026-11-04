@@ -33,12 +33,17 @@ QManager is a two-tier application:
 │  │  ┌──────────────────────────────────────────────┐   ││
 │  │  │ cgi_base.sh (auth + headers + JSON helpers)  │   ││
 │  │  └──────────────────────────────────────────────┘   ││
-│  │       │ reads cache      │ executes AT               ││
-│  │       ▼                  ▼                            ││
-│  │  /tmp/qmanager_    qcmd AT+...  → /dev/smd11         ││
-│  │  status.json              (modem serial port)         ││
-│  │       ▲                                               ││
-│  │       │ writes every 2s                               ││
+│  │       │ reads cache      │ AT / QMI requests         ││
+│  │       ▼                  ▼                           ││
+│  │  /tmp/qmanager_    qcmd · qsms · qmi (symlinks)      ││
+│  │  status.json             │ Unix socket               ││
+│  │       ▲                  ▼                           ││
+│  │       │          qmanager_atd (Rust broker)          ││
+│  │       │           ├─ AT lane: FIFO → one worker      ││
+│  │       │           │    → flock → /dev/smd11          ││
+│  │       │           └─ QMI lane: read-only, no lock    ││
+│  │       │                → AF_QIPCRTR (QRTR)           ││
+│  │       │ writes every 2s (+ reads qmi.env sidecar)    ││
 │  │  ┌──────────────────────────────────────────────┐   ││
 │  │  │     qmanager_poller (main data collector)     │   ││
 │  │  │     + qmanager_ping  + qmanager_watchcat      │   ││
@@ -46,6 +51,15 @@ QManager is a two-tier application:
 │  └──────────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────────┘
 ```
+
+### Modem access: the broker and its two lanes
+
+CGI scripts and daemons never open the modem themselves. `qcmd` (AT), `qsms` (SMS, still AT) and `qmi` (read-only QMI) are all symlinks to one Rust broker, `qmanager_atd` (`native/qmanager_atd/`), which is the only process that opens `/dev/smd11`. The broker runs two independent lanes:
+
+- **AT lane:** requests queue in a bounded FIFO and run one at a time on a single worker that holds the modem lock and talks to `/dev/smd11`.
+- **QMI lane:** read-only NAS/DMS/UIM/WDS/DSD reads over QRTR (`AF_QIPCRTR`). It never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job. A sampler in the lane publishes sidecars (`/var/run/qmanager/qmi.env`, `/tmp/qmanager_qmi.json`) that the poller and CGIs read, plus the live signal file.
+
+Details live in the feature docs: [`features/at-broker.md`](features/at-broker.md) (process model, output contract, invariants), [`features/qmi-lane.md`](features/qmi-lane.md) (allow-list, field coverage, sidecars), [`features/live-signal.md`](features/live-signal.md) and [`features/data-used.md`](features/data-used.md).
 
 ---
 

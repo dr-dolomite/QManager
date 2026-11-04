@@ -143,7 +143,7 @@ Publishing goes through the feed repo's CI (build and sign on merge); the PR rul
 ### Target Device
 
 - OpenWRT router with:
-  - Quectel modem (RM520N-GL, RM551E-GL, RM500Q, or similar)
+  - Quectel RM551E-GL (the RM520N-GL has its own repository, `dr-dolomite/QManager-RM520N`)
   - AT command access via the modem's internal AT channel (`/dev/smd11` on the RM551E)
   - uhttpd web server (standard on OpenWRT)
   - BusyBox standard utilities

@@ -7,7 +7,7 @@
   <h3>A modern, custom GUI for Quectel modem management</h3>
   <p>Visualize, configure, and optimize your cellular modem's performance with an intuitive web interface</p>
 
-  ![Version](https://img.shields.io/badge/version-v0.1.8-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-v0.1.35-blue?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-green?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-OpenWRT-orange?style=flat-square)
   ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
@@ -26,7 +26,7 @@
 
 ---
 
-> **Note:** QManager is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing Quectel modems like the RM520N-GL, RM551E-GL, and similar devices.
+> **Note:** QManager is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing the Quectel RM551E-GL. The RM520N-GL has its own repository, [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N).
 
 ---
 
@@ -176,15 +176,15 @@ One-liner uninstall:
 curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh --uninstall
 ```
 
-Use `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` to pin a specific version with the one-liner wrapper.
+Use `QMANAGER_TAG="v0.1.35" sh /tmp/qmanager-installer.sh` to pin a specific version with the one-liner wrapper.
 
 ---
 
 ## Prerequisites
 
-- Compatible Quectel modem (RM520N-GL, RM551E-GL, RM500Q, etc.) with AT command support
+- Quectel RM551E-GL (RM520N-GL users: see [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N))
 - OpenWRT device with the modem connected
-- **Required packages:** `jq`, `sms-tool`
+- **Required packages:** `jq` (`sms-tool` is no longer used and is removed by the installer as a conflict)
 - **Optional packages:** `msmtp` (email alerts), `ethtool` (link speed control), `ookla-speedtest` (speed testing)
 
 > Optional packages can be installed from within the app — no manual `opkg` needed.

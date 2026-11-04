@@ -8,7 +8,7 @@ web
 
 ## Users
 
-**Hobbyist power users and field technicians managing Quectel modems on OpenWRT** (RM551E, RM520N and RM500Q class). Technically literate without being developers: comfortable with APN, PCI, RSRP, EARFCN and band numbers, but not expected to read shell scripts or hand-write AT commands. The hobbyist is tuning a home cellular setup for speed and coverage; the field tech is deploying and maintaining modems on site.
+**Hobbyist power users and field technicians managing Quectel modems on OpenWRT** (this repository targets the RM551E-GL; the RM520N has its own fork, `QManager-RM520N`). Technically literate without being developers: comfortable with APN, PCI, RSRP, EARFCN and band numbers, but not expected to read shell scripts or hand-write AT commands. The hobbyist is tuning a home cellular setup for speed and coverage; the field tech is deploying and maintaining modems on site.
 
 Two session shapes share one UI:
 
@@ -49,7 +49,7 @@ Success looks like:
 **Constraints that bind design.**
 
 - **BusyBox-era userland.** POSIX `ash`, no bashisms, a `jq` built without regex support, and a CGI contract where a stray carriage return means no output at all.
-- **AT is the only transport, and it is serialised.** Every AT call goes through `qcmd` under one lock, so the product cannot react to unsolicited modem events and every value is polled; a long-held lock stalls every caller. The adaptive poller trades freshness for load by tier (active, idle, deep).
+- **AT is the only write transport, and it is serialised.** Every AT call goes through `qcmd` (the `qmanager_atd` broker) under one lock; a read-only QMI lane over QRTR serves identity, signal and packet counters without the lock (`docs/features/qmi-lane.md`). Every value is still polled, and a long-held AT lock stalls every AT caller. The adaptive poller trades freshness for load by tier (active, idle, deep).
 - **Scheduled work runs from cron on a device with a 1970 boot window.** Every scheduled operation must survive an untrusted clock and a crond that has to be told to reload.
 - **Static export.** No server runtime, no server components, no API routes. The backend is CGI shell scripts.
 - **Self-hosted assets only.** Fonts and icon fonts are vendored and subset at build time. An affordance that depends on a CDN is not an affordance.

@@ -1,6 +1,6 @@
 ## Device & Architecture Context
 
-QManager = Next.js static-export frontend + OpenWRT CGI shell backend, deployed **on the modem itself** (Quectel RM520N/RM551E/RM500Q-class). Backend is BusyBox `/bin/sh`: CGI under `scripts/www/cgi-bin/`, daemons under `scripts/usr/bin/`, libs under `scripts/usr/lib/qmanager/`; AT commands go through `qcmd`. Anything that reboots the modem kills the in-flight HTTP request, so reboots defer behind a dialog + the persistent deferred-reboot banner, never `AT+CFUN=1,1` mid-request. Overviews: `docs/ARCHITECTURE.md`, `docs/BACKEND.md`, `docs/FRONTEND.md`, `docs/API-REFERENCE.md`.
+QManager = Next.js static-export frontend + OpenWRT CGI shell backend, deployed **on the modem itself** (Quectel RM551E-GL only; the RM520N lives in its own repo, `QManager-RM520N`). Backend is BusyBox `/bin/sh`: CGI under `scripts/www/cgi-bin/`, daemons under `scripts/usr/bin/`, libs under `scripts/usr/lib/qmanager/`; AT commands go through `qcmd` (a symlink to the `qmanager_atd` broker, the only opener of `/dev/smd11`); read-only QMI goes through `qmi` (`docs/features/at-broker.md`, `docs/features/qmi-lane.md`). Anything that reboots the modem kills the in-flight HTTP request, so reboots defer behind a dialog + the persistent deferred-reboot banner, never `AT+CFUN=1,1` mid-request. Overviews: `docs/ARCHITECTURE.md`, `docs/BACKEND.md`, `docs/FRONTEND.md`, `docs/API-REFERENCE.md`.
 
 ## Change Workflow
 
