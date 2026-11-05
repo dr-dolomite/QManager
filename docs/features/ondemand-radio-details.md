@@ -14,7 +14,8 @@ Layer-1-adjacent and data-plane AT reads (MIMO layers, timing advance, APN/DNS, 
 | Poller sidecar | `/var/run/qmanager/ondemand.env` (see [Sidecar](#sidecar-ondemandenv)) |
 | Hook | `hooks/use-radio-details.ts` · `useRadioDetails()` |
 | Types | `RadioDetails`, `RadioDetailsResponse`, `RadioDetailsErrorResponse` in `types/modem-status.ts` |
-| Poll interval (frontend) | 7 s while page is mounted; stops on unmount |
+| Poll interval (frontend) | 7 s while page is mounted and visible; stops when hidden or unmounted |
+| Freshness window | 5 s (`RD_FRESH_SECS`); fetch lock `/tmp/qmanager_radio_details.lock` |
 | Reboot required | No |
 
 ---
@@ -23,7 +24,13 @@ Layer-1-adjacent and data-plane AT reads (MIMO layers, timing advance, APN/DNS, 
 
 `GET /cgi-bin/quecmanager/cellular/radio_details.sh` — auth-gated, no request parameters.
 
-Each call to the endpoint triggers a full on-demand AT read via `ondemand_radio_fetch()`, updates `/tmp/qmanager_ondemand.json`, then returns the result.
+A call triggers a full on-demand AT read via `ondemand_radio_fetch()`, updates `/tmp/qmanager_ondemand.json`, then returns the result, **unless the freshness gate serves the cache**:
+
+1. If the cache file's mtime is under 5 s old, the CGI answers from it (`stale: false`) without sourcing `parse_at.sh` / `ondemand_radio.sh` or touching the modem.
+2. Otherwise it takes `flock -n` on `/tmp/qmanager_radio_details.lock`. If another request holds it (another tab is reading the modem right now), it answers from the cache as it stands (`stale: false`).
+3. With the lock held it re-checks freshness (the request it raced may have just refreshed the cache), then runs the fetch.
+
+So N open tabs cost at most one AT sequence per 5 s instead of N per 7 s. The gate only removes duplicate reads: every fetch that does run still starts with the RAT probe below. The cache mtime moves only when a fetch succeeds (`_ondemand_write_cache` renames a new file in), so an unreachable modem never makes the cache look fresh and the `stale: true` path is unchanged. If the lock file cannot be opened the CGI fetches unlocked, as before. `uninstall.sh` removes the lock with the other `/tmp/qmanager_*.lock` files.
 
 ### Success Response
 

@@ -1,6 +1,6 @@
 # CGI request efficiency + qlog (plan and ledger)
 
-Date: 2026-11-03. Status: **awaiting approval**. Class: large (auth path shared by all 101 CGIs, AT path via `radio_details.sh`, poller tier input).
+Date: 2026-11-03. Status: **approved; built 2026-11-05** (frontend tier probes pending). Class: large (auth path shared by all 101 CGIs, AT path via `radio_details.sh`, poller tier input).
 
 ## Goal
 
@@ -85,9 +85,21 @@ Worktree from `development-home`; commit per row; frontend `bunx tsc --noEmit` +
 
 | Probe | P0 baseline | V after |
 |---|---|---|
-| `fetch_data.sh` ms/call | | |
-| `check.sh` ms/call | | |
-| `radio_details.sh` ms/call | | |
-| forks/s, 1 visible tab | | |
-| poller tier, hidden tab only | | |
-| qlog lines/min (INFO / WARN+) | | |
+| `fetch_data.sh` ms/call (50 runs, valid cookie) | 64 / 66 | 26 / 28 (−58 %) |
+| `check.sh` ms/call (50 runs, valid cookie) | 63 / 62 | 22 / 22 (−65 %) |
+| `radio_details.sh` ms/call, cache expired (real AT read) | 328 (10 runs) | 300-330 |
+| `radio_details.sh` ms/call, served by the gate | n/a (every call read) | 30-60; 10-run loop averaged 74 |
+| processes per call, `fetch_data.sh` / `check.sh` (incl. ~3 background) | 16 / 16 | 4 / 3 |
+| processes per call, `radio_details.sh` (fetching) | 125 | unchanged when it fetches |
+| system forks/s, one open browser tab (old frontend) | 42 | 28-29 (backend rows only) |
+| `serve_ndjson_as_array` on signal history, ms/call | 31 | 20 |
+| poller tier, one open tab, 2 min | active | active 24/24 samples, heartbeat changed 21 times |
+| concurrent `radio_details.sh` x3, cache expired | 3 AT sequences | 1 (other two served in ~50 ms), 3 rounds out of 3 |
+| poller tier with 0 tabs / hidden tab only / 3 tabs | not measured: needs browser tab control (see below) | pending frontend deploy |
+| qlog lines/min, steady state, 10 min | INFO 3.4 (poller 3.2, sites 0.2), WARN+ 0 | same lines in the file; syslog copy now WARN+ only |
+
+Notes:
+
+- Probes ran on the device with the CGIs invoked directly (`HTTP_COOKIE` set to a throwaway bench session). One real browser tab stayed open throughout, so "background" numbers include its polling. `radio_details.sh` ran 10 times, not 50: each uncached run is a full on-demand AT read, which `ondemand-radio-details.md` ties to SSR risk.
+- The syslog ring (`logd -S 64`) holds only ~47 s on this modem: the firmware's `qms` daemon writes ~11 `user.debug` lines/s. QManager INFO lines were already being flushed out within a minute, which supports D1.
+- Long-running daemons keep the qlog they sourced at start, so they copy INFO to syslog until their next restart.

@@ -75,8 +75,13 @@ A line that does not start with `[` is skipped outright, and a line whose level 
 one of the four is dropped by the awk pass. That is why `LogLevel` is a **closed union** in
 `types/system-logs.ts`: widening it on the client would be a lie until the backend widens too.
 
-> ℹ️ NOTE: `qlog.sh` also mirrors every line to syslog via `logger` when `QLOG_TO_SYSLOG=1`
-> (the default). This page never reads syslog — only the file.
+> ℹ️ NOTE: `qlog.sh` also copies lines to syslog via `logger` when `QLOG_TO_SYSLOG=1`
+> (the default), but only at or above `QLOG_SYSLOG_LEVEL` (default `WARN`; set `INFO` or
+> `DEBUG` in a script's environment to widen it). INFO and DEBUG lines live only in the file:
+> no `logger` fork for routine lines, and they cannot push kernel lines out of the
+> `logread | tail -300` that the debug report and health check capture (on the RM551E the
+> 64 KB syslog ring holds well under a minute, flooded by the firmware's `qms` debug output).
+> Daemons pick up the new default on their next restart. This page never reads syslog, only the file.
 
 ---
 
