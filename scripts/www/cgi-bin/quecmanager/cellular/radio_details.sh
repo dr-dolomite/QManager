@@ -24,6 +24,11 @@
 # write_cache() reads so the public status snapshot retains last-known values
 # between fetches.
 #
+# Freshness gate: open tabs share one read. A request finding the cache under
+# RD_FRESH_SECS old, or another request already holding the fetch lock, serves
+# the cache (stale:false) without sourcing the parse libraries or touching the
+# modem. Every fetch that does run still starts with the RAT probe.
+#
 # Endpoint: GET /cgi-bin/quecmanager/cellular/radio_details.sh
 # Response (success):
 # {
@@ -56,22 +61,6 @@
 qlog_init "cgi_radio_details"
 cgi_headers
 cgi_handle_options
-
-# --- Dependencies ------------------------------------------------------------
-# parse_at.sh provides the parsers; ondemand_radio.sh provides the fetch +
-# cache helpers (and the t2_*/lte_ta/nr_ta variables they populate).
-if [ -f /usr/lib/qmanager/parse_at.sh ]; then
-    . /usr/lib/qmanager/parse_at.sh
-else
-    cgi_error "internal_error" "parse library unavailable"
-    exit 0
-fi
-if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
-    . /usr/lib/qmanager/ondemand_radio.sh
-else
-    cgi_error "internal_error" "radio library unavailable"
-    exit 0
-fi
 
 # --- Emit the current on-demand cache as the response details ----------------
 # Reads the same 12 fields ondemand_radio_fetch persists, with explicit null
@@ -115,6 +104,68 @@ emit_details() {
         }
     }'
 }
+
+# --- Freshness gate ----------------------------------------------------------
+# Decided before sourcing parse_at.sh / ondemand_radio.sh (~1,950 lines), so a
+# served-from-cache request costs one stat. ONDEMAND_CACHE_FILE is the same
+# path ondemand_radio.sh sets. The cache mtime moves only when a fetch
+# succeeded, so a failed (unreachable) fetch never makes the cache look fresh.
+ONDEMAND_CACHE_FILE="/tmp/qmanager_ondemand.json"
+RD_FRESH_SECS=5
+RD_LOCK="/tmp/qmanager_radio_details.lock"
+
+rd_cache_fresh() {
+    [ -s "$ONDEMAND_CACHE_FILE" ] || return 1
+    _rd_now="$QM_AUTH_NOW"
+    case "$_rd_now" in
+        ''|*[!0-9]*) _rd_now=$(date +%s) ;;
+    esac
+    _rd_mtime=$(stat -c %Y "$ONDEMAND_CACHE_FILE" 2>/dev/null)
+    case "$_rd_mtime" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    _rd_age=$((_rd_now - _rd_mtime))
+    # A negative age (wall clock stepped back) counts as not fresh.
+    [ "$_rd_age" -ge 0 ] && [ "$_rd_age" -lt "$RD_FRESH_SECS" ]
+}
+
+if rd_cache_fresh; then
+    emit_details "false"
+    exit 0
+fi
+
+# One fetch at a time. The lock fd closes with the process, so every exit path
+# releases it. A failing exec redirect aborts an ash script, so probe the path
+# first; if the lock cannot be opened, fetch unlocked as before.
+if true >> "$RD_LOCK" 2>/dev/null; then
+    exec 9>> "$RD_LOCK"
+    if ! flock -n 9; then
+        # Another tab is reading the modem right now: serve what we have.
+        emit_details "false"
+        exit 0
+    fi
+    # The holder we waited behind may have just refreshed the cache.
+    if rd_cache_fresh; then
+        emit_details "false"
+        exit 0
+    fi
+fi
+
+# --- Dependencies ------------------------------------------------------------
+# parse_at.sh provides the parsers; ondemand_radio.sh provides the fetch +
+# cache helpers (and the t2_*/lte_ta/nr_ta variables they populate).
+if [ -f /usr/lib/qmanager/parse_at.sh ]; then
+    . /usr/lib/qmanager/parse_at.sh
+else
+    cgi_error "internal_error" "parse library unavailable"
+    exit 0
+fi
+if [ -f /usr/lib/qmanager/ondemand_radio.sh ]; then
+    . /usr/lib/qmanager/ondemand_radio.sh
+else
+    cgi_error "internal_error" "radio library unavailable"
+    exit 0
+fi
 
 # --- Run the on-demand fetch -------------------------------------------------
 # ondemand_radio_fetch loads last-known first, issues the RAT-gated reads, then
