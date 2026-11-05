@@ -98,6 +98,29 @@ Worktree from `development-home`; commit per row; frontend `bunx tsc --noEmit` +
 | poller tier with 0 tabs / hidden tab only / 3 tabs | not measured: needs browser tab control (see below) | pending frontend deploy |
 | qlog lines/min, steady state, 10 min | INFO 3.4 (poller 3.2, sites 0.2), WARN+ 0 | same lines in the file; syslog copy now WARN+ only |
 
+### CPU per call and per tab (measured 2026-11-05)
+
+CPU time (user+sys of the CGI and every child, `/proc/<pid>/stat` cutime+cstime, HZ 100) per call. "Before" ran the exact pre-change files from a sandbox copy with their source paths pointed at the old libraries, so live files were not swapped.
+
+| Endpoint (dashboard cadence) | Before, CPU ms/call | After, CPU ms/call |
+|---|---|---|
+| `fetch_data.sh` (every 2 s) | 63 | 26 |
+| `fetch_signal_history.sh` (every 2 s) | 67 | 29 |
+| `check.sh` (every 3 s) | 60 | 20 |
+| `radio_details.sh` (every 7 s) | 384 | 362 reading the modem, 40 served by the gate |
+| `fetch_events.sh` (every 10 s) | 60 | 26 |
+| `data_used.sh` (every 10 s) | 72 | 44 |
+
+Per-tab CPU, of one core (the modem has 4), computed from those costs at the frontend cadences:
+
+| Scenario | Before | After |
+|---|---|---|
+| 1 visible dashboard tab | 9.2 s/min = 15.3 % | 5.6 s/min = 9.3 % |
+| 1 hidden tab | 15.3 % (polled like a visible tab) | 0 % (no requests) |
+| 3 visible tabs | 45.9 % | about 20 % (one radio read per 5 s shared) |
+
+A single visible tab still pays a full radio read every 7 s (the 5 s window is shorter than the 7 s poll); the gate pays off from the second tab on. Poller CPU is not in these numbers.
+
 Notes:
 
 - Probes ran on the device with the CGIs invoked directly (`HTTP_COOKIE` set to a throwaway bench session). One real browser tab stayed open throughout, so "background" numbers include its polling. `radio_details.sh` ran 10 times, not 50: each uncached run is a full on-demand AT read, which `ondemand-radio-details.md` ties to SSR risk.
