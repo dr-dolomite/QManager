@@ -45,6 +45,7 @@ if ! type require_auth >/dev/null 2>&1; then
     }
     is_setup_required()     { return 1; }
     qm_get_cookie()         { :; }
+    qm_cookie_value()       { QM_COOKIE=""; }
     qm_set_session_cookies(){ :; }
     qm_clear_session_cookies(){ :; }
     qm_create_session()     { :; }
@@ -90,6 +91,34 @@ cgi_headers() {
 if [ "$_SKIP_AUTH" != "1" ]; then
     require_auth
 fi
+
+# ---------------------------------------------------------------------------
+# UI heartbeat
+# cgi_ui_heartbeat — mark a browser as open for the poller's adaptive tiers.
+# The poller keeps the Active tier while the epoch in this file keeps CHANGING
+# (it times the change on its monotonic clock, 20 s active_grace), so a rewrite
+# every 5 s is enough: the file is rewritten only when the stored epoch is 5 s
+# or more old, or ahead of the clock (a wall-clock step back). Reuses the epoch
+# require_auth already read (QM_AUTH_NOW) instead of forking `date` again.
+# Temp file + rename, so the poller never reads a half-written epoch.
+# ---------------------------------------------------------------------------
+UI_HEARTBEAT_FILE="/tmp/qmanager_ui_active"
+cgi_ui_heartbeat() {
+    _hb_now="$QM_AUTH_NOW"
+    case "$_hb_now" in
+        ''|*[!0-9]*) _hb_now=$(date +%s) ;;
+    esac
+    _hb_old=""
+    { read -r _hb_old < "$UI_HEARTBEAT_FILE"; } 2>/dev/null
+    case "$_hb_old" in
+        ''|0*|*[!0-9]*) _hb_old=0 ;;
+    esac
+    if [ "$_hb_old" -le "$_hb_now" ] && [ $((_hb_now - _hb_old)) -lt 5 ]; then
+        return 0
+    fi
+    printf '%s
+' "$_hb_now" > "${UI_HEARTBEAT_FILE}.$$" 2>/dev/null         && mv -f "${UI_HEARTBEAT_FILE}.$$" "$UI_HEARTBEAT_FILE" 2>/dev/null         || rm -f "${UI_HEARTBEAT_FILE}.$$"
+}
 
 # ---------------------------------------------------------------------------
 # CORS Preflight
@@ -161,12 +190,21 @@ cgi_reboot_response() {
 # Serve an NDJSON file (one JSON object per line) as a JSON array.
 # Outputs "[]" if file doesn't exist or is empty.
 #
+# The writers append one complete JSON value per line, so the lines are joined
+# as they are (awk, not a `jq -s` parse: this serves the 2 s history poll).
+# Blank lines and a trailing CR are skipped. Output is compact, one line.
+#
 # Usage:
 #   serve_ndjson_as_array "/tmp/myfile.json"
 # ---------------------------------------------------------------------------
 serve_ndjson_as_array() {
     if [ -f "$1" ] && [ -s "$1" ]; then
-        jq -s '.' "$1"
+        awk '
+            { sub(/\r$/, "") }
+            /^[ \t]*$/ { next }
+            { printf "%s%s", (n++ ? "," : "["), $0 }
+            END { print (n ? "]" : "[]") }
+        ' "$1"
     else
         echo "[]"
     fi

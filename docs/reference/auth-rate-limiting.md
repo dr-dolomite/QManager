@@ -77,6 +77,12 @@ Reads use jq defaults (`.level // 0`, `.last_failure // 0`), so an older flat fi
 
 `cgi_base.sh` carries a **fail-closed** stub for `qm_get_rate_limit_status`, so a script that sources the base without the auth library still resolves the symbol and cannot read "unlocked" by accident.
 
+The session helpers on the same request path (every authenticated CGI, and `check.sh`) are builtin-only so a request costs two forks (`stat`, `date`) before its own work:
+
+- `qm_cookie_value <name>` sets `QM_COOKIE` with no subshell; `qm_get_cookie` is a printing wrapper kept for `logout.sh` / `password.sh`. Same first-match rules as the awk parser it replaced: pairs split on `;`, blanks after each `;` dropped, exact name, value up to the next `=`.
+- `_is_valid_token` is a `case` plus a length check (64 lowercase hex).
+- `qm_validate_session` reads the body with `read` (one bare epoch line; a second line, blanks or non-digits are rejected and the file removed), checks both the directory and the file are non-symlinks owned by uid 0 with a single `stat`, and exports the epoch it read as `QM_AUTH_NOW` for the calling CGI (the UI heartbeat reuses it).
+
 ### Invariants a future edit will break
 
 **1. `check.sh` calls only `qm_get_rate_limit_status`, never `qm_check_rate_limit`.** `check.sh` is public and fetched on every load of `/` and `/login/`. A mutating call would let a visitor engage or extend their own lockout by pressing F5. Verify by hand: snapshot the state file (`md5sum`), call `check.sh`, confirm it is unchanged.

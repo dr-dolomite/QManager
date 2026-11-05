@@ -20,6 +20,10 @@
 #   QLOG_MAX_SIZE_KB — Max log file size in KB before rotation (default: 256)
 #   QLOG_MAX_FILES   — Number of rotated files to keep (default: 2)
 #   QLOG_TO_SYSLOG   — Also log to syslog: 1|0 (default: 1)
+#   QLOG_SYSLOG_LEVEL — Minimum level copied to syslog (default: WARN). INFO
+#                       and DEBUG stay in QLOG_FILE only: no `logger` fork
+#                       for routine lines, and they cannot push kernel lines
+#                       (SSR evidence) out of the debug report's logread tail.
 #   QLOG_TO_STDOUT   — Also log to stdout: 1|0 (default: 0)
 #
 # Install location: /usr/lib/qmanager/qlog.sh
@@ -34,6 +38,7 @@ QLOG_FILE="${QLOG_FILE:-/tmp/qmanager.log}"
 QLOG_MAX_SIZE_KB="${QLOG_MAX_SIZE_KB:-256}"
 QLOG_MAX_FILES="${QLOG_MAX_FILES:-2}"
 QLOG_TO_SYSLOG="${QLOG_TO_SYSLOG:-1}"
+QLOG_SYSLOG_LEVEL="${QLOG_SYSLOG_LEVEL:-WARN}"
 QLOG_TO_STDOUT="${QLOG_TO_STDOUT:-0}"
 
 # Internal state
@@ -57,9 +62,14 @@ qlog_init() {
     _QLOG_COMPONENT="${1:-unknown}"
     _QLOG_INITIALIZED=1
 
-    # Ensure log directory exists (should be /tmp/ which always exists)
+    # Ensure log directory exists (should be /tmp/ which always exists).
+    # Parameter expansion, not $(dirname): this runs in every CGI request.
     local log_dir
-    log_dir=$(dirname "$QLOG_FILE")
+    case "$QLOG_FILE" in
+        */*) log_dir="${QLOG_FILE%/*}" ;;
+        *)   log_dir="." ;;
+    esac
+    [ -n "$log_dir" ] || log_dir="/"
     [ -d "$log_dir" ] || mkdir -p "$log_dir" 2>/dev/null
 }
 
@@ -166,8 +176,15 @@ _qlog_write() {
     fi
     echo "$line" >> "$QLOG_FILE" 2>/dev/null
 
-    # Optionally write to syslog
-    if [ "$QLOG_TO_SYSLOG" = "1" ]; then
+    # Optionally write to syslog, only at or above QLOG_SYSLOG_LEVEL
+    local syslog_level_num
+    case "$QLOG_SYSLOG_LEVEL" in
+        DEBUG) syslog_level_num=$_QLOG_LVL_DEBUG ;;
+        INFO)  syslog_level_num=$_QLOG_LVL_INFO ;;
+        ERROR) syslog_level_num=$_QLOG_LVL_ERROR ;;
+        *)     syslog_level_num=$_QLOG_LVL_WARN ;;
+    esac
+    if [ "$QLOG_TO_SYSLOG" = "1" ] && [ "$msg_level_num" -ge "$syslog_level_num" ]; then
         local syslog_priority
         case "$level" in
             DEBUG) syslog_priority="daemon.debug" ;;

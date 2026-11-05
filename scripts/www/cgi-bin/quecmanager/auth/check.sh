@@ -6,14 +6,17 @@ _SKIP_AUTH=1
 qlog_init "cgi_auth_check"
 cgi_headers
 
+# Bodies are printf'd in jq's own pretty layout: every open page polls this
+# every 3 s, so constant answers skip the jq start-up.
 if is_setup_required; then
-    jq -n '{"authenticated":false,"setup_required":true}'
+    printf '{\n  "authenticated": false,\n  "setup_required": true\n}\n'
     exit 0
 fi
 
-_token=$(qm_get_cookie "$COOKIE_SESSION")
+qm_cookie_value "$COOKIE_SESSION"
+_token="$QM_COOKIE"
 if [ -n "$_token" ] && qm_validate_session "$_token"; then
-    jq -n '{"authenticated":true}'
+    printf '{\n  "authenticated": true\n}\n'
     exit 0
 fi
 
@@ -27,7 +30,11 @@ else
     _rate_limited="true"
 fi
 
-jq -n --argjson limited "$_rate_limited" \
-    --argjson retry "${RATE_LIMIT_RETRY_AFTER:-0}" \
-    --argjson remaining "${RATE_LIMIT_ATTEMPTS_REMAINING:-0}" \
-    '{"authenticated":false,"rate_limited":$limited,"retry_after":$retry,"attempts_remaining":$remaining}'
+# Integers only, like the --argjson it replaced (which emitted nothing on a
+# non-number); a bad value becomes 0 instead of an empty body.
+_retry="${RATE_LIMIT_RETRY_AFTER:-0}"
+_remaining="${RATE_LIMIT_ATTEMPTS_REMAINING:-0}"
+case "$_retry" in ''|*[!0-9]*) _retry=0 ;; esac
+case "$_remaining" in ''|*[!0-9]*) _remaining=0 ;; esac
+printf '{\n  "authenticated": false,\n  "rate_limited": %s,\n  "retry_after": %s,\n  "attempts_remaining": %s\n}\n' \
+    "$_rate_limited" "$_retry" "$_remaining"

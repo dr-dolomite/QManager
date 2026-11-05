@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { startVisibleInterval } from "@/lib/visible-interval";
 import type { SignalHistoryEntry } from "@/types/modem-status";
 
 // =============================================================================
@@ -109,7 +110,6 @@ export function useSignalHistory(
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -151,15 +151,12 @@ export function useSignalHistory(
       };
     }
 
-    fetchHistory();
-    intervalRef.current = setInterval(fetchHistory, pollInterval);
+    // Paused while the tab is hidden; fetches at once when shown again.
+    const stop = startVisibleInterval(() => void fetchHistory(), pollInterval);
 
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      stop();
     };
   }, [fetchHistory, pollInterval, enabled]);
 

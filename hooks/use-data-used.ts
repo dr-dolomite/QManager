@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { startVisibleInterval } from "@/lib/visible-interval";
 import type { DataUsed, DataUsedResponse } from "@/types/data-used";
 
 // =============================================================================
@@ -59,11 +60,11 @@ export function useDataUsed(): UseDataUsedReturn {
 
   useEffect(() => {
     mountedRef.current = true;
-    void fetchData();
-    const id = window.setInterval(() => void fetchData(), POLL_MS);
+    // Paused while the tab is hidden; fetches at once when shown again.
+    const stop = startVisibleInterval(() => void fetchData(), POLL_MS);
     return () => {
       mountedRef.current = false;
-      window.clearInterval(id);
+      stop();
     };
   }, [fetchData]);
 

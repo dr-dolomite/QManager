@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
 import { isRebooting } from "@/lib/reboot";
+import { startVisibleInterval } from "@/lib/visible-interval";
 import {
   evaluateConnection,
   reportConnectionState,
@@ -25,7 +26,10 @@ function clearSessionCookie() {
 }
 
 /**
- * Polls auth/check.sh every POLL_INTERVAL_MS while the dashboard is mounted.
+ * Polls auth/check.sh every POLL_INTERVAL_MS while the dashboard is mounted
+ * and the tab is visible. A hidden tab does not poll; on becoming visible it
+ * checks at once with the failure counter reset, so time spent hidden (or a
+ * slow network wake-up) never counts toward the offline redirect.
  *
  * check.sh skips auth and always answers HTTP 200 with {authenticated:bool},
  * so this poller must inspect BOTH the transport and the body:
@@ -103,13 +107,24 @@ export function useAutoLogout() {
       }
     };
 
-    const id = setInterval(() => {
-      if (!cancelled) void tick();
-    }, POLL_INTERVAL_MS);
+    const stop = startVisibleInterval(
+      () => {
+        if (!cancelled) void tick();
+      },
+      POLL_INTERVAL_MS,
+      {
+        // The first check still waits one interval, as before.
+        immediate: false,
+        onResume: () => {
+          stateRef.current = INITIAL_CONNECTION_STATE;
+          reportConnectionState(false);
+        },
+      },
+    );
 
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, []);
 }
