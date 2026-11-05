@@ -13,6 +13,8 @@ function harness() {
   let fail = false;
   const intervals = new Map<number, { fn: () => void; ms: number; next: number }>();
   let nextId = 1;
+  let hidden = false;
+  const visListeners = new Set<() => void>();
 
   const store = createModemStatusStore({
     fetchStatus: async () => {
@@ -28,6 +30,13 @@ function harness() {
     },
     clearInterval: (id) => {
       intervals.delete(id as number);
+    },
+    visibility: {
+      isHidden: () => hidden,
+      onChange: (fn) => {
+        visListeners.add(fn);
+        return () => visListeners.delete(fn);
+      },
     },
   });
 
@@ -60,6 +69,11 @@ function harness() {
     setFail: (v: boolean) => {
       fail = v;
     },
+    setHidden: (v: boolean) => {
+      hidden = v;
+      for (const fn of Array.from(visListeners)) fn();
+    },
+    visibilityListeners: () => visListeners.size,
   };
 }
 
@@ -150,5 +164,69 @@ describe("modem status store", () => {
       kind: "error",
       message: "HTTP 502: Bad Gateway",
     });
+  });
+
+  it("stops polling while hidden and fetches at once when shown", async () => {
+    const h = harness();
+    const dash = collector();
+    const side = collector();
+    h.store.subscribe(2000, dash.listener);
+    h.store.subscribe(15_000, side.listener);
+    await h.flush();
+    expect(h.fetches()).toBe(1);
+
+    h.setHidden(true);
+    expect(h.activeIntervals()).toBe(0);
+    await h.advance(60_000);
+    expect(h.fetches()).toBe(1);
+
+    const dashBefore = dash.events.length;
+    const sideBefore = side.events.length;
+    h.setHidden(false);
+    await h.flush();
+    expect(h.fetches()).toBe(2);
+    // Every subscriber is served on return, whatever its cadence.
+    expect(dash.events.length).toBe(dashBefore + 1);
+    expect(side.events.length).toBe(sideBefore + 1);
+    expect(h.activeIntervals()).toBe(1);
+
+    await h.advance(2000);
+    expect(h.fetches()).toBe(3);
+  });
+
+  it("defers the first fetch of a background mount until shown", async () => {
+    const h = harness();
+    h.setHidden(true);
+    const dash = collector();
+    h.store.subscribe(2000, dash.listener);
+    await h.advance(10_000);
+    expect(h.fetches()).toBe(0);
+
+    h.setHidden(false);
+    await h.flush();
+    expect(dash.events.length).toBe(1);
+  });
+
+  it("still serves an explicit refresh while hidden", async () => {
+    const h = harness();
+    const dash = collector();
+    const sub = h.store.subscribe(2000, dash.listener);
+    await h.flush();
+    h.setHidden(true);
+    sub.refresh();
+    await h.flush();
+    expect(h.fetches()).toBe(2);
+    expect(dash.events.length).toBe(2);
+  });
+
+  it("drops its visibility listener when the last consumer leaves", async () => {
+    const h = harness();
+    const a = h.store.subscribe(2000, () => {});
+    const b = h.store.subscribe(15_000, () => {});
+    expect(h.visibilityListeners()).toBe(1);
+    a.unsubscribe();
+    expect(h.visibilityListeners()).toBe(1);
+    b.unsubscribe();
+    expect(h.visibilityListeners()).toBe(0);
   });
 });

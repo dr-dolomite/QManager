@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
 import {
   createModemStatusStore,
+  documentVisibility,
   type ModemStatusSubscription,
 } from "@/lib/modem-status-store";
 import type { ModemStatus } from "@/types/modem-status";
@@ -44,6 +45,7 @@ const modemStatusStore = createModemStatusStore({
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: (handle) =>
     clearInterval(handle as ReturnType<typeof setInterval>),
+  visibility: documentVisibility,
 });
 
 export interface UseModemStatusOptions {
