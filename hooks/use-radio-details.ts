@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { startVisibleInterval } from "@/lib/visible-interval";
 import type {
   RadioDetails,
   RadioDetailsResponse,
@@ -85,7 +86,6 @@ export function useRadioDetails(
 
   // Track mount state so we never setState after unmount.
   const mountedRef = useRef(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchDetails = useCallback(async () => {
     try {
@@ -127,7 +127,7 @@ export function useRadioDetails(
     fetchDetails();
   }, [fetchDetails]);
 
-  // Poll only while mounted; stop on unmount.
+  // Poll only while mounted and visible: a hidden tab issues no AT reads.
   useEffect(() => {
     mountedRef.current = true;
 
@@ -137,15 +137,11 @@ export function useRadioDetails(
       };
     }
 
-    fetchDetails();
-    intervalRef.current = setInterval(fetchDetails, pollInterval);
+    const stop = startVisibleInterval(() => void fetchDetails(), pollInterval);
 
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      stop();
     };
   }, [fetchDetails, pollInterval, enabled]);
 
