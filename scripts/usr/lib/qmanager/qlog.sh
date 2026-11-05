@@ -57,9 +57,14 @@ qlog_init() {
     _QLOG_COMPONENT="${1:-unknown}"
     _QLOG_INITIALIZED=1
 
-    # Ensure log directory exists (should be /tmp/ which always exists)
+    # Ensure log directory exists (should be /tmp/ which always exists).
+    # Parameter expansion, not $(dirname): this runs in every CGI request.
     local log_dir
-    log_dir=$(dirname "$QLOG_FILE")
+    case "$QLOG_FILE" in
+        */*) log_dir="${QLOG_FILE%/*}" ;;
+        *)   log_dir="." ;;
+    esac
+    [ -n "$log_dir" ] || log_dir="/"
     [ -d "$log_dir" ] || mkdir -p "$log_dir" 2>/dev/null
 }
 
