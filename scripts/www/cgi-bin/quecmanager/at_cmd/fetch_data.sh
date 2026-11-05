@@ -19,8 +19,8 @@ cgi_handle_options
 
 # UI heartbeat — any dashboard fetch is activity. The poller reads this epoch to
 # keep AT reads at the Active cadence while a browser is open (adaptive backoff).
-# Written to a temp file then renamed, so the poller never reads a half-written epoch.
-date +%s > /tmp/qmanager_ui_active.$$ 2>/dev/null && mv -f /tmp/qmanager_ui_active.$$ /tmp/qmanager_ui_active 2>/dev/null || rm -f /tmp/qmanager_ui_active.$$
+# Throttled to one rewrite per 5 s (cgi_ui_heartbeat in cgi_base.sh).
+cgi_ui_heartbeat
 
 CACHE_FILE="/tmp/qmanager_status.json"
 

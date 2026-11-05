@@ -93,6 +93,34 @@ if [ "$_SKIP_AUTH" != "1" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# UI heartbeat
+# cgi_ui_heartbeat — mark a browser as open for the poller's adaptive tiers.
+# The poller keeps the Active tier while the epoch in this file keeps CHANGING
+# (it times the change on its monotonic clock, 20 s active_grace), so a rewrite
+# every 5 s is enough: the file is rewritten only when the stored epoch is 5 s
+# or more old, or ahead of the clock (a wall-clock step back). Reuses the epoch
+# require_auth already read (QM_AUTH_NOW) instead of forking `date` again.
+# Temp file + rename, so the poller never reads a half-written epoch.
+# ---------------------------------------------------------------------------
+UI_HEARTBEAT_FILE="/tmp/qmanager_ui_active"
+cgi_ui_heartbeat() {
+    _hb_now="$QM_AUTH_NOW"
+    case "$_hb_now" in
+        ''|*[!0-9]*) _hb_now=$(date +%s) ;;
+    esac
+    _hb_old=""
+    { read -r _hb_old < "$UI_HEARTBEAT_FILE"; } 2>/dev/null
+    case "$_hb_old" in
+        ''|0*|*[!0-9]*) _hb_old=0 ;;
+    esac
+    if [ "$_hb_old" -le "$_hb_now" ] && [ $((_hb_now - _hb_old)) -lt 5 ]; then
+        return 0
+    fi
+    printf '%s
+' "$_hb_now" > "${UI_HEARTBEAT_FILE}.$$" 2>/dev/null         && mv -f "${UI_HEARTBEAT_FILE}.$$" "$UI_HEARTBEAT_FILE" 2>/dev/null         || rm -f "${UI_HEARTBEAT_FILE}.$$"
+}
+
+# ---------------------------------------------------------------------------
 # CORS Preflight
 # Call right after cgi_headers on scripts that accept POST.
 # Exits 0 immediately for OPTIONS requests (browser pre-flight).
