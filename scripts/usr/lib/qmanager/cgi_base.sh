@@ -190,12 +190,21 @@ cgi_reboot_response() {
 # Serve an NDJSON file (one JSON object per line) as a JSON array.
 # Outputs "[]" if file doesn't exist or is empty.
 #
+# The writers append one complete JSON value per line, so the lines are joined
+# as they are (awk, not a `jq -s` parse: this serves the 2 s history poll).
+# Blank lines and a trailing CR are skipped. Output is compact, one line.
+#
 # Usage:
 #   serve_ndjson_as_array "/tmp/myfile.json"
 # ---------------------------------------------------------------------------
 serve_ndjson_as_array() {
     if [ -f "$1" ] && [ -s "$1" ]; then
-        jq -s '.' "$1"
+        awk '
+            { sub(/\r$/, "") }
+            /^[ \t]*$/ { next }
+            { printf "%s%s", (n++ ? "," : "["), $0 }
+            END { print (n ? "]" : "[]") }
+        ' "$1"
     else
         echo "[]"
     fi
