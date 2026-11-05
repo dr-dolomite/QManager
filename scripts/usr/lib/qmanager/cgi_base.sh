@@ -45,6 +45,7 @@ if ! type require_auth >/dev/null 2>&1; then
     }
     is_setup_required()     { return 1; }
     qm_get_cookie()         { :; }
+    qm_cookie_value()       { QM_COOKIE=""; }
     qm_set_session_cookies(){ :; }
     qm_clear_session_cookies(){ :; }
     qm_create_session()     { :; }
