@@ -197,7 +197,11 @@ qm_create_session() {
 }
 
 # Validate a session token: check file exists and not expired.
-# Returns 0 if valid, 1 if invalid/expired.
+# Returns 0 if valid, 1 if invalid/expired. Sets QM_AUTH_NOW to the epoch it
+# read, so the calling CGI can reuse it instead of forking `date` again.
+#
+# Two forks on the valid path (stat, date): the body is read with the `read`
+# builtin, and one stat covers the directory and the file.
 qm_validate_session() {
     _check_token="$1"
     [ -z "$_check_token" ] && return 1
@@ -205,19 +209,26 @@ qm_validate_session() {
 
     _session_file="${SESSIONS_DIR}/${_check_token}"
     [ ! -f "$_session_file" ] && return 1
-    command -v qm_owned_by_root >/dev/null 2>&1 || return 1
-    qm_owned_by_root "$SESSIONS_DIR" || return 1
-    qm_owned_by_root "$_session_file" || return 1
+    # Same rule as qm_owned_by_root for both paths: no symlink, owner uid 0.
+    [ -L "$SESSIONS_DIR" ] && return 1
+    [ -L "$_session_file" ] && return 1
+    _owners=$(stat -c %u "$SESSIONS_DIR" "$_session_file" 2>/dev/null)
+    [ "$_owners" = "0
+0" ] || return 1
 
-    _created=$(cat "$_session_file" 2>/dev/null)
-    # Reject empty or non-numeric content. A bare epoch timestamp is the only
-    # valid session-file body; anything else (e.g. a stale pre-2026-03-17
-    # JSON session blob) would crash the $(( )) arithmetic below under ash.
+    # The only valid body is one bare epoch line. A second line, blanks, or
+    # anything non-numeric (e.g. a stale pre-2026-03-17 JSON session blob) is
+    # rejected: it would crash the $(( )) arithmetic below under ash.
+    _created=""
+    _extra=""
+    { IFS= read -r _created; IFS= read -r _extra; } < "$_session_file" 2>/dev/null
     case "$_created" in
         ''|*[!0-9]*) rm -f "$_session_file"; return 1 ;;
     esac
+    [ -n "$_extra" ] && { rm -f "$_session_file"; return 1; }
 
     _now=$(date +%s)
+    QM_AUTH_NOW="$_now"
     _age=$(( _now - _created ))
     [ "$_age" -gt "$SESSION_MAX_AGE" ] && {
         rm -f "$_session_file"
