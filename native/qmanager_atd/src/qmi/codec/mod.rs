@@ -208,6 +208,10 @@ pub mod testfix {
             fx!("ca_0x19_wide_scell"),
             fx!("ca_0x15_deconfigured"),
             fx!("serving_searching"),
+            fx!("nsa_scc_3_0x0043"),
+            fx!("nsa_scc_3_0x00AC"),
+            fx!("nsa_3_0x004D"),
+            fx!("nsa_2_0x0045"),
         ]
     }
 
