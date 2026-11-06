@@ -1708,18 +1708,21 @@ read_ping_data() {
 
         local _ha=""
         if [ -s "$PING_HISTORY_RAW" ]; then
+            # Ring lines are "<rtt|null> <leg>" (leg p4|s4|p6|s6|-; an older
+            # one-column file has no leg). Jitter only pairs consecutive answers
+            # from the same leg, so a switch to the second provider is not jitter.
             _ha=$(awk -v min_samples="$PING_MIN_SAMPLES" '
-            BEGIN { n=0; lost=0; nv=0; have=0; sum=0; jsum=0 }
-            {
-                n++; arr[n]=$0
-                if ($0=="null") { lost++ }
+            BEGIN { n=0; lost=0; nv=0; have=0; sum=0; jsum=0; nj=0 }
+            NF > 0 {
+                n++; arr[n]=$1
+                if ($1=="null") { lost++ }
                 else {
-                    val=$0+0; sum+=val; nv++
+                    val=$1+0; sum+=val; nv++
                     if (!have||val<min) min=val
                     if (!have||val>max) max=val
                     have=1
-                    if (nv>1) { d=val-prev; if(d<0)d=-d; jsum+=d }
-                    prev=val
+                    if (nv>1 && $2==pleg) { d=val-prev; if(d<0)d=-d; jsum+=d; nj++ }
+                    prev=val; pleg=$2
                 }
             }
             END {
@@ -1730,7 +1733,7 @@ read_ping_data() {
                 # of this stat), so suppressing immature loss% loses no real signal.
                 mloss = (n >= min_samples) ? int(lost*100/n) : 0
                 if (nv>0)
-                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nv>1?jsum/(nv-1):0),mloss
+                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nj>0?jsum/nj:0),mloss
                 else
                     printf "null|null|null|null|%d|", (n>0 && n>=min_samples ? 100 : 0)
                 printf "["
