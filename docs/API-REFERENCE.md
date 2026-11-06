@@ -224,6 +224,7 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
     "conn_uptime_seconds": 43200,
     "serving_read_mono": 123456,
     "ca_read_mono": 123450,
+    "ca_source": "qmi",
     "firmware": "RM520NGLAAR03A04M4GA",
     "build_date": "Jun 25 2025",
     "manufacturer": "Quectel",
@@ -295,7 +296,7 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
 
 `lte.sinr` is in dB. `AT+QENG="servingcell"` reports LTE `<SINR>` as a raw value X from 0 to 25. The poller converts it with the RG520N/RM5xxN AT manual (§5.20) formula `Y = 2X - 20`, which gives -20 to +30 dB. Live checks on an RM551E against `AT+QCAINFO` RSSNR and `AT+QSINR` held from X=8 to X=24. Any raw value outside 0..25, or one that isn't a number (`-`, `-32768`, empty), is published as `null`. `nr.sinr` and the `signal_per_antenna` arrays are already in dB and are passed through unchanged.
 
-`device.serving_read_mono` and `device.ca_read_mono` are the uptime seconds (same clock as `mono`) of the last `AT+QENG` reply carrying `+QENG:` lines and the last `AT+QCAINFO` parse; `0` means never read since the poller started. Age them with `mono - value`; the deep poller tier freezes CA values, so `ca_read_mono` can be hours old. Backs `qmanager_serving_cell_age_seconds` / `qmanager_carrier_components_age_seconds` ([`features/prometheus-metrics.md`](features/prometheus-metrics.md)).
+`device.serving_read_mono` and `device.ca_read_mono` are the uptime seconds (same clock as `mono`) of the last `AT+QENG` reply carrying `+QENG:` lines and the last carrier read (an `AT+QCAINFO` parse, or a QMI carrier build since 0.7.0); `0` means never read since the poller started. Age them with `mono - value`; the deep poller tier freezes CA values, so `ca_read_mono` can be hours old. `device.ca_source` says where the carrier list came from: `qmi` (LTE carriers from the broker), `mixed` (QMI LTE plus the cached NR row) or `at`. Backs `qmanager_serving_cell_age_seconds` / `qmanager_carrier_components_age_seconds` ([`features/prometheus-metrics.md`](features/prometheus-metrics.md)).
 
 `watchcat.age_sec` is the watchdog daemon's heartbeat age: seconds since it last wrote `/tmp/qmanager_watchcat.json`, as a monotonic delta (poller uptime minus the state file's `mono`, never negative). `watchcat.stale_after` is the daemon's own limit (`3 * check_interval + 60`, or 600 during a long recovery tier). `age_sec > stale_after` means the daemon stopped reporting, and the Watchdog page shows "Not reporting". Both are `null` while the daemon has never reported, and are absent on an older poller (consumers treat that as live). When the state file is gone (daemon stopped) the poller resets the whole block to defaults (`enabled: false`, `state: "disabled"`). `watchcat.state` also takes `"ssr_hold"` and `"radio_off"`. See [`docs/features/connection-watchdog.md`](features/connection-watchdog.md#heartbeat-contract).
 

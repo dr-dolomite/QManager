@@ -17,7 +17,8 @@ Adaptive Polling makes the QManager AT poller ease off modem interrogation when 
 | Prometheus scrape file | `/var/run/qmanager/metrics_scrape` (`"<mode> <uptime_s>"`, written by the scrape CGI; TTL `METRICS_LEASE_TTL=120`; Invariant 11) |
 | SIM-switch quiesce flag | `/tmp/qmanager_sim_switch_active` (producer `cellular/settings.sh`; early-return alongside `LONG_FLAG`; mtime-bounded 60 s) |
 | Tier field in status.json | `.device.poller_tier` — `"active"` | `"idle"` | `"deep"` |
-| Radio read-age fields | `.device.serving_read_mono`, `.device.ca_read_mono` (uptime s of the last `+QENG:` reply / `AT+QCAINFO` parse; `0` = never) |
+| Radio read-age fields | `.device.serving_read_mono`, `.device.ca_read_mono` (uptime s of the last `+QENG:` reply / carrier read, from QMI or `AT+QCAINFO`; `0` = never) |
+| Carrier source | `.device.ca_source`: `qmi` \| `mixed` \| `at` (Invariant 14) |
 | AT read cap | `QC_WAIT_MS=2500`, passed per call as `QCMD_WAIT_MS` (Invariant 8); per-cycle busy latch `_AT_LATCH` / `_AT_BUSY`, rc 3 = not run |
 | status.json composer | `_wc_compose_pf` (printf, compact one line); `write_cache_jq` is the safety net (Invariant 9) |
 | Sidecars | `/var/run/qmanager/{ping,dns,ondemand}.env` (Invariant 10) |
@@ -167,7 +168,7 @@ This invariant has two layers, applied across two releases:
 **When the poller is Idle, the Tier-1 signal set runs in full:**
 
 - `AT+QENG="servingcell"` — serving-cell signal metrics
-- `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` — carrier-aggregation info. Extended reporting is switched on, read and switched off in one exchange (QuecManager's pattern); never leave `AT+QCAINFO=1` set at boot or between cycles, since a persistent `=1` drops the connection on RM551E R01A04 (confirmed by field test, fixed in v0.1.34).
+- `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` — carrier-aggregation info, skipped on an AT-due cycle when the QMI carrier list is usable (Invariant 14). Extended reporting is switched on, read and switched off in one exchange (QuecManager's pattern); never leave `AT+QCAINFO=1` set at boot or between cycles, since a persistent `=1` drops the connection on RM551E R01A04 (confirmed by field test, fixed in v0.1.34).
 - `AT+CFUN?` — radio function state
 - `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
 
@@ -240,7 +241,7 @@ The scrape CGI ([prometheus-metrics.md](prometheus-metrics.md)) writes `/var/run
 
 **Why:** the scrape file doubles as the card's "Last scrape" fact and lives in the root-only run dir, so a parse failure or a planted file can at worst raise the cadence for 120 s. Only an authenticated scrape renews it, so an unauthenticated flood cannot pin the poller. `Real-time` lands in `active` like an open browser; `balanced` lands in `idle`, so data (including QCAINFO and per-antenna) is at most `idle_interval` old.
 
-The poller also exports `.device.serving_read_mono` (set when a `poll_serving_cell` reply contains `+QENG:`) and `.device.ca_read_mono` (set after `parse_ca_info`). They let a consumer age the radio data, because the deep tier freezes CA values. Both are `_kN` integer keys in `_wc_compose_pf` and `--argjson` in `write_cache_jq`, so the two composers stay in parity; they default to `0`.
+The poller also exports `.device.serving_read_mono` (set when a `poll_serving_cell` reply contains `+QENG:`) and `.device.ca_read_mono` (set after `parse_ca_info`, or from the sidecar's `qmi_mono` after a QMI carrier build; Invariant 14). They let a consumer age the radio data, because the deep tier freezes CA values. Both are `_kN` integer keys in `_wc_compose_pf` and `--argjson` in `write_cache_jq`, so the two composers stay in parity; they default to `0`.
 
 ### 13. The QMI overlay wraps the final `write_cache` only
 
@@ -250,8 +251,24 @@ The poller also exports `.device.serving_read_mono` (set when a `poll_serving_ce
 - **Gates (all must hold):** no `+QENG:` reply parsed this cycle (`_QENG_PARSED`); no scan flag (`/tmp/qmanager_long_running`) and no SIM-switch flag; `system_state` is not `scan_in_progress` (a deep/idle tier keeps reporting it after a scan until its next AT read, so a lingering value must also block the overlay); a valid sidecar with `qmi_state=up` and `qmi_registered=1`; `_MONO_TOP - qmi_mono` in 0..5 s; QMI PCI and EARFCN equal the AT ones (or AT knows no serving cell), so a handover between AT reads is never merged; all three values integers. The scan/SIM-switch early-return `write_cache` gets no overlay.
 - **`qmi_load`** is `-nt`-gated against `/var/run/qmanager/qmi.stamp` (stamp backdated 1 s, forced re-read every 15 calls) and forks nothing. **`qmi.stamp` is owned by the poller** (`init.d/qmanager` stop removes it). The env is sourced through `_qmi_env_source`, stricter than `cq_env_source`: every line must be a single-quoted `qmi_*` assignment using only `[A-Za-z0-9_='-]`, ending with `qm_sidecar_end='1'`, so a sourced line can only set a `qmi_*` variable, never a poller global. **The broker must keep its values in that set.** The stamp touch uses `true`, not `:` (a failing redirect on `:` kills the shell).
 - **New `status.json` keys** (both composers, `_wc_compose_pf` and `write_cache_jq`, kept in parity): `lte.source` (`at|qmi`), `device.qmi_read_mono` (int, 0 = never), `device.qmi_state` (`""|up|down|unavailable`), `device.qmi_ssr_count` (int). All are optional in `types/modem-status.ts`.
-- **Not merged:** CA (decided against 2026-10-25: [`../plans/2026-10-25-qmi-ca-gap-fill.md`](../plans/2026-10-25-qmi-ca-gap-fill.md); `QCAINFO` runs every AT-due cycle and `device.ca_read_mono` labels deep-tier age, so there is no `network.ca_source`), NR, SINR and per-antenna values.
+- **Not merged:** the carrier list. It is not an overlay: it replaces the QCAINFO read on AT-due cycles (Invariant 14). NR, SINR and per-antenna values are not merged either.
 - **Parity tooling:** `dump_globals.sh` learns `qmi_`/`_qmo_`; `sidecar_parity.sh` takes `qmi_merge.sh` as a 5th argument and covers valid, truncated, stray-line and older-than-stamp envs plus no fork; `status_parity.sh` covers the new keys. See `tools/poller-parity/README.md`.
+
+### 14. The carrier list comes from QMI on AT-due cycles, with an AT fallback
+
+At the QCAINFO point of an AT-due, non-deep cycle, the poller calls `qmi_load` and then `qmi_ca_build` (`scripts/usr/lib/qmanager/qmi_merge.sh`). A successful build fills the `t2_*` carrier globals from the broker 0.7.0 sidecar and **does not run** `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0`. Any failed gate returns 1 and the unchanged AT read runs. The carrier data and its join are in [`qmi-lane.md`](qmi-lane.md#carrier-list-from-qmi-broker-070).
+
+- **Same cadence, same shape.** The build replaces the QCAINFO sample on the same cycles. It is not an overlay and is never restored, so `events.sh` sees one sample per AT-due cycle as before and the `ca_change` debounce is not retuned. The `carrier_components` JSON keeps the parser's keys and order.
+- **Gates (all must hold).** QENG parsed this cycle. The sidecar is `qmi_state=up`, registered, at most 5 s old, and has the 0.7.0 keys. No scan flag, no SIM-switch flag, and `system_state` is not `scan_in_progress`. The network is LTE, or 5G-NSA with QENG showing an NR leg (SA and an NR PCC always read AT). QMI's PCC PCI and EARFCN equal QENG's. The last AT parse had no NR PCC and at most one NR row. Every carrier slot is complete and numeric, and the SCC count is `qmi_ca_count - 1`.
+- **NR row is cached whole, not merged.** With an NR leg, the NR row is the one from the last successful QCAINFO parse (`qmi_ca_cache_update`). It is used only while its ARFCN and PCI equal QENG's and it is at most `QMI_CA_NR_MAX_AGE` (20 s) old. Otherwise the AT read runs and refreshes it.
+- **Effect.** In NSA, QCAINFO runs about every 20 s instead of every 2 s in active. In LTE-only it does not run while QMI is fresh. Live (2026-11-06, NSA, 4 min active): 109 cycles built from QMI (`mixed`), 11 read AT.
+- **Freshness fields.** `device.ca_source` is `qmi`, `mixed` or `at`. The poller sets `at` after every QCAINFO parse or failure and leaves it alone on a busy skip. `device.ca_read_mono` is the sidecar's `qmi_mono` on a QMI build, so in `mixed` the NR row can be up to 20 s older than the field says.
+- **SCC SINR is null on QMI builds.** AT reports 0 for LTE SCC SINR on this firmware, which the UI showed as a false low-SNR warning.
+- **Boot fallbacks are not carrier data.** `collect_boot_data` fills an empty model, firmware or IMEI from `qmi rev ids`. `refresh_policy_band` takes the LTE list from `qmi bands` only when AT gives none, and never caches it.
+
+> ⚠️ WARNING: Do not build the NR row from QMI values, and do not drop the 20 s NR gate. **Why:** QMI has no NR bandwidth and its NR SINR runs about 9 dB above QCAINFO's, so a QMI NR row would change published values. Keeping the AT row whole keeps its values the same as before.
+
+Parity: `tools/poller-parity/qmi_ca_parity.sh` (63 checks) covers the gates and the carrier JSON. `status_parity.sh` `sc_qmica` covers the status shape.
 
 ---
 
@@ -332,7 +349,7 @@ Sidebar entry key: `adaptive_polling`. Available in all 5 shipped locales.
 
 ## status.json Surface
 
-The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11), and since QMI Phase 2 `.lte.source`, `.device.qmi_read_mono`, `.device.qmi_state` and `.device.qmi_ssr_count` (Invariant 13).
+The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11), and since QMI Phase 2 `.lte.source`, `.device.qmi_read_mono`, `.device.qmi_state` and `.device.qmi_ssr_count` (Invariant 13), and since 0.7.0 `.device.ca_source` (Invariant 14).
 
 The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"deep"` on every `write_cache` call. Consumers (the frontend tier badge, the CGI GET fallback) should treat the field as optional — it is absent on older builds and on the first write if the poller starts before the cache is populated.
 
