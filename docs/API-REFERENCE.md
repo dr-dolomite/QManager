@@ -224,12 +224,8 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
     "conn_uptime_seconds": 43200,
     "serving_read_mono": 123456,
     "ca_read_mono": 123450,
-<<<<<<< HEAD
-    "firmware": "RM551EGL00AAR02A01M8G",
-=======
     "ca_source": "qmi",
-    "firmware": "RM520NGLAAR03A04M4GA",
->>>>>>> feat/qmi-at-offload
+    "firmware": "RM551EGL00AAR02A01M8G",
     "build_date": "Jun 25 2025",
     "manufacturer": "Quectel",
     "model": "RM551E-GL",
