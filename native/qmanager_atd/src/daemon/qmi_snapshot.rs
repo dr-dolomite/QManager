@@ -1,7 +1,8 @@
 //! The QMI snapshot engine: a sampler thread in the QMI lane that reads the
-//! bundle (serving + cell + CA + RF: four requests, about 1.5 ms) and
-//! publishes it for the poller and the CGIs, so they get LTE identity, signal
-//! and CA at most 2 s old in every poller tier, with no AT and no fork.
+//! bundle (serving + cell + CA + RF + signal info + sys info: six requests,
+//! about 2 ms) and publishes it for the poller and the CGIs, so they get LTE
+//! identity, signal, CA and the NR identity at most 2 s old in every poller
+//! tier, with no AT and no fork.
 //!
 //! Two files, written atomically (`<path>.new`, O_EXCL + O_NOFOLLOW, rename),
 //! JSON first and env right after it so the env is never older than the JSON
@@ -33,6 +34,16 @@
 //!   avoids the RSRP-while-searching trap.
 //! - CA is the PCC plus up to four SCCs, 5 fields each; the contract is flat
 //!   names, so the list is fixed. A fifth SCC is not published.
+//! - Per-carrier signal (0.7.0): `qmi_pcc_{rsrp,rsrq,rssi,sinr}` and
+//!   `qmi_scc<N>_{rsrp,rsrq,rssi}` are the carrier's own reading, whole dB
+//!   **truncated toward zero** (what `AT+QCAINFO` prints; the JSON `value`
+//!   fields round instead). SCC slot N is the same carrier as the
+//!   `qmi_scc<N>_*` identity keys. Empty unless registered and the carrier's
+//!   (EARFCN, PCI) found its row; never a neighbour's. SCC SINR is not
+//!   published (QMI has none).
+//! - NR identity (0.7.0): `qmi_nr_pci` / `qmi_nr_arfcn` from Sys Info (the
+//!   ARFCN falls back to the cell location's), `qmi_nr_endc` `1` / `0`. Not
+//!   registration gated (identity), empty when the modem reports none.
 //! - Data Used (0.6.0): `qmi_wds_ok`, `qmi_wds_rx_bytes`, `qmi_wds_tx_bytes`,
 //!   `qmi_wds_mux` are the default call's ok byte counters from WDS Get
 //!   Packet Statistics on the registry's two internal, bound WDS clients
@@ -70,7 +81,7 @@ use crate::common::log::Logger;
 use crate::common::safefs;
 use crate::qmi::codec::wds::ERR_OUT_OF_CALL;
 use crate::qmi::error::QmiError;
-use crate::qmi::model::{self, Bundle, Registration};
+use crate::qmi::model::{self, Bundle, Reading, Registration};
 use crate::qmi::registry::{BindTarget, IpFamily, Registry, SvcState, WdsBind, THREAD_STACK};
 use crate::qmi::SVC_NAS;
 use super::data_call;
@@ -193,6 +204,26 @@ pub const NAMES: &[&str] = &[
     "qmi_wds_rx_bytes",
     "qmi_wds_tx_bytes",
     "qmi_wds_mux",
+    // 0.7.0: appended after the 0.6.0 block, before the terminator.
+    "qmi_pcc_rsrp",
+    "qmi_pcc_rsrq",
+    "qmi_pcc_rssi",
+    "qmi_pcc_sinr",
+    "qmi_scc1_rsrp",
+    "qmi_scc1_rsrq",
+    "qmi_scc1_rssi",
+    "qmi_scc2_rsrp",
+    "qmi_scc2_rsrq",
+    "qmi_scc2_rssi",
+    "qmi_scc3_rsrp",
+    "qmi_scc3_rsrq",
+    "qmi_scc3_rssi",
+    "qmi_scc4_rsrp",
+    "qmi_scc4_rsrq",
+    "qmi_scc4_rssi",
+    "qmi_nr_pci",
+    "qmi_nr_arfcn",
+    "qmi_nr_endc",
 ];
 
 /// This cycle's WDS packet statistics (Data Used). All None: not read.
@@ -224,6 +255,12 @@ fn num<T: std::fmt::Display>(v: Option<T>) -> String {
 /// "B41" -> 41. Only an LTE band label; anything else is empty.
 fn band_num(label: Option<&str>) -> Option<u32> {
     label?.strip_prefix('B')?.parse().ok()
+}
+
+/// Whole dB cut toward zero (integer division), the way `AT+QCAINFO` prints
+/// the same tenths.
+fn trunc(r: Option<Reading>) -> Option<i32> {
+    r.map(|r| r.x10 / 10)
 }
 
 fn registered(b: &Bundle) -> Option<bool> {
@@ -281,6 +318,26 @@ fn values(v: &View) -> Vec<String> {
     out.push(num(w.rx.filter(|_| valid)));
     out.push(num(w.tx.filter(|_| valid)));
     out.push(num(w.mux));
+
+    // 0.7.0. Carrier readings are already None unless registered; the gate is
+    // explicit for the day the model changes.
+    let regd = b.is_some_and(|b| b.registered());
+    let pcc = pcc.filter(|_| regd);
+    out.push(num(trunc(pcc.and_then(|c| c.rsrp))));
+    out.push(num(trunc(pcc.and_then(|c| c.rsrq))));
+    out.push(num(trunc(pcc.and_then(|c| c.rssi))));
+    out.push(num(trunc(pcc.and_then(|c| c.sinr))));
+    for i in 0..SCCS {
+        let s = sccs.get(i).copied().filter(|_| regd);
+        out.push(num(trunc(s.and_then(|c| c.rsrp))));
+        out.push(num(trunc(s.and_then(|c| c.rsrq))));
+        out.push(num(trunc(s.and_then(|c| c.rssi))));
+    }
+    let sys = b.and_then(|b| b.sysinfo);
+    out.push(num(sys.and_then(|s| s.nr_pci)));
+    let cell_arfcn = b.and_then(|b| b.cell.as_ref()).and_then(|c| c.nr.as_ref()).and_then(|n| n.arfcn);
+    out.push(num(sys.and_then(|s| s.nr_arfcn).or(cell_arfcn)));
+    out.push(num(sys.and_then(|s| s.endc).map(|e| e as u8)));
     debug_assert_eq!(out.len(), NAMES.len());
     out
 }
@@ -625,6 +682,19 @@ mod tests {
             ca: Some(&fx!("ca_0x15_two_scells")),
             rf: Some(&fx!("r1_3_0x0031")),
             sig_info: None,
+            sys_info: None,
+        })
+    }
+
+    /// The NSA capture: B1 PCC + B3 LTE SCC (both PCI 295) + N41, registered.
+    fn nsa_bundle() -> Bundle {
+        Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&fx!("nsa_scc_3_0x0043")),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            rf: Some(&fx!("r1_3_0x0031")),
+            sig_info: Some(&fx!("r1_3_0x004F")),
+            sys_info: Some(&fx!("nsa_3_0x004D")),
         })
     }
 
@@ -777,7 +847,7 @@ mod tests {
         // still satisfy the contract.
         for base in crate::qmi::codec::testfix::all() {
             for m in crate::qmi::codec::testfix::mangled(&base) {
-                let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m) });
+                let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m), sys_info: Some(&m) });
                 let env = render_env(&View { mono_s: Some(1), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
                 assert_eq!(violation(&env), None, "{env}");
             }
@@ -975,8 +1045,97 @@ mod tests {
     }
 
     #[test]
-    fn the_env_contract_is_42_names_in_order() {
-        assert_eq!(NAMES.len(), 42);
+    fn nsa_carriers_publish_their_own_truncated_signal_and_the_nr_identity() {
+        let b = nsa_bundle();
+        let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
+        assert_eq!(violation(&env), None, "{env}");
+        let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
+        // AT at the same moment: PCC -93/-8/-67, SCC -94/-11/-75 (tenths -934/-87/-675 and -942/-113/-751).
+        assert_eq!((get(&p, "qmi_pcc_rsrp"), get(&p, "qmi_pcc_rsrq"), get(&p, "qmi_pcc_rssi")), ("-93", "-8", "-67"));
+        assert_eq!((get(&p, "qmi_scc1_rsrp"), get(&p, "qmi_scc1_rsrq"), get(&p, "qmi_scc1_rssi")), ("-94", "-11", "-75"));
+        // PCC SINR is the cached Signal Info one (26.4 dB); an SCC has none.
+        assert_eq!(get(&p, "qmi_pcc_sinr"), "26");
+        // Slot 1's signal belongs to slot 1's identity: the B3 SCC on EARFCN 1350.
+        assert_eq!((get(&p, "qmi_scc1_earfcn"), get(&p, "qmi_scc1_pci"), get(&p, "qmi_scc1_band")), ("1350", "295", "3"));
+        for n in ["qmi_scc2_rsrp", "qmi_scc3_rssi", "qmi_scc4_rsrq"] {
+            assert_eq!(get(&p, n), "", "{n}");
+        }
+        assert_eq!((get(&p, "qmi_nr_pci"), get(&p, "qmi_nr_arfcn"), get(&p, "qmi_nr_endc")), ("262", "528030", "1"));
+        // Printed for the build report.
+        eprintln!("--- qmi.env (NSA SCC capture)\n{env}---");
+    }
+
+    #[test]
+    fn a_carrier_without_a_matching_row_is_empty_not_a_neighbours() {
+        // The two-SCell CA capture against the idle cell location: PCC is
+        // EARFCN 1350 but the serving cell is 150, and no SCC has a row.
+        let b = bundle("registered");
+        let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
+        let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
+        for n in ["qmi_pcc_rsrp", "qmi_pcc_rsrq", "qmi_pcc_rssi", "qmi_pcc_sinr", "qmi_scc1_rsrp", "qmi_scc2_rssi", "qmi_nr_pci", "qmi_nr_endc"] {
+            assert_eq!(get(&p, n), "", "{n}");
+        }
+        // The NR ARFCN still falls back to the cell location's.
+        assert_eq!(get(&p, "qmi_nr_arfcn"), "528030");
+        // The same PCI on another EARFCN does not borrow: drop the SCC's frequency row.
+        let mut cell = fx!("nsa_scc_3_0x0043");
+        cell.tlvs.retain(|t| t.t != 0x14 && t.t != 0x28);
+        let b = Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&cell),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            ..Inputs::default()
+        });
+        let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
+        let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
+        assert_eq!(get(&p, "qmi_pcc_rsrp"), "-93");
+        assert_eq!((get(&p, "qmi_scc1_pci"), get(&p, "qmi_scc1_rsrp"), get(&p, "qmi_scc1_rsrq")), ("295", "", ""));
+    }
+
+    #[test]
+    fn the_new_signal_is_gated_by_registration_and_nr_identity_is_not() {
+        let mk = |serving: Option<crate::qmi::msg::Msg>| {
+            Bundle::build(&Inputs {
+                serving: serving.as_ref(),
+                cell: Some(&fx!("nsa_scc_3_0x0043")),
+                ca: Some(&fx!("nsa_scc_3_0x00AC")),
+                sig_info: Some(&fx!("r1_3_0x004F")),
+                sys_info: Some(&fx!("nsa_3_0x004D")),
+                ..Inputs::default()
+            })
+        };
+        for serving in [Some(fx!("serving_searching")), None] {
+            let b = mk(serving);
+            let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: WdsView::default(), bundle: Some(&b) });
+            assert_eq!(violation(&env), None, "{env}");
+            let p = pairs(&env[..env.len() - "qm_sidecar_end='1'\n".len()]);
+            for n in ["qmi_pcc_rsrp", "qmi_pcc_sinr", "qmi_scc1_rsrp", "qmi_scc1_rssi"] {
+                assert_eq!(get(&p, n), "", "{n} must be empty while not registered");
+            }
+            assert_eq!((get(&p, "qmi_nr_pci"), get(&p, "qmi_nr_endc")), ("262", "1"));
+            assert_eq!(get(&p, "qmi_scc1_pci"), "295", "identity is not gated");
+        }
+    }
+
+    #[test]
+    fn the_nsa_sample_flows_through_the_real_registry() {
+        let d = dir("nsa");
+        let p = paths(&d);
+        let env_p = p.env.clone();
+        let reg = start_registry(&crate::qmi::fake::nsa_scc_net());
+        Sampler::new(p, log()).sample(&reg);
+        let env = std::fs::read_to_string(&env_p).unwrap();
+        assert_eq!(violation(&env), None, "{env}");
+        let pr = pairs(&env[..env.len() - 19]);
+        assert_eq!((get(&pr, "qmi_pcc_rsrp"), get(&pr, "qmi_scc1_rsrp"), get(&pr, "qmi_nr_pci")), ("-93", "-94", "262"));
+        let json = std::fs::read_to_string(&paths(&d).json).unwrap();
+        assert!(json.contains("\"sysinfo\":{\"nr\":{\"pci\":262,"), "{json}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_env_contract_is_61_names_in_order() {
+        assert_eq!(NAMES.len(), 61);
         let mut want: Vec<String> = ["qmi_mono", "qmi_state", "qmi_ssr_count", "qmi_registered"].iter().map(|s| s.to_string()).collect();
         for f in ["pci", "earfcn", "tac", "cell_id", "band", "bw_mhz", "rsrp", "rsrq", "rssi"] {
             want.push(format!("qmi_lte_{f}"));
@@ -993,6 +1152,18 @@ mod tests {
         // 0.6.0 appends Data Used, still before the terminator.
         for f in ["ok", "rx_bytes", "tx_bytes", "mux"] {
             want.push(format!("qmi_wds_{f}"));
+        }
+        // 0.7.0 appends the per-carrier signal and the NR identity after them.
+        for f in ["rsrp", "rsrq", "rssi", "sinr"] {
+            want.push(format!("qmi_pcc_{f}"));
+        }
+        for i in 1..=4 {
+            for f in ["rsrp", "rsrq", "rssi"] {
+                want.push(format!("qmi_scc{i}_{f}"));
+            }
+        }
+        for f in ["pci", "arfcn", "endc"] {
+            want.push(format!("qmi_nr_{f}"));
         }
         assert_eq!(NAMES, want.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice());
     }
@@ -1034,13 +1205,14 @@ mod tests {
     }
 
     #[test]
-    fn the_wds_lines_sit_last_before_the_terminator_integer_or_empty() {
+    fn the_wds_lines_keep_their_place_and_the_0_7_lines_follow_them_integer_or_empty() {
         let w = WdsView { ok: Some(true), rx: Some(730_344_017), tx: Some(41_000_123), mux: Some(1) };
         let env = render_env(&View { mono_s: Some(5), state: "up", ssr_count: 0, sig: "off", wds: w, bundle: None });
         assert_eq!(violation(&env), None, "{env}");
-        assert!(env.ends_with(
-            "qmi_scc4_active=''\nqmi_wds_ok='1'\nqmi_wds_rx_bytes='730344017'\nqmi_wds_tx_bytes='41000123'\nqmi_wds_mux='1'\nqm_sidecar_end='1'\n"
+        assert!(env.contains(
+            "qmi_scc4_active=''\nqmi_wds_ok='1'\nqmi_wds_rx_bytes='730344017'\nqmi_wds_tx_bytes='41000123'\nqmi_wds_mux='1'\nqmi_pcc_rsrp=''\n"
         ), "{env}");
+        assert!(env.ends_with("qmi_nr_arfcn=''\nqmi_nr_endc=''\nqm_sidecar_end='1'\n"), "{env}");
         // ok=0 or unknown: never bytes, even if the view carried some.
         for ok in [Some(false), None] {
             let w = WdsView { ok, rx: Some(1), tx: Some(2), mux: Some(3) };
