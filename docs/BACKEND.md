@@ -63,7 +63,7 @@ Never access the modem's AT channel directly. `qcmd` is served by the Rust AT br
 
 > ⚠️ WARNING: Do not reintroduce `AT+QTEMP` on RM551E-GL (SDX75) firmware. Issuing it on `/dev/smd11` can crash the AT channel, making the modem unreachable until the channel recovers or the device reboots.
 
-Temperature is read exclusively from the SoC thermal sysfs (`/sys/class/thermal/thermal_zone*/`) and runs at **Tier 1.5 (10 s)**. The parser (`parse_temperature()` in `scripts/usr/lib/qmanager/parse_at.sh`) selects zones by **type-name allowlist** (`mdmss-*|mdmq6-*|sdr[0-9]*|xo-therm*|sys-therm-*|cpuss-*`), not by zone index — indices renumber across firmware builds, type names are stable. The allowlist spans the modem die (`mdmss`, `mdmq6`), the RF transceiver (`sdr`), the board/system thermistors (`sys-therm`, `xo-therm`), and the application-processor cores (`cpuss`), so the single averaged value reflects overall device temperature. Unavailable-sensor sentinels (`-273000`, `-40960`) are filtered by an `awk '$1 > 0'` pass before averaging. The result is millidegrees-to-degrees via `printf "%.0f", sum/1000/count`.
+Temperature is read exclusively from the SoC thermal sysfs (`/sys/class/thermal/thermal_zone*/`) and runs at **Tier 1.5 (10 s)**. The parser (`parse_temperature()` in `scripts/usr/lib/qmanager/parse_at.sh`) selects zones by **type-name allowlist** (`mdmss-*|mdmq6-*|sdr[0-9]*|xo-therm*|sys-therm-*|cpuss-*`), not by zone index — indices renumber across firmware builds, type names are stable. The allowlist spans the modem die (`mdmss`, `mdmq6`), the RF transceiver (`sdr`), the board/system thermistors (`sys-therm`, `xo-therm`), and the application-processor cores (`cpuss`), so the single averaged value reflects overall device temperature. Unavailable-sensor sentinels (`-273000`, `-40960`) and empty values are excluded (non-positive values are dropped) before averaging. The current `parse_temperature()` is builtins-only (no awk/cat). It falls back to `_parse_temperature_legacy()` (awk-based) only for unusual sysfs values. The result is millidegrees-to-degrees, rounded as `printf "%.0f", sum/1000/count`.
 
 The poller global for this value is `t1_temperature` (renamed from `t2_temperature` when the read moved from Tier 2 to Tier 1.5). The `.temperature` key in `/tmp/qmanager_status.json` and `device.temperature` in the API response are unchanged.
 
@@ -150,6 +150,7 @@ cgi_headers
 | Function | Description |
 |----------|-------------|
 | `cgi_headers` | Emit JSON + CORS + no-cache headers |
+| `cgi_ui_heartbeat` | Touch the UI-active heartbeat (`/tmp/qmanager_ui_active`) that drives the poller's adaptive tier |
 | `cgi_handle_options` | Handle CORS preflight (OPTIONS) requests |
 | `cgi_read_post` | Read POST body into `$POST_DATA` |
 | `cgi_success` | Emit `{"success":true}` |
@@ -328,38 +329,16 @@ Video Optimizer helper functions. Guard-loaded (`_DPI_HELPER_LOADED`).
 
 | Function | Description |
 |----------|-------------|
-| `dpi_check_binary()` | Verify nfqws binary exists |
+| `dpi_check_binary()` | Verify nfqws binary (`/usr/bin/nfqws`) exists |
 | `dpi_check_kmod()` | Check NFQUEUE support (built-in via `/proc/config.gz` or loadable module) |
-| `dpi_check_libs()` | Verify shared library dependencies |
-| `dpi_insert_rules(iface)` | Add nftables NFQUEUE rules (queue 200) |
-| `dpi_remove_rules()` | Remove nftables NFQUEUE rules by comment (`qmanager_dpi`) |
 | `dpi_get_status()` | Return running/stopped |
-| `dpi_get_uptime()` | Calculate from PID timestamp |
+| `dpi_get_uptime()` | Calculate from PID file timestamp |
 | `dpi_get_packet_count()` | Read nftables counter |
 | `dpi_get_domain_count()` | Count hostlist entries |
 
-### masq_helper.sh
+**Constants:** `NFQWS_BIN=/usr/bin/nfqws`, `NFQWS_PID=/var/run/nfqws.pid`, `DPI_QUEUE_NUM=200`, `DPI_NFT_COMMENT=qmanager_dpi`, `DPI_HOSTLIST=/etc/qmanager/video_domains.txt`.
 
-Traffic Masquerade helper functions. Guard-loaded (`_MASQ_HELPER_LOADED`). Sources `dpi_helper.sh` for shared constants and prerequisite checks.
-
-**Constants:**
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `MASQ_PID` | `/var/run/nfqws_masq.pid` | PID file for uptime tracking |
-| `MASQ_QUEUE_NUM` | `201` | NFQUEUE number (separate from Video Optimizer's queue 200) |
-| `MASQ_NFT_COMMENT` | `qmanager_masq` | nftables rule comment for identification |
-
-**Functions:**
-
-| Function | Description |
-|----------|-------------|
-| `masq_insert_rules(iface)` | Add nftables NFQUEUE rules for all HTTPS traffic (TCP + QUIC port 443, queue 201) |
-| `masq_remove_rules()` | Remove nftables rules by comment (`qmanager_masq`) |
-| `masq_get_status()` | Return `running` or `stopped` based on PID file |
-| `masq_get_uptime()` | Calculate human-readable uptime from PID file timestamp |
-| `masq_get_packet_count()` | Read nftables counter for masquerade rules |
-| `get_nfqws_pid_by_queue(qnum)` | Find nfqws PID by scanning `/proc/*/cmdline` for `qnum=<N>` |
+The NFQUEUE rules are not added by a helper function. They are a persistent fw4 include, `scripts/etc/nftables.d/12-mangle-qmanager-dpi.nft` (chain `mangle_postrouting_qmanager_dpi`, `oifname "rmnet*"` TCP/UDP 443, first 4 packets of each connection, `queue num 200 bypass`). Runtime `nft add rule` would not survive a fw4 reload.
 
 ---
 
@@ -371,7 +350,7 @@ The core daemon — runs forever, polls the modem at tiered intervals.
 
 **Location:** `scripts/usr/bin/qmanager_poller`
 **Output:** `/tmp/qmanager_status.json`
-**Size:** ~2000 lines
+**Size:** ~3000 lines
 
 **Responsibilities:**
 - Execute AT commands via `qcmd` at tiered intervals
@@ -386,10 +365,12 @@ The core daemon — runs forever, polls the modem at tiered intervals.
 
 | Tier | Interval | Data |
 |------|----------|------|
-| 1 | 2s | Serving cell, uptime |
-| 1.5 | 10s | SoC temperature (thermal sysfs), per-antenna signal, history append |
-| 2 | 30s | Carrier, CA, MIMO, SIM identity (operator name, APN, DNS, WAN-IP, ICCID, IMSI) |
-| Boot | Once | Firmware, IMEI, IMSI, capabilities |
+| 1 | 2s cycle (AT every cycle while Active; slower Idle/Deep, see [ARCHITECTURE.md](ARCHITECTURE.md#polling-architecture-backend)) | `AT+QENG="servingcell"`, `AT+QCAINFO`, `AT+CFUN?`, per-antenna signal (`AT+QRSRP;+QRSRQ;+QSINR`), `/proc` traffic and uptime |
+| 1.5 | 10s (every 5 cycles) | Ping history append, watchcat state read, SoC temperature (thermal sysfs, no AT) |
+| 2 | 30s (every 15 cycles, Active only) | Identity: carrier (`AT+COPS?`), SIM slot (`AT+QUIMSLOT?`), phone number (`AT+CNUM`), SIM presence (`AT+CPIN?`) |
+| Boot | Once | Firmware, IMEI, IMSI, ICCID, capabilities, supported bands |
+
+Tier 2 no longer carries CA, MIMO, APN, or the data-plane/L1 group. CA is in Tier 1, and the data-plane/L1 values are fetched on demand by `cellular/radio_details.sh`. The QMI lane's `qmi.env` also fills LTE serving signal on cycles where AT did not read the serving cell (`qmi_merge.sh`).
 
 **Boot APN reconcile:** `collect_boot_data()` invokes `reconcile_active_apn_slot_at_boot()` (defined in `apn_mgr.sh`) immediately after the profile auto-apply step. The function compares the stored active APN slot against the live `AT+CGDCONT?` value and runs a COPS detach/attach cycle only on mismatch — no AT commands fire when the APN is already correct. Two gates must both pass: no active Custom SIM Profile (`/etc/qmanager/active_profile` empty/absent) and a non-zero `active` pointer in `apn_profiles.json`. See [`docs/features/apn-management.md`](features/apn-management.md) for the full invariant.
 
@@ -435,20 +416,21 @@ State machine: `MONITOR → SUSPECT → RECOVERY → COOLDOWN → LOCKED`
 
 On-demand cell scanning daemons started by CGI endpoints.
 
-**Output:** `/tmp/qmanager_cell_scan.json`, `/tmp/qmanager_neighbour_scan.json`
+**Output:** `/tmp/qmanager_cell_scan_result.json`, `/tmp/qmanager_neighbour_scan_result.json` (errors in `*_error`, PID in `*.pid`)
 
 ### qmanager_profile_apply
 
-3-step custom profile application daemon:
+4-step custom profile application daemon, ordered least to most disruptive (`qmanager_profile_apply`):
 1. APN → `AT+CGDCONT`
 2. TTL/HL → Write `/etc/firewall.user.ttl`
-3. IMEI → `AT+EGMR=1,7,"<IMEI>"` + reboot
+3. MPDN rule → Verizon PDP3 routing or revert (no reboot)
+4. IMEI → `AT+EGMR=1,7,"<IMEI>"` + reboot (always last)
 
 **State:** `/tmp/qmanager_profile_state.json`
 
 ### qmanager_band_failover / qmanager_tower_failover
 
-Signal-based automatic failover daemons for bands and towers.
+Signal-based automatic failover for bands and towers. `qmanager_band_failover` is a one-shot watcher, not a persistent daemon: `bands/lock.sh` spawns it via double-fork after a band lock when failover is enabled, and it exits when done. `qmanager_tower_failover` is the long-running tower watcher (init script `qmanager_tower_failover`).
 
 ### qmanager_sites (Sites Monitor)
 
@@ -494,10 +476,10 @@ Downloads and installs the nfqws binary from the [zapret](https://github.com/bol
 **Flow:**
 
 1. Detect device architecture via `uname -m` (aarch64, armv7l, x86_64, mips, mipsel)
-2. Query GitHub API (`/repos/bol-van/zapret/releases/latest`) for the latest release
-3. Find the `openwrt-embedded.tar.gz` asset (smaller tarball with only binaries); falls back to the full release tarball
-4. Download the tarball to `/tmp/qmanager_dpi_download/`
-5. Extract only the architecture-specific `nfqws` binary (`binaries/<arch>/nfqws`)
+2. Use the pinned zapret release (`ZAPRET_TAG`, currently `v72.13`); no GitHub API lookup. The URL is the `openwrt-embedded` tarball (binaries only).
+3. Verify the download against the pinned release digest
+4. Download the tarball to `/var/run/qmanager/dpi_download/`
+5. Extract only the architecture-specific `nfqws` binary (`zapret-<tag>/binaries/<arch>/nfqws`, where `<arch>` is the mapped name such as `linux-arm64`)
 6. Install to `/usr/bin/nfqws` with `chmod 755`
 7. Verify the binary runs (`nfqws --help`)
 8. Write success/error result to `/tmp/qmanager_dpi_install.json`
@@ -516,18 +498,20 @@ Status values: `running`, `complete`, `error`
 
 ### qmanager_dpi (DPI Evasion — Video Optimizer + Traffic Masquerade)
 
-**Type:** Procd service (multi-instance daemon pattern)
-**Binary:** `/usr/bin/nfqws` (from zapret project)
+**Type:** Procd service, one nfqws instance
+**Binary:** `/usr/bin/nfqws` (from zapret project), PID file `/var/run/nfqws.pid`
 **Config:** UCI `quecmanager.video_optimizer` + `quecmanager.traffic_masquerade`
 
-Manages up to two nfqws instances for DPI evasion. Each instance runs on its own NFQUEUE number and is independently UCI-gated:
+Runs a single nfqws instance on NFQUEUE 200. The two modes are mutually exclusive, and Traffic Masquerade wins when both are enabled:
 
-- **Instance 1 (`nfqws`)**: Video Optimizer — SNI split on queue 200, filtered by hostname list. Enabled via `quecmanager.video_optimizer.enabled`.
-- **Instance 2 (`nfqws_masq`)**: Traffic Masquerade — fake TLS ClientHello with spoofed SNI on queue 201, applied to all HTTPS traffic. Enabled via `quecmanager.traffic_masquerade.enabled`.
+- **Video Optimizer** (`video_optimizer.enabled=1`): `split2` desync on the hostnames in `/etc/qmanager/video_domains.txt`. Options: `desync_repeats` (clamped 1–10), `quic_enabled` (UDP length increment).
+- **Traffic Masquerade** (`traffic_masquerade.enabled=1`): `fake` desync with a spoofed TLS SNI (`sni_domain`, default `speedtest.net`), applied to all HTTPS traffic.
 
-**Start:** Checks binary + kernel module (shared prerequisites) → for each enabled instance: inserts nftables rules → launches nfqws via procd → writes PID files by scanning `/proc/*/cmdline` for queue numbers
-**Stop:** Removes all nftables rules (both `qmanager_dpi` and `qmanager_masq` comments) → kills both instances → cleans up PID files
-**Respawn:** 3600s window, 5s delay, max 5 respawns (per instance)
+**Start:** `start_service` checks the binary and kernel module, picks the mode from UCI, and launches nfqws via procd with `pidfile` set to `/var/run/nfqws.pid`. Returns without starting if neither mode is enabled. The NFQUEUE rules are a persistent fw4 include (see `dpi_helper.sh` above), not added at start time.
+**Stop:** `stop_service` removes the PID file. procd stops the instance.
+**Respawn:** 3600s window, 5s delay, max 5 respawns
+
+Uses `STOP=10` and `USE_PROCD=1`.
 
 ### qcmd
 
@@ -550,8 +534,13 @@ result=$(qcmd 'AT+QENG="servingcell"')
 | `qmanager_mtu` | non-procd | 99 | `qmanager_mtu_apply` | MTU application daemon |
 | `qmanager_imei_check` | non-procd | 99 | `qmanager_imei_check` | Boot-time IMEI check (one-shot, double-fork) |
 | `qmanager_tower_failover` | non-procd | 99 | `qmanager_tower_failover` | Tower failover watchdog |
-| `qmanager_dpi` | procd | 99 | `nfqws` (x2) | DPI evasion: Video Optimizer (queue 200) + Traffic Masquerade (queue 201), each UCI-gated |
+| `qmanager_dpi` | procd | 99 | `nfqws` (x1) | DPI evasion on NFQUEUE 200: Video Optimizer or Traffic Masquerade (mutually exclusive, UCI-gated) |
 | `qmanager_sites` | procd | 99 | `qmanager_sites` | Sites monitor (per-site latency); always enabled, on/off in `/etc/qmanager/sites.json` |
+| `qmanager_watchcat` | procd | 99 | `qmanager_watchcat` | Connection watchdog (4-tier recovery ladder) |
+| `qmanager_sms_forward` | procd | 99 | `qmanager_sms_forward` | SMS forwarding daemon (polls the inbox via `qsms`) |
+| `qmanager_sms_storage` | non-procd | 99 | `qmanager_sms_storage` | One-shot at boot: points `AT+CPMS` at the chosen SMS storage (ME or SM) |
+| `qmanager_netbird_zone` | non-procd | 99 | — | Boot-time self-heal of the NetBird firewall zone |
+| `qmanager_tailscale_net` | non-procd | 99 | — | Boot-time re-assert of Tailscale network fixes |
 
 Non-procd services use the double-fork pattern for daemonization:
 ```sh
@@ -680,7 +669,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `get.sh` | GET | Get single profile by ID |
 | `save.sh` | POST | Create or update profile |
 | `delete.sh` | POST | Delete profile |
-| `apply.sh` | POST | Start 3-step apply process |
+| `apply.sh` | POST | Start the 4-step apply process (`qmanager_profile_apply`) |
 | `apply_status.sh` | GET | Get apply progress |
 | `deactivate.sh` | POST | Deactivate active profile |
 | `current_settings.sh` | GET | Current modem settings (for profile creation) |
@@ -721,6 +710,18 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | Script | Method | Description |
 |--------|--------|-------------|
 | `tailscale.sh` | GET/POST | Tailscale VPN status and config |
+| `netbird.sh` | GET/POST | NetBird VPN status and config |
+
+#### Other endpoints (not itemised above)
+
+The tree also ships these CGI scripts under `scripts/www/cgi-bin/quecmanager/`. Check each script's header for its exact methods and behaviour:
+
+- `at_cmd/`: `reconnect_modem.sh`, `speedtest_servers.sh`
+- `cellular/`: `live_signal.sh` (POST live-signal lease, see [`features/live-signal.md`](features/live-signal.md)), `radio_details.sh` (on-demand radio fields, populates `/tmp/qmanager_ondemand.json`), `sms_forwarding.sh`, `sms_storage.sh`
+- `metrics/`, `monitoring/`: `prometheus.sh` (metrics scrape), `sites.sh` (sites monitor)
+- `network/`: `data_used.sh`, `dns.sh`, `lan_config.sh`, `lan_devices.sh`
+- `public/`: `hostname.sh`, `overview.sh`, `units.sh` (unauthenticated read-only data for the public overview)
+- `system/`: `adaptive_polling.sh`, `config-backup/` (`collect.sh`, `apply.sh`, `apply_status.sh`, `apply_cancel.sh`), `diagnostics.sh`, `health-check/` (`run.sh`, `status.sh`, `download.sh`, `clear.sh`), `host_at_ports.sh`, `ipa_offload.sh`, `known_sims.sh`, `language-packs/` (`list.sh`, `install.sh`, `install_status.sh`, `install_cancel.sh`, `remove.sh`), `pending_reboot.sh`, `ping_profile.sh`, `quality_thresholds.sh`, `ssh_password.sh`, `storage.sh`, `update.sh`, `web_port.sh`
 
 ---
 
@@ -755,16 +756,18 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `qmanager_crashlog.lock` | qlog.sh (`record_planned_reboot`) | flock guarding appends to the shared `/etc/qmanager/crash.log` reboot ledger |
 | `qmanager_sessions/` | CGI (auth) | Session files |
 | `qmanager.log` | all (qlog) | Centralized log file |
-| `/var/run/nfqws_masq.pid` | qmanager_dpi | Traffic Masquerade nfqws instance PID (uptime tracking) |
+| `/var/run/nfqws.pid` | qmanager_dpi (procd pidfile) | nfqws instance PID (uptime tracking) |
+| `/tmp/qmanager_auth_attempts.json` | cgi_auth | Login rate-limit ladder state |
+| `/tmp/qmanager_ondemand.json` | `cellular/radio_details.sh` / poller | Last-known on-demand radio fields |
 
 ### Persistent Configuration (`/etc/qmanager/`)
 
 | File | Purpose |
 |------|---------|
-| `shadow` | Password hash (SHA-256) |
+| `auth.json` | Password hash + salt (SHA-256) |
 | `profiles/<id>.json` | Custom SIM profile configs |
 | `tower_lock.json` | Tower lock configuration |
-| `band_lock.json` | Band lock configuration |
+| `sites.json` | Sites monitor config (`interval_sec`, site list) |
 | `imei_backup.json` | IMEI backup config (`{ enabled, imei }`) |
 | `sms_alerts.json` | SMS alert settings (`{ enabled, recipient_phone, threshold_minutes }`). `recipient_phone` is stored as raw digits with no leading `+` — the CGI save handler normalizes input before writing. |
 | `email_alerts.json` | Email alert settings (`{ enabled, sender_email, recipient_email, app_password, threshold_minutes }`). |
@@ -786,7 +789,7 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | `quecmanager.settings.sched_reboot_days` | `0,1,...,6` | Scheduled reboot days (0=Sun) |
 | `quecmanager.video_optimizer.enabled` | `0`, `1` | Video Optimizer on/off |
 | `quecmanager.video_optimizer.quic_enabled` | `0`, `1` | QUIC desync on/off (default `1`) |
-| `quecmanager.video_optimizer.interface` | interface name | WAN interface (default `rmnet_data0`) |
+| `quecmanager.video_optimizer.desync_repeats` | `1`–`10` | Video Optimizer desync repeats (clamped; default 1) |
 | `quecmanager.traffic_masquerade.enabled` | `0`, `1` | Traffic Masquerade on/off |
 | `quecmanager.traffic_masquerade.sni_domain` | domain name | Spoofed SNI domain (default `speedtest.net`) |
 | `system.@system[0].timezone` | POSIX TZ string | System timezone |

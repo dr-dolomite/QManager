@@ -216,11 +216,9 @@ const {
 
 | Component | What it uses |
 |---|---|
-| `components/dashboard/home-component.tsx` | Fetches `{ details: radioDetails, lteTa, nrTa }` and passes down to device-status, device-metrics, and cell-data children |
-| `components/cellular/cellular-information.tsx` | Fetches `{ details: radioDetails }` and passes to `CellDataComponent` |
-| `components/dashboard/device-status.tsx` | Displays MIMO label from `radioDetails` (falls back to poller snapshot) |
-| `components/dashboard/device-metrics.tsx` | Converts `lteTa` / `nrTa` to distance estimate |
-| `components/cellular/cell-data.tsx` | Displays MIMO, TA, APN, WAN IP, DNS from `radioDetails` |
+| `components/dashboard/home-component.tsx` | The only `useRadioDetails()` caller (checked 2026-11-06). Takes `{ lteTa, nrTa }` and passes them to device-metrics as `liveLteTa` / `liveNrTa` |
+| `components/dashboard/device-metrics.tsx` | Converts `liveLteTa` / `liveNrTa` (falling back to the poller's `ta`) to a distance estimate |
+| `components/cellular/cellular-information.tsx` | Shows MIMO from the poller snapshot (`device.mimo`), not from this hook |
 
 The preference / fallback pattern is consistent across all consumers: prefer the live `radioDetails` from the hook; fall back to the equivalent field in the poller's `status.json` snapshot (via `useModemStatus`) before the first on-demand fetch returns or when the hook is in an error state.
 

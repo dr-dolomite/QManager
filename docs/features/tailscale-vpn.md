@@ -173,6 +173,7 @@ All POST bodies are JSON. Mutating actions call `check_migration_lock` first: a 
 | `not_connected` | set_exit_node, set_ssh | Daemon down or `BackendState != "Running"` |
 | `set_failed` | set_exit_node, set_ssh | `tailscale set` exited non-zero |
 | `daemon_start_failed` / `auth_timeout` | connect | Daemon did not start in 5 s / no auth URL in 10 s |
+| `connect_failed` | connect (Tiny) | The LocalAPI prefs edit on `/var/run/tailscale/tailscaled.sock` got no 2xx answer |
 | `start_failed` | start_service | Daemon not running after start |
 | `disconnect_failed` / `logout_failed` | disconnect / logout | The CLI exited non-zero |
 | `uninstall_failed` | uninstall | A binary is still present after removal |

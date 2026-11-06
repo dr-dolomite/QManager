@@ -457,7 +457,7 @@ covered by fake-modem tests only (86 crate tests).
 | `common/` | `proto.rs` (wire format, capability file), `log.rs`, `lock.rs`, `safefs.rs` (`open_own`, `is_own_file`, `write_nofollow`, `write_atomic`, `ensure_own_dir`), `json.rs`. |
 | `at/` | `channel.rs`, `exec.rs`, `classify.rs`, `output.rs`: the AT path. |
 | `sms/` | `mod.rs`, `pdu.rs`. |
-| `daemon/` | `mod.rs` (bind, acceptor, readers, router), `at_lane.rs`, `qmi_lane.rs`, `qmi_snapshot.rs`. |
+| `daemon/` | `mod.rs` (bind, acceptor, readers, router), `at_lane.rs`, `data_call.rs`, `live.rs`, `qmi_lane.rs`, `qmi_snapshot.rs`. |
 | `client/` | `transport.rs` (socket-first, reply wait, frozen-broker restart), `qcmd.rs`, `qsms.rs`, `qmi.rs`. |
 | `qmi/` | `transport.rs`, `registry.rs`, `allow.rs`, `model.rs`, `query.rs`, `msg.rs`, `error.rs`, `codec/{nas,dms,uim,wds,dsd}.rs`. |
 

@@ -67,16 +67,30 @@ Details live in the feature docs: [`features/at-broker.md`](features/at-broker.m
 
 ### Polling Architecture (Backend)
 
-The backend uses a tiered polling system to balance data freshness against modem serial port contention:
+The poller (`/usr/bin/qmanager_poller`, source `scripts/usr/bin/qmanager_poller`) runs a 2s base cycle (`POLL_INTERVAL=2`). Local-only work (`/proc` metrics, ping and DNS reads, alert engine, `write_cache`) runs every cycle. AT work is gated by a UI-aware tier, derived from the heartbeat file `/tmp/qmanager_ui_active` that the status CGIs touch:
 
 | Tier | Interval | Data Collected | Source |
 |------|----------|---------------|--------|
-| **Tier 1 (Hot)** | 2s | Serving cell (RSRP/RSRQ/SINR/RSSI), traffic stats, uptime | `AT+QENG="servingcell"`, `/proc/net/dev` |
-| **Tier 1.5 (Signal)** | 10s | Per-antenna signal, signal history, ping history | `AT+QRSRP`, `AT+QRSRQ`, `AT+QSINR` |
-| **Tier 2 (Warm)** | 30s | Temperature, carrier, SIM slot, CA info, MIMO, APN | `AT+QTEMP`, `AT+COPS`, `AT+QCAINFO` |
-| **Boot (Once)** | Startup | Firmware, IMEI, IMSI, ICCID, capabilities, supported bands | `AT+CGMM`, `AT+CGSN`, etc. |
+| **Tier 1 (Hot)** | Every cycle (2s) while Active; slower when Idle/Deep (see below) | Serving cell, CA info, CFUN state, per-antenna signal (RSRP/RSRQ/SINR); traffic stats and uptime (no AT) | `AT+QENG="servingcell"`, `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0`, `AT+CFUN?`, `AT+QRSRP;+QRSRQ;+QSINR`, `/proc/net/dev` |
+| **Tier 1.5 (Housekeeping)** | Every 5 cycles (10s) | Ping history append, watchcat state read, SoC temperature | `/tmp/qmanager_ping_history`, `/tmp/qmanager_watchcat.json`, `/sys/class/thermal` (no AT) |
+| **Tier 2 (Warm, Active only)** | Every 15 cycles (30s) | Carrier, SIM slot, phone number, SIM presence | `AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?` |
+| **Boot (Once)** | Startup | Firmware, IMEI, IMSI, ICCID, capabilities, supported bands | `AT+CVERSION`, `AT+CGMM`, `AT+CGSN`, `AT+CIMI`, `AT+QCCID`, `AT+CNUM`, `AT+QGETCAPABILITY`, `AT+QNWPREFCFG="policy_band"` |
+
+The Tier 2 DATA-PLANE / L1 group (CGCONTRDP, QMAP WWAN, QNWCFG time-advance and MIMO) is no longer polled. It is fetched on demand by `cellular/radio_details.sh` while its page is open (see `ondemand_radio.sh`).
+
+**Adaptive (UI-aware) backoff.** The heartbeat age decides the tier. Thresholds come from `quecmanager.poller.*` (defaults in brackets):
+
+| Tier | Heartbeat age | AT cadence | What runs on an AT touch |
+|------|---------------|------------|--------------------------|
+| **Active** | ≤ 20s `[active_grace]` | every cycle (2s) | Full Tier 1 / 1.5 / 2 graduated cadence |
+| **Idle** | ≤ 300s `[idle_threshold]` | every 7 cycles (~14s) `[idle_interval=15]` | Full snapshot: serving cell, CA, CFUN, per-antenna, temperature, SIM state. Tier 2 identity reads are skipped (Active only). |
+| **Deep** | > 300s | every 30 cycles (60s) `[deep_idle_interval=60]` | Serving cell only. CA, CFUN and per-antenna keep their last-known values. |
+
+A Prometheus scrape holds the tier open (`/var/run/qmanager/metrics_scrape`), and an active scan or SIM switch backs off AT entirely for the cycle.
 
 All tiers write to a single cache file: `/tmp/qmanager_status.json`
+
+**QMI gap-fill.** On cycles where AT did not parse the serving cell (idle/deep between AT touches, or a busy QENG), `qmi_merge.sh` overlays LTE serving signal from the broker's `/var/run/qmanager/qmi.env` sidecar. The overlay is applied only around the final `write_cache`, so AT consumers never see QMI samples. `lte.source` reports which source filled the cache.
 
 ### Frontend Polling
 
@@ -87,7 +101,7 @@ useModemStatus()  ──── GET /at_cmd/fetch_data.sh ──── reads /tmp
   (every 2s)
 
 useSignalHistory() ── GET /at_cmd/fetch_signal_history.sh ── reads NDJSON file
-  (every 10s)
+  (every 2s)
 
 useLatencyHistory() ─ GET /at_cmd/fetch_ping_history.sh ── reads NDJSON file
   (every 30s)
@@ -146,8 +160,8 @@ Auth endpoints use `_SKIP_AUTH=1` to bypass the automatic auth check in `cgi_bas
 | Pattern | Examples | Behavior |
 |---------|----------|----------|
 | **Polling Hooks** | `useModemStatus`, `useSignalHistory`, `useLatencyHistory` | Auto-fetch at interval, staleness detection, manual refresh |
-| **One-Shot Hooks** | `useCellularSettings`, `useAPNSettings`, `useMBNSettings` | Fetch on mount, local cache, explicit `saveSettings()` |
-| **Form Hooks** | `useLogin`, `useAuth` | Cookie check, submit actions, rate limit handling |
+| **One-Shot Hooks** | `useCellularSettings`, `useApnSettings`, `useMbnSettings` | Fetch on mount, local cache, explicit `saveSettings()` |
+| **Form Hooks** | `useLogin` (`isLoggedIn` helper) | Cookie check, submit actions, rate limit handling |
 | **Async Process Hooks** | `useProfileApply`, `useCellScanner`, `useSpeedtest` | Start operation → poll status → completion/error |
 
 ### Backend State Files
@@ -155,8 +169,9 @@ Auth endpoints use `_SKIP_AUTH=1` to bypass the automatic auth check in `cgi_bas
 | File | Owner | Format | Purpose |
 |------|-------|--------|---------|
 | `/tmp/qmanager_status.json` | poller | JSON | Main modem status cache |
-| `/tmp/qmanager_signal_history.json` | poller | NDJSON | 30-min signal history (10s samples) |
-| `/tmp/qmanager_ping_history.json` | poller | NDJSON | 24h ping history (10s samples, max 8640 lines) |
+| `/tmp/qmanager_signal_history.json` | poller | NDJSON | Rolling signal history (one row per 2s Tier 1 cycle, ~60 rows) |
+| `/tmp/qmanager_ping_history.json` | poller | NDJSON | Ping history (max 8640 lines) |
+| `/tmp/qmanager_qmi.json`, `/var/run/qmanager/qmi.env` | `qmanager_atd` (QMI sampler) | JSON / env | QMI lane snapshot for CGIs; `qmi.env` read by the poller gap-fill |
 | `/tmp/qmanager_events.json` | poller | NDJSON | Network events (max 50 entries) |
 | `/tmp/qmanager_ping.json` | ping daemon | JSON | Current ping result |
 | `/tmp/qmanager_watchcat.json` | watchcat | JSON | Watchdog state machine |
@@ -174,16 +189,32 @@ Auth endpoints use `_SKIP_AUTH=1` to bypass the automatic auth check in `cgi_bas
 ### Process Hierarchy
 
 ```
-init.d/qmanager (procd)
-  └── qmanager_poller (main loop, runs forever)
-  ├── sources: events.sh, email_alerts.sh, sms_alerts.sh, alert_routing.sh, alert_engine.sh, parse_at.sh
-       └── reads: qmanager_ping.json, qmanager_watchcat.json
+init.d/qmanager_atd (procd)
+  └── qmanager_atd (Rust AT + QMI broker; sole owner of /dev/smd11)
+       └── /usr/bin/qcmd, qsms, qmi are symlinks to it
 
 init.d/qmanager (procd)
-  └── qmanager_ping (ping daemon, runs forever)
+  ├── qmanager_ping (ping daemon, runs forever)
+  └── qmanager_poller (main loop, runs forever)
+       ├── sources: events.sh, email_alerts.sh, sms_alerts.sh, alert_routing.sh, alert_engine.sh,
+       │            data_used.sh, qmi_merge.sh, parse_at.sh, ondemand_radio.sh, ...
+       └── reads: qmanager_ping.json, qmanager_watchcat.json
+
+init.d/qmanager_watchcat (procd)
+  └── qmanager_watchcat (connection watchdog)
+
+init.d/qmanager_sites (procd)        → qmanager_sites
+init.d/qmanager_sms_forward (procd)  → qmanager_sms_forward
+init.d/qmanager_dpi (procd)          → nfqws (DPI evasion, single instance)
 
 init.d/qmanager_eth_link (non-procd, one-shot)
   └── applies persisted ethernet link speed on boot
+
+init.d/qmanager_sms_storage (non-procd)
+  └── qmanager_sms_storage (SMS storage routing daemon)
+
+init.d/qmanager_netbird_zone, init.d/qmanager_tailscale_net (non-procd, one-shot)
+  └── boot-time re-assert of NetBird firewall zone / Tailscale network fixes
 
 init.d/qmanager_ttl (non-procd, one-shot)
   └── applies persisted TTL/HL rules on boot
@@ -208,7 +239,7 @@ Daemons communicate through shared files in `/tmp/`:
 - **Poller reads** ping daemon output (`qmanager_ping.json`) and watchcat state (`qmanager_watchcat.json`)
 - **CGI scripts read** the poller's cache (`qmanager_status.json`) for GET requests
 - **CGI scripts write** config files, then touch trigger files (e.g., `/tmp/qmanager_email_reload`, `/tmp/qmanager_sms_reload`) to signal daemons to reload
-- **No IPC sockets or signals** — pure file-based communication
+- **Modem access goes through one socket**: the broker listens on `/var/run/qmanager_atd.sock`, and `qcmd`/`qsms`/`qmi` connect to it. Everything else is file-based.
 
 ---
 
@@ -226,8 +257,8 @@ The poller's `events.sh` library detects state changes and emits events to an ND
 | `nr_anchor` | 5G NR anchor gained/lost | info/warning |
 | `signal_lost` / `signal_restored` | Modem reachability change | warning/info |
 | `internet_lost` / `internet_restored` | Internet connectivity change | warning/info |
-| `high_latency` / `latency_recovered` | Latency >90ms (debounced 3 readings) | warning/info |
-| `high_packet_loss` / `packet_loss_recovered` | Loss >20% (debounced 3 readings) | warning/info |
+| `high_latency` / `latency_recovered` | Latency above threshold (default 250ms, debounced 3 readings) | warning/info |
+| `high_packet_loss` / `packet_loss_recovered` | Loss above threshold (default 30%, debounced 3 readings) | warning/info |
 | `watchcat_recovery` | Watchdog executed recovery action | warning |
 | `sim_failover` | SIM slot switched by watchdog | warning |
 | `sim_swap_detected` | Physical SIM card changed at boot | info |
@@ -269,12 +300,13 @@ Abort immediately if `CFUN=0` fails (modem may be in an inconsistent state).
 
 Profiles store a complete modem configuration (APN + TTL/HL + optional IMEI) that can be saved and applied as a unit.
 
-### Apply Workflow (3 Steps)
+### Apply Workflow (4 Steps)
 
 ```
 Step 1: APN        → AT+CGDCONT (set PDP context)
 Step 2: TTL/HL     → Write /etc/firewall.user.ttl + apply iptables
-Step 3: IMEI       → AT+EGMR=1,7,"<IMEI>" + reboot (only if IMEI changed)
+Step 3: MPDN rule  → Verizon PDP3 routing or revert on carrier switch (no reboot)
+Step 4: IMEI       → AT+EGMR=1,7,"<IMEI>" + reboot (only if IMEI changed; always last)
 ```
 
 The apply process runs asynchronously via `qmanager_profile_apply` daemon. The frontend polls `/profiles/apply_status.sh` for progress updates.
@@ -287,7 +319,6 @@ The apply process runs asynchronously via `qmanager_profile_apply` daemon. The f
 |------|-------|--------|
 | SIM profiles | `/etc/qmanager/profiles/<id>.json` | JSON |
 | Tower lock config | `/etc/qmanager/tower_lock.json` | JSON |
-| Band lock config | `/etc/qmanager/band_lock.json` | JSON |
 | IMEI backup config | `/etc/qmanager/imei_backup.json` | JSON |
 | SMS alerts config | `/etc/qmanager/sms_alerts.json` | JSON |
 | Email alerts config | `/etc/qmanager/email_alerts.json` | JSON |

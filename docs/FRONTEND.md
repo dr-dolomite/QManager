@@ -14,12 +14,12 @@ This document covers the frontend architecture, component patterns, hooks, routi
 | Tailwind CSS | v4 | Utility-first styling |
 | shadcn/ui | Latest | Headless UI components (Radix UI) |
 | Recharts | 2.15.4 | Signal and latency charting |
-| React Hook Form | 7.69.0 | Form state management |
-| Zod | 4.2.1 | Schema validation |
-| Motion | 12.34.3 | Animations |
+| React Hook Form | ^7.71.2 | Form state management |
+| Zod | ^4.3.6 | Schema validation |
+| Motion | ^12.38.0 | Animations |
 | @dnd-kit | 6.3/10.0 | Drag-and-drop (sortable lists) |
 | @tanstack/react-table | 8.21.3 | Data tables |
-| Lucide React | 0.562.0 | Icons |
+| Lucide React | ^1.8.0 | Icons |
 | next-themes | 0.4.6 | Dark/light mode |
 | sonner | 2.0.7 | Toast notifications |
 
@@ -34,20 +34,26 @@ app/                            # Next.js App Router
 ├── globals.css                 # Tailwind + OKLCH theme variables
 ├── fonts/                      # Vendored Rethink Sans, JetBrains Mono, Material Symbols subset
 ├── login/page.tsx              # Authentication page (thin wrapper around LoginComponent)
+├── setup/page.tsx              # First-time password setup
+├── reboot/page.tsx             # Reboot page
 ├── dashboard/                  # Home dashboard
 ├── cellular/                   # Cellular management
 │   ├── page.tsx                # Cellular info hub
 │   ├── settings/               # APN, IMEI, network priority, FPLMN
 │   ├── cell-locking/           # Band, frequency, tower locking
-│   ├── cell-scanner/           # Cell scanner + frequency calculator
-│   ├── custom-profiles/        # SIM profile management
-│   └── sms/                    # SMS management
+│   ├── cell-scanner/           # Cell scanner, neighbour scanner, frequency calculator
+│   ├── antenna-alignment/      # Antenna alignment
+│   ├── antenna-statistics/     # Antenna statistics
+│   ├── custom-profiles/        # SIM profiles + connection scenarios
+│   └── sms/                    # SMS inbox/send, forwarding/
 ├── local-network/              # Network settings
 │   ├── page.tsx                # Redirect stub to /local-network/ethernet
 │   ├── ethernet/               # Ethernet status + link speed
-│   ├── ttl-settings/           # TTL/HL + MTU
+│   ├── ttl-settings/           # TTL/HL and MTU (one page)
 │   ├── ip-passthrough/         # IP passthrough
-│   └── custom-dns/             # DNS settings
+│   ├── custom-dns/             # DNS settings
+│   ├── traffic-engine/         # Traffic Engine (DPI settings: Video Optimizer / Traffic Masquerade)
+│   └── dpi-masking/            # Redirect stub to /local-network/traffic-engine
 ├── monitoring/                 # Monitoring & alerts
 │   ├── page.tsx                # Redirect stub to /monitoring/events
 │   ├── connection-quality/     # Ping profile + quality thresholds
@@ -56,14 +62,14 @@ app/                            # Next.js App Router
 │   ├── alerts/                 # Centralized SMS + email connection alerts
 │   ├── watchdog/               # Watchdog settings
 │   ├── prometheus/             # Prometheus metrics endpoint (token, scrape freshness, scrape config)
-│   ├── logs/                   # System logs
-│   └── tailscale/              # Tailscale VPN
-├── system-settings/            # System settings & scheduled ops
+│   ├── tailscale/              # Tailscale VPN
+│   └── netbird/                # NetBird VPN
+├── system-settings/            # System settings & scheduled ops; subpages: adaptive-polling, at-terminal, config-backup, connection-quality (redirect), device-access, hardware, languages, logs, software-update, system-health-check
 ├── about-device/               # Device information
 └── support/                    # Support & links
 
 components/
-├── ui/                         # shadcn/ui primitives (42 components)
+├── ui/                         # shadcn/ui primitives (61 components)
 ├── app-layout.tsx              # Main layout (sidebar + breadcrumbs)
 ├── app-sidebar.tsx             # Navigation sidebar
 ├── theme-provider.tsx          # next-themes wrapper
@@ -73,7 +79,7 @@ components/
 ├── donate-dialog.tsx           # GitHub Sponsors / GCash donation dialog
 ├── pre-auth-type.ts            # Shared type scale for the pre-auth cards (`/` and `/login/`); type-only
 ├── auth/                       # Login card (login-component, login-device-name, login-language-picker), interpolation-slot (SLOT / withSlot), setup form
-├── cellular/                   # Cellular components (57 files)
+├── cellular/                   # Cellular components (100 files)
 ├── dashboard/                  # Dashboard cards
 ├── local-network/              # Network components
 ├── monitoring/                 # Monitoring components
@@ -81,8 +87,8 @@ components/
 ├── about-device/               # About page components
 └── support/                    # Support page components
 
-hooks/                          # Custom React hooks (30 files)
-types/                          # TypeScript interfaces (14 files)
+hooks/                          # Custom React hooks (76 files, incl. tests)
+types/                          # TypeScript interfaces (38 files)
 lib/                            # Utility functions
 constants/                      # Static configuration data
 ```
@@ -115,10 +121,11 @@ constants/                      # Static configuration data
 | `/cellular/sms` | SMS | SMS inbox/send |
 | `/local-network` | (redirect) | Client-side redirect to `/local-network/ethernet` |
 | `/local-network/ethernet` | EthernetStatus | Ethernet link status and speed |
-| `/local-network/ttl-settings` | TTLSettings | IPv4 TTL / IPv6 HL |
-| `/local-network/mtu` | MTUSettings | MTU configuration |
+| `/local-network/ttl-settings` | TTLandMTUSettings | IPv4 TTL / IPv6 HL and MTU (one page; there is no `/local-network/mtu` route) |
 | `/local-network/ip-passthrough` | IPPassthrough | IP passthrough mode |
 | `/local-network/custom-dns` | CustomDNS | DNS override |
+| `/local-network/traffic-engine` | TrafficEngine | Traffic Engine (hosts the DPI settings: Video Optimizer / Traffic Masquerade) |
+| `/local-network/dpi-masking` | (redirect) | Redirect to `/local-network/traffic-engine` |
 | `/monitoring` | (redirect) | Client-side redirect to `/monitoring/events` |
 | `/monitoring/events` | NetworkEvents | Event log |
 | `/monitoring/connection-quality` | ConnectionQuality | Ping profile + quality thresholds |
@@ -126,9 +133,24 @@ constants/                      # Static configuration data
 | `/monitoring/alerts` | Alerts | Centralized SMS + email connection alerts (routing matrix + capability, readiness status, merged log) |
 | `/monitoring/watchdog` | Watchdog | Connection health |
 | `/monitoring/prometheus` | Prometheus | Prometheus scrape endpoint settings (enable, scrape freshness, bearer token, scrape config); see `docs/features/prometheus-metrics.md` |
-| `/monitoring/logs` | SystemLogs | Log viewer |
 | `/monitoring/tailscale` | Tailscale | VPN status |
+| `/monitoring/netbird` | (see page file) | NetBird VPN status |
 | `/system-settings` | SystemSettings | System preferences, scheduled ops |
+| `/system-settings/connection-quality` | (redirect) | Client-side redirect to `/monitoring/connection-quality` |
+| `/system-settings/logs` | SystemLogs | Log viewer |
+| `/system-settings/config-backup` | (see page file) | Configuration backup and restore |
+| `/system-settings/software-update` | (see page file) | Software update |
+| `/system-settings/at-terminal` | (see page file) | AT terminal |
+| `/system-settings/adaptive-polling` | (see page file) | Adaptive polling settings |
+| `/system-settings/languages` | (see page file) | Language packs |
+| `/system-settings/hardware` | (see page file) | Hardware |
+| `/system-settings/device-access` | (see page file) | Device access |
+| `/system-settings/system-health-check` | (see page file) | System health check |
+| `/cellular/antenna-alignment` | (see page file) | Antenna alignment |
+| `/cellular/antenna-statistics` | (see page file) | Antenna statistics |
+| `/cellular/sms/forwarding` | (see page file) | SMS forwarding |
+| `/setup` | (see page file) | First-time password setup |
+| `/reboot` | (see page file) | Reboot |
 | `/about-device` | AboutDevice | Device info |
 | `/support` | Support | Project info & links |
 
@@ -214,15 +236,15 @@ if (result.success) { /* toast success */ }
 |------|-------------|------------|
 | `useCellularSettings` | `/cellular/settings.sh` | `cellular-settings.ts` |
 | `useApnSettings` | `/cellular/apn.sh` | `apn-settings.ts` |
-| `useMBNSettings` | `/cellular/mbn.sh` | `mbn-settings.ts` |
-| `useIMEISettings` | `/cellular/imei.sh` | `imei-settings.ts` |
+| `useMbnSettings` | `/cellular/mbn.sh` | `mbn-settings.ts` |
+| `useImeiSettings` | `/cellular/imei.sh` | `imei-settings.ts` |
 | `useBandLocking` | `/bands/lock.sh` | `band-locking.ts` |
 | `useFrequencyLocking` | `/frequency/lock.sh` | `frequency-locking.ts` |
 | `useTowerLocking` | `/tower/lock.sh` | `tower-locking.ts` |
-| `useTTLSettings` | `/network/ttl.sh` | — |
-| `useMTUSettings` | `/network/mtu.sh` | — |
-| `useDNSSettings` | `/network/dns.sh` | — |
-| `useIPPassthrough` | `/network/ip_passthrough.sh` | `ip-passthrough.ts` |
+| `useTtlSettings` | `/network/ttl.sh` | — |
+| `useMtuSettings` | `/network/mtu.sh` | — |
+| `useDnsSettings` | `/network/dns.sh` | — |
+| `useIpPassthrough` | `/network/ip_passthrough.sh` | `ip-passthrough.ts` |
 | `useAlerts` | `/monitoring/alerts.sh` | `alerts.ts` |
 | `useAlertsLog` | `/monitoring/alerts.sh` (`action: "get_log"`) | `alerts.ts` |
 | `useWatchdogSettings` | `/monitoring/watchdog.sh` | In hook file |
@@ -247,23 +269,23 @@ For long-running operations that run in the background:
 
 - `useConfigBackup` is a 4-stage pipeline: `idle → collecting → encrypting → downloading → done` (or `error`). It calls `collect.sh` for plaintext sections JSON, runs WebCrypto AES-256-GCM in the browser via `lib/config-backup/crypto.ts`, builds the envelope via `lib/config-backup/format.ts`, and triggers a blob download. The passphrase never leaves the browser.
 - `useConfigRestore` is a `useReducer`-driven state machine with 10 UI states (`idle`, `reading`, `password_required`, `password_incorrect`, `model_warning`, `ready`, `applying`, `success`, `partial_success`, `failed`). Polling at 500ms only runs in the `applying` state and stops on `done`/`cancelled`. Wrong passphrase decrypt failures map to `password_incorrect` (not `failed`) so the user can retry without re-uploading.
-- Both hooks share `lib/config-backup/{crypto,format,sections,pending-reboot}.ts` and `types/config-backup.ts`. Pure-TS modules have `*.test.ts` files run via `bun test` (the project's first Bun test setup; `tsconfig.json` excludes `**/*.test.ts` so `bun tsc --noEmit` doesn't choke on `bun:test` imports).
-- `lib/config-backup/pending-reboot.ts` exports `usePendingReboot()` plus `setPendingReboot`/`clearPendingReboot`/`readPendingReboot` helpers, backed by a `qmanager_pending_reboot` localStorage key. Used by both the post-restore AlertDialog and the persistent banner on the Configuration Backup page; both routes survive navigation/reload until the user reboots or dismisses.
+- Both hooks share `lib/config-backup/{crypto,format,sections}.ts` and `types/config-backup.ts`. Pure-TS modules have `*.test.ts` files run via `bun test` (the project's first Bun test setup; `tsconfig.json` excludes `**/*.test.ts` so `bun tsc --noEmit` doesn't choke on `bun:test` imports).
+- `lib/reboot/pending.ts` exports `usePendingReboot()` plus `setPendingReboot`/`clearPendingReboot`/`readPendingReboot` helpers, backed by a `qmanager_pending_reboot` localStorage key. Used by both the post-restore AlertDialog and the persistent banner on the Configuration Backup page; both routes survive navigation/reload until the user reboots or dismisses.
 
 ### Utility Hooks
 
 | Hook | Purpose |
 |------|---------|
 | `useLogin` | Login page (setup detection + login/setup actions). Returns `lockout` (`active`, `retryAfter`, `attemptsRemaining`) seeded from `auth/check.sh` with `cache: "no-store"`; `error` is the backend code (translated by the page), `detail` is the English fallback. See [`reference/auth-rate-limiting.md`](reference/auth-rate-limiting.md) |
-| `useAuth` | Sidebar auth (change password, logout) |
+| `isLoggedIn`, `changePassword` (plain functions, not hooks) | Auth helpers in `hooks/use-auth.ts` (the password card uses `useWebPassword`) |
 | `useUnitPreferences` | Cached unit preferences (temp/distance) for dashboard display |
-| `useMobile` | Responsive breakpoint detection |
+| `useIsMobile` | Responsive breakpoint detection |
 | `useRecentActivities` | Fetches network events for the dashboard |
 | `useCurrentSettings` | Fetches current modem settings for profile creation |
 | `useConnectionScenarios` | CRUD for connection scenario templates |
 | `useSimProfiles` | CRUD for custom SIM profiles |
 | `useAboutDevice` | Fetches device information |
-| `useSMS` | SMS inbox and send |
+| `useSms` | SMS inbox and send |
 
 ---
 
@@ -353,15 +375,15 @@ It's a thin wrapper around `fetch()` that:
 
 ### Development Proxy
 
-In development, `next.config.ts` proxies `/cgi-bin/*` to the modem at `192.168.224.1`:
+The `rewrites()` block in `next.config.ts` is **commented out** in the repo. For local development against a device, uncomment it. It proxies `/cgi-bin/*` (and `/qmlive/*`, the live-signal files) to the modem at `192.168.224.1`. Comment it out again before `bun run build`:
 
 ```typescript
-// next.config.ts
+// next.config.ts (uncomment for dev only)
 async rewrites() {
-  return [{
-    source: "/cgi-bin/:path*",
-    destination: "http://192.168.224.1/cgi-bin/:path*",
-  }];
+  return [
+    { source: "/cgi-bin/:path*", destination: "http://192.168.224.1/cgi-bin/:path*", basePath: false },
+    { source: "/qmlive/:path*", destination: "http://192.168.224.1/qmlive/:path*", basePath: false },
+  ];
 }
 ```
 
@@ -483,7 +505,7 @@ The layout is shadcn's sidebar-07 (see DESIGN.md > Components > Navigation). `Na
 ### Scripts
 
 ```bash
-bun run dev     # Development server with hot reload + API proxy
+bun run dev     # Development server with hot reload (API proxy only if the rewrites block is uncommented)
 bun run build   # Static export to out/ directory
 bun run start   # Serve the built app locally
 bun run lint    # ESLint check
@@ -493,7 +515,7 @@ bun run lint    # ESLint check
 
 | File | Purpose |
 |------|---------|
-| `next.config.ts` | Static export, trailing slash, dev API proxy |
+| `next.config.ts` | Static export, trailing slash, dev API proxy (commented out by default) |
 | `tsconfig.json` | Strict mode, `@/*` path alias → `./*` |
 | `postcss.config.mjs` | Tailwind CSS v4 PostCSS plugin |
 | `eslint.config.mjs` | next/core-web-vitals + next/typescript rules |

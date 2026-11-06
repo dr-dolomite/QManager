@@ -180,7 +180,7 @@ Also accepted as `?action=check_now`. Raises the flag → `{ "success": true }`.
 
 - **install.sh:** `install_backend` creates `/usrdata/qmanager/sites` (`mkdir -p` + `chown root:root` + `chmod 0755`; the device has **no `install` applet**). `enable_services` enables `qmanager_sites` (not in `UCI_GATED_SERVICES`); `start_services` starts it, because OTA runs `--no-reboot`. `stop_services` and the legacy-script prune glob `qmanager*`.
 - **uninstall.sh:** the generic init.d loop stops and removes the service; `remove_runtime_state` removes `/tmp/qmanager_sites*` and leftover probe dirs; `--purge` removes `/usrdata/qmanager/sites` (`sites.json` goes with `/etc/qmanager`).
-- **Config Backup** does not carry `sites.json` yet.
+- **Config Backup** carries `sites.json` as the `sites` section of `config_backup_sections.sh` (ledger B5.4); an absent file collects as `{"default":true}` and apply removes it.
 
 ## Port notes (vs the RM520N source)
 

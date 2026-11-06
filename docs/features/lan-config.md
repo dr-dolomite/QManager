@@ -75,7 +75,7 @@ Applies a new gateway IP and subnet prefix.
 After flushing this response, the CGI fire-and-forgets a sequenced background job:
 
 ```sh
-# One detached double-fork (lan_config.sh:318-333):
+# One detached double-fork (lan_config.sh:320-335):
 ( (
     sleep 1
     /etc/init.d/network reload                 # br-lan rebinds to new IP ≈ +1s
@@ -121,7 +121,7 @@ The fix: after `network reload`, the CGI bounces every bridge member (`ip link s
 
 **dnsmasq reload:** Immediately after `network reload` (and before the `sleep 3` that precedes the bounce), the CGI reloads dnsmasq (instance `lan_dns`, leasefile `/tmp/data/dhcp.leases.lan`). This ensures the daemon is already serving the new DHCP pool and scope when bounced clients send their DISCOVER. Without this step, clients could receive an address from the old pool during the window between `network reload` and the first dnsmasq restart.
 
-**Device constraints — no `setsid`, no `base64`:** The RM551E BusyBox does not include `setsid` or `base64`. Background detachment therefore uses the double-fork pattern (`( ( ... ) & )`) for both the `network reload` job and the carrier-bounce watchdog. They are independent forks — the bounce is not chained inside the `network reload` subshell — so the reload completing or failing does not affect the bounce timer.
+**Device constraints — no `setsid`, no `base64`:** The RM551E BusyBox does not include `setsid` or `base64`. Background detachment therefore uses the double-fork pattern (`( ( ... ) & )`). The carrier bounce runs sequentially inside the same detached subshell, after `network reload` and `dnsmasq reload`, with no exit-status gate, so a reload failure does not stop the bounce. Only the 15 s safety watchdog is a separate fork.
 
 ### 2. "Gateway" = `network.lan.ipaddr`
 
@@ -202,7 +202,7 @@ No reboot is issued. `network reload` re-reads UCI and rebinds `br-lan` without 
 | `hooks/use-lan-config.ts` | Fetch/save hook; flips to `applied` state on success — no retry after apply. `LanApplied` shape carries `carrierBounce: boolean` (from `json.carrier_bounce ?? false`). |
 | `types/lan-config.ts` | `LanConfigStatus`, `LanConfigSaveRequest`, `LanConfigSaveResponse` (includes `carrier_bounce?: boolean`) |
 
-The card slots into `components/local-network/ethernet-status.tsx`, replacing the removed Wake-on-LAN card.
+The card slots into `components/local-network/ethernet/ethernet-status.tsx`, replacing the removed Wake-on-LAN card.
 
 **Canon re-author (ledger U4.11.9).** Presentation only; the CGI, the hook and the self-severing apply flow above are unchanged. Both components take their motion from `lib/motion` tokens (`EASE_STANDARD`, `EASE_QUICK`, `DUR.quick` / `DUR.standard` / `DUR.emphasized`, `STAGGER_STEP`) and honour `useMotionReduced()`; no raw durations. The manual-fallback reconnect banner is a solid tonal `bg-warning-container` block with its glyph on a strong `bg-warning` disc, not a 10% tint.
 
@@ -229,8 +229,8 @@ Timing is anchored to the measured apply sequence (invariant #1): the carrier bo
 
 ## Removed Feature: Wake-on-LAN
 
-WoL was removed in the same change that introduced this feature. The `qmanager.network.disable_wol` UCI key is retired by the installer's cleanup function (`uci -q delete quecmanager.network.disable_wol`). The `qmanager_wol_fix` init.d service is pruned by the existing init.d prune loop on upgrade.
+WoL was removed in the same change that introduced this feature. The `quecmanager.network.disable_wol` UCI key is retired by the installer's cleanup function (`uci -q delete quecmanager.network.disable_wol`). The `qmanager_wol_fix` init.d service is pruned by the existing init.d prune loop on upgrade.
 
 > ⚠️ WARNING: On already-installed devices upgraded without a clean install, the old `wol.sh` CGI file may persist at `/www/cgi-bin/quecmanager/network/wol.sh`. There is no CGI prune loop in the installer. The file is auth-gated and harmless, but it is a known artifact of the upgrade path.
 
-The `wol_changed` event type has been **repurposed** to `lan_address_changed` across `events.json` (all 4 locales), `constants/network-events.ts`, and the `NetworkEventType` union in `types/modem-status.ts`.
+The `wol_changed` event type has been **repurposed** to `lan_address_changed` across `events.json` (all 5 locales), `constants/network-events.ts`, and the `NetworkEventType` union in `types/modem-status.ts`.

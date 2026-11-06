@@ -1,6 +1,6 @@
 # Error Code Vocabulary (Plan 12+)
 
-- **Namespace**: `errors` in `public/locales/{en,zh-CN}/errors.json`. Flat dictionary, 186 keys: 184 stable backend error-code strings + two catch-alls (`unknown`, `unknown_with_detail`).
+- **Namespace**: `errors` in `public/locales/{en,id,it,zh-CN,zh-TW}/errors.json`. Flat dictionary, 224 keys: the stable backend error-code strings + two catch-alls (`unknown`, `unknown_with_detail`).
 - **Backend contract**: CGI scripts + daemons emit `{ error: "<code>", detail?: "<string>" }` (or `{ success: false, error, detail }`). Codes are stable snake_case tokens. Do NOT rename existing codes without a coordinated frontend sync — they are contract.
 - **Frontend resolution**: use `lib/i18n/resolve-error.ts::resolveErrorMessage(t, code, detail, fallback)`. Tries `errors.<code>`; unknown code with detail → "Modem reported: {{detail}}"; no code → detail verbatim; else caller fallback.
 - **Usage pattern** (any component with `t` in scope from any namespace):

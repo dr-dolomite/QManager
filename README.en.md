@@ -5,7 +5,7 @@
   <h3>A modern, custom GUI for Quectel modem management</h3>
   <p>Visualize, configure, and optimize your cellular modem's performance with an intuitive web interface</p>
 
-  ![Version](https://img.shields.io/badge/version-v0.1.8-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-v0.1.35-blue?style=flat-square)
   ![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-green?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-OpenWRT-orange?style=flat-square)
   ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
@@ -14,7 +14,7 @@
 
 ---
 
-> **Note:** QManager is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing Quectel modems like the RM520N-GL, RM551E-GL, and similar devices.
+> **Note:** QManager is the successor to [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), rebuilt from the ground up with a modern tech stack and improved user experience for managing the Quectel RM551E-GL. The RM520N-GL has its own repository, [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N).
 
 ---
 
@@ -24,7 +24,7 @@
 - **Live Signal Dashboard** — Real-time RSRP, RSRQ, SINR with per-antenna values (4x4 MIMO) and 30-minute historical charts
 - **Network Events** — Automatic detection of band changes, cell handoffs, carrier aggregation changes, and connectivity events
 - **Latency Monitoring** — Real-time ping with 24-hour history, jitter, packet loss, and aggregated views (hourly/12h/daily)
-- **Traffic Statistics** — Live throughput (Mbps) and cumulative data usage
+- **Traffic Statistics** — Cumulative data usage
 
 ### Cellular Configuration
 - **Band Locking** — Select and lock specific LTE/NR bands for optimal performance
@@ -105,7 +105,7 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 
 The one-liner wrapper still downloads the latest pre-release tarball, verifies `sha256sum.txt`, and then executes `install.sh`.
 
-To pin a specific release instead of latest pre-release, set `TAG` manually (for example `TAG="v0.1.13"`) and skip the API lookup block.
+To pin a specific release instead of latest pre-release, set `TAG` manually (for example `TAG="v0.1.35"`) and skip the API lookup block.
 
 ### Upgrading
 
@@ -140,16 +140,16 @@ One-liner uninstall:
 curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh --uninstall
 ```
 
-Use `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` to pin a specific version with the one-liner wrapper.
+Use `QMANAGER_TAG="v0.1.35" sh /tmp/qmanager-installer.sh` to pin a specific version with the one-liner wrapper.
 
 ---
 
 ## Prerequisites
 
-- Compatible Quectel modem (RM520N-GL, RM551E-GL, RM500Q, etc.) with AT command support
+- Quectel RM551E-GL (RM520N-GL users: see [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N))
 - OpenWRT device with the modem connected
-- **Required packages:** `jq`, `sms-tool`
-- **Optional packages:** `msmtp` (email alerts), `ethtool` (link speed control), `ookla-speedtest` (speed testing)
+- **Required packages:** `jq`, `curl`, `coreutils-timeout`, `ethtool` (the installer installs any that are missing; `sms-tool` is no longer used and is removed by the installer as a conflict)
+- **Optional packages:** `msmtp` (email alerts), `ookla-speedtest` (speed testing)
 
 > Optional packages can be installed from within the app — no manual `opkg` needed.
 
@@ -163,7 +163,7 @@ Use `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` to pin a specific ver
 | **Styling** | Tailwind CSS v4, OKLCH colors, Euclid Circular B + Manrope |
 | **Components** | shadcn/ui (42+ components), Recharts, React Hook Form + Zod |
 | **Backend** | POSIX shell scripts (OpenWRT/BusyBox), CGI endpoints |
-| **AT Commands** | `qcmd` wrapper for Quectel modem serial communication |
+| **AT Commands** | `qcmd` client for the `qmanager_atd` Rust AT broker, which owns `/dev/smd11`; read-only data also comes over QMI (QRTR) |
 | **Package Manager** | Bun |
 
 ---
@@ -173,7 +173,7 @@ Use `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` to pin a specific ver
 ```
 Browser ─── authFetch() ─── CGI Scripts ─── qcmd ─── Modem (AT commands)
                 │                  │
-                │          Shell Libraries (11)
+                │          Shell Libraries (40)
                 │
         reads /tmp/qmanager_status.json
                 │
@@ -186,8 +186,8 @@ The frontend is a statically-exported Next.js app served from the device. The ba
 **Key Data Flow:**
 
 - **Poller daemon** queries the modem via AT commands every 2–30s (3 tiers) and writes a JSON cache file
-- **CGI endpoints** (58 scripts) read the cache for GET requests, execute AT commands for POST requests
-- **React hooks** (38 custom hooks) poll the CGI layer and provide loading/error/staleness states
+- **CGI endpoints** (101 scripts) read the cache for GET requests, execute AT commands for POST requests
+- **React hooks** (75 custom hooks) poll the CGI layer and provide loading/error/staleness states
 
 See [full documentation](docs/README.md) for architecture details, API reference, and development guides.
 
@@ -209,7 +209,7 @@ cd qmanager
 # Install dependencies
 bun install
 
-# Start development server (proxies API to modem at 192.168.224.1)
+# Start development server (to proxy API calls to a modem at 192.168.224.1, uncomment the rewrites() block in next.config.ts)
 bun run dev
 ```
 
@@ -233,7 +233,7 @@ The `package` script builds the frontend, bundles it with backend scripts into a
 
 ```
 QManager/
-├── app/                        # Next.js App Router pages (39 routes)
+├── app/                        # Next.js App Router pages (52 routes)
 │   ├── dashboard/              # Home — live signal monitoring
 │   ├── cellular/               # Cellular info, SMS, profiles, band/tower/freq locking,
 │   │                           #   cell scanner, APN, IMEI, FPLMN, network priority
@@ -243,22 +243,22 @@ QManager/
 │   │                           #   SMS alerts, Tailscale, logs, software updates
 │   ├── system-settings/        # System config, AT terminal
 │   └── (login, setup, reboot, about-device, support)
-├── components/                 # React components (~185 files)
+├── components/                 # React components (~370 files)
 │   ├── ui/                     # shadcn/ui primitives (42+ components)
 │   ├── cellular/               # Cellular management UI
 │   ├── dashboard/              # Home dashboard cards
 │   ├── local-network/          # Network settings UI
 │   ├── monitoring/             # Monitoring & alerts UI
 │   └── system-settings/        # System configuration UI
-├── hooks/                      # Custom React hooks (38 files)
-├── types/                      # TypeScript interfaces (17 files)
+├── hooks/                      # Custom React hooks (75 files)
+├── types/                      # TypeScript interfaces (38 files)
 ├── lib/                        # Utilities (auth-fetch, earfcn, csv)
 ├── constants/                  # Static data (MNO presets, event labels)
 ├── scripts/                    # Backend shell scripts
-│   ├── etc/init.d/             # Init.d services (11)
-│   ├── usr/bin/                # Daemons & utilities (35)
-│   ├── usr/lib/qmanager/       # Shared libraries (11)
-│   ├── www/cgi-bin/            # CGI endpoints (58 scripts)
+│   ├── etc/init.d/             # Init.d services (14)
+│   ├── usr/bin/                # Daemons & utilities (27)
+│   ├── usr/lib/qmanager/       # Shared libraries (40)
+│   ├── www/cgi-bin/            # CGI endpoints (101 scripts)
 │   ├── install.sh              # Device installation script
 │   └── uninstall.sh            # Clean removal script
 └── docs/                       # Documentation
@@ -283,11 +283,12 @@ QManager/
 
 ## Backend Services
 
-QManager runs 11 init.d services on the device:
+QManager runs 14 init.d services on the device:
 
 | Service | Purpose |
 |---------|---------|
 | `qmanager` | Main poller daemon — tiered AT polling, JSON cache, event detection |
+| `qmanager_atd` | AT broker — owns `/dev/smd11`, serialises AT commands for `qcmd`, `qsms` and `qmi` |
 | `qmanager_watchcat` | Connection watchdog — 4-tier auto-recovery state machine |
 | `qmanager_dpi` | DPI service — nfqws in video optimizer or traffic masquerade mode |
 | `qmanager_tower_failover` | Tower failover — restores lock after cell loss |
@@ -295,6 +296,11 @@ QManager runs 11 init.d services on the device:
 | `qmanager_ttl` | TTL/HL — applies iptables rules at boot |
 | `qmanager_mtu` | MTU — applies interface MTU settings |
 | `qmanager_imei_check` | IMEI integrity — verifies IMEI backup on boot |
+| `qmanager_netbird_zone` | NetBird — boot-time self-heal of the firewall zone for `wt0` |
+| `qmanager_sites` | Sites monitor — times TCP handshakes to configured sites |
+| `qmanager_sms_forward` | SMS forwarding daemon — runs only when forwarding is enabled |
+| `qmanager_sms_storage` | SMS storage — applies the chosen storage (`AT+CPMS`) at boot |
+| `qmanager_tailscale_net` | Tailscale — boot re-assert of reachability rules |
 
 ---
 

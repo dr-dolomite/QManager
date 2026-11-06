@@ -27,7 +27,7 @@ SMS Forwarding automatically relays every new incoming SMS to a configured phone
 
 The init.d script uses `USE_PROCD=1` for automatic respawn (`3600 5 5`). The service is **UCI-gated**: `start_service()` reads `quecmanager.sms_forwarding.enabled` and returns early if it is not `1`, so enabling the init.d service on its own does nothing — UCI must also be set. For this reason the daemon is listed in `UCI_GATED_SERVICES` in `install.sh` and is **not** auto-enabled on install.
 
-`stop_service()` removes all five `/tmp/qmanager_sms_forward_*` files. This means a disable-then-re-enable cycle wipes the seen-set, causing the daemon to re-seed from the current inbox on next start (see Seed-on-First-Run below).
+`stop_service()` removes the pid file and seen-set under `/var/run/qmanager/`, plus the `/tmp/qmanager_sms_forward*` reload, seen, pid and failures files (and the `.tmp` leftover). This means a disable-then-re-enable cycle wipes the seen-set, causing the daemon to re-seed from the current inbox on next start (see Seed-on-First-Run below).
 
 ---
 

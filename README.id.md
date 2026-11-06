@@ -5,7 +5,7 @@
   <h3>Antarmuka GUI modern untuk manajemen modem Quectel</h3>
   <p>Visualisasikan, konfigurasikan, dan optimalkan performa modem seluler Anda dengan antarmuka web yang intuitif</p>
 
-  ![Version](https://img.shields.io/badge/versi-v0.1.8-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/versi-v0.1.35-blue?style=flat-square)
   ![License](https://img.shields.io/badge/lisensi-MIT%20%2B%20Commons%20Clause-green?style=flat-square)
   ![Platform](https://img.shields.io/badge/platform-OpenWRT-orange?style=flat-square)
   ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
@@ -14,7 +14,7 @@
 
 ---
 
-> **Catatan:** QManager adalah penerus dari [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), dibangun ulang dari awal menggunakan tumpukan teknologi modern dengan pengalaman pengguna yang lebih baik untuk mengelola modem Quectel seperti RM520N-GL, RM551E-GL, dan perangkat sejenis.
+> **Catatan:** QManager adalah penerus dari [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup), dibangun ulang dari awal menggunakan tumpukan teknologi modern dengan pengalaman pengguna yang lebih baik untuk mengelola modem Quectel RM551E-GL. RM520N-GL memiliki repositori sendiri, [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N).
 
 ---
 
@@ -24,13 +24,13 @@
 - **Dashboard Sinyal Langsung** — RSRP, RSRQ, SINR secara real-time dengan nilai per-antena (4x4 MIMO) dan grafik historis 30 menit
 - **Event Jaringan** — Deteksi otomatis perubahan band, handoff sel, perubahan carrier aggregation, dan event konektivitas
 - **Pemantauan Latensi** — Ping real-time dengan riwayat 24 jam, jitter, packet loss, dan tampilan agregat (per jam/12j/harian)
-- **Statistik Trafik** — Throughput langsung (Mbps) dan total penggunaan data kumulatif
+- **Statistik Trafik** — Total penggunaan data kumulatif
 
 ### Konfigurasi Seluler
 - **Band Locking** — Pilih dan kunci band LTE/NR tertentu untuk performa optimal
 - **Tower Locking** — Kunci ke menara sel tertentu berdasarkan PCI, dengan failover otomatis dan perubahan terjadwal
 - **Frequency Locking** — Kunci ke saluran EARFCN/ARFCN yang tepat
-- **Manajemen APN** — Buat, edit, dan hapus profil APN dengan preset MNO (Telkomsel, XL, Indosat, dll.)
+- **Manajemen APN** — Buat, edit, dan hapus profil APN dengan preset MNO (T-Mobile, AT&T, Verizon, dll.)
 - **Profil SIM Kustom** — Simpan konfigurasi lengkap (APN + TTL/HL + IMEI opsional) dan terapkan dengan satu klik
 - **Skenario Koneksi** — Simpan dan pulihkan snapshot konfigurasi jaringan lengkap
 - **Prioritas Jaringan** — Konfigurasi jenis jaringan yang diutamakan dan mode pemilihan jaringan
@@ -105,7 +105,7 @@ curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-do
 
 One-liner ini tetap mengunduh tarball pre-release terbaru, memverifikasi `sha256sum.txt`, lalu menjalankan `install.sh`.
 
-Untuk menentukan rilis tertentu alih-alih pre-release terbaru, atur `TAG` secara manual (misalnya `TAG="v0.1.13"`) dan lewati blok pencarian API.
+Untuk menentukan rilis tertentu alih-alih pre-release terbaru, atur `TAG` secara manual (misalnya `TAG="v0.1.35"`) dan lewati blok pencarian API.
 
 ### Memperbarui
 
@@ -140,16 +140,16 @@ One-liner uninstall:
 curl -fsSL -o /tmp/qmanager-installer.sh https://raw.githubusercontent.com/dr-dolomite/QManager/development-home/qmanager-installer.sh && sh /tmp/qmanager-installer.sh --uninstall
 ```
 
-Gunakan `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` untuk menentukan versi tertentu dengan one-liner.
+Gunakan `QMANAGER_TAG="v0.1.35" sh /tmp/qmanager-installer.sh` untuk menentukan versi tertentu dengan one-liner.
 
 ---
 
 ## Prasyarat
 
-- Modem Quectel yang kompatibel (RM520N-GL, RM551E-GL, RM500Q, dll.) dengan dukungan perintah AT
+- Quectel RM551E-GL (pengguna RM520N-GL: lihat [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N))
 - Perangkat OpenWRT dengan modem terhubung
-- **Paket wajib:** `jq`, `sms-tool`
-- **Paket opsional:** `msmtp` (notifikasi email), `ethtool` (kontrol kecepatan link), `ookla-speedtest` (pengujian kecepatan)
+- **Paket wajib:** `jq`, `curl`, `coreutils-timeout`, `ethtool` (installer memasang yang belum ada; `sms-tool` tidak lagi dipakai dan dihapus installer sebagai paket konflik)
+- **Paket opsional:** `msmtp` (notifikasi email), `ookla-speedtest` (pengujian kecepatan)
 
 > Paket opsional dapat diinstal dari dalam aplikasi — tidak perlu `opkg` manual.
 
@@ -163,7 +163,7 @@ Gunakan `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` untuk menentukan 
 | **Styling** | Tailwind CSS v4, warna OKLCH, Euclid Circular B + Manrope |
 | **Komponen** | shadcn/ui (42+ komponen), Recharts, React Hook Form + Zod |
 | **Backend** | Script shell POSIX (OpenWRT/BusyBox), endpoint CGI |
-| **Perintah AT** | Wrapper `qcmd` untuk komunikasi serial modem Quectel |
+| **Perintah AT** | Klien `qcmd` untuk broker AT Rust `qmanager_atd`, yang memiliki `/dev/smd11`; data baca-saja juga lewat QMI (QRTR) |
 | **Package Manager** | Bun |
 
 ---
@@ -173,7 +173,7 @@ Gunakan `QMANAGER_TAG="v0.1.14" sh /tmp/qmanager-installer.sh` untuk menentukan 
 ```
 Browser ─── authFetch() ─── Script CGI ─── qcmd ─── Modem (perintah AT)
                 │                  │
-                │          Library Shell (11)
+                │          Library Shell (40)
                 │
         membaca /tmp/qmanager_status.json
                 │
@@ -186,8 +186,8 @@ Frontend adalah aplikasi Next.js yang diekspor secara statis dan dilayani dari p
 **Alur Data Utama:**
 
 - **Daemon poller** menanyai modem via perintah AT setiap 2–30 detik (3 tingkat) dan menulis file cache JSON
-- **Endpoint CGI** (58 script) membaca cache untuk permintaan GET, mengeksekusi perintah AT untuk permintaan POST
-- **React hooks** (38 hook kustom) melakukan polling lapisan CGI dan menyediakan status loading/error/kedaluwarsa
+- **Endpoint CGI** (101 script) membaca cache untuk permintaan GET, mengeksekusi perintah AT untuk permintaan POST
+- **React hooks** (75 hook kustom) melakukan polling lapisan CGI dan menyediakan status loading/error/kedaluwarsa
 
 Lihat [dokumentasi lengkap](docs/README.md) untuk detail arsitektur, referensi API, dan panduan pengembangan.
 
@@ -209,7 +209,7 @@ cd qmanager
 # Instal dependensi
 bun install
 
-# Jalankan server pengembangan (proxy API ke modem di 192.168.224.1)
+# Jalankan server pengembangan (untuk proxy panggilan API ke modem di 192.168.224.1, aktifkan blok rewrites() di next.config.ts)
 bun run dev
 ```
 
@@ -233,7 +233,7 @@ Script `package` membangun frontend, menggabungkannya dengan script backend ke d
 
 ```
 QManager/
-├── app/                        # Halaman Next.js App Router (39 route)
+├── app/                        # Halaman Next.js App Router (52 route)
 │   ├── dashboard/              # Beranda — pemantauan sinyal langsung
 │   ├── cellular/               # Info seluler, SMS, profil, locking band/tower/frekuensi,
 │   │                           #   pemindai sel, APN, IMEI, FPLMN, prioritas jaringan
@@ -243,22 +243,22 @@ QManager/
 │   │                           #   notifikasi SMS, Tailscale, log, pembaruan perangkat lunak
 │   ├── system-settings/        # Konfigurasi sistem, AT terminal
 │   └── (login, setup, reboot, about-device, support)
-├── components/                 # Komponen React (~185 file)
+├── components/                 # Komponen React (~370 file)
 │   ├── ui/                     # Primitif shadcn/ui (42+ komponen)
 │   ├── cellular/               # UI manajemen seluler
 │   ├── dashboard/              # Kartu dashboard beranda
 │   ├── local-network/          # UI pengaturan jaringan
 │   ├── monitoring/             # UI pemantauan & notifikasi
 │   └── system-settings/        # UI konfigurasi sistem
-├── hooks/                      # React hooks kustom (38 file)
-├── types/                      # Interface TypeScript (17 file)
+├── hooks/                      # React hooks kustom (75 file)
+├── types/                      # Interface TypeScript (38 file)
 ├── lib/                        # Utilitas (auth-fetch, earfcn, csv)
 ├── constants/                  # Data statis (preset MNO, label event)
 ├── scripts/                    # Script shell backend
-│   ├── etc/init.d/             # Layanan init.d (11)
-│   ├── usr/bin/                # Daemon & utilitas (35)
-│   ├── usr/lib/qmanager/       # Library bersama (11)
-│   ├── www/cgi-bin/            # Endpoint CGI (58 script)
+│   ├── etc/init.d/             # Layanan init.d (14)
+│   ├── usr/bin/                # Daemon & utilitas (27)
+│   ├── usr/lib/qmanager/       # Library bersama (40)
+│   ├── www/cgi-bin/            # Endpoint CGI (101 script)
 │   ├── install.sh              # Script instalasi perangkat
 │   └── uninstall.sh            # Script penghapusan bersih
 └── docs/                       # Dokumentasi
@@ -283,7 +283,7 @@ QManager/
 
 ## Layanan Backend
 
-QManager menjalankan 11 layanan init.d di perangkat:
+QManager menjalankan 14 layanan init.d di perangkat:
 
 | Layanan | Fungsi |
 |---------|--------|
@@ -295,6 +295,12 @@ QManager menjalankan 11 layanan init.d di perangkat:
 | `qmanager_ttl` | TTL/HL — menerapkan aturan iptables saat boot |
 | `qmanager_mtu` | MTU — menerapkan pengaturan MTU antarmuka |
 | `qmanager_imei_check` | Integritas IMEI — memverifikasi cadangan IMEI saat boot |
+| `qmanager_atd` | Broker AT — memiliki `/dev/smd11` dan menyerialkan perintah AT untuk `qcmd`, `qsms` dan `qmi` |
+| `qmanager_netbird_zone` | NetBird — self-heal zona firewall untuk `wt0` saat boot |
+| `qmanager_sites` | Pemantau situs — mengukur handshake TCP ke situs yang dikonfigurasi |
+| `qmanager_sms_forward` | Daemon penerusan SMS — hanya berjalan saat penerusan diaktifkan |
+| `qmanager_sms_storage` | Penyimpanan SMS — menerapkan penyimpanan pilihan (`AT+CPMS`) saat boot |
+| `qmanager_tailscale_net` | Tailscale — menegaskan ulang aturan keterjangkauan saat boot |
 
 ---
 

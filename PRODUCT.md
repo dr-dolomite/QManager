@@ -61,7 +61,7 @@ Success looks like:
 
 - **Name and voice.** QManager. Direct, specific, never apologetic. "Lock to cell 412" beats "Are you sure you want to proceed?". Real units, real values, real consequences in plain language. Say it once, and short: the UI talks the way a good label does, not the way a manual does. A sentence that exists only to teach belongs behind an info tip or in the docs, not on the surface. Calm by default; risk surfaces visibly.
 - **Emotional goals, in order.** First **trust**: that the modem will still be up tomorrow morning and nothing happened behind the user's back. Then **competence, fast**: a new user should feel capable within a few clicks, not after reading docs.
-- **The mark is binding.** The "Tonal Q": a ring plus a 45-degree tail anchored at dead centre, two tones of one blue, no gradient and no shadow. The tail starts at the centre because the signal originates at the device. New brand and UI surfaces derive from the mark rather than beside it. The canonical file is `public/qmanager-mark.svg` on the RM520N fork; the target ships `public/qmanager-logo.svg` today and adopts the mark file with the shell and pre-auth ports (ledger U3).
+- **The mark is binding.** The "Tonal Q": a ring plus a 45-degree tail anchored at dead centre, two tones of one blue, no gradient and no shadow. The tail starts at the centre because the signal originates at the device. New brand and UI surfaces derive from the mark rather than beside it. The canonical file is `public/qmanager-mark.svg` on the RM520N fork; the target ships the same file (ledger U3.1), used on the pre-auth pages and the app switcher, and still carries `public/qmanager-logo.svg` for the READMEs.
 - **Blue is the single overall hue**, and it is the mark's blue. It is simultaneously the brand, the action accent, and the identity of the 5G NR leg.
 - **Radio identity colours are fixed**: blue for 5G NR, violet for 4G LTE. They say which radio, never whether anything is healthy.
 - **The operational state colours are fixed**: green, amber, red.
@@ -85,7 +85,7 @@ What QManager should not look or feel like. These sit beside the binding referen
 ## Evidence on Hand
 
 - **A live RM551E** is reachable over SSH (PowerShell Posh-SSH, credentials in the gitignored `.env` as `SSH_HOST`, `SSH_USERNAME`, `SSH_PASSWORD`) for verifying platform claims directly. The device is the source of truth; documentation drifts.
-- **The shipped product itself**: a large, coherent, working interface across roughly forty routes. Any claim about how QManager behaves is checkable against the code and the device.
+- **The shipped product itself**: a large, coherent, working interface across roughly fifty routes. Any claim about how QManager behaves is checkable against the code and the device.
 - **The RM520N fork** (`QManager-RM520N`, fetched into this repository; read its files with `git show a05c4e92:<path>`), from which this canon and its reference implementations (`/dashboard`, the `/cellular/` index) come, and `docs/rm520n-port-ledger.md`, which tracks the port.
 - **Measured colour data.** Contrast and colour-vision-deficiency separation for the token system were computed on the fork rather than estimated, and more than one shipped value is a correctness fix rather than a taste change (`docs/reference/color-system.md`).
 - **What does not exist and must not be invented**: customers, testimonials, benchmarks, install counts, pricing, or any commercial claim. QManager is distributed through GitHub releases and an in-product OTA updater.

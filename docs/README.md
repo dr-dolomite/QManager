@@ -2,7 +2,7 @@
 
 QManager is a modern web-based GUI for managing Quectel cellular modems on OpenWRT devices. It provides real-time signal monitoring, cellular configuration, network management, and advanced diagnostics through an intuitive interface.
 
-**Version:** v0.1.2
+**Version:** v0.1.35 (latest release)
 **License:** MIT
 **Successor to:** [SimpleAdmin](https://github.com/dr-dolomite/simpleadmin-mockup)
 
@@ -29,7 +29,7 @@ QManager is a modern web-based GUI for managing Quectel cellular modems on OpenW
 ### Prerequisites
 
 - [Bun](https://bun.sh/) (package manager and runtime)
-- Compatible Quectel modem (RM520N-GL, RM551E-GL, RM500Q, etc.)
+- Quectel RM551E-GL, the only modem this repo targets (RM520N-GL is in [QManager-RM520N](https://github.com/dr-dolomite/QManager-RM520N))
 - OpenWRT device with the modem connected
 
 ### Development
@@ -41,7 +41,7 @@ bun install
 bun run dev        # Start dev server at http://localhost:3000
 ```
 
-The dev server proxies `/cgi-bin/*` requests to `http://192.168.224.1` (configurable in `next.config.ts`).
+The API proxy in `next.config.ts` (`rewrites()`, which sends `/cgi-bin/*` and `/qmlive/*` to `http://192.168.224.1`) is commented out by default. Uncomment it to talk to a modem from the dev server.
 
 ### Production Build
 
@@ -63,9 +63,9 @@ The `out/` directory contains the complete frontend — deploy it to the OpenWRT
 | **Styling** | Tailwind CSS v4, OKLCH color system |
 | **Charts** | Recharts 2.15 |
 | **Forms** | React Hook Form + Zod validation |
-| **Animations** | Motion (Framer Motion) |
+| **Animations** | Motion (`motion` package) |
 | **Backend** | OpenWRT CGI shell scripts (BusyBox /bin/sh) |
-| **AT Commands** | `qcmd` wrapper for Quectel modem communication |
+| **AT Commands** | `qcmd` client for the `qmanager_atd` Rust AT broker (owns `/dev/smd11`); read-only data also via QMI over QRTR |
 | **Package Manager** | Bun |
 
 ---
@@ -93,22 +93,22 @@ The `out/` directory contains the complete frontend — deploy it to the OpenWRT
 ```
 QManager/
 ├── app/                    # Next.js App Router pages
-├── components/             # React components (~150 files)
-│   ├── ui/                 # shadcn/ui primitives (42 components)
+├── components/             # React components (~370 files)
+│   ├── ui/                 # shadcn/ui primitives (61 files)
 │   ├── cellular/           # Cellular management UI
 │   ├── dashboard/          # Home dashboard cards
 │   ├── local-network/      # Network settings UI
 │   └── monitoring/         # Monitoring & alerts UI
-├── hooks/                  # Custom React hooks (30 files)
-├── types/                  # TypeScript interfaces (14 files)
+├── hooks/                  # Custom React hooks (75 files)
+├── types/                  # TypeScript interfaces (38 files)
 ├── lib/                    # Utilities (auth-fetch, earfcn, csv, cn)
 ├── constants/              # Static data (MNO presets, event labels)
 ├── public/                 # Static assets (logo SVG)
 ├── scripts/                # Backend shell scripts
-│   ├── etc/init.d/         # Init.d services (8)
-│   ├── usr/bin/            # Daemons & utilities (18)
-│   ├── usr/lib/qmanager/   # Shared libraries (10)
-│   └── www/cgi-bin/        # CGI endpoints (60 scripts)
+│   ├── etc/init.d/         # Init.d services (14)
+│   ├── usr/bin/            # Daemons & utilities (27)
+│   ├── usr/lib/qmanager/   # Shared libraries (40)
+│   └── www/cgi-bin/        # CGI endpoints (101 scripts)
 └── docs/                   # This documentation
 ```
 

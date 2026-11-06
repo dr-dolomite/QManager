@@ -1,6 +1,6 @@
 # QManager Design System
 
-> ⚠️ WARNING: **Superseded on 2026-10-15.** QManager adopted the RM520N design canon wholesale (port ledger U0.1 to U0.3). `DESIGN.md` and `PRODUCT.md` at the repo root are now the only design source of truth. Everything below describes the earlier target design (Manrope, Signal Indigo, outline status badges, hybrid elevation, the uniform card grid) and is kept only as a record of what the current code still implements until the ledger rows in `DESIGN.md` > Migration Deltas land. Do not build new UI from it.
+> ⚠️ WARNING: **Superseded on 2026-10-15.** QManager adopted the RM520N design canon wholesale (port ledger U0.1 to U0.3). `DESIGN.md` and `PRODUCT.md` at the repo root are now the only design source of truth. This file is kept as a historical record of the earlier target design (Signal Indigo, outline status badges, hybrid elevation, the uniform card grid). The code no longer matches every value below. Where they differ, `app/globals.css`, `app/layout.tsx` and `components/ui/` are ground truth. The token values, fonts (Rethink Sans, JetBrains Mono), component inventory, and sidebar were re-synced to the code on 2026-11-06; the rest is unverified against the code. Do not build new UI from it.
 
 This document defines the visual language, component library, theming system, and UI conventions used throughout QManager.
 
@@ -34,40 +34,40 @@ QManager uses OKLCH (Oklab Lightness, Chroma, Hue) for perceptually uniform colo
 
 | Token | OKLCH Value | Usage |
 |-------|-------------|-------|
-| `--background` | `oklch(1 0 0)` | Page background (white) |
-| `--foreground` | `oklch(0.141 0.005 285.823)` | Primary text (near black) |
-| `--card` | `oklch(1 0 0)` | Card backgrounds |
-| `--primary` | `oklch(0.488 0.243 264.376)` | Primary actions, links (blue) |
-| `--primary-foreground` | `oklch(0.97 0.014 254.604)` | Text on primary bg |
-| `--secondary` | `oklch(0.91 0.05 264)` | Quiet control surface — lighter shade of primary (not a brand color) |
-| `--secondary-foreground` | `oklch(0.39 0.15 264)` | Text on secondary surface |
-| `--muted` | `oklch(0.967 0.001 286.375)` | Muted backgrounds |
-| `--muted-foreground` | `oklch(0.552 0.016 285.938)` | Secondary text |
-| `--accent` | `oklch(0.967 0.001 286.375)` | Accent backgrounds |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | Destructive actions (red) |
-| `--success` | `oklch(0.59 0.18 149)` | Success indicators (green) |
-| `--warning` | `oklch(0.75 0.18 75)` | Warning indicators (amber) |
-| `--info` | `oklch(0.62 0.19 255)` | Info indicators (blue) |
-| `--border` | `oklch(0.92 0.004 286.32)` | Borders and dividers |
-| `--input` | `oklch(0.92 0.004 286.32)` | Input borders |
-| `--ring` | `oklch(0.708 0 0)` | Focus rings |
+| `--background` | `oklch(0.985 0.003 258)` | Page background (near white) |
+| `--foreground` | `oklch(0.205 0.011 258)` | Primary text (near black) |
+| `--card` | `oklch(1 0 258)` | Card backgrounds |
+| `--primary` | `oklch(0.565 0.235 262)` | Primary actions, links (blue) |
+| `--primary-foreground` | `oklch(0.985 0.006 262)` | Text on primary bg |
+| `--secondary` | `oklch(0.967 0.005 258)` | Quiet control surface (neutral) |
+| `--secondary-foreground` | `oklch(0.205 0.011 258)` | Text on secondary surface |
+| `--muted` | `oklch(0.967 0.005 258)` | Muted backgrounds |
+| `--muted-foreground` | `oklch(0.505 0.012 258)` | Secondary text |
+| `--accent` | `oklch(0.938 0.007 258)` | Accent backgrounds |
+| `--destructive` | `oklch(0.48 0.192 27)` | Destructive actions (red) |
+| `--success` | `oklch(0.54 0.15 149)` | Success indicators (green) |
+| `--warning` | `oklch(0.56 0.118 72)` | Warning indicators (amber) |
+| `--info` | `oklch(0.565 0.235 262)` | Info indicators (blue) |
+| `--border` | `oklch(0.905 0.006 258)` | Borders and dividers |
+| `--input` | `oklch(0.868 0.008 258)` | Input borders |
+| `--ring` | `oklch(0.565 0.235 262)` | Focus rings |
 
 ### Dark Mode
 
 | Token | OKLCH Value | Change from Light |
 |-------|-------------|-------------------|
-| `--background` | `oklch(0.141 0.005 285.823)` | Charcoal |
-| `--foreground` | `oklch(0.985 0 0)` | Near white |
-| `--card` | `oklch(0.21 0.006 285.885)` | Elevated dark |
-| `--secondary` | `oklch(0.40 0.08 264)` | Quiet control surface — lighter shade of primary (dark) |
-| `--secondary-foreground` | `oklch(0.97 0.014 264)` | Text on secondary surface (dark) |
-| `--muted-foreground` | `oklch(0.705 0.015 286.067)` | Lighter secondary text |
-| `--destructive` | `oklch(0.704 0.191 22.216)` | Brighter red for contrast |
-| `--success` | `oklch(0.65 0.17 149)` | Brighter green |
-| `--warning` | `oklch(0.80 0.16 75)` | Brighter amber |
-| `--info` | `oklch(0.68 0.17 255)` | Brighter blue |
-| `--border` | `oklch(1 0 0 / 10%)` | Subtle white border |
-| `--input` | `oklch(1 0 0 / 15%)` | Slightly more visible |
+| `--background` | `oklch(0.12 0.008 258)` | Charcoal |
+| `--foreground` | `oklch(0.965 0.004 258)` | Near white |
+| `--card` | `oklch(0.17 0.009 258)` | Elevated dark |
+| `--secondary` | `oklch(0.2 0.01 258)` | Quiet control surface (neutral, dark) |
+| `--secondary-foreground` | `oklch(0.965 0.004 258)` | Text on secondary surface (dark) |
+| `--muted-foreground` | `oklch(0.762 0.011 258)` | Lighter secondary text |
+| `--destructive` | `oklch(0.64 0.2 27)` | Brighter red for contrast |
+| `--success` | `oklch(0.74 0.2 149)` | Brighter green |
+| `--warning` | `oklch(0.79 0.166 72)` | Brighter amber |
+| `--info` | `oklch(0.605 0.2 262)` | Brighter blue |
+| `--border` | `oklch(0.288 0.012 258)` | Subtle border |
+| `--input` | `oklch(0.33 0.013 258)` | Slightly more visible |
 
 ### Semantic Color Usage
 
@@ -89,20 +89,22 @@ Six chart colors are defined for Recharts visualizations:
 
 | Token | OKLCH | Visual |
 |-------|-------|--------|
-| `--chart-1` | `oklch(0.809 0.105 251.813)` | Light blue |
-| `--chart-2` | `oklch(0.623 0.214 259.815)` | Medium blue |
-| `--chart-3` | `oklch(0.546 0.245 262.881)` | Deep blue |
+| `--chart-1` | `oklch(0.809 0.097 251.813)` | Light blue |
+| `--chart-2` | `oklch(0.623 0.201 259.815)` | Medium blue |
+| `--chart-3` | `oklch(0.535 0.22 262)` | Deep blue |
 | `--chart-4` | `oklch(0.488 0.243 264.376)` | Primary blue |
 | `--chart-5` | `oklch(0.424 0.199 265.638)` | Dark blue |
-| `--chart-6` | `oklch(0.705 0.213 47.604)` | Orange (contrast) |
+| `--chart-6` | `oklch(0.51 0.143 45)` | Orange (contrast) |
+
+Light-mode values; dark mode redefines all six in `app/globals.css` (`.dark`). The RM520N-derived `--chart-nr`, `--chart-lte` and `--chart-threshold` tokens also exist.
 
 ---
 
 ## Typography
 
-### Primary (and only UI font): Manrope
+### Primary (and only UI font): Rethink Sans
 
-The single interface typeface. Geometric without being severe, technical without being cold; tabular-numbers and stylistic alternates (`ss01`) carry dense modem-data readouts. Loaded via `next/font/google`. See `DESIGN.md` §3 for the full hierarchy and named rules.
+The single interface typeface. Loaded from vendored variable font files (`app/fonts/RethinkSans-Variable.woff2`, `RethinkSans-Italic-Variable.woff2`) via `next/font/local`, not `next/font/google`, so the build makes no Google request. See `DESIGN.md` §3 for the full hierarchy and named rules.
 
 | Weight | Usage |
 |--------|-------|
@@ -111,7 +113,7 @@ The single interface typeface. Geometric without being severe, technical without
 | 600 (SemiBold) | Headings, card titles, numeric readouts, emphasis |
 | 700 (Bold) | Wordmark / brand surfaces only |
 
-CSS Variable: `--font-manrope`
+CSS Variable: `--font-rethink-sans` (mapped to `--font-sans`)
 Tailwind: `font-sans` (mapped via `@theme inline`)
 
 **Weight discipline:** 400 body · 500 labels · 600 headings/emphasis · 700 brand only.
@@ -120,10 +122,10 @@ Tailwind: `font-sans` (mapped via `@theme inline`)
 
 The one sanctioned non-Manrope face, used **only** in the AT terminal, raw-AT-response / log viewers, and inline `<code>` for AT command strings. Never a general UI font (The Machine-Voice Rule in `DESIGN.md`). Chosen for a disambiguated (slashed) zero and fixed advance width so device output stays column-aligned.
 
-CSS Variable: `--font-mono` (resolves to `'JetBrains Mono', ui-monospace, monospace`)
+CSS Variable: `--font-jetbrains-mono` (mapped to `--font-mono`; vendored `app/fonts/JetBrainsMono-Variable.woff2`)
 Tailwind: `font-mono`
 
-> Note: the app previously shipped Euclid Circular B (commercial) as `--font-euclid` and pointed `--font-mono` at an undefined `--font-geist-mono`. Both are superseded: Manrope (free, SIL OFL) is the canonical UI font, JetBrains Mono the canonical scoped mono.
+> Note: the app previously shipped Euclid Circular B (commercial) as `--font-euclid` and pointed `--font-mono` at an undefined `--font-geist-mono`. Both are superseded. Rethink Sans is the canonical UI font, and JetBrains Mono the canonical scoped mono.
 
 ---
 
@@ -136,6 +138,14 @@ Tailwind: `font-mono`
 | `--radius-md` | `calc(0.65rem - 2px)` | Inputs, buttons |
 | `--radius-lg` | `0.65rem` | Cards, dialogs |
 | `--radius-xl` | `calc(0.65rem + 4px)` | Large containers |
+| `--radius-inline` | `0.5rem` | Small inline affordances, code, skeletons |
+| `--radius-field` | `0.625rem` | Inputs, selects, small popovers |
+| `--radius-tile` | `0.75rem` | Inner tiles, carrier tiles, alignment slots |
+| `--radius-card` | `1rem` | Standard cards, dialogs |
+| `--radius-hero` | `1.25rem` | Hero surfaces, aggregation strip |
+| `--radius-pill` | `9999px` | Chips, buttons, nav items, metric rows, meters |
+
+The `--radius-sm` to `--radius-xl` chain is the legacy set. `app/globals.css` also defines the purpose-named set above.
 
 The radius is softly rounded — not pill-shaped, not sharp-cornered.
 
@@ -157,27 +167,29 @@ The radius is softly rounded — not pill-shaped, not sharp-cornered.
 }
 ```
 
-### Available Components (42)
+### Available Components (61 files in `components/ui/`)
 
-**Layout:** `card`, `separator`, `aspect-ratio`, `sidebar`, `scroll-area`, `resizable`
+Not present in the tree (despite earlier docs): `scroll-area`, `resizable`, `navigation-menu`, `carousel`, `form`.
 
-**Navigation:** `breadcrumb`, `navigation-menu`, `menubar`, `tabs`
+**Layout:** `card`, `card-foot`, `separator`, `aspect-ratio`, `sidebar`, `sheet`, `skeleton`
 
-**Forms:** `button`, `input`, `label`, `select`, `checkbox`, `switch`, `toggle`, `toggle-group`, `slider`, `input-otp`, `form` (React Hook Form integration)
+**Navigation:** `breadcrumb`, `menubar`, `tabs`
 
-**Data Display:** `table`, `badge`, `avatar`, `progress`, `chart` (Recharts wrapper)
+**Forms:** `button`, `input`, `textarea`, `label`, `select`, `checkbox`, `switch`, `toggle`, `toggle-group`, `slider`, `input-otp`, `input-group`, `field`, `segmented-field`, `save-button`
 
-**Feedback:** `alert`, `alert-dialog`, `dialog`, `popover`, `tooltip`, `hover-card`, `sonner` (toasts)
+**Data Display:** `table`, `badge`, `avatar`, `progress`, `chart` (Recharts wrapper), `tag`, `metric-bar`, `code-block`
+
+**Feedback:** `alert`, `alert-dialog`, `banner`, `tonal-banner`, `dialog`, `popover`, `tooltip`, `hover-card`, `sonner` (toasts), `spinner`
 
 **Menus:** `dropdown-menu`, `context-menu`, `command` (cmdk search)
 
-**Content:** `accordion`, `collapsible`, `carousel`, `drawer` (vaul)
+**Content:** `accordion`, `collapsible`, `drawer` (vaul), `empty`, `kbd`, `meta-panel`
 
-**Custom:**
-- `empty.tsx` — Empty state with icon and message
-- `field.tsx` — Labeled field display (label + value)
-- `input-group.tsx` — Input with prefix/suffix
-- `kbd.tsx` — Keyboard shortcut display
+**Icons and brand:** `material-symbol` (+ `material-symbol-names.ts`), `brand-mark`, `hint-icon`
+
+**Interaction and value helpers:** `reveal-button`, `reveal-label-button`, `expand-button`, `swap-label`, `tick-group`, `ticking-value`
+
+`components.json` registers the `@magicui` registry.
 
 ### MagicUI Registry
 
@@ -305,17 +317,17 @@ Use badges for status indicators:
 
 ## Sidebar Design
 
-The sidebar uses the `inset` variant with a header, content sections, and user footer:
+The sidebar uses the `inset` variant with `collapsible="icon"` (`components/app-sidebar.tsx`). Groups render through `NavSection` and `NavMenu`. The authoritative tree is `NAV_GROUPS` in `app-sidebar.tsx`, and [`FRONTEND.md`](FRONTEND.md#sidebar-navigation) summarises it:
 
-| Section | Components | Items |
-|---------|-----------|-------|
-| Header | Logo + "QManager" / "Admin" | QManager logo SVG |
-| NavMain | Home | Single link to dashboard |
-| NavCellular | Collapsible groups | Cellular Info, SMS, Profiles, Band Locking, Cell Scanner, Settings |
-| NavLocalNetwork | Flat list | Ethernet, IP Passthrough, DNS, TTL & MTU |
-| NavMonitoring | Collapsible groups | Events, Email Alerts, Tailscale, Watchdog, Logs |
-| NavSecondary | Flat list + donate dialog | About Device, Support, Donate |
-| Footer | NavUser | User avatar, change password, logout |
+| Section | Items |
+|---------|-------|
+| Main | Home (Dashboard) |
+| Cellular | Cellular Info, SMS, Custom Profiles, Band Locking, Cell Scanner, Settings |
+| Local Network | Ethernet Status, Traffic Engine, Settings (TTL & MTU, Custom DNS) |
+| Monitoring | Connection Quality, Alerts, Watchdog, Tailscale, NetBird |
+| System | System Settings (Logs, Languages, Configuration Backup, Adaptive Polling, and others) |
+| Footer | About Device, Support, Donate |
+| User menu | Change Password, Theme, Animations, Reboot Device, Logout |
 
 ---
 
@@ -362,7 +374,7 @@ Dark mode uses `next-themes` with class-based toggling:
 
 ```tsx
 // app/layout.tsx
-<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
   {children}
 </ThemeProvider>
 ```
@@ -391,14 +403,14 @@ All colors automatically switch between light and dark palettes via CSS variable
 ### Libraries
 
 - **tw-animate-css** — Tailwind animation utilities (fade, slide, scale)
-- **Motion** (Framer Motion) — Complex component animations
+- **Motion** (`motion` package, the successor to Framer Motion; `framer-motion` is not installed) — Complex component animations
 
 ### Custom Animations
 
 ```css
-/* Pulsating ring for status indicators */
+/* Pulsating ring for status indicators (app/globals.css) */
 .animate-pulse-ring {
-  animation: pulse-ring 2s ease-in-out infinite alternate;
+  animation: pulse-ring var(--duration-ambient) var(--ease-ambient) infinite alternate;
 }
 ```
 
@@ -415,7 +427,7 @@ All animations respect `prefers-reduced-motion`:
 
 ### Lucide React
 
-Primary icon library. Consistent stroke width and sizing:
+Primary icon library for in-page icons. Sidebar glyphs and the pre-auth pages (`/`, `/login`) use Material Symbols through `components/ui/material-symbol.tsx` instead. Consistent stroke width and sizing:
 
 ```tsx
 import { RadioTowerIcon, SettingsIcon } from "lucide-react";

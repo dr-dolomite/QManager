@@ -42,7 +42,7 @@ sh /tmp/qmanager_install/install.sh
 To pin a specific release, set `TAG` manually and skip the API lookup block.
 
 The installer will:
-- Install required packages (`jq`) and optional packages (`msmtp`, `tailscale`, `ethtool`)
+- Install required packages (`jq`, `curl`, `coreutils-timeout`, `ethtool`) and optional packages (`msmtp`, `ookla-speedtest`). Tailscale is not installed by the installer; add it from the Tailscale page in the UI
 - Backup the original `index.html` before replacing it
 - Deploy frontend, backend scripts, CGI endpoints, and init.d services
 - Fix any CRLF line endings
@@ -50,7 +50,7 @@ The installer will:
 - On a fresh interactive install, ask whether to serve QManager on ports other than 80 / 443 (Enter keeps the defaults; the OTA updater never asks, and an earlier choice is kept). Change it later with `qmanager_web_port set <http> <https>` or **System Settings → Device Access**; see [`features/web-port.md`](features/web-port.md)
 - Prune any legacy daemons absent from the current release (e.g., `qmanager_wan_guard`, retired in v0.1.24 — the installer stops, disables, and removes the binary, init.d script, and any `/etc/rc.d/` symlinks on upgraded devices)
 
-See `sh install.sh --help` for all options (`--frontend-only`, `--backend-only`, `--skip-packages`, `--uninstall`, etc.)
+See `sh install.sh --help` for all options (`--frontend-only`, `--backend-only`, `--skip-packages`, `--no-reboot`, etc.). Uninstall with `uninstall.sh`
 
 ### Quick Uninstall
 
@@ -164,9 +164,9 @@ bun install
 bun run dev
 ```
 
-Opens at `http://localhost:3000`. API requests are proxied to `http://192.168.224.1` (the modem's IP).
+Opens at `http://localhost:3000`. API requests need the `rewrites()` block in `next.config.ts` uncommented. The block ships commented out and proxies `/cgi-bin/` and `/qmlive/` to the modem at `http://192.168.224.1` (the modem's IP).
 
-To change the proxy target, edit `next.config.ts`:
+To change the proxy target, edit the `destination` values:
 
 ```typescript
 destination: "http://192.168.224.1/cgi-bin/:path*",
@@ -188,7 +188,7 @@ bun run package
 
 This produces a static export in the `out/` directory. The output is a complete, self-contained frontend that requires no server-side rendering.
 
-**Important:** The `rewrites()` block in `next.config.ts` is only used in development. In production, the browser makes direct requests to the device's CGI endpoints.
+**Important:** The `rewrites()` block in `next.config.ts` is development-only and must stay commented out for `bun run build`. In production, the browser makes direct requests to the device's CGI endpoints.
 
 ### Build Output
 
@@ -335,9 +335,11 @@ cat /tmp/qmanager.log | tail -20
         ├── cellular/
         ├── device/
         ├── frequency/
+        ├── metrics/
         ├── monitoring/
         ├── network/
         ├── profiles/
+        ├── public/
         ├── scenarios/
         ├── system/
         ├── tower/
@@ -380,10 +382,9 @@ cat /tmp/qmanager.log | tail -20
 └── qmanager_tower_failover # Tower failover
 
 /etc/qmanager/             # Persistent configuration
-├── shadow                 # Password hash
+├── auth.json              # Password hash + salt
 ├── profiles/              # Custom SIM profiles
 ├── tower_lock.json
-├── band_lock.json
 ├── imei_backup.json
 ├── last_iccid
 └── msmtprc                # Email SMTP config
@@ -409,7 +410,7 @@ cat /tmp/qmanager.log | tail -20
 
 The `.gitattributes` file enforces LF:
 ```
-scripts/**/*.sh text eol=lf
+*.sh text eol=lf
 scripts/etc/init.d/* text eol=lf
 scripts/usr/bin/* text eol=lf
 ```

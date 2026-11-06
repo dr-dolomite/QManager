@@ -224,10 +224,10 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
     "conn_uptime_seconds": 43200,
     "serving_read_mono": 123456,
     "ca_read_mono": 123450,
-    "firmware": "RM520NGLAAR03A04M4GA",
+    "firmware": "RM551EGL00AAR02A01M8G",
     "build_date": "Jun 25 2025",
     "manufacturer": "Quectel",
-    "model": "RM520N-GL",
+    "model": "RM551E-GL",
     "imei": "123456789012345",
     "imsi": "310260123456789",
     "iccid": "89012345678901234567",
@@ -405,6 +405,22 @@ Same pattern and shared lock as the cell scanner (`other_scan_running` while a f
 Start speed test, check results, and check if speedtest binary is available.
 
 `speedtest_status.sh` answers `idle`, `running` (`phase` + `progress` line), `complete` (`result`) or `error`. Several pollers can watch one run (the dashboard row and the dialog), so the destructive completion harvest (write `/tmp/qmanager_speedtest_result.json`, remove the output and PID files) runs under an exclusive flock on `/tmp/qmanager_speedtest.lock` (B5.23, ported from the RM520N source; BusyBox `flock` has no `-w`, so it polls `flock -x -n` every 0.2 s for up to 3 s). Invariants: the PID file is removed **last**, inside the lock, so a late poller stays in the harvest branch instead of falling through to `idle`; a poller that waited and finds the PID file gone serves the result the winner wrote (`speedtest_start.sh` clears the result file before every run, so it is this run's); a lock timeout answers `{"status":"running"}` with no `phase`, which `useSpeedtest` treats as "keep the current phase", never an error. A failed harvest is saved as `/tmp/qmanager_speedtest_failed.json` (detail = Ookla's last `"level":"error"` log message from `/tmp/qmanager_speedtest_error`, e.g. "Cannot open socket", else a generic line) and returned to every poller until `speedtest_start.sh` removes it with the other per-run files; before that, only the harvesting poller saw the error and the rest got `idle`. `useSpeedtest` also treats running-then-`idle` as a failure, and ignores non-`running` answers while its start POST is in flight (they describe the previous run).
+
+---
+
+### POST `/at_cmd/reconnect_modem.sh`
+
+Forces a network re-attach: `AT+COPS=2` (deregister), a 2 s server-side wait, then `AT+COPS=0` (automatic re-register). No request body.
+
+```json
+{ "success": true }
+```
+
+**Errors:** `reconnect_deregister_failed`, `reconnect_reregister_failed`, `modem_error` (the modem did not answer).
+
+### GET `/at_cmd/speedtest_servers.sh`
+
+Lists nearby Ookla speedtest servers (`speedtest --servers -f json`) for the server picker. GET only.
 
 ---
 
@@ -674,6 +690,16 @@ Renews the real-time signal lease and returns the capability URL of the static f
 `{ "success": true, "available": false }` means the running broker does not advertise `qmi=1` and `live=1` (or `/usr/bin/qmi` is missing); the client stays on the 2 s `status.json` path. No stamp is written in that case. The file at `url` is **unauthenticated by design** (capability token, rotates per lease episode) and identifier-free: `{ v, run, seq, period_ms, qmi_state, ssr_count, scan, samples[] }`, signals as integers x10.
 
 **Error codes:** `bad_tier`, `lease_failed`
+
+---
+
+### GET `/cellular/radio_details.sh`
+
+On-demand layer-1 and data-plane details: MIMO layers, timing advance, APN, WAN IPv4/IPv6 and DNS. These are read only while a UI page showing them is open, never by the poller; open tabs share one cached fetch. Response fields include `apn`, `wan_ipv4`, `wan_ipv6`, `primary_dns`, `secondary_dns`, the `_v4`/`_v6` DNS variants, and `updated_at` (epoch seconds; 0 if never read). See [`features/ondemand-radio-details.md`](features/ondemand-radio-details.md).
+
+### GET/POST `/cellular/sms_storage.sh`
+
+Where incoming SMS are stored: `ME` or `SM`. GET returns `storage` (the saved choice in `/etc/qmanager/sms_storage`; missing means `ME`), `routing` (the modem's live `AT+CPMS` mem3 value, `""` if the read failed), and `storages` with `used`/`total` per store. POST `{ "storage": "ME" | "SM" }` saves, applies and reads the value back. Errors: `invalid_storage`, `sim_storage_unavailable`, `save_failed`, `apply_failed` (the previous choice is restored), `modem_busy`. See [`features/sms.md`](features/sms.md).
 
 ---
 
@@ -1002,6 +1028,12 @@ Read or write the LAN bridge (`br-lan`) IPv4 address and subnet. Auth-gated. See
 > ⚠️ WARNING: This response is emitted **before** the `network reload` fires. Changing the LAN IP severs the serving HTTP connection and makes the old origin unreachable. The frontend hook does not retry — it transitions directly to an applied state and shows a persistent banner with the new address. When `carrier_bounce` is true, the card shows auto-reconnect copy (`lan_config.applied_body_auto`) instead of the manual fallback.
 
 **Error codes:** `invalid_ipaddr`, `invalid_prefix`, `invalid_host_in_subnet` (IP is the network/broadcast address of the resulting subnet), `lan_read_failed`, `lan_save_failed`
+
+---
+
+### GET `/network/data_used.sh`
+
+Data Used counter, read-only. The poller rewrites its RAM mirror every 30 s and is the only writer. Returns `{"success":true,"available":true,"rx_bytes","tx_bytes","since","updated","iface_present","source":"wds"|"netdev","stale"}`, or `{"success":true,"available":false}` before the first sample. `rx` is download and `tx` upload; `source` is the modem's QMI WDS counter or the `rmnet_ipa0` fallback; `stale` is `true` when the poller has stopped. See [`features/data-used.md`](features/data-used.md).
 
 ---
 
@@ -1817,6 +1849,38 @@ Triggers a device reboot. POST-only, no request body required.
 
 The HTTP response is flushed before the device reboots asynchronously. The connection will drop shortly after.
 
+### GET `/system/storage.sh`
+
+Usage of `/usrdata`, the one writable volume. Returns `{"success":true,"storage":{"mount":"/usrdata","total_kb":N,"used_kb":N,"available_kb":N}}`, or `storage: null` when `df` fails.
+
+### GET `/system/pending_reboot.sh`
+
+Returns the boot-path pending-reboot flags: the Verizon MPDN revert (set when a Verizon profile is auto-deactivated at boot) and the package install/upgrade flag (set by the `sdxpinn-qmanager` postinst). Each flag is cleared as it is read, so it fires once per boot. See [`features/custom-sim-profiles.md`](features/custom-sim-profiles.md) and [`features/ipk-packaging.md`](features/ipk-packaging.md).
+
+### GET/POST `/system/update.sh`
+
+Software Update. GET with no action checks GitHub Releases; `action=status` returns progress. POST actions: `download` (stage a version: download and verify its SHA-256), `install_staged` (install the staged tarball), `install` (legacy one-step install used by the auto-updater), `save_prerelease`, `save_auto_update`. Config is UCI `quecmanager.update.*`; progress is in `/tmp/qmanager_update.json`. On a package-managed install the endpoint refuses to act (see [`features/ipk-packaging.md`](features/ipk-packaging.md)).
+
+### GET `/system/language-packs/list.sh`
+
+Installed packs and the remote manifest. Optional `manifest_url` query parameter overrides the manifest URL. Returns `installed: [{ code, version }]`, `manifest` (or `null`) and `manifest_error` (or `null`). See [`features/language-packs.md`](features/language-packs.md).
+
+### POST `/system/language-packs/install.sh`
+
+Starts a pack install in the background. Body: `{ "code": "fr", "manifest_url": "https://..." }`, 4 KiB cap. Poll `install_status.sh`.
+
+### GET `/system/language-packs/install_status.sh`
+
+Progress of the running install.
+
+### POST `/system/language-packs/install_cancel.sh`
+
+Asks the install worker to cancel between steps.
+
+### POST `/system/language-packs/remove.sh`
+
+Deletes an installed pack. Body: `{ "code": "fr" }`. Refuses bundled and unsafe codes.
+
 ### GET `/system/config-backup/collect.sh`
 
 Collects the plaintext sections selected by the user, ready for browser-side encryption into a `.qmbackup` file. No crypto runs on the server — the response is plaintext JSON over the localhost HTTP boundary.
@@ -1835,8 +1899,8 @@ Collects the plaintext sections selected by the user, ready for browser-side enc
     "version": 1,
     "created_at": "2026-04-13T10:30:00Z",
     "device": {
-      "model": "RM520N-GL",
-      "firmware": "RM520NGLAAR03A07M4G",
+      "model": "RM551E-GL",
+      "firmware": "RM551EGL00AAR02A01M8G",
       "imei": "860000000000000",
       "qmanager_version": "0.1.16"
     },
@@ -2080,6 +2144,10 @@ Returns `{"success": true, "status": "started"}` if the installer was spawned, o
 ---
 
 ## VPN
+
+### GET/POST `/vpn/netbird.sh`
+
+NetBird VPN control layer. NetBird keeps its own config, so there is no UCI section. GET returns install status, daemon state, connection info and peers. POST `action`: `install` (background; poll `install_status`), `install_status`, `connect` (takes an optional setup key), `disconnect`, `start_service`, `stop_service`, `set_boot_enabled`, `uninstall`. Full contract: [`reference/netbird.md`](reference/netbird.md).
 
 ### GET/POST `/vpn/tailscale.sh`
 

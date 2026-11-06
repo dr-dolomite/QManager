@@ -18,8 +18,7 @@
 - Dashboard segnale live (RSRP, RSRQ, SINR con valori per antenna)
 - Eventi di rete (cambi banda/cella, aggregazione portanti, connettivita')
 - Monitor latenza (ping, jitter, packet loss, storico)
-- Monitor banda in tempo reale via WebSocket
-- Statistiche traffico (throughput live + consumo cumulativo)
+- Statistiche traffico (consumo dati cumulativo)
 
 ### Configurazione rete mobile
 - Blocco bande LTE/NR

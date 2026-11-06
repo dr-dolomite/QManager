@@ -33,6 +33,17 @@ describe a design that is not in the product. Proto number 3 is now the QMI lane
 (broker 0.3.0, see `docs/features/qmi-lane.md`); number 4 stays unassigned. The 12 h soak on this build passed (2026-10-19 10:22 to 2026-10-20
 01:30 PHT; see the Soak entry in Section 14 notes and the ledger row B5.29).
 
+**Code status (checked 2026-11-06).** The Section 2 figures are the 2026-10-19
+snapshot. `scripts/usr/bin/qmanager_poller` is now 3075 lines (1825 when Section 2.3
+was measured). Changes since this plan, verified in the code: the UI-aware
+Active/Idle/Deep tiers driven by the `/tmp/qmanager_ui_active` heartbeat; Tier 2
+reduced to identity reads (COPS, QUIMSLOT, CNUM, CPIN) and Active-only; the
+data-plane/L1 reads moved to on-demand (`ondemand_radio.sh`); QCAINFO read every
+AT-due cycle; the QMI gap-fill from `/var/run/qmanager/qmi.env` (`qmi_merge.sh`).
+The current tier table is in [`ARCHITECTURE.md`](../ARCHITECTURE.md#polling-architecture-backend).
+The `native/qmanager_atd/src/poll/` directory, the `POLL` verb, the `qcmd --poll`
+client and `poll_legacy` are still absent, which matches this status.
+
 Measured after A+B+C (poller CPU including children, one core):
 
 | Tier | CPU | System forks/s | `status.json` period | `.mono` age max |

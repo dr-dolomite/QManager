@@ -9,7 +9,7 @@ Custom DNS lets users override the carrier-assigned resolver addresses on both I
 | CGI endpoint | `network/dns.sh` |
 | Hook | `hooks/use-dns-settings.ts` |
 | Provider presets | `components/local-network/custom-dns/dns-providers.ts` |
-| Component | `components/local-network/custom-dns/custom-dns-card.tsx` |
+| Components | `components/local-network/custom-dns/custom-dns.tsx` (composer), `resolver-card.tsx`, `servers-card.tsx` |
 | Mode state file | `/etc/qmanager/dns_mode` |
 | IPv6 UCI path | `dhcp.lan.dns` (list) |
 | IPv4 UCI path | `dhcp.lan.dhcp_option` (value `"6,addr1,addr2"`) |
@@ -124,7 +124,7 @@ Selecting a provider in the card fills all four fields and shows a read-only add
 
 ## Mode State File
 
-`/etc/qmanager/dns_mode` contains the literal string `enabled` or `disabled`. It is read by the GET handler to populate the `mode` field in the response. It is written atomically (`echo "enabled" > /etc/qmanager/dns_mode`) after UCI commit succeeds.
+`/etc/qmanager/dns_mode` contains the literal string `enabled` or `disabled`. It is read by the GET handler to populate the `mode` field in the response. It is written durably (`echo "enabled" | qm_durable_write /etc/qmanager/dns_mode`) after UCI commit succeeds.
 
 The file is created by the first POST; a fresh install with no prior POST will have no file. The GET handler defaults to `"disabled"` if the file is absent (`cat ... || echo "disabled"`).
 

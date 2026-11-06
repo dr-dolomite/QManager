@@ -18,7 +18,7 @@ Each Custom SIM Profile carries a `.scenario` binding: a `default` scenario appl
 
 ## Saving the Active Profile Re-Arms the Schedule (B1)
 
-`profiles/save.sh` used to write to disk only, so a schedule edit on the active profile did nothing until the next reapply. Now, after a successful save of the **active** profile, it calls `scenario_install_cron` (teardown when the schedule is now off) and returns `schedule_rearmed: true|false` beside the normal envelope. `scenario_install_cron` ends with a synchronous `scenario_apply` snap, so the current window applies immediately.
+`profiles/save.sh` used to write to disk only, so a schedule edit on the active profile did nothing until the next reapply. Now, after a successful save of the **active** profile whose scenario binding changed, it calls `scenario_install_cron` (teardown when the schedule is now off) and returns `schedule_rearmed: true|false` beside the normal envelope. `scenario_install_cron` ends with a synchronous `scenario_apply` snap, so the current window applies immediately.
 
 **Why:** the alternative (auto-reapplying the profile, as the RM520N fork does) runs the APN attach cycle, MPDN and possibly an IMEI reboot. Re-arming cron touches none of that: no CFUN, no MPDN, no reboot. Network-field edits stay pending until the user activates or hits Reapply; see [custom-sim-profiles.md](custom-sim-profiles.md) "No auto-reapply on save".
 
@@ -71,7 +71,7 @@ For weekday `dow` (0=Sun..6=Sat) and minute-of-day `m` (0..1439):
 
 ## DISK is the Single Source of Truth for Scenario Config
 
-`scenario_resolve_config` reads `AT_MODE`, `lte_bands`, `nsa_nr_bands`, and `sa_nr_bands` from `/etc/qmanager/scenarios/<id>.json` — not from any POST body. The activate CGI only receives `{"id":"..."}`.
+`scenario_resolve_config` reads `config.atModeValue`, `config.lte_bands`, `config.nsa_nr_bands`, and `config.sa_nr_bands` from `/etc/qmanager/scenarios/<id>.json` — not from any POST body. The activate CGI only receives `{"id":"..."}`.
 
 Consequence for the UI: if a user edits a custom scenario while that scenario is scheduled, the next cron fire picks up the updated file automatically. The cron line bakes in the scenario **id**, not its config.
 
@@ -94,7 +94,7 @@ Scenario apply is **never** followed by `AT+CFUN=1,1`. It is safe to call from a
 
 ### `scenario_install_cron <profile_id>`
 
-Called as a side-effect inside `qmanager_profile_apply` after the main apply steps succeed. Also called by `qmanager_scenario_schedule` is not the install path — install runs from the profile apply worker.
+Called as a side-effect inside `qmanager_profile_apply` after the main apply steps succeed, and by `profiles/save.sh` when the active profile's binding changed. `qmanager_scenario_schedule` never installs cron; it only applies the transition it fires.
 
 Steps:
 
@@ -189,7 +189,7 @@ The schedule editor is the Scenario tab of the profile wizard (hosted by `profil
 
 ### Simplified Daily-Only Model
 
-The editor no longer asks about days of the week. Every window runs every day: the save path always writes `days: [0,1,2,3,4,5,6]` for each block (and `blocks: []` while the schedule is off). This keeps the device cron generator and the synced shell/TS resolver unchanged; `validateSchedule` still requires a non-empty `days` array and this invariant satisfies it. The `days` field is retained in `types/sim-profile.ts` as `days?: number[]` (optional) for backward-read compatibility with profiles saved earlier.
+The editor no longer asks about days of the week. Every window runs every day: the save path always writes `days: [0,1,2,3,4,5,6]` for each block (and `blocks: []` while the schedule is off). This keeps the device cron generator and the synced shell/TS resolver unchanged; `validateSchedule` still requires a non-empty `days` array and this invariant satisfies it. The `days` field is retained in `types/sim-profile.ts` as `days?: DayOfWeek[]` (optional) for backward-read compatibility with profiles saved earlier.
 
 **Why removed:** per-day selection added complexity users did not need. All practical use cases (day/night split, work-hours swap) recur daily.
 

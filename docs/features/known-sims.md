@@ -65,16 +65,15 @@ The canonical QCCID read pipeline is:
 qcmd 'AT+QCCID' 2>/dev/null | grep '+QCCID:' | sed 's/+QCCID: //g' | tr -d '\r '
 ```
 
-All six write sites use exactly this pipeline (or `sim_db_normalize`, which reproduces its effect). They are:
+Every write site uses exactly this pipeline (or `sim_db_normalize`, which reproduces its effect). They are:
 
 | Site | File | Approx. line |
 |---|---|---|
-| Boot detector | `qmanager_poller` | ~462 |
-| Profile activation | `qmanager_profile_apply` (via `mark_sim_acknowledged`) | ~401, ~543 |
-| UI SIM-slot switch | `cellular/settings.sh` (post-switch `sim_switch` block) | ~346 |
-| Watchcat SIM revert | `qmanager_watchcat` | ~440 |
-| Watchcat SIM failover | `qmanager_watchcat` | ~644 |
-| CGI clear action | `system/known_sims.sh` | ~56 |
+| Boot detector | `qmanager_poller` (`sim_db_seed_if_absent` gate, `sim_db_add`) | ~801, ~820–849 |
+| Profile activation | `profile_mgr.sh` `mark_sim_acknowledged` (called from `qmanager_profile_apply`) | ~509–511 |
+| UI SIM-slot switch | `cellular/settings.sh` (post-switch `sim_db_add` block) | ~494–508 |
+| Watchcat SIM revert / failover / failback | `wd_sim.sh` (sourced by `qmanager_watchcat`): `wd_swap_slot`, `sim_failover_fallback`, `wd_sim_adopt_live_slot`, `finalize_sim_failover`, `_wd_sim_failback`, `wd_sim_finish_recheck` | ~397, ~435, ~499, ~554, ~623, ~717 |
+| CGI clear action | `system/known_sims.sh` | ~59–65 |
 
 > ℹ️ NOTE: The UI SIM-slot switch (`cellular/settings.sh`) registers the switched-to SIM so the Known SIMs count updates immediately and a deliberate switch does not trigger a redundant "New SIM" toast on the next poller boot. Without it, a slot switch would not register the new SIM until the next reboot ran the boot detector.
 
@@ -97,7 +96,7 @@ Sources `cgi_base.sh` and `sim_db.sh`. Handles GET, POST `list`, POST `clear`, a
 **GET** and **POST `{"action":"list"}`** are equivalent: both return `{ "success": true, "count": N }`.
 
 **POST `{"action":"clear"}`**:
-1. Reads the live ICCID via `AT+QCCID` (same canonical pipeline as all other sites).
+1. Reads the live ICCID via `AT+QCCID` (same canonical pipeline as all other sites). A transport failure returns `modem_error` and clears nothing; a modem ERROR (no SIM seated) clears the whole set.
 2. Calls `sim_db_clear_keep` with that ICCID — rewrites the set to a single entry.
 3. Removes `/tmp/qmanager_sim_swap_detected` so a stale banner flag does not linger after a clear.
 4. Returns `{ "success": true, "count": N }` where N is 1 if a SIM is present, 0 if not.
