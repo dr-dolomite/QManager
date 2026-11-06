@@ -230,7 +230,10 @@ qmi_overlay_restore() {
 # _CA_READ_MONO = the sidecar read time. In a mixed list the NR row is up to
 # QMI_CA_NR_MAX_AGE s older than that; ca_read_mono labels the LTE data.
 
-QMI_CA_NR_MAX_AGE="${QMI_CA_NR_MAX_AGE:-60}"
+# 20 s: QCAINFO's own NR row held one value for 36 s on the RM551E (2026-11-06),
+# so the cache is never staler than AT's plateau. QMI's NR signal is not
+# merged into the cached row: its SINR runs ~9 dB above QCAINFO's.
+QMI_CA_NR_MAX_AGE="${QMI_CA_NR_MAX_AGE:-20}"
 
 # Published as device.ca_source (qmi | at | mixed); the poller sets "at" after
 # every AT+QCAINFO parse or failure, and leaves it alone on a busy skip.

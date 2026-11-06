@@ -274,8 +274,8 @@ fresh; envset qmi_ca_count ""; fresh_load; expect_at "ca_count empty"
 # NR leg handling.
 nsa_cached; fresh_load; nr_arfcn=528000; expect_at "NSA: NR ARFCN changed vs cache"
 nsa_cached; fresh_load; nr_pci=263; expect_at "NSA: NR PCI changed vs cache"
-nsa_cached; fresh_load; _MONO_TOP=$((_UP + 59)); sed -i "s/^qmi_mono=.*/qmi_mono='$((_UP + 59))'/" "$QMI_ENV"; fresh_load; expect_ok "NSA: cache 59 s old" mixed
-nsa_cached; fresh_load; _MONO_TOP=$((_UP + 61)); sed -i "s/^qmi_mono=.*/qmi_mono='$((_UP + 61))'/" "$QMI_ENV"; fresh_load; expect_at "NSA: cache 61 s old"
+nsa_cached; fresh_load; _MONO_TOP=$((_UP + 19)); sed -i "s/^qmi_mono=.*/qmi_mono='$((_UP + 19))'/" "$QMI_ENV"; fresh_load; expect_ok "NSA: cache 19 s old" mixed
+nsa_cached; fresh_load; _MONO_TOP=$((_UP + 21)); sed -i "s/^qmi_mono=.*/qmi_mono='$((_UP + 21))'/" "$QMI_ENV"; fresh_load; expect_at "NSA: cache 21 s old"
 nsa_cached; fresh_load; network_type="LTE"; expect_at "NR leg shown but network_type LTE"
 qeng_nsa; mkenv; fresh_load; expect_at "NSA: no cache yet"
 nsa_cached; fresh_load; qmi_ca_cache_reset; expect_at "NSA: cache reset after an AT failure"
