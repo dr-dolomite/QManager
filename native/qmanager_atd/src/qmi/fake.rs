@@ -303,6 +303,9 @@ pub fn r1_reply(svc: u32, m: &Msg) -> Option<Vec<u8>> {
             (SVC_DMS, 0x0025) => fx!("r1_2_0x0025"),
             (SVC_DMS, 0x002D) => fx!("r1_2_0x002D"),
             (SVC_DMS, 0x002F) => fx!("r1_2_0x002F"),
+            // Captured on a later NSA session (broker 0.7.0).
+            (SVC_DMS, 0x0045) => fx!("nsa_2_0x0045"),
+            (SVC_NAS, 0x004D) => fx!("nsa_3_0x004D"),
             (SVC_UIM, 0x002F) => fx!("r1_11_0x002F"),
             (SVC_UIM, 0x0047) => fx!("r1_11_0x0047"),
             (SVC_WDS, 0x002A) => fx!("r1_1_0x002A"),
@@ -311,6 +314,26 @@ pub fn r1_reply(svc: u32, m: &Msg) -> Option<Vec<u8>> {
         };
         Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &r.tlvs))
     }
+}
+
+/// `r1_reply`, but cell location and CA come from the NSA capture with a B3
+/// LTE SCC next to the B1 PCC (both PCI 295). Registered; AT at the same
+/// moment: PCC -93/-8/-67, SCC -94/-11/-75.
+pub fn nsa_scc_reply(svc: u32, m: &Msg) -> Option<Vec<u8>> {
+    use crate::qmi::codec::testfix::fx;
+    let r = match (svc, m.id) {
+        (SVC_NAS, 0x0043) => fx!("nsa_scc_3_0x0043"),
+        (SVC_NAS, 0x00AC) => fx!("nsa_scc_3_0x00AC"),
+        _ => return r1_reply(svc, m),
+    };
+    Some(msg::encode(msg::KIND_RESP, m.txn, m.id, &r.tlvs))
+}
+
+/// `r1_net` answering from the NSA SCC capture (see `nsa_scc_reply`).
+pub fn nsa_scc_net() -> Arc<FakeNet> {
+    let net = r1_net();
+    net.set_responder(nsa_scc_reply);
+    net
 }
 
 /// A modem-side model of WDS packet statistics, per client socket, as seen

@@ -1721,7 +1721,7 @@ mod tests {
         }
         assert!(net.sent().is_empty());
         // The read-only NAS 0x004D is still a client read.
-        assert!(reg.request(SVC_NAS, 0x004D, &[]).is_err_and(|e| e != QmiError::Refused { svc: SVC_NAS, msg: 0x004D }));
+        assert_ne!(reg.request(SVC_NAS, 0x004D, &[]).err(), Some(QmiError::Refused { svc: SVC_NAS, msg: 0x004D }));
     }
 
     #[test]

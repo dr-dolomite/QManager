@@ -13,7 +13,7 @@
 //! `ok:false` (with the first read's error) only when every read failed. A
 //! consumer that needs all of them checks each slot. `bundle` is the
 //! poller-shaped read and must be requested alone; its keys (`serving`,
-//! `signal`, `cell`, `ca`, `rf`) become `data`'s own keys.
+//! `signal`, `cell`, `ca`, `rf`, `sysinfo`) become `data`'s own keys.
 
 use super::error::QmiError;
 use super::model::{self, Fetch, Read};
@@ -22,8 +22,8 @@ use crate::common::json::J;
 use crate::common::proto::mono_ms;
 use std::time::Instant;
 
-/// Arguments accepted in one request (there are 14 reads; the rest is noise).
-pub const MAX_ARGS: usize = 16;
+/// Arguments accepted in one request (there are 16 reads; the rest is noise).
+pub const MAX_ARGS: usize = 20;
 
 /// Validates and orders the requested reads: at least one, each a known
 /// name, repeats dropped (a repeated read would repeat a JSON key), and
@@ -165,6 +165,7 @@ mod tests {
         let (ok, j) = answer(Some(&reg), &sv(&["bundle"]));
         assert!(ok);
         assert!(j.contains("\"data\":{\"serving\":{") && j.contains(",\"rf\":{\"bands\":["), "{j}");
+        assert!(j.contains(",\"sysinfo\":{\"nr\":{\"pci\":262,\"arfcn\":528030,\"endc\":true}}}}"), "{j}");
         assert!(!j.contains("\"bundle\""), "{j}");
         // Every envelope is one line.
         assert!(!j.contains('\n'));
