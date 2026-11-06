@@ -755,16 +755,74 @@ update_conn_uptime() {
 # Note: this bypasses the source-if-present shortcut on purpose — callers that
 # want the cached value source SUPPORTED_BANDS_FILE directly.
 # =============================================================================
+#
+# QMI fallback (boot robustness only): when AT fails, or answers without an LTE
+# list, the LTE list comes from `qmi bands` for this run. That result is never
+# written to the cache, so the next refresh asks AT again. NR lists stay AT.
+# =============================================================================
+
+# _qmi_cli_ready: the `qmi` client exists and the broker advertises the QMI lane.
+_qmi_cli_ready() {
+    [ -x /usr/bin/qmi ] || return 1
+    grep -qx 'qmi=1' /var/run/qmanager_atd.proto 2>/dev/null
+}
+
+# _qmi_policy_lte: boot_supported_lte_bands from `qmi bands` (broker 0.7.0; an
+# older broker answers bad_args, which fails here).
+_qmi_policy_lte() {
+    local _qp
+    _qmi_cli_ready || return 1
+    _qp=$(qmi bands 2>/dev/null | jq -r 'if .ok == true and ((.data.bands.lte // []) | length) > 0 then (.data.bands.lte | map(tostring) | join(":")) else empty end' 2>/dev/null)
+    case "$_qp" in ''|*[!0-9:]*) return 1 ;; esac
+    boot_supported_lte_bands="$_qp"
+    qlog_info "policy_band: LTE list taken from QMI (AT gave none); not cached"
+    return 0
+}
+
+# _qmi_boot_identity: fill only the empty boot_model / boot_firmware / boot_imei
+# from `qmi rev ids`. The revision equals the AT+CVERSION VERSION value, the
+# model equals AT+CGMM and the IMEI AT+CGSN (checked on the RM551E).
+_qmi_boot_identity() {
+    local _qb
+    local _qb_model
+    local _qb_rev
+    local _qb_imei
+    _qmi_cli_ready || return 0
+    _qb=$(qmi rev ids 2>/dev/null | jq -r 'if .ok == true then [(.data.rev.model // ""), (.data.rev.revision // ""), (.data.ids.imei // "")] | join("|") else empty end' 2>/dev/null)
+    [ -n "$_qb" ] || return 0
+    _qb_model="${_qb%%|*}"
+    _qb="${_qb#*|}"
+    _qb_rev="${_qb%%|*}"
+    _qb_imei="${_qb#*|}"
+    if [ -z "$boot_model" ]; then
+        case "$_qb_model" in ''|*[!A-Za-z0-9._-]*) ;; *) boot_model="$_qb_model" ;; esac
+    fi
+    if [ -z "$boot_firmware" ]; then
+        case "$_qb_rev" in ''|*[!A-Za-z0-9._-]*) ;; *) boot_firmware="$_qb_rev" ;; esac
+    fi
+    if [ -z "$boot_imei" ]; then
+        case "$_qb_imei" in
+            ''|*[!0-9]*) ;;
+            ???????????????) boot_imei="$_qb_imei" ;;
+        esac
+    fi
+    qlog_info "boot identity: AT left gaps, filled from QMI (model=$boot_model firmware=$boot_firmware)"
+}
+
 refresh_policy_band() {
     qcmd_exec_g 'AT+QNWPREFCFG="policy_band"'
     if [ $? -eq 0 ]; then
         parse_policy_band "$_QR"
+        if [ -z "$boot_supported_lte_bands" ] && _qmi_policy_lte; then
+            return 0
+        fi
         printf 'boot_supported_lte_bands="%s"\nboot_supported_nsa_nr5g_bands="%s"\nboot_supported_sa_nr5g_bands="%s"\nboot_supported_nrdc_nr5g_bands="%s"\n' \
             "$boot_supported_lte_bands" "$boot_supported_nsa_nr5g_bands" "$boot_supported_sa_nr5g_bands" "$boot_supported_nrdc_nr5g_bands" \
             | qm_atomic_write "$SUPPORTED_BANDS_FILE"
         qlog_info "policy_band refreshed; supported bands cached to $SUPPORTED_BANDS_FILE"
         return 0
     fi
+    _qmi_policy_lte && return 0
     return 1
 }
 
@@ -813,6 +871,12 @@ collect_boot_data() {
 
         # QGETCAPABILITY: prefixed (multi-line)
         parse_capability "$result"
+    fi
+
+    # AT left model, firmware or IMEI empty (modem busy or silent at boot):
+    # fill only the empty ones over QMI. Never runs when the AT read succeeded.
+    if [ -z "$boot_model" ] || [ -z "$boot_firmware" ] || [ -z "$boot_imei" ]; then
+        _qmi_boot_identity
     fi
 
     # --- SIM Swap Detection (boot-time, one-shot) — known-SIMs set model ---
