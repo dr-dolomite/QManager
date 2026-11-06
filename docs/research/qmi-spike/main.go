@@ -472,6 +472,17 @@ func main() {
 				cmdRaw(0x004D)
 			case c == "serving":
 				cmdRaw(0x0024)
+			case c == "dms:0045":
+				// DMS Get Band Capabilities (read-only, parameterless)
+				n, p, ok := lookup(2)
+				if !ok {
+					fmt.Println("== DMS service not found")
+					continue
+				}
+				sn, sp := dstNode, dstPort
+				dstNode, dstPort = n, p
+				cmdRaw(0x0045)
+				dstNode, dstPort = sn, sp
 			case strings.HasPrefix(c, "get:"):
 				// only whitelisted read-only NAS getters
 				var id uint16
