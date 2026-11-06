@@ -71,10 +71,12 @@ The poller (`/usr/bin/qmanager_poller`, source `scripts/usr/bin/qmanager_poller`
 
 | Tier | Interval | Data Collected | Source |
 |------|----------|---------------|--------|
-| **Tier 1 (Hot)** | Every cycle (2s) while Active; slower when Idle/Deep (see below) | Serving cell, CA info, CFUN state, per-antenna signal (RSRP/RSRQ/SINR); traffic stats and uptime (no AT) | `AT+QENG="servingcell"`, `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0`, `AT+CFUN?`, `AT+QRSRP;+QRSRQ;+QSINR`, `/proc/net/dev` |
+| **Tier 1 (Hot)** | Every cycle (2s) while Active; slower when Idle/Deep (see below) | Serving cell, CA info, CFUN state, per-antenna signal (RSRP/RSRQ/SINR); traffic stats and uptime (no AT) | `AT+QENG="servingcell"`, CA from the QMI sidecar (`qmi_ca_build`) else `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0`, `AT+CFUN?`, `AT+QRSRP;+QRSRQ;+QSINR`, `/proc/net/dev` |
 | **Tier 1.5 (Housekeeping)** | Every 5 cycles (10s) | Ping history append, watchcat state read, SoC temperature | `/tmp/qmanager_ping_history`, `/tmp/qmanager_watchcat.json`, `/sys/class/thermal` (no AT) |
 | **Tier 2 (Warm, Active only)** | Every 15 cycles (30s) | Carrier, SIM slot, phone number, SIM presence | `AT+COPS?;+QUIMSLOT?;+CNUM;+CPIN?` |
 | **Boot (Once)** | Startup | Firmware, IMEI, IMSI, ICCID, capabilities, supported bands | `AT+CVERSION`, `AT+CGMM`, `AT+CGSN`, `AT+CIMI`, `AT+QCCID`, `AT+CNUM`, `AT+QGETCAPABILITY`, `AT+QNWPREFCFG="policy_band"` |
+
+The CA read is QMI-first (broker 0.7.0): with a fresh `qmi.env` the poller builds the LTE carriers from QMI and skips `AT+QCAINFO`; in NSA the NR row comes from the last `AT+QCAINFO`, refreshed every 20 s or when QENG's NR cell changes; SA, NR-CA and any failed gate use AT. `device.ca_source` says which (`qmi`/`mixed`/`at`). Boot identity and the LTE band list fall back to QMI only when AT leaves them empty. See [`features/adaptive-polling.md`](features/adaptive-polling.md) Invariant 14.
 
 The Tier 2 DATA-PLANE / L1 group (CGCONTRDP, QMAP WWAN, QNWCFG time-advance and MIMO) is no longer polled. It is fetched on demand by `cellular/radio_details.sh` while its page is open (see `ondemand_radio.sh`).
 
