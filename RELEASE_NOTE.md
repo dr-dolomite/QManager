@@ -5,6 +5,7 @@ v0.1.36 is a polish release focused on how much work the web interface asks of t
 ## ✅ Improvements
 
 - **Lighter on the modem while the web page is open.** Background tabs no longer refresh the dashboard, so the modem drops to its slower idle checks when nobody is watching, and each tab catches up the moment you return to it. Every page request now starts faster (status and sign-in checks take about a third of the time they did), several open tabs share one detailed radio reading instead of each asking the modem separately, and routine log lines no longer crowd the system log.
+- **New browser-tab icon.** The tab icon now matches the QManager logo used across the interface, in place of the old one.
 
 ## 📥 Installation
 
