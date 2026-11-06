@@ -16,7 +16,7 @@
 | State file (heartbeat) | `/tmp/qmanager_watchcat.json`, rewritten every pass; removed on exit |
 | PID file | `/tmp/qmanager_watchcat.pid` |
 | Reachability input | `/tmp/qmanager_ping.json` `.streak_fail`, read through `conn_state_read` ([connection-quality.md](connection-quality.md#shared-ping-cache-reader-conn_statesh)) |
-| Quality input | `/tmp/qmanager_ping_history` (one RTT in ms or the word `null` per line, newest last; written by `qmanager_ping`) |
+| Quality input | `/tmp/qmanager_ping_history` (`<rtt ms or null> <leg>` per line, newest last, read as `$1`; written by `qmanager_ping`). Sample spacing is `wd_probe_period`: the larger of `interval_sec` and the cache's rounded `cycle_ms` |
 | Quality thresholds | `quecmanager.quality_thresholds.*` (shared with Connection Quality Network Events) |
 | Recovery active flag | `/tmp/qmanager_recovery_active` |
 | Maintenance lock | `/tmp/qmanager_watchcat.lock` (also `/tmp/qmanager_long_running` and a live `/tmp/qmanager_profile_apply.pid`) |

@@ -26,35 +26,47 @@ The Connection Quality settings page (Monitoring → Connection Quality) control
 
 ## Probe Mechanics
 
-`qmanager_ping` is an ICMP probe daemon — not HTTP/curl. Each cycle it issues a `ping -c 1 -W 2 <target>` (BusyBox ICMP) call. RTT is parsed from the summary line `round-trip min/avg/max = a/b/c` (taking the avg field), with a fallback to the per-packet `time=<n>` field when no summary line appears. The RTT is then normalized to one decimal place. A probe succeeds only when a numeric RTT > 0 is extracted. 100% packet loss produces no round-trip summary line and therefore no RTT, so the probe is counted as a failure — this is the fail-safe.
+`qmanager_ping` is an ICMP probe daemon, not HTTP/curl. It was rewritten in v0.1.36 from the best parts of this daemon and the RM520N one (plan: `docs/plans/ping-daemon-rewrite.md`).
 
-**Why the switch from curl/HTTP to ICMP:** The curl HTTP probe was the single biggest behavioral difference between the old QuecManager and the new QManager, and a disconnection bug present in QManager but absent from the predecessor pointed squarely at it. Reverting to ICMP eliminates the curl probe as a suspect AND fixes a concrete IPv6-only false positive: on an IPv6-only cellular bearer the IPv4 HTTP probe targets were unreachable, so curl failed and the watchdog declared the connection down — incorrectly. The ICMP v4-primary / v6-fallback model handles that case correctly.
+**Why ICMP and not curl/HTTP:** the curl probe was the biggest behavioural difference from the old QuecManager and the prime suspect in a disconnection bug, and it gave a false "down" on IPv6-only bearers (the IPv4 HTTP targets were unreachable). ICMP with an IPv6 leg handles that case.
 
-### IPv4-primary / IPv6-fallback (`probe_cycle`)
+### Legs and the cycle (`probe_cycle`)
 
-Each probe cycle runs as follows. IPv4 is tried first (`ping` against `target_ipv4`). Only if that fails, and only if an IPv6 ping command is available and `target_ipv6` is set, does the daemon try IPv6. Reachability stays `true` if EITHER family answers. This either-family-up logic means an IPv6-only bearer is never falsely reported offline.
+| Leg | Target | Notes |
+|---|---|---|
+| `p4` | `target_ipv4` (default `1.1.1.1`) | Probed alone first. A hostname gets `timeout 4` (the `-w` deadline does not cover the DNS lookup). |
+| `s4` | the other provider's IPv4 | `1.1.1.1` when `p4` is Google (`8.8.8.8`, `8.8.4.4`, `dns.google`), else `8.8.8.8` (also for any custom target). |
+| `p6` | `target_ipv6` (default `2606:4700:4700::1111`) | IPv6 legs run only when `detect_ping6` found a ping and the kernel has an IPv6 default route. |
+| `s6` | the other provider's IPv6 | `2606:4700:4700::1111` when `p6` is Google (`2001:4860:4860:*`), else `2001:4860:4860::8888`. |
 
-Results travel via the `PROBE_RTT` and `last_family` globals — not stdout from a command substitution. A command-substitution subshell (`rtt=$(probe_cycle)`) would discard `last_family` when the subshell exits; using globals avoids that.
+The alternates are built in (no UCI key, no UI). There are no hostname legs of the daemon's own: DNS health is the separate DNS sampler, so a resolver outage never reads as "internet down".
+
+1. `p4` alone: `ping -c 1 -W 2 -w 3`. If it answers, the cycle is done (one probe per healthy cycle).
+2. Otherwise `s4`, `p6` and `s6` run **in parallel** as background jobs writing to `/var/run/qmanager/ping_fan/<leg>` (root 0700), and the daemon `wait`s for them. The IPv6 default route is read from `/proc/net/ipv6_route` with builtins (`::/0` not on `lo`).
+3. The winner is the first leg **in priority order** `s4 > p6 > s6` that answered, never the fastest, so the reported RTT is deterministic.
+
+Worst case is about 4 s (a blackholed `p4` costs 2.0 s, the parallel fan-out another 2.0 s), well under the 15 s stale floor for every profile. An unroutable leg fails in ~0.02 s, and a locally dropped one (firewall `EPERM`) instantly.
+
+Results travel through the `PROBE_RTT`, `last_family`, `last_target` and `last_leg` globals, not stdout: `rtt=$(probe_cycle)` would run in a subshell and lose them.
+
+### Debounce and loop timing
+
+- **Wall-clock, monotonic.** `_clock` reads `/proc/uptime` in centiseconds with the `read` builtin (no fork). A failure run is timed from the **start** of its first failing cycle; `reachable` flips to `false` once that elapsed time reaches `fail_secs`, and back to `true` once a success run (timed the same way) reaches `recover_secs`. The honest bound is `fail_secs` + one cycle. Live (RM551E, 2026-11-06, ICMP dropped at the firewall): `quiet` flipped 33 s after the drop and recovered 23 s after it cleared; `sensitive` flipped in 7.3 s and recovered in 4.2 s. The old cycle-count debounce took 22-32 s for a promised 6-15 s.
+- **Counts stay counts.** `streak_success` / `streak_fail` are still per-cycle counts: the watchdog's `fail_threshold` is a number of failed probes.
+- **Fixed-rate.** After each cycle the daemon sleeps what is left of the interval (`S.CC` fractional sleep, 0.2 s floor), so the period equals the interval whenever the cycle fits; `cycle_ms` publishes the measured period.
+- If `/proc/uptime` cannot be parsed, the clock advances one interval per read so a failure run still reaches `fail_secs`.
 
 ### IPv6 detection (`detect_ping6`)
 
-At startup and on every reload-flag trip, the daemon runs `detect_ping6()`. It probes `::1` (the loopback address, always answerable when the kernel has IPv6) using `ping -6` first; if that is absent or fails, it tries the `ping6` applet. If neither works, `PING6_CMD` is set to empty, IPv6 probing is unavailable, and the daemon logs a single warn-once message. The daemon then runs IPv4-only. Running `detect_ping6` on reload means that OpenWRT IPv6 configuration changes are picked up without a daemon restart.
+At startup and on every reload-flag trip the daemon probes `::1` with `ping -6`, then the `ping6` applet. If neither works, `PING6_CMD` is empty, the daemon logs one warning and runs IPv4-only. Running it on reload picks up OpenWRT IPv6 changes without a restart.
 
-### RTT parser
+### RTT parser (`parse_rtt`)
 
-`do_ping_icmp()` runs:
+Builtins only (no `grep`/`cut`/`awk` per probe). It takes the average from the summary line (`round-trip min/avg/max = 12.3/15.6/18.9 ms`, also the iputils `min/avg/max/mdev` form), else the first per-packet `time=<n>`, and rounds to one decimal in integer arithmetic (a leading-zero fraction is kept out of octal with the `1$frac - 100` trick). Only a value > 0 counts as an answer; 100% loss prints no round-trip line and so fails (the fail-safe).
 
-```sh
-$cmd -c 1 -W 2 "$target"
-```
+### Targets
 
-and extracts the average RTT from the BusyBox summary line:
-
-```
-round-trip min/avg/max = 12.3/15.6/18.9 ms
-```
-
-using `grep -oE 'min/avg/max[^=]*= ...'` followed by `cut -d'/' -f2`. If that line is absent (100% loss, BusyBox variant), it falls back to `grep -oE 'time=[0-9.]+'`. The extracted value is then passed through `awk printf "%.1f"` to normalize precision and checked `> 0`. A zero or non-numeric result is treated as failure.
+`load_config` re-checks both targets with the CGI's charsets (`[0-9A-Za-z.-]` for IPv4, `[0-9A-Fa-f:.%]` for IPv6, at most 128 chars) and also rejects a leading `-` (it would be parsed as a `ping` option). A rejected value falls back to the Cloudflare default with a warning.
 
 ### ping.json schema
 
@@ -72,11 +84,20 @@ using `grep -oE 'min/avg/max[^=]*= ...'` followed by `cut -d'/' -f2`. If that li
   "streak_success": 12,
   "streak_fail": 0,
   "during_recovery": false,
-  "last_family": "ipv4"
+  "last_family": "ipv4",
+  "last_target": "1.1.1.1",
+  "fail_elapsed_sec": 0,
+  "cycle_ms": 5010
 }
 ```
 
-`targets` is `[target_ipv4, target_ipv6]`. `interval_sec` is the effective probe interval (override applied); `fail_secs` / `recover_secs` are the profile's time-to-fail / time-to-recover in seconds (unaffected by `interval_override`). `last_rtt_ms` is a JSON number or `null`. `last_family` is `"ipv4"`, `"ipv6"`, or `"none"` — `"none"` when both families failed. Statistics (avg/min/max/jitter/loss) and the history array are NOT written here; they are computed by the poller from `/tmp/qmanager_ping_history`.
+`targets` is `[target_ipv4, target_ipv6]` (the configured primaries, not the alternates). `interval_sec` is the effective interval (override applied); `fail_secs` / `recover_secs` are the profile's time-to-fail / time-to-recover. `last_rtt_ms` is a number or `null`. `last_family` is `"ipv4"`, `"ipv6"` or `"none"`. `last_target` is the address that answered (`""` when nothing did), so a fallback to the second provider is visible. `fail_elapsed_sec` is how long the current failure run has lasted (0 when not failing). `cycle_ms` is the last measured cycle period, start to start.
+
+The file is written with `printf` (no `jq` fork), tmp + `mv`. A failed write keeps the previous file, skips the sidecar and logs one warning until a write succeeds again. Only the profile name can carry characters that need JSON escaping; `_json_str` escapes `\` and `"`.
+
+### History ring (`/tmp/qmanager_ping_history`)
+
+One line per recorded cycle, newest last, `HISTORY_SIZE=60` lines: `<rtt|null> <leg>` where leg is `p4`, `s4`, `p6`, `s6` or `-` (no answer). The ring is never truncated when the winning leg changes (the RM520N daemon did that and lost loss and jitter on every switch); it is emptied only at daemon start. **Readers use `$1`**, so an older one-column file still parses. The poller computes jitter only between consecutive answers from the **same leg**, so a switch to the second provider is not counted as jitter; loss keeps every `null`. Readers: the poller's stats awk (`read_ping_data`) and the watchdog's `read_quality` (`wd_detect.sh`). `fetch_ping_history.sh` serves the poller's NDJSON archive, not this ring.
 
 ---
 
@@ -93,7 +114,7 @@ using `grep -oE 'min/avg/max[^=]*= ...'` followed by `cut -d'/' -f2`. If that li
 | `conn_state_resolve <profile> [override]` | Pure profile table + override → `CQ_CFG_*` (see [Ping Profiles](#ping-profiles)). |
 | `conn_state_cadence` | `conn_state_resolve` fed from UCI `quecmanager.ping_profile.{profile,interval_override}`. |
 
-**Verdict vars on a fresh read:** `CQ_REACHABLE` (`true`/`false`/`"null"`), `CQ_RTT_MS`, `CQ_STREAK_SUCCESS`, `CQ_STREAK_FAIL`, `CQ_DURING_RECOVERY`, `CQ_INTERVAL_SEC`, `CQ_FAIL_SECS`, `CQ_RECOVER_SECS`, `CQ_PROFILE`, `CQ_LAST_FAMILY`, `CQ_TARGET` (first of `targets`), `CQ_TIMESTAMP`, `CQ_AGE_SEC`.
+**Verdict vars on a fresh read:** `CQ_REACHABLE` (`true`/`false`/`"null"`), `CQ_RTT_MS`, `CQ_STREAK_SUCCESS`, `CQ_STREAK_FAIL`, `CQ_DURING_RECOVERY`, `CQ_INTERVAL_SEC`, `CQ_FAIL_SECS`, `CQ_RECOVER_SECS`, `CQ_PROFILE`, `CQ_LAST_FAMILY`, `CQ_TARGET` (first of `targets`), `CQ_LAST_TARGET` (the address that answered, `""` when none), `CQ_CYCLE_MS` (measured cycle period; empty on an older cache), `CQ_TIMESTAMP`, `CQ_AGE_SEC`.
 
 **The one staleness rule:** the cache is stale when `age > max(3 * interval_sec, 15)` seconds. `interval_sec` comes from the cache and is clamped to 1–300, anything else becoming 5. `age` is `/proc/uptime` minus the cache's `mono`; the wall clock (`date +%s - timestamp`) is used only when `mono` is absent or `0`.
 
@@ -392,7 +413,7 @@ Per-site latency (TCP handshake to a list of websites, with history) is a separa
 
 `ms` is `null` when `ok` is `false`. Success means `nslookup` exited 0 and printed an `Address` line after a `Name:` line.
 
-**Schedule.** Every 60 s, plus a forced lookup on a reachable `true` to `false` edge with a 10 s floor between forced runs. At most one job runs at a time (PID file, zombie check and a 15 s age guard). The job is never run inline in the probe loop, so the 12 s probe budget is unchanged. **Why:** a slow or dead resolver would otherwise stall probes and the reachability verdict.
+**Schedule.** Every 60 s, plus a forced lookup on a reachable `true` to `false` edge with a 10 s floor between forced runs. At most one job runs at a time (PID file, zombie check and a 15 s age guard). The job is never run inline in the probe loop, so the probe cycle (about 4 s at worst) is unchanged. **Why:** a slow or dead resolver would otherwise stall probes and the reachability verdict.
 
 **Timing and bound.** The lookup is bounded at 5 s by the BusyBox `timeout` applet through a local `qm_timeout` fallback (the target has no `platform.sh`); a killed lookup exits 143 and reports `ok:false`. Elapsed time comes from `/proc/uptime` centiseconds, so the quantum is 10 ms and `ms` is floored at 10.
 
@@ -427,7 +448,7 @@ Since B5.29 Phase C `qmanager_ping` also writes two shell-assignment files in `/
 
 | File | Written by | Right after | Variables |
 |---|---|---|---|
-| `/var/run/qmanager/ping.env` | `write_ping_env` in `qmanager_ping`, after every `ping.json` write | the successful `mv` of `ping.json` | `_cq_ts`, `_cq_mono`, `_cq_reach`, `_cq_rtt`, `_cq_ss`, `_cq_sf`, `_cq_dr`, `_cq_iv`, `_cq_fs`, `_cq_rs`, `_cq_prof`, `_cq_fam`, `_cq_tgt` (the 13 raw fields `conn_state_read` extracts; null or empty becomes `-`) |
+| `/var/run/qmanager/ping.env` | `write_ping_env` in `qmanager_ping`, after every `ping.json` write | the successful `mv` of `ping.json` | `_cq_ts`, `_cq_mono`, `_cq_reach`, `_cq_rtt`, `_cq_ss`, `_cq_sf`, `_cq_dr`, `_cq_iv`, `_cq_fs`, `_cq_rs`, `_cq_prof`, `_cq_fam`, `_cq_tgt`, `_cq_last_target`, `_cq_cyc` (the 15 raw fields `conn_state_read` extracts; null or empty becomes `-`) |
 | `/var/run/qmanager/dns.env` | `write_dns_env`, from the detached DNS job | the successful `mv` of `dns.json` | `dns_s_ok`, `dns_s_ms`, `dns_s_mono`, `dns_s_res` (`ms` is `null` when the lookup failed) |
 
 - **Format.** Every line is `name='value'` with `'` written as `'\''`, and the last line is `qm_sidecar_end='1'`. Files are written to `<name>.new` and renamed.
@@ -491,14 +512,14 @@ Types are in `types/modem-status.ts`: `PING_PROFILES`, `PingProfile`, `QUALITY_P
 - **100% loss = probe failure, not null RTT.** When `ping` reports 100% packet loss, no round-trip summary line is emitted. The RTT parser finds nothing, so `last_rtt_ms` is `null` and the probe is counted as a failure. This is the fail-safe — the daemon cannot emit a false-zero latency reading.
 - **`detect_ping6` runs on every reload.** Dropping the reload flag (`/tmp/qmanager_ping_reload`) causes the daemon to re-run `detect_ping6` as well as re-read UCI. If you later disable IPv6 in OpenWRT, the next ping profile save will make the daemon pick that up and stop issuing IPv6 probes.
 - **Latency events now use windowed average (`avg_latency_ms`), not last single RTT.** `events.sh` sources `conn_avg_latency` (which maps to `avg_latency_ms` in `status.json`) rather than `latency_ms`. A single high-latency probe will not fire the event; it must be sustained across the debounce window. This is consistent with the watchdog quality trigger.
-- **`last_family` uses globals, not stdout.** `probe_cycle()` stores results in the `PROBE_RTT` and `last_family` shell globals rather than echoing to stdout. This is intentional: assigning `rtt=$(probe_cycle)` would run `probe_cycle` in a subshell, and the subshell's assignments to `last_family` would be lost when it exits.
+- **Probe results use globals, not stdout.** `probe_cycle()` stores results in `PROBE_RTT`, `last_family`, `last_target` and `last_leg`; `rtt=$(probe_cycle)` would run it in a subshell and lose them.
 - **Quality preset thresholds (150/250/500 ms) have generous headroom.** Against honest ICMP RTT they comfortably exceed 3× normal cellular RTT on a healthy link. `tolerant` (250 ms) is the shipping default.
 - **`quality_thresholds.sh` POST must touch two reload flags.** Both `/tmp/qmanager_quality_reload` (poller) and `/tmp/qmanager_watchcat_reload` (watchdog) must be touched on every successful save. Omitting either leaves one daemon on stale thresholds.
 - **The `quality_thresholds` section must not be pre-seeded in new installs.** If it is, the frontend will never show `isDefault: true` and users won't know they haven't customised it. The installer intentionally skips seeding it. Exception: the `install.sh` migration from old watchcat ceiling keys seeds a `custom` preset for users who had non-default ceilings — this is a one-time idempotent migration, not routine seeding.
 - **The Probe interval row links to the Watchdog when `interval_override` is active.** The Sensitivity pills remain interactive — the user can pre-select a profile to fall back to. The daemon ignores the profile-derived interval while an override is active; to change the override itself, use the Connection Watchdog settings page (the watchdog is the sole writer of `interval_override`).
-- **Reload is flag-file per loop, not a signal.** If the daemon is in the middle of a probe (`ping -c 1 -W 2`, up to 2 s) when the flag is written, the reload happens at the start of the *next* cycle. The effective delay after save is `0 → PROBE_TIMEOUT + PING_INTERVAL` (at most `2 + 10 = 12 s` on `quiet`).
+- **Reload is flag-file per loop, not a signal.** A flag written mid-cycle is read at the start of the next one: at most one interval plus one cycle later (about `10 + 4 = 14 s` on `quiet`).
 - **Unknown profile names fall back to `relaxed`.** If you hand-edit UCI to an unrecognised profile name, the daemon silently resets to `relaxed` and continues. No error is logged.
 - **False high-packet-loss immediately after a reboot is structurally prevented by `PING_MIN_SAMPLES=10`.** The poller suppresses `packet_loss_pct` to `0` until the ring-buffer window holds at least 10 samples (~20–100 s depending on profile). Without this guard, two transient boot-attach null probes in a 4-sample window report 50% loss, which trips the Connection Watchdog quality trigger and can cause a reboot loop. Do not remove this guard. Real outages are still caught by the independent `streak_fail` reachability path.
 - **Attach warm-up: pre-attach probes are not loss.** `qmanager_ping` starts before the data call is up, so its first few probes after boot fail. The maturity guard alone only delayed the problem: once the window reached 10 samples those nulls read as 20 % loss (2/10, decaying over the 60-sample ring, ~10 min at `quiet`), enough for `degraded` and `high_packet_loss` on the `standard` preset, and a red strip. Until the first probe answers, at most `ATTACH_GRACE_SECS=120` after daemon start (on `mono_now`), a failed probe still drives `streak_fail` and `reachable` (watchdog and verdict unchanged) but is **not** written to the ring. `/tmp/qmanager_ping_attaching` exists for that span (removed on first answer, at the cap, and by the EXIT trap), and `append_ping_history` in the poller skips archive rows while it exists **and** the ping cache is fresh (`conn_internet_available != null`), so those seconds show as unmeasured instead of an outage. If nothing answers within the cap, failures are recorded again, so a boot with no service still shows red after 2 min.
 
-> ℹ️ NOTE: On-device validation of the updated daemon and poller is deferred — the test modem was offline at time of writing. The analysis above is based on static source review only. Verify live RTT readings and the `last_family` field in `/tmp/qmanager_ping.json` on-device before relying on these numbers in production calibration.
+> ℹ️ NOTE: Validated on the RM551E on 2026-11-06: healthy cycles send one probe with a 10.01 s period on `quiet`; a blackholed primary (`192.0.2.1`) hands the answer to `s4` with `reachable` unchanged and no history loss; firewall-dropped ICMP gives the time-to-fail and recovery figures under [Debounce and loop timing](#debounce-and-loop-timing).

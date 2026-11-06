@@ -1,6 +1,6 @@
 # Plan: rewrite `qmanager_ping` (best of RM551E + RM520N)
 
-Status: **approved, option A** (2026-11-06). Large change: it feeds the watchdog, alerts, poller and dashboard.
+Status: **built and validated on the RM551E, option A** (2026-11-06). Large change: it feeds the watchdog, alerts, poller and dashboard.
 
 ## Goal
 

@@ -380,16 +380,16 @@ Tier 2 no longer carries CA, MIMO, APN, or the data-plane/L1 group. CA is in Tie
 
 ### qmanager_ping (Ping Daemon)
 
-HTTP-probe daemon that monitors internet reachability and latency. Uses `curl` — not ICMP ping — so reported latency includes TCP connect, TLS handshake, and time-to-first-byte.
+ICMP probe daemon that monitors internet reachability and latency (BusyBox `ping`). Each cycle probes the primary IPv4 target alone, then on failure the other provider's IPv4 and both IPv6 targets in parallel; debounce is wall-clock on `/proc/uptime` and the loop is fixed-rate. Details: [`docs/features/connection-quality.md`](features/connection-quality.md#probe-mechanics).
 
 **Location:** `scripts/usr/bin/qmanager_ping`
 **Output:** `/tmp/qmanager_ping.json`
-**History:** `/tmp/qmanager_ping_history` (flat-file ring buffer; read + processed by the poller)
-**Dependency:** `curl` full build, 8.7.1+ (hard runtime dependency — without it the daemon emits no results)
+**History:** `/tmp/qmanager_ping_history` (ring of `<rtt|null> <leg>` lines; read as `$1` by the poller and the watchdog)
+**Dependency:** BusyBox `ping` (with `-w`), `ping -6` or `ping6` for the IPv6 legs, `timeout` (hostname targets and the DNS job)
 
 Also runs a detached DNS lookup job (every 60 s, plus on a reachable true to false edge) that writes `/tmp/qmanager_dns.json` (`{ms, ok, resolver, name, mono, ts}`); the poller publishes it as `connectivity.dns_lookup_ms` / `dns_resolver`. See the DNS Lookup Time section of [`docs/features/connection-quality.md`](features/connection-quality.md).
 
-Writes slim JSON: `{ timestamp, mono, profile, targets, interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success, streak_fail, during_recovery, last_family }`. The poller handles all statistical analysis (avg/min/max/jitter/loss) in a single awk pass over the raw history file.
+Writes slim JSON: `{ timestamp, mono, profile, targets, interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success, streak_fail, during_recovery, last_family, last_target, fail_elapsed_sec, cycle_ms }` (printf, keep-last-good). The poller handles all statistical analysis (avg/min/max/jitter/loss) in a single awk pass over the raw history file.
 
 The active probe sensitivity is set by the **ping profile** (`sensitive` / `regular` / `relaxed` / `quiet`). The profile→interval/fail/recover table lives in `conn_state.sh` (the daemon resolves through it); UCI stores only the profile name and the optional `interval_override`. A saved profile change drops `/tmp/qmanager_ping_reload`; the daemon re-reads UCI within one probe cycle without a restart. See [`docs/features/connection-quality.md`](features/connection-quality.md) for the full profile table and reload pipeline.
 
