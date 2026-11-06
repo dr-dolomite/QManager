@@ -253,6 +253,7 @@ sc_base() {
     sim_swap_profile_id=""
     sim_swap_profile_name=""
     lte_source=at
+    ca_source=at
     _QMI_READ_MONO=0
     _QMI_STATE=""
     _QMI_SSR=0
@@ -346,6 +347,16 @@ sc_qmi() {
     _QMI_STATE=up
     _QMI_SSR=3
 }
+sc_qmica() {
+    # Carrier list built from the sidecar (qmi_ca_build), NR row from the cache.
+    sc_base
+    ca_source=mixed
+    _CA_READ_MONO=123455
+    t2_ca_active=true; t2_ca_count=1
+    t2_total_bandwidth_mhz=80
+    t2_bandwidth_details="B1: 20 MHz + N41: 60 MHz"
+    t2_carrier_components='[{"type":"PCC","technology":"LTE","band":"B1","earfcn":150,"bandwidth_mhz":20,"pci":295,"rsrp":-93,"rsrq":-8,"rssi":-67,"sinr":26},{"type":"SCC","technology":"NR","band":"N41","earfcn":528030,"bandwidth_mhz":60,"pci":262,"rsrp":-86,"rsrq":-11,"rssi":null,"sinr":23.9}]'
+}
 sc_qmidown() {
     sc_base
     _QMI_READ_MONO=120000
@@ -375,12 +386,12 @@ sc_empties() {
     conn_internet_available=""
     conn_latency=""; conn_avg_latency=""; conn_min_latency=""; conn_max_latency=""; conn_jitter=""
     t1_temperature=""
-    lte_source=""; _QMI_READ_MONO=""; _QMI_STATE=""; _QMI_SSR=""
+    lte_source=""; ca_source=""; _QMI_READ_MONO=""; _QMI_STATE=""; _QMI_SSR=""
 }
 
 run_named() {
     local _s
-    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmidown sc_qmiunavail sc_empties; do
+    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties; do
         "$_s"
         write_cache_jq "$PH_TMP/a.json" 2>/dev/null
         _wc_compose_pf "$PH_TMP/b.json"
@@ -396,6 +407,30 @@ run_named() {
         else
             PH_FAIL=$((PH_FAIL + 1))
             [ -z "$PH_FIRST" ] && PH_FIRST="qmi keys missing or wrong in $_s.json"
+        fi
+    done
+    # device.ca_source exists in both composers: "at" by default, the scenario
+    # value otherwise.
+    sc_qmica
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    for _s in a b; do
+        if jq -e '(.device.ca_source == "mixed") and (.device.ca_read_mono == 123455)' "$PH_TMP/$_s.json" >/dev/null 2>&1; then
+            PH_PASS=$((PH_PASS + 1))
+        else
+            PH_FAIL=$((PH_FAIL + 1))
+            [ -z "$PH_FIRST" ] && PH_FIRST="ca_source missing or wrong in $_s.json"
+        fi
+    done
+    sc_base
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    for _s in a b; do
+        if jq -e '.device.ca_source == "at"' "$PH_TMP/$_s.json" >/dev/null 2>&1; then
+            PH_PASS=$((PH_PASS + 1))
+        else
+            PH_FAIL=$((PH_FAIL + 1))
+            [ -z "$PH_FIRST" ] && PH_FIRST="ca_source default not at in $_s.json"
         fi
     done
 }
@@ -464,7 +499,7 @@ _pick_num() {
     esac
 }
 
-PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source _QMI_STATE"
+PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE"
 # Numeric fields that have a default in BOTH composers (empty is allowed).
 PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
 
@@ -599,6 +634,7 @@ line' ;;
         t2_apn="$_s"
         sim_swap_profile_name="$_s"
         lte_source="$_s"
+        ca_source="$_s"
         _QMI_STATE="$_s"
         errors="$_s"
         _wc_prepare

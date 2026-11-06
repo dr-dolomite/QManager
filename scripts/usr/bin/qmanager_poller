@@ -118,6 +118,9 @@ _QENG_PARSED=0
 # QMI gap-fill state (qmi_merge.sh; defaults for when the lib is absent).
 # Published as lte.source and device.qmi_read_mono / qmi_state / qmi_ssr_count.
 lte_source="at"
+# Published as device.ca_source: where the last carrier list came from
+# (qmi | at | mixed). qmi_merge.sh sets qmi or mixed; the AT path sets at.
+ca_source="at"
 _QMI_READ_MONO=0
 _QMI_STATE=""
 _QMI_SSR=0
@@ -442,6 +445,9 @@ fi
 command -v qmi_load >/dev/null 2>&1 || qmi_load() { return 1; }
 command -v qmi_overlay_apply >/dev/null 2>&1 || qmi_overlay_apply() { lte_source="at"; return 1; }
 command -v qmi_overlay_restore >/dev/null 2>&1 || qmi_overlay_restore() { lte_source="at"; }
+command -v qmi_ca_build >/dev/null 2>&1 || qmi_ca_build() { return 1; }
+command -v qmi_ca_cache_update >/dev/null 2>&1 || qmi_ca_cache_update() { return 0; }
+command -v qmi_ca_cache_reset >/dev/null 2>&1 || qmi_ca_cache_reset() { return 0; }
 
 # =============================================================================
 # DEV-ONLY AT TAP (see TAP_FLAG)
@@ -2127,6 +2133,7 @@ _wc_compose_pf() {
     _kS ippt_dhcpv4dns "$boot_ippt_dhcpv4dns"
     _kN serving_read_mono "$_SERVING_READ_MONO" 0
     _kN ca_read_mono "$_CA_READ_MONO" 0
+    _kS ca_source "${ca_source:-at}"
     _kS poller_tier "${ap_tier:-active}"
     _kN qmi_read_mono "$_QMI_READ_MONO" 0
     _kS qmi_state "$_QMI_STATE"
@@ -2293,6 +2300,7 @@ write_cache_jq() {
         --arg ippt_dns  "$boot_ippt_dhcpv4dns" \
         --argjson sc_read_mono "${_SERVING_READ_MONO:-0}" \
         --argjson ca_read_mono "${_CA_READ_MONO:-0}" \
+        --arg ca_src "${ca_source:-at}" \
         --arg ap_tier "${ap_tier:-active}"         --arg lte_src "${lte_source:-at}"         --argjson qmi_rmono "${_QMI_READ_MONO:-0}"         --arg qmi_st "$_QMI_STATE"         --argjson qmi_ssr "${_QMI_SSR:-0}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
@@ -2410,6 +2418,7 @@ write_cache_jq() {
                 ippt_dhcpv4dns: $ippt_dns,
                 serving_read_mono: $sc_read_mono,
                 ca_read_mono: $ca_read_mono,
+                ca_source: $ca_src,
                 poller_tier: $ap_tier,
                 qmi_read_mono: $qmi_rmono,
                 qmi_state: $qmi_st,
@@ -2901,21 +2910,32 @@ poll_cycle() {
             # Carrier Aggregation — enable, query and disable in one exchange
             # (as QuecManager does): =1 adds the extended NR fields, and leaving
             # it on drops the connection on RM551E R01A04.
+            #
+            # With a fresh broker 0.7.0 sidecar the carrier list is built from
+            # QMI at this same point (qmi_ca_build, qmi_merge.sh) and the AT
+            # read is skipped; any gate that fails falls through to the read.
             local ca_rc
-            qcmd_exec_g 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0'
-            ca_rc=$?
-            if [ $ca_rc -eq 0 ] && [ -n "$_QR" ]; then
-                parse_ca_info "$_QR"
-                _CA_READ_MONO="${_MONO_TOP:-0}"
-            elif [ $ca_rc -ne 3 ]; then
-                # Busy (rc 3) keeps the last CA values, like the deep tier.
-                t2_ca_active=false
-                t2_ca_count=0
-                t2_nr_ca_active=false
-                t2_nr_ca_count=0
-                t2_total_bandwidth_mhz=0
-                t2_bandwidth_details=""
-                t2_carrier_components="[]"
+            qmi_load
+            if ! qmi_ca_build; then
+                qcmd_exec_g 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0'
+                ca_rc=$?
+                if [ $ca_rc -eq 0 ] && [ -n "$_QR" ]; then
+                    parse_ca_info "$_QR"
+                    _CA_READ_MONO="${_MONO_TOP:-0}"
+                    ca_source="at"
+                    qmi_ca_cache_update "$t2_carrier_components"
+                elif [ $ca_rc -ne 3 ]; then
+                    # Busy (rc 3) keeps the last CA values, like the deep tier.
+                    ca_source="at"
+                    qmi_ca_cache_reset
+                    t2_ca_active=false
+                    t2_ca_count=0
+                    t2_nr_ca_active=false
+                    t2_nr_ca_count=0
+                    t2_total_bandwidth_mhz=0
+                    t2_bandwidth_details=""
+                    t2_carrier_components="[]"
+                fi
             fi
 
             # CFUN — standalone query (compound commands timeout in CFUN=0).
