@@ -127,7 +127,7 @@ h_qcmd_default() {
 
 # --- inputs the real daemons would produce -----------------------------------
 
-# Ping-history ring (/tmp/qmanager_ping_history, one RTT or "null" per line,
+# Ping-history ring (/tmp/qmanager_ping_history, "<rtt|null> <leg>" per line,
 # newest last, 60 lines): one sample per 5 fake seconds since the last refresh.
 # Unreachable -> null; otherwise q_latency, with q_loss percent of the samples
 # null (evenly spread: sample k is null when floor((k+1)*P/100) > floor(k*P/100)).
@@ -140,9 +140,9 @@ h_hist_append() { # dt reachable
     _h_lat=$(mget q_latency 24.5)
     while [ "$_h_ns" -gt 0 ]; do
         if [ "$2" = "false" ] || [ $(( (_h_k + 1) * _h_p / 100 )) -gt $(( _h_k * _h_p / 100 )) ]; then
-            echo null >> "$_h_hf"
+            echo "null -" >> "$_h_hf"
         else
-            echo "$_h_lat" >> "$_h_hf"
+            echo "$_h_lat p4" >> "$_h_hf"
         fi
         _h_k=$(( _h_k + 1 ))
         _h_ns=$(( _h_ns - 1 ))

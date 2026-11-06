@@ -107,6 +107,7 @@ stop_service() {
     # qmanager_ping and ondemand_radio.sh), the state-file read stamps, and the
     # dev-only status parity hook. A fresh start rebuilds them.
     rm -f /var/run/qmanager/ping.env /var/run/qmanager/ping.env.new
+    rm -rf /var/run/qmanager/ping_fan
     rm -f /var/run/qmanager/dns.env /var/run/qmanager/dns.env.new
     rm -f /var/run/qmanager/ondemand.env /var/run/qmanager/ondemand.env.new
     rm -f /var/run/qmanager/watchcat.stamp /var/run/qmanager/sim_swap.stamp

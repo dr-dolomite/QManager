@@ -52,7 +52,7 @@ read_ping() {
 }
 
 # Quality window. Quality is judged from the ping daemon's raw sample history
-# (one RTT in ms or the word "null" per line, newest last), not from the poller's
+# ("<rtt ms|null> <leg>" per line, newest last), not from the poller's
 # status.json, so a long-gone outage cannot leak into a fresh decision.
 # quality_since is the monotonic second the window starts at: wd_quality_mark
 # resets it after every event that makes older samples meaningless (startup, an
@@ -61,6 +61,25 @@ read_ping() {
 # samples must have accrued since the mark or there is no signal.
 quality_since=0
 WD_PING_HISTORY="/tmp/qmanager_ping_history"
+
+# wd_probe_period: WD_PERIOD = seconds between two ping samples, the larger of
+# the configured interval and the daemon's measured cycle (cycle_ms, rounded).
+# In an outage a cycle runs the parallel fallback legs (~4 s), which is longer
+# than a 1-2 s interval; counting samples by the interval alone would reach
+# back past the mark or underestimate how long a failure streak took.
+WD_PERIOD=5
+wd_probe_period() {
+    local _cms
+    WD_PERIOD="$CQ_INTERVAL_SEC"
+    case "$WD_PERIOD" in ''|*[!0-9]*) WD_PERIOD=5 ;; esac
+    [ "$WD_PERIOD" -ge 1 ] || WD_PERIOD=5
+    _cms="$CQ_CYCLE_MS"
+    case "$_cms" in ''|*[!0-9]*) return 0 ;; esac
+    [ "${#_cms}" -le 7 ] || return 0
+    _cms=$(( (_cms + 500) / 1000 ))
+    [ "$_cms" -gt "$WD_PERIOD" ] && WD_PERIOD="$_cms"
+    return 0
+}
 
 wd_quality_mark() {
     quality_since=$(mono_now)
@@ -81,9 +100,8 @@ read_quality() {
     local since
     local out
 
-    iv="$CQ_INTERVAL_SEC"
-    case "$iv" in ''|*[!0-9]*) iv=5 ;; esac
-    [ "$iv" -ge 1 ] || iv=5
+    wd_probe_period
+    iv="$WD_PERIOD"
     w=$((120 / iv))
     [ "$w" -lt 6 ] && w=6
     [ "$w" -gt 60 ] && w=60
@@ -98,9 +116,10 @@ read_quality() {
     [ "$n" -ge 3 ] || return 1
 
     [ -f "$WD_PING_HISTORY" ] || return 1
+    # Lines are "<rtt|null> <leg>" (one column in an older ring): $1 only.
     out=$(tail -n "$n" "$WD_PING_HISTORY" 2>/dev/null | awk '
         { c++ }
-        $0 ~ /^[0-9]+(\.[0-9]+)?$/ { s += $0; k++; next }
+        $1 ~ /^[0-9]+(\.[0-9]+)?$/ { s += $1; k++; next }
         { nl++ }
         END {
             if (c < 3) exit 1
@@ -318,10 +337,11 @@ ssr_in_progress() {
     case "$now" in ''|*[!0-9]*) return 1 ;; esac
 
     # The crash is only visible to the ladder once the ping daemon has counted
-    # CFG_FAIL_THRESHOLD failed probes (CQ_INTERVAL_SEC apart) and a check pass
-    # has seen them, so the look-back must cover that detection delay as well as
-    # the grace. A bare grace window always expired first on slow ping profiles
-    # (the hold never engaged and every SSR was amplified).
+    # CFG_FAIL_THRESHOLD failed probes (one probe period apart, WD_PERIOD: the
+    # failing cycle can outlast the interval) and a check pass has seen them, so
+    # the look-back must cover that detection delay as well as the grace. A bare
+    # grace window always expired first on slow ping profiles (the hold never
+    # engaged and every SSR was amplified).
     local iv
     local ft
     local ci
@@ -329,8 +349,8 @@ ssr_in_progress() {
     local win
     gr="$CFG_SSR_GRACE"
     case "$gr" in ''|*[!0-9]*) gr=45 ;; esac
-    iv="$CQ_INTERVAL_SEC"
-    case "$iv" in ''|*[!0-9]*) iv=5 ;; esac
+    wd_probe_period
+    iv="$WD_PERIOD"
     ft="$CFG_FAIL_THRESHOLD"
     case "$ft" in ''|*[!0-9]*) ft=5 ;; esac
     ci="$CFG_CHECK_INTERVAL"

@@ -1,9 +1,10 @@
 # 🚀 QManager BETA v0.1.36-draft
 
-v0.1.36 is a polish release focused on how much work the web interface asks of the modem. Background tabs now stay quiet, every page request starts faster, and open tabs share one detailed radio reading, so the modem spends less time answering the browser and more time idle.
+v0.1.36 is a polish release focused on how much work the web interface asks of the modem, plus a faster and more honest internet check. Background tabs now stay quiet, every page request starts faster, and open tabs share one detailed radio reading. The connection check now falls back to a second provider and reports an outage within the time its sensitivity setting promises.
 
 ## ✅ Improvements
 
+- **Faster, more honest outage detection.** When the main probe target stops answering, QManager now checks a second provider (Google or Cloudflare, whichever you are not already using) and IPv6 at the same time, so one unreachable server no longer reads as "internet down". A real outage is reported within the time the selected sensitivity promises (about 7 seconds on Sensitive, about 35 seconds on Quiet) instead of up to twice that, and latency history is no longer reset when the answering server changes.
 - **Lighter on the modem while the web page is open.** Background tabs no longer refresh the dashboard, so the modem drops to its slower idle checks when nobody is watching, and each tab catches up the moment you return to it. Every page request now starts faster (status and sign-in checks take about a third of the time they did), several open tabs share one detailed radio reading instead of each asking the modem separately, and routine log lines no longer crowd the system log.
 - **Carrier aggregation details come from the modem's fast data channel whenever it is available.** The modem gets far fewer carrier status commands, and secondary carriers no longer show a misleading 0 dB SINR.
 - **New browser-tab icon.** The tab icon now matches the QManager logo used across the interface, in place of the old one.
