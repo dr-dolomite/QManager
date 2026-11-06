@@ -341,7 +341,7 @@ _qmi_ca_slot() {
     [ "$2" -gt 0 ] || return 1
     _qmi_int "$3" || return 1
     _qmi_int "$5" || return 1
-    case "$4" in ''|*[!0-9]*) return 1 ;; esac
+    case "$4" in ''|*[!0-9]*|0?*) return 1 ;; esac
     _qcs_rsrp="null"
     _qcs_rsrq="null"
     _qcs_rssi="null"

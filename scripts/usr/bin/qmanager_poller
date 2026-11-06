@@ -814,6 +814,9 @@ refresh_policy_band() {
     if [ $? -eq 0 ]; then
         parse_policy_band "$_QR"
         if [ -z "$boot_supported_lte_bands" ] && _qmi_policy_lte; then
+            # Drop the cache so a reader never sees the previous SIM's lists;
+            # the next refresh asks AT again.
+            rm -f "$SUPPORTED_BANDS_FILE"
             return 0
         fi
         printf 'boot_supported_lte_bands="%s"\nboot_supported_nsa_nr5g_bands="%s"\nboot_supported_sa_nr5g_bands="%s"\nboot_supported_nrdc_nr5g_bands="%s"\n' \
