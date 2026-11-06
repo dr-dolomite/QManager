@@ -1,6 +1,6 @@
 # QMI offload of AT reads (carrier list, NR identity, device IDs, LTE bands)
 
-Status: **PLAN, awaiting approval** (2026-11-06). Large change (broker + poller + AT path).
+Status: **BUILT** (2026-11-06, broker 0.7.0). Large change (broker + poller + AT path). Deviations and decisions as built are at the end.
 
 ## Goal
 
@@ -81,3 +81,20 @@ Broker: reinstall the 0.6.2 binary; the poller sees no `qmi_pcc_rsrp` and falls 
 
 - `status.json` `lte.bandwidth` is the raw QENG enum (`5` for 20 MHz), `parse_at.sh:378,455`.
 - `t2_*` CA globals are set in the Tier 1 path; poller header says QCAINFO runs "every cycle" (it runs every AT-due cycle).
+
+## As built (2026-11-06)
+
+Built on `feat/qmi-at-offload` (broker 0.7.0; the binary ships in `dependencies/qmanager_atd`). Verified on the RM551E in NSA: see [`qmi-lane.md`](../features/qmi-lane.md#broker-070-2026-11-06) and [`adaptive-polling.md`](../features/adaptive-polling.md) Invariant 14.
+
+Deviations from the plan:
+
+- **NR cache age is 20 s** (`QMI_CA_NR_MAX_AGE`), not 60 s. QCAINFO's own NR row held one value for 36 s, so 20 s is shorter than that plateau.
+- **NR rows are never merged with QMI NR values.** The cached AT row is used whole. QMI's NR SINR runs about 9 dB above QCAINFO's.
+- **The NR refresh gate compares QENG's NR PCI and ARFCN.** `qmi_nr_pci` and `qmi_nr_arfcn` are published (identity, 0.7.0), but no gate reads them yet.
+- **Band capability open item closed.** DMS `0x0045` values are band numbers; the LTE list equals AT `lte_band` (32 bands).
+
+Decisions:
+
+1. DMS `0x0045` added to the client allow-list (19 pairs), approved 2026-11-06.
+2. SCC SINR is `null` on QMI-built carrier lists (as the plan proposed).
+3. Off-cycle freshness stays a follow-up.
