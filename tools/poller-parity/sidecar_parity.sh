@@ -82,7 +82,7 @@ ONDEMAND_STAMP="$T/run/ondemand.stamp"
 _lift() { # file name
     sed -n "/^$2() {/,/^}/p" "$1"
 }
-for _f in write_cache _sc_sq _sc_dir_ok write_ping_env write_dns_env; do
+for _f in write_cache _json_str _sc_sq _sc_dir_ok write_ping_env write_dns_env; do
     _lift "$PING" "$_f" > "$T/f.sh"
     [ -s "$T/f.sh" ] || { echo "cannot lift $_f from $PING"; exit 2; }
     . "$T/f.sh"
@@ -95,6 +95,11 @@ mono_now() {
     _u=0
     { read -r _u _i < /proc/uptime; } 2>/dev/null
     echo $(( ${_u%%.*} - MONO_SKEW ))
+}
+mono_now_set() {
+    _MONO=0
+    { read -r _MONO _i < /proc/uptime; } 2>/dev/null
+    _MONO=$(( ${_MONO%%.*} - MONO_SKEW ))
 }
 CACHE_FILE="$T/ping.json"; CACHE_TMP="$T/ping.json.tmp"; SC_DIR="$T/run"
 SC_PING="$T/run/ping.env"; SC_DNS="$T/run/dns.env"; RECOVERY_FLAG="$T/recovery"
@@ -122,7 +127,8 @@ dump_cq() {
     case "$_dq_reason" in "age "*) _dq_reason="age" ;; esac
     printf '%s|' "$CQ_STALE" "$_dq_reason" "$CQ_STALE_THRESHOLD" "$CQ_TIMESTAMP" "$CQ_MONO" \
         "$CQ_REACHABLE" "$CQ_RTT_MS" "$CQ_STREAK_SUCCESS" "$CQ_STREAK_FAIL" "$CQ_DURING_RECOVERY" \
-        "$CQ_INTERVAL_SEC" "$CQ_PROFILE" "$CQ_LAST_FAMILY" "$CQ_TARGET" "$CQ_FAIL_SECS" "$CQ_RECOVER_SECS"
+        "$CQ_INTERVAL_SEC" "$CQ_PROFILE" "$CQ_LAST_FAMILY" "$CQ_TARGET" "$CQ_FAIL_SECS" "$CQ_RECOVER_SECS" \
+        "$CQ_LAST_TARGET" "$CQ_CYCLE_MS"
 }
 
 # ---------------------------------------------------------------------------
@@ -142,15 +148,22 @@ ping_case() { # name
 reachable=true; streak_success=5; streak_fail=0; last_family=ipv4
 PING_PROFILE=relaxed; PING_TARGET_IPV4=1.1.1.1; PING_TARGET_IPV6=2606:4700:4700::1111
 PING_INTERVAL=5; PING_FAIL_SECS=15; PING_RECOVER_SECS=10
+last_target=1.1.1.1; cycle_ms=5010; fail_elapsed_sec=0
 RTT="34.2"
 ping_case "fresh ipv4"
 
 reachable=false; streak_success=0; streak_fail=4; last_family=none; RTT="null"
+last_target=""; cycle_ms=4200; fail_elapsed_sec=16
 : > "$RECOVERY_FLAG"
 ping_case "down + recovery"
 rm -f "$RECOVERY_FLAG"
 
+reachable=true; streak_success=1; streak_fail=0; last_family=ipv4; RTT="61.0"
+last_target=8.8.8.8; cycle_ms=2110; fail_elapsed_sec=0
+ping_case "second provider won"
+
 reachable=true; streak_success=1; streak_fail=0; last_family=ipv6; RTT="120.5"
+last_target=2606:4700:4700::1111; cycle_ms=1000
 PING_PROFILE="o'brien \"x\""; PING_INTERVAL=1; PING_FAIL_SECS=6; PING_RECOVER_SECS=3
 PING_TARGET_IPV4="1.2.3.4"
 ping_case "quote in profile"
@@ -193,6 +206,23 @@ read_ping_data
 B="$conn_internet_available|$conn_status|$conn_latency|$conn_ping_target|$conn_profile|$conn_last_family|$conn_history_interval|$conn_during_recovery"
 check "read_ping_data env == json path" "$B" "$A"
 cp "$T/ping.env.good" "$SC_PING"
+
+# two-column ring: jitter pairs only same-leg neighbours, loss keeps every null
+hist_case() { # name expected(min|avg|max|jit|loss|history) lines...
+    local _n="$1"
+    local _e="$2"
+    shift 2
+    printf '%s\n' "$@" > "$T/hist"
+    PING_HISTORY_RAW="$T/hist"; PING_MIN_SAMPLES=4
+    _last_ping_ts="x"
+    read_ping_data
+    check "history: $_n" "$_e" "$conn_min_latency|$conn_avg_latency|$conn_max_latency|$conn_jitter|$conn_packet_loss|$conn_history"
+}
+hist_case "one leg" "10.0|20.0|30.0|10.0|0|[10.0,30.0,20.0,20.0]" "10.0 p4" "30.0 p4" "20.0 p4" "20.0 p4"
+hist_case "leg switch is not jitter" "10.0|35.0|60.0|0.0|0|[10.0,10.0,60.0,60.0]" "10.0 p4" "10.0 p4" "60.0 s4" "60.0 s4"
+hist_case "nulls count as loss" "10.0|12.0|14.0|4.0|50|[10.0,null,null,14.0]" "10.0 p4" "null -" "null -" "14.0 p4"
+hist_case "old one-column ring" "10.0|20.0|30.0|10.0|0|[10.0,30.0,20.0,20.0]" "10.0" "30.0" "20.0" "20.0"
+PING_HISTORY_RAW="$T/no_history"; PING_MIN_SAMPLES=10
 : > "$FORKS"
 _i=0
 while [ "$_i" -lt 20 ]; do read_ping_data; _i=$((_i + 1)); done
