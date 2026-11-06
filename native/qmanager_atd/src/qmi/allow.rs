@@ -36,6 +36,7 @@ pub const CLIENT_ALLOWED: &[(u32, u16)] = &[
     (SVC_DMS, 0x0025), // Get IDs
     (SVC_DMS, 0x002D), // Get Operating Mode
     (SVC_DMS, 0x002F), // Get Time
+    (SVC_DMS, 0x0045), // Get Band Capability
     (SVC_UIM, 0x002F), // Get Card Status
     (SVC_UIM, 0x0047), // Get Slots Status
     (SVC_WDS, 0x002A), // Get Profile List
@@ -106,11 +107,12 @@ mod tests {
 
     #[test]
     fn exactly_the_read_only_gets() {
-        assert_eq!(CLIENT_ALLOWED.len(), 18);
+        assert_eq!(CLIENT_ALLOWED.len(), 19);
         for &(s, m) in &[
             (SVC_NAS, 0x0020u16),
             (SVC_NAS, 0x00AC),
             (SVC_DMS, 0x0025),
+            (SVC_DMS, 0x0045),
             (SVC_UIM, 0x0047),
             (SVC_WDS, 0x002A),
             (SVC_DSD, 0x0024),

@@ -16,8 +16,14 @@
 //!   (NAS 0x004F, cached by the modem: a handful of values per half hour).
 //!   Live is preferred per metric; SINR and all NR values exist only as
 //!   `signal_info`.
+//! - **Per-carrier signal.** Each `ca` carrier carries its own live reading
+//!   (`cell_location`), joined on (EARFCN, PCI): the PCC against the serving
+//!   cell's rows, an SCC against the frequency list. A carrier with no match
+//!   is `null`, never a neighbour's row (the PCC and an SCC may share a PCI on
+//!   different EARFCNs). Same registration gate as `signal`. PCC SINR is the
+//!   cached `signal_info` one; SCC SINR is always `null`.
 
-use super::codec::nas::{self, CellLocation, LteCa, RfBandInfo, SignalInfo};
+use super::codec::nas::{self, CellLocation, LteCa, RfBandInfo, SignalInfo, SysInfo};
 use super::codec::{dms, dsd, uim, wds, Rat};
 use super::error::QmiError;
 use super::msg::Msg;
@@ -280,6 +286,13 @@ pub struct Carrier {
     /// Always true for the PCC; for an SCC, QMI state 2 (activated) as
     /// opposed to 1 (configured, not activated).
     pub active: bool,
+    /// This carrier's own signal (see the module doc). None until
+    /// `Ca::attach_signal` finds a match.
+    pub rsrp: Option<Reading>,
+    pub rsrq: Option<Reading>,
+    pub rssi: Option<Reading>,
+    /// PCC only.
+    pub sinr: Option<Reading>,
 }
 
 /// LTE carrier aggregation. `carriers` is the PCC followed by every
@@ -299,6 +312,10 @@ impl Ca {
             band: nas::band_from_class(x.band_class).map(|b| b.label()),
             bandwidth_mhz: nas::lte_bw_mhz(x.bw_enum),
             active,
+            rsrp: None,
+            rsrq: None,
+            rssi: None,
+            sinr: None,
         };
         let mut carriers = Vec::new();
         if let Some(p) = &c.pcell {
@@ -310,6 +327,36 @@ impl Ca {
             }
         }
         Ca { carriers }
+    }
+
+    /// Fills each carrier's signal from the cell location (and the PCC's
+    /// SINR from Signal Info). Nothing is attached unless registered; a
+    /// carrier whose (EARFCN, PCI) has no row keeps `None`.
+    pub fn attach_signal(&mut self, reg: Registration, cell: Option<&CellLocation>, info: Option<&SignalInfo>) {
+        if reg != Registration::Registered {
+            return;
+        }
+        let live = |x: i16, ok: fn(i32) -> bool| {
+            Some(x as i32).filter(|x| ok(*x)).map(|x10| Reading { x10, source: Source::CellLocation })
+        };
+        for c in self.carriers.iter_mut() {
+            let pcc = c.kind == "PCC";
+            let row = cell.and_then(|cl| {
+                if pcc {
+                    cl.lte.as_ref().filter(|l| l.earfcn == c.earfcn).and_then(|l| l.rows.iter().find(|r| r.pci == c.pci))
+                } else {
+                    cl.inter.iter().find(|f| f.earfcn == c.earfcn).and_then(|f| f.cells.iter().find(|r| r.pci == c.pci))
+                }
+            });
+            if let Some(r) = row {
+                c.rsrp = live(r.rsrp_x10, ok_rsrp);
+                c.rsrq = live(r.rsrq_x10, ok_rsrq);
+                c.rssi = live(r.rssi_x10, ok_rssi);
+            }
+            if pcc {
+                c.sinr = pick(None, info.and_then(|i| i.lte).and_then(|l| l.sinr_x10).map(|v| v as i32), ok_sinr);
+            }
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -332,7 +379,11 @@ impl Ca {
                     .num("earfcn", c.earfcn)
                     .opt_num("bandwidth_mhz", c.bandwidth_mhz)
                     .num("pci", c.pci)
-                    .boolean("active", c.active);
+                    .boolean("active", c.active)
+                    .raw("rsrp", &reading_json(&c.rsrp))
+                    .raw("rsrq", &reading_json(&c.rsrq))
+                    .raw("rssi", &reading_json(&c.rssi))
+                    .raw("sinr", &reading_json(&c.sinr));
                 o.done()
             })
             .collect();
@@ -340,6 +391,53 @@ impl Ca {
         j.num("count", self.count()).raw("carriers", &arr(&items));
         j.done()
     }
+}
+
+fn reading_json(r: &Option<Reading>) -> String {
+    r.as_ref().map(|r| r.json()).unwrap_or_else(|| "null".into())
+}
+
+// ---------------------------------------------------------------- sysinfo
+
+/// NR identity from Get Sys Info. Identity, not signal: not registration
+/// gated. Out-of-range values are the modem's invalid sentinels and become
+/// None.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Sys {
+    pub nr_pci: Option<u16>,
+    pub nr_arfcn: Option<u32>,
+    pub endc: Option<bool>,
+}
+
+/// Highest NR PCI (3 x 336 groups) and highest NR-ARFCN (3GPP TS 38.104).
+const NR_PCI_MAX: u16 = 1007;
+const NR_ARFCN_MAX: u32 = 3_279_165;
+
+impl Sys {
+    pub fn from_codec(s: &SysInfo) -> Sys {
+        Sys {
+            nr_pci: s.nr_pci.filter(|p| *p <= NR_PCI_MAX),
+            nr_arfcn: s.nr_arfcn.filter(|a| *a <= NR_ARFCN_MAX),
+            endc: s.endc,
+        }
+    }
+
+    pub fn json(&self) -> String {
+        let mut o = J::obj();
+        o.opt_num("pci", self.nr_pci).opt_num("arfcn", self.nr_arfcn).opt_bool("endc", self.endc);
+        let mut j = J::obj();
+        j.raw("nr", &o.done());
+        j.done()
+    }
+}
+
+// ----------------------------------------------------------------- bands
+
+pub fn bands_json(b: &dms::BandCaps) -> String {
+    let list = |v: &[u16]| arr(&v.iter().map(|n| n.to_string()).collect::<Vec<_>>());
+    let mut j = J::obj();
+    j.raw("lte", &list(&b.lte)).raw("nr", &list(&b.nr));
+    j.done()
 }
 
 // -------------------------------------------------------------------- rf
@@ -410,11 +508,12 @@ pub struct Inputs<'a> {
     pub ca: Option<&'a Msg>,
     pub rf: Option<&'a Msg>,
     pub sig_info: Option<&'a Msg>,
+    pub sys_info: Option<&'a Msg>,
 }
 
-/// The poller-shaped read: serving + cell + CA + RF + Signal Info, plus the
-/// signal block derived from them (Signal Info adds SINR and NR; it is live
-/// while the broker holds the NAS signal config).
+/// The poller-shaped read: serving + cell + CA + RF + Signal Info + Sys
+/// Info, plus the signal block derived from them (Signal Info adds SINR and
+/// NR; it is live while the broker holds the NAS signal config).
 #[derive(Clone, Debug)]
 pub struct Bundle {
     pub serving: Option<ServingSystem>,
@@ -422,6 +521,7 @@ pub struct Bundle {
     pub signal: Signal,
     pub ca: Option<Ca>,
     pub rf: Option<Rf>,
+    pub sysinfo: Option<Sys>,
 }
 
 impl Bundle {
@@ -430,11 +530,17 @@ impl Bundle {
         let cell_c = i.cell.map(nas::cell_location);
         let info = i.sig_info.map(nas::signal_info);
         let reg = serving.as_ref().and_then(|s| s.reg).unwrap_or(Registration::Unknown);
+        let ca = i.ca.map(|m| {
+            let mut ca = Ca::from_codec(&nas::lte_ca(m));
+            ca.attach_signal(reg, cell_c.as_ref(), info.as_ref());
+            ca
+        });
         Bundle {
             signal: Signal::build(reg, cell_c.as_ref(), info.as_ref()),
             cell: cell_c.as_ref().map(Cell::from_codec),
-            ca: i.ca.map(|m| Ca::from_codec(&nas::lte_ca(m))),
+            ca,
             rf: i.rf.map(|m| Rf::from_codec(&nas::rf_band_info(m))),
+            sysinfo: i.sys_info.map(|m| Sys::from_codec(&nas::sys_info(m))),
             serving,
         }
     }
@@ -479,6 +585,10 @@ impl Bundle {
         match &self.rf {
             Some(r) => j.raw("rf", &r.json()),
             None => j.null("rf"),
+        };
+        match &self.sysinfo {
+            Some(s) => j.raw("sysinfo", &s.json()),
+            None => j.null("sysinfo"),
         };
         j.done()
     }
@@ -636,11 +746,13 @@ pub enum Read {
     Slots,
     Profiles,
     Dsd,
+    Sysinfo,
+    Bands,
     Bundle,
 }
 
 impl Read {
-    pub const ALL: [Read; 14] = [
+    pub const ALL: [Read; 16] = [
         Read::Serving,
         Read::Signal,
         Read::Cell,
@@ -654,6 +766,8 @@ impl Read {
         Read::Slots,
         Read::Profiles,
         Read::Dsd,
+        Read::Sysinfo,
+        Read::Bands,
         Read::Bundle,
     ];
 
@@ -672,6 +786,8 @@ impl Read {
             Read::Slots => "slots",
             Read::Profiles => "profiles",
             Read::Dsd => "dsd",
+            Read::Sysinfo => "sysinfo",
+            Read::Bands => "bands",
             Read::Bundle => "bundle",
         }
     }
@@ -689,7 +805,10 @@ impl Read {
             // cached SINR / NR / fallback.
             Read::Signal => &[(SVC_NAS, 0x0024), (SVC_NAS, 0x0043), (SVC_NAS, 0x004F)],
             Read::Cell => &[(SVC_NAS, 0x0043)],
-            Read::Ca => &[(SVC_NAS, 0x00AC)],
+            // 0x00AC is the primary request (its failure fails the read); the
+            // rest are the per-carrier signal: cell location, the serving
+            // gate and Signal Info (PCC SINR).
+            Read::Ca => &[(SVC_NAS, 0x00AC), (SVC_NAS, 0x0043), (SVC_NAS, 0x0024), (SVC_NAS, 0x004F)],
             Read::Rf => &[(SVC_NAS, 0x0031)],
             Read::Ids => &[(SVC_DMS, 0x0025)],
             Read::Rev => &[(SVC_DMS, 0x0022), (SVC_DMS, 0x0023)],
@@ -699,7 +818,16 @@ impl Read {
             Read::Slots => &[(SVC_UIM, 0x0047)],
             Read::Profiles => &[(SVC_WDS, 0x002A)],
             Read::Dsd => &[(SVC_DSD, 0x0024)],
-            Read::Bundle => &[(SVC_NAS, 0x0024), (SVC_NAS, 0x0043), (SVC_NAS, 0x00AC), (SVC_NAS, 0x0031), (SVC_NAS, 0x004F)],
+            Read::Sysinfo => &[(SVC_NAS, 0x004D)],
+            Read::Bands => &[(SVC_DMS, 0x0045)],
+            Read::Bundle => &[
+                (SVC_NAS, 0x0024),
+                (SVC_NAS, 0x0043),
+                (SVC_NAS, 0x00AC),
+                (SVC_NAS, 0x0031),
+                (SVC_NAS, 0x004F),
+                (SVC_NAS, 0x004D),
+            ],
         }
     }
 }
@@ -720,7 +848,23 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
     Ok(match read {
         Read::Serving => serving_json(&nas::serving_system(&q(0)?)),
         Read::Cell => Cell::from_codec(&nas::cell_location(&q(0)?)).json(),
-        Read::Ca => Ca::from_codec(&nas::lte_ca(&q(0)?)).json(),
+        Read::Ca => {
+            // Only 0x00AC can fail the read; the others add signal.
+            let ca = q(0)?;
+            let (cell, serving, info) = (q(1).ok(), q(2).ok(), q(3).ok());
+            Bundle::build(&Inputs {
+                serving: serving.as_ref(),
+                cell: cell.as_ref(),
+                ca: Some(&ca),
+                sig_info: info.as_ref(),
+                ..Inputs::default()
+            })
+            .ca
+            .unwrap_or_default()
+            .json()
+        }
+        Read::Sysinfo => Sys::from_codec(&nas::sys_info(&q(0)?)).json(),
+        Read::Bands => bands_json(&dms::band_caps(&q(0)?)),
         Read::Rf => Rf::from_codec(&nas::rf_band_info(&q(0)?)).json(),
         Read::Ids => ids_json(&dms::ids(&q(0)?)),
         Read::Opmode => opmode_json(dms::op_mode(&q(0)?)),
@@ -756,7 +900,7 @@ pub fn run(fetch: Fetch, read: Read) -> Result<String, QmiError> {
 }
 
 /// The poller-shaped read as a struct (the snapshot sampler needs the values,
-/// not only the JSON). Fails only if all five requests fail, with the first
+/// not only the JSON). Fails only if all six requests fail, with the first
 /// one's error; a failed part is `None` / null.
 pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
     let r: Vec<Result<Msg, QmiError>> = Read::Bundle.requests().iter().map(|&(svc, id)| fetch(svc, id)).collect();
@@ -776,7 +920,14 @@ pub fn bundle(fetch: Fetch) -> Result<Bundle, QmiError> {
     }
     let m: Vec<Option<Msg>> = r.into_iter().map(|x| x.ok()).collect();
     let part = |i: usize| m.get(i).and_then(|x| x.as_ref());
-    Ok(Bundle::build(&Inputs { serving: part(0), cell: part(1), ca: part(2), rf: part(3), sig_info: part(4) }))
+    Ok(Bundle::build(&Inputs {
+        serving: part(0),
+        cell: part(1),
+        ca: part(2),
+        rf: part(3),
+        sig_info: part(4),
+        sys_info: part(5),
+    }))
 }
 
 #[cfg(test)]
@@ -791,6 +942,7 @@ mod tests {
             ca: Some(&fx!("r1_3_0x00AC")),
             rf: Some(&fx!("r1_3_0x0031")),
             sig_info: None,
+            sys_info: None,
         })
     }
 
@@ -837,8 +989,12 @@ mod tests {
                 "\"cell\":{\"lte\":{\"pci\":295,\"earfcn\":150,\"tac\":4660,\"cell_id\":19088641,\"enodeb_id\":74565,",
                 "\"sector_id\":1,\"mcc\":\"515\",\"mnc\":\"03\"},\"nr\":{\"arfcn\":528030,\"pci\":null,\"tac\":null,\"cell_id\":null}},",
                 "\"ca\":{\"count\":1,\"carriers\":[{\"type\":\"PCC\",\"technology\":\"LTE\",\"band\":\"B1\",\"earfcn\":150,",
-                "\"bandwidth_mhz\":20,\"pci\":295,\"active\":true}]},",
-                "\"rf\":{\"bands\":[{\"rat\":\"lte\",\"band\":\"B1\",\"channel\":150,\"bandwidth_mhz\":20}]}}"
+                "\"bandwidth_mhz\":20,\"pci\":295,\"active\":true,",
+                "\"rsrp\":{\"value\":-90,\"x10\":-900,\"source\":\"cell_location\"},",
+                "\"rsrq\":{\"value\":-7,\"x10\":-74,\"source\":\"cell_location\"},",
+                "\"rssi\":{\"value\":-63,\"x10\":-628,\"source\":\"cell_location\"},\"sinr\":null}]},",
+                "\"rf\":{\"bands\":[{\"rat\":\"lte\",\"band\":\"B1\",\"channel\":150,\"bandwidth_mhz\":20}]},",
+                "\"sysinfo\":null}"
             )
         );
     }
@@ -882,6 +1038,7 @@ mod tests {
                 ca: Some(&fx!("r1_3_0x00AC")),
                 rf: Some(&fx!("r1_3_0x0031")),
                 sig_info: Some(&fx!("r1_3_0x004F")),
+                sys_info: None,
             });
             assert!(!b.registered());
             assert!(b.signal.lte.is_none() && b.signal.nr.is_none());
@@ -946,6 +1103,199 @@ mod tests {
         assert!(ca.json().starts_with("{\"count\":0,\"carriers\":[]"));
     }
 
+    fn nsa_bundle(serving: &str) -> Bundle {
+        let s = match serving {
+            "registered" => fx!("r1_3_0x0024"),
+            _ => fx!("serving_searching"),
+        };
+        Bundle::build(&Inputs {
+            serving: Some(&s),
+            cell: Some(&fx!("nsa_scc_3_0x0043")),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            rf: Some(&fx!("r1_3_0x0031")),
+            sig_info: Some(&fx!("r1_3_0x004F")),
+            sys_info: Some(&fx!("nsa_3_0x004D")),
+        })
+    }
+
+    #[test]
+    fn each_carrier_gets_its_own_row_by_earfcn_and_pci() {
+        // PCC B1 EARFCN 150 and SCC B3 EARFCN 1350 share PCI 295. AT at the
+        // same moment: PCC -93/-8/-67, SCC -94/-11/-75 (tenths truncated).
+        let ca = nsa_bundle("registered").ca.unwrap();
+        assert_eq!(ca.count(), 2);
+        let (p, s) = (&ca.carriers[0], &ca.carriers[1]);
+        assert_eq!((p.kind, p.earfcn, p.pci), ("PCC", 150, 295));
+        assert_eq!((s.kind, s.earfcn, s.pci, s.band.as_deref(), s.bandwidth_mhz), ("SCC", 1350, 295, Some("B3"), Some(15)));
+        let x = |r: Option<Reading>| r.map(|r| (r.x10, r.source));
+        assert_eq!(x(p.rsrp), Some((-934, Source::CellLocation)));
+        assert_eq!((x(p.rsrq), x(p.rssi)), (Some((-87, Source::CellLocation)), Some((-675, Source::CellLocation))));
+        assert_eq!(x(s.rsrp), Some((-942, Source::CellLocation)));
+        assert_eq!((x(s.rsrq), x(s.rssi)), (Some((-113, Source::CellLocation)), Some((-751, Source::CellLocation))));
+        // PCC SINR is the cached Signal Info one; an SCC has none.
+        assert_eq!(x(p.sinr), Some((264, Source::SignalInfo)));
+        assert_eq!(s.sinr, None);
+        // Not the PCC's row: the two carriers read different values.
+        assert_ne!(p.rsrp, s.rsrp);
+        let j = nsa_bundle("registered").json();
+        assert!(j.contains("\"sysinfo\":{\"nr\":{\"pci\":262,\"arfcn\":528030,\"endc\":true}}}"), "{j}");
+        assert_clean(&j);
+    }
+
+    #[test]
+    fn an_unmatched_carrier_is_null_never_a_neighbours_row() {
+        // The SCC's frequency row is gone: the PCC (a different EARFCN with
+        // the same PCI) must not lend its row.
+        let mut cell = fx!("nsa_scc_3_0x0043");
+        cell.tlvs.retain(|t| t.t != 0x14 && t.t != 0x28);
+        let ca = Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&cell),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            ..Inputs::default()
+        })
+        .ca
+        .unwrap();
+        assert!(ca.carriers[0].rsrp.is_some());
+        let s = &ca.carriers[1];
+        assert_eq!((s.rsrp, s.rsrq, s.rssi, s.sinr), (None, None, None, None));
+        // A same-EARFCN frequency whose cell has another PCI is no match either.
+        let mut cell = fx!("nsa_scc_3_0x0043");
+        for t in cell.tlvs.iter_mut() {
+            if t.t == 0x14 {
+                t.v[8] = 0x28; // PCI 296
+            }
+        }
+        let ca = Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&cell),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            ..Inputs::default()
+        })
+        .ca
+        .unwrap();
+        assert_eq!(ca.carriers[1].rsrp, None);
+        // A PCC whose EARFCN is not the serving cell's (mid-handover) is null too.
+        let mut pcc_moved = fx!("nsa_scc_3_0x00AC");
+        for t in pcc_moved.tlvs.iter_mut() {
+            if t.t == 0x16 {
+                t.v = 151u32.to_le_bytes().to_vec();
+            }
+        }
+        let ca = Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&fx!("nsa_scc_3_0x0043")),
+            ca: Some(&pcc_moved),
+            ..Inputs::default()
+        })
+        .ca
+        .unwrap();
+        assert_eq!(ca.carriers[0].rsrp, None);
+    }
+
+    #[test]
+    fn carrier_signal_is_registration_gated_and_range_filtered() {
+        let ca = nsa_bundle("searching").ca.unwrap();
+        for c in &ca.carriers {
+            assert_eq!((c.rsrp, c.rsrq, c.rssi, c.sinr), (None, None, None, None));
+        }
+        // Identity stays.
+        assert_eq!(ca.carriers[1].earfcn, 1350);
+        // An out-of-range reading (RSRP 0 = not measured) becomes null.
+        let mut cell = fx!("nsa_scc_3_0x0043");
+        for t in cell.tlvs.iter_mut() {
+            if t.t == 0x14 {
+                // row: pci(2) rsrq(2) rsrp(2) rssi(2) srxlev(2) after 8 header bytes
+                t.v[12] = 0;
+                t.v[13] = 0;
+            }
+        }
+        let ca = Bundle::build(&Inputs {
+            serving: Some(&fx!("r1_3_0x0024")),
+            cell: Some(&cell),
+            ca: Some(&fx!("nsa_scc_3_0x00AC")),
+            ..Inputs::default()
+        })
+        .ca
+        .unwrap();
+        let s = &ca.carriers[1];
+        assert_eq!((s.rsrp, s.rsrq.is_some(), s.rssi.is_some()), (None, true, true));
+    }
+
+    #[test]
+    fn the_ca_read_asks_for_cell_serving_and_signal_info_and_fails_only_on_00ac() {
+        let reqs: Vec<_> = Read::Ca.requests().to_vec();
+        assert_eq!(reqs, vec![(SVC_NAS, 0x00AC), (SVC_NAS, 0x0043), (SVC_NAS, 0x0024), (SVC_NAS, 0x004F)]);
+        let nsa = |svc: u32, id: u16| match (svc, id) {
+            (3, 0x0043) => fx!("nsa_scc_3_0x0043").into_result(),
+            (3, 0x00AC) => fx!("nsa_scc_3_0x00AC").into_result(),
+            _ => r1(svc, id),
+        };
+        let j = run(&nsa, Read::Ca).unwrap();
+        assert!(j.contains("\"earfcn\":1350,\"bandwidth_mhz\":15,\"pci\":295,\"active\":false,\"rsrp\":{\"value\":-94,\"x10\":-942,"), "{j}");
+        assert!(j.contains("\"type\":\"PCC\"") && j.contains("\"sinr\":{\"value\":26,\"x10\":264,\"source\":\"signal_info\"}"), "{j}");
+        // Only 0x00AC failing fails the read, and it stops there (fetch once, no extras).
+        let n = std::cell::Cell::new(0u32);
+        let no_ca = |svc: u32, id: u16| {
+            n.set(n.get() + 1);
+            if (svc, id) == (3, 0x00AC) {
+                Err(QmiError::Timeout)
+            } else {
+                r1(svc, id)
+            }
+        };
+        assert_eq!(run(&no_ca, Read::Ca).unwrap_err(), QmiError::Timeout);
+        assert_eq!(n.get(), 1);
+        // The signal parts failing leaves the identity with null signal.
+        let ca_only = |svc: u32, id: u16| if (svc, id) == (3, 0x00AC) { fx!("nsa_scc_3_0x00AC").into_result() } else { Err(QmiError::Timeout) };
+        let j = run(&ca_only, Read::Ca).unwrap();
+        assert!(j.contains("\"active\":true,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"sinr\":null"), "{j}");
+    }
+
+    #[test]
+    fn sysinfo_and_bands_reads() {
+        assert_eq!(run_r1(Read::Sysinfo).unwrap(), "{\"nr\":{\"pci\":262,\"arfcn\":528030,\"endc\":true}}");
+        let b = run_r1(Read::Bands).unwrap();
+        assert_eq!(
+            b,
+            concat!(
+                "{\"lte\":[1,2,3,4,5,7,8,12,13,14,17,18,19,20,25,26,28,29,30,32,34,38,39,40,41,42,43,46,48,66,70,71],",
+                "\"nr\":[1,2,3,5,7,8,12,13,14,18,20,25,26,28,29,30,38,40,41,48,53,66,70,71,75,77,78,79,91,92,93,94,257,258,260,261]}"
+            )
+        );
+        assert_clean(&b);
+        assert_eq!(Read::Sysinfo.requests(), &[(SVC_NAS, 0x004D)]);
+        assert_eq!(Read::Bands.requests(), &[(SVC_DMS, 0x0045)]);
+        assert!(!Read::Bundle.requests().contains(&(SVC_DMS, 0x0045)), "static data stays out of the bundle");
+        // Out-of-range NR values are the modem's sentinels.
+        let mut m = fx!("nsa_3_0x004D");
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x54 {
+                t.v = vec![0xff, 0xff];
+            }
+            if t.t == 0x60 {
+                t.v = vec![0xff; 4];
+            }
+        }
+        assert_eq!(Sys::from_codec(&nas::sys_info(&m)).json(), "{\"nr\":{\"pci\":null,\"arfcn\":null,\"endc\":true}}");
+    }
+
+    #[test]
+    fn the_bundle_fails_only_when_all_six_requests_do_and_sysinfo_is_optional() {
+        assert_eq!(Read::Bundle.requests().len(), 6);
+        assert_eq!(Read::Bundle.requests()[5], (SVC_NAS, 0x004D));
+        let no_sys = |svc: u32, id: u16| if (svc, id) == (3, 0x004D) { Err(QmiError::Timeout) } else { r1(svc, id) };
+        let j = run(&no_sys, Read::Bundle).unwrap();
+        assert!(j.ends_with(",\"sysinfo\":null}"), "{j}");
+        assert!(j.contains("\"serving\":{\"registration\":\"registered\""), "{j}");
+        let only_sys = |svc: u32, id: u16| if (svc, id) == (3, 0x004D) { r1(svc, id) } else { Err(QmiError::Timeout) };
+        let j = run(&only_sys, Read::Bundle).unwrap();
+        assert!(j.contains("\"serving\":null") && j.contains("\"sysinfo\":{\"nr\":{\"pci\":262"), "{j}");
+        // Sys info is identity: no registration gate.
+        let b = Bundle::build(&Inputs { sys_info: Some(&fx!("nsa_3_0x004D")), ..Inputs::default() });
+        assert_eq!(b.sysinfo.unwrap().nr_pci, Some(262));
+    }
+
     #[test]
     fn lte_band_falls_back_to_ca_pcc() {
         let b = Bundle::build(&Inputs {
@@ -974,6 +1324,8 @@ mod tests {
                 (2, 0x0025) => fx!("r1_2_0x0025"),
                 (2, 0x002D) => fx!("r1_2_0x002D"),
                 (2, 0x002F) => fx!("r1_2_0x002F"),
+                (2, 0x0045) => fx!("nsa_2_0x0045"),
+                (3, 0x004D) => fx!("nsa_3_0x004D"),
                 (11, 0x002F) => fx!("r1_11_0x002F"),
                 (11, 0x0047) => fx!("r1_11_0x0047"),
                 (1, 0x002A) => fx!("r1_1_0x002A"),
@@ -1136,8 +1488,13 @@ mod tests {
                     ca: Some(&m),
                     rf: Some(&m),
                     sig_info: Some(&m),
+                    sys_info: Some(&m),
                 });
                 assert_clean(&b.json());
+                let ca_read = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), sig_info: Some(&m), ..Inputs::default() });
+                assert_clean(&ca_read.ca.unwrap_or_default().json());
+                assert_clean(&Sys::from_codec(&nas::sys_info(&m)).json());
+                assert_clean(&bands_json(&dms::band_caps(&m)));
                 assert_clean(&b.signal.json());
                 let _ = b.lte_band();
                 assert_clean(&ids_json(&dms::ids(&m)));

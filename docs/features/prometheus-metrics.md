@@ -125,7 +125,7 @@ Every family is typed `gauge`. Info and stateset families carry value `1` (or `1
 | Metric | Labels | Unit / meaning |
 |---|---|---|
 | `qmanager_serving_cell_age_seconds` | none | seconds since the last `AT+QENG` reply carrying `+QENG:` lines (from `.device.serving_read_mono`) |
-| `qmanager_carrier_components_age_seconds` | none | seconds since the last `AT+QCAINFO` parse (from `.device.ca_read_mono`) |
+| `qmanager_carrier_components_age_seconds` | none | seconds since the last carrier read, from QMI or `AT+QCAINFO` (from `.device.ca_read_mono`) |
 | `qmanager_poller_tier` | `tier` = `active`/`idle`/`deep` | stateset, `1` for the current tier |
 | `qmanager_scrape_freshness` | `mode` = `adaptive`/`balanced`/`realtime` | stateset, `1` for the configured mode |
 | `qmanager_modem_reachable` | none | `1`/`0` |
@@ -156,7 +156,7 @@ Every family is typed `gauge`. Info and stateset families carry value `1` (or `1
 
 Antenna sentinels dropped (the same values `normalizeSignalValue` treats as unmeasured, see [`antenna-alignment.md`](antenna-alignment.md)): RSRP `-140` and `-32768`; RSRQ `-32768`; SINR `-20` and `-32768`.
 
-**Why the age gauges exist (D4):** without them every radio gauge looks fresh while the deep tier freezes CA data for hours. Both `.device` fields are written by the poller (`_SERVING_READ_MONO` set after a `poll_serving_cell` reply that contains `+QENG:`; `_CA_READ_MONO` after a successful `parse_ca_info`), `0` = never. A zero or future value yields no sample, so the gauge is omitted rather than reading as huge. The serving-cell age can grow even in the active and idle tiers: the RM551E sometimes answers `AT+QENG="servingcell"` with no `+QENG:` line (logged as `parse_serving_cell: no +QENG: lines in response`), and a busy broker turn keeps the last values. Seen on 2026-10-19 as a 59 s serving age against a 29 s CA age in the idle tier; that gap is the gauge doing its job.
+**Why the age gauges exist (D4):** without them every radio gauge looks fresh while the deep tier freezes CA data for hours. Both `.device` fields are written by the poller (`_SERVING_READ_MONO` set after a `poll_serving_cell` reply that contains `+QENG:`; `_CA_READ_MONO` after a successful `parse_ca_info` or a QMI carrier build, which uses the sidecar's `qmi_mono`), `0` = never. A zero or future value yields no sample, so the gauge is omitted rather than reading as huge. The serving-cell age can grow even in the active and idle tiers: the RM551E sometimes answers `AT+QENG="servingcell"` with no `+QENG:` line (logged as `parse_serving_cell: no +QENG: lines in response`), and a busy broker turn keeps the last values. Seen on 2026-10-19 as a 59 s serving age against a 29 s CA age in the idle tier; that gap is the gauge doing its job.
 
 ## Scrape-Freshness Hold
 

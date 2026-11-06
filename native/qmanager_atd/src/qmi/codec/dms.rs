@@ -7,6 +7,10 @@
 //!   standard layout, absent on an LTE-only modem)
 //! - 0x002D Get Operating Mode  TLV 0x01 (TLV 0x10 / 0x11 not decoded)
 //! - 0x002F Get Time        TLV 0x01 (TLV 0x10 / 0x11 not decoded)
+//! - 0x0045 Get Band Capability  TLV 0x12 `{count u16; count x u16}` LTE band
+//!   numbers, TLV 0x13 the same for NR (RM551E R02A01, NSA capture
+//!   2026-11-06: the LTE list equals `AT+QNWPREFCFG="lte_band"`). TLV 0x01 /
+//!   0x10 / 0x11 are legacy bitmasks and not decoded.
 
 use super::{text, Rd};
 use crate::qmi::msg::Msg;
@@ -119,6 +123,34 @@ pub fn time(m: &Msg) -> Option<DeviceTime> {
     Some(DeviceTime { ms_since_gps_epoch: count * 5 / 4, source: r.u16()? })
 }
 
+/// Most entries kept per list (a modem lists 32 LTE / 36 NR bands).
+const MAX_BANDS: usize = 128;
+
+/// Band numbers (not NAS enums) in the modem's order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BandCaps {
+    pub lte: Vec<u16>,
+    pub nr: Vec<u16>,
+}
+
+/// The declared count is bounded by what the TLV actually holds: a short
+/// list yields the entries that are there.
+fn band_list(v: &[u8]) -> Vec<u16> {
+    let mut r = Rd::new(v);
+    let mut out = Vec::new();
+    for _ in 0..r.u16().unwrap_or(0).min(MAX_BANDS as u16) {
+        match r.u16() {
+            Some(b) => out.push(b),
+            None => break,
+        }
+    }
+    out
+}
+
+pub fn band_caps(m: &Msg) -> BandCaps {
+    BandCaps { lte: m.tlv(0x12).map(band_list).unwrap_or_default(), nr: m.tlv(0x13).map(band_list).unwrap_or_default() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,9 +190,39 @@ mod tests {
     }
 
     #[test]
+    fn band_caps_fixture() {
+        let b = band_caps(&fx!("nsa_2_0x0045"));
+        assert_eq!(b.lte.len(), 32);
+        assert_eq!(&b.lte[..8], &[1, 2, 3, 4, 5, 7, 8, 12]);
+        assert_eq!(&b.lte[29..], &[66, 70, 71]);
+        assert_eq!(b.nr.len(), 36);
+        assert_eq!(&b.nr[..4], &[1, 2, 3, 5]);
+        assert_eq!(&b.nr[32..], &[257, 258, 260, 261]);
+    }
+
+    #[test]
+    fn a_band_count_larger_than_the_tlv_never_reads_past_it() {
+        let mut m = fx!("nsa_2_0x0045");
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x12 {
+                t.v.truncate(2 + 2 * 3); // declares 32, holds 3
+            }
+            if t.t == 0x13 {
+                t.v = vec![0xff, 0xff, 1, 0, 2, 0];
+            }
+        }
+        let b = band_caps(&m);
+        assert_eq!(b.lte, vec![1, 2, 3]);
+        assert_eq!(b.nr, vec![1, 2]);
+        m.tlvs.retain(|t| t.t != 0x12 && t.t != 0x13);
+        assert_eq!(band_caps(&m), BandCaps::default());
+    }
+
+    #[test]
     fn truncated_tlvs_never_panic() {
         for base in crate::qmi::codec::testfix::all() {
             for m in mangled(&base) {
+                let _ = band_caps(&m);
                 let _ = string_tlv(&m);
                 let _ = ids(&m);
                 let _ = op_mode(&m);

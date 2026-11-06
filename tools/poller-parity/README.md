@@ -23,6 +23,7 @@ there. Nothing here is installed by the product.
 | `gen_fixtures.sh [dir]` | regenerates the whole fixture corpus byte for byte (device or Git Bash) |
 | `status_parity.sh` | Phase C gate for the status.json composers: printf composer vs the jq composer (`write_cache_jq`) over synthetic scenarios, seeded random values, hostile text and the write_cache safety net; and the live 200-pair capture from the deployed poller (`arm` / `compare` / `live`) |
 | `sidecar_parity.sh` | Phase C gate for the `.env` sidecars (`ping.env`, `dns.env`, `ondemand.env`) and the `-nt`-gated watchcat / SIM state readers, in a scratch dir; also asserts the sidecar paths fork no `jq` / `date` / `touch` / `awk`. An optional 5th argument (`qmi_merge.sh`) adds the `qmi.env` gate: a valid env loads, truncated / stray-line / hostile-value / older-than-stamp envs are rejected, the overlay applies and restores, and the path forks nothing |
+| `qmi_ca_parity.sh <parse_at.sh> <qmi_merge.sh>` | Gate for the QMI carrier list (`qmi_ca_build`): the same carrier set through `parse_ca_info` and through a fake broker 0.7.0 `qmi.env` + fake QENG globals must give identical `t2_*` (an LTE SCC SINR is `0` from AT, `null` from QMI), then every gate that must fall back to `AT+QCAINFO` is flipped in turn (scan/SIM-switch flag, state, registration, age, 0.6.x sidecar, SA, PCI/EARFCN mismatch, NR ARFCN/PCI change, NR cache age, NR-CA, NR PCC). Runs under dash and BusyBox ash |
 
 ### Status composer gate (Phase C)
 

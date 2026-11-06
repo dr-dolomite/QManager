@@ -1,6 +1,6 @@
 # QMI Lane (`qmi`, QMI sidecars)
 
-The broker `qmanager_atd` (0.6.2; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Data Used is a third consumer: the poller's `data_used.sh` reads the `qmi_wds_*` keys of `qmi.env` ([`data-used.md`](data-used.md)). Nothing else calls `qmi` or reads the sidecars yet.
+The broker `qmanager_atd` (0.7.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Data Used is a third consumer: the poller's `data_used.sh` reads the `qmi_wds_*` keys of `qmi.env` ([`data-used.md`](data-used.md)). Since 0.7.0 the poller is also a `qmi` caller: it builds the LTE carrier list from the sidecar and skips `AT+QCAINFO` when that list is usable ([Carrier list from QMI](#carrier-list-from-qmi-broker-070)), and its boot fallbacks read `qmi rev ids` and `qmi bands`.
 
 Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Field verdicts behind the table below: [`../research/qmi-phase0-results.md`](../research/qmi-phase0-results.md), corrected for NR by the full NAS sweep in [`../research/qmi-nr-sweep.md`](../research/qmi-nr-sweep.md) (2026-10-29). Design: [`../plans/2026-10-22-qmi-phase1-broker-architecture.md`](../plans/2026-10-22-qmi-phase1-broker-architecture.md).
 
@@ -10,10 +10,10 @@ Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Fi
 |---|---|
 | Client | `/usr/bin/qmi` → `qmanager_atd` (`at_qmi_link`; always a client) |
 | Verb / reply | `QMI <nbytes> <sent_ms>\n<NUL-joined reads>` → `RES <0\|1> <n>\n<json>`; cap 1 KB; answered on the reader thread |
-| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1` (0.4.0 adds `live=1`; 0.5.0 adds nothing); callers gate on both |
+| Capability | `/var/run/qmanager_atd.proto` has `proto=3` and `qmi=1` (0.4.0 adds `live=1`; 0.5.0 to 0.7.0 add nothing); callers gate on both |
 | Signal config | NAS `0x006C` (Config Signal Info v2), sent by the broker only (`BROKER_CONFIG`); state `qmi_sig_config` in `/tmp/qmanager_qmi.json`. See [Signal config hold](#signal-config-hold-nas-0x006c-broker-050). |
-| Reads | `serving signal cell ca rf ids rev opmode time card slots profiles dsd`, plus `bundle` (alone) |
-| Env sidecar | `/var/run/qmanager/qmi.env` (dir `0700`; sourced by the poller's `qmi_merge.sh`) |
+| Reads | `serving signal cell ca rf ids rev opmode time card slots profiles dsd sysinfo bands`, plus `bundle` (alone) |
+| Env sidecar | `/var/run/qmanager/qmi.env` (dir `0700`; sourced by the poller's `qmi_merge.sh`; 61 names since 0.7.0) |
 | JSON snapshot | `/tmp/qmanager_qmi.json` (for CGIs) |
 | Live lease | stamps `/var/run/qmanager/qmi_live_{aim,watch}` written by the lease CGI; see [`live-signal.md`](live-signal.md). The Phase 1 `/tmp/qmanager_qmi_live` lease is retired. |
 | Code | `native/qmanager_atd/src/{qmi/,daemon/qmi_lane.rs,daemon/qmi_snapshot.rs,client/qmi.rs}` |
@@ -28,12 +28,12 @@ Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Fi
 
 ## Allow-list
 
-Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the trust boundary; `Registry::request` refuses anything else before it reaches a socket (`not_supported`). Exactly 18 read-only Get pairs:
+Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the trust boundary; `Registry::request` refuses anything else before it reaches a socket (`not_supported`). Exactly 19 read-only Get pairs (18 before 0.7.0):
 
 | Service | Messages |
 |---|---|
 | NAS | `0x0020` Signal Strength, `0x0024` Serving System, `0x0031` RF Band Info, `0x0034` System Selection Preference, `0x0043` Cell Location Info, `0x004D` Sys Info, `0x004F` Signal Info, `0x005A` Tx Rx Info, `0x00AC` LTE CPHY CA Info |
-| DMS | `0x0022` Model, `0x0023` Revision, `0x0025` IDs, `0x002D` Operating Mode, `0x002F` Time |
+| DMS | `0x0022` Model, `0x0023` Revision, `0x0025` IDs, `0x002D` Operating Mode, `0x002F` Time, `0x0045` Get Band Capability (0.7.0, user-approved 2026-11-06) |
 | UIM | `0x002F` Card Status, `0x0047` Slots Status |
 | WDS | `0x002A` Profile List |
 | DSD | `0x0024` System Status |
@@ -41,7 +41,7 @@ Enforced inside the daemon (`qmi/allow.rs`) because the broker socket is the tru
 - **NAS `0x0003` Indication Register is internal only** (`INTERNAL_ONLY`, reachable through the registry's own API, never from a request). It is per-client state on the daemon's socket, replayed after a rebuilt socket. Nothing calls it in Phase 1.
 - **Config Signal Info v2 (NAS `0x006C`) is never client-allowed.** It is a config write, held by the broker itself (see [Signal config hold](#signal-config-hold-nas-0x006c-broker-050)). It sits in `BROKER_CONFIG` only, never in `CLIENT_ALLOWED` or `INTERNAL_ONLY`, so the `QMI` verb, `qcmd` and the in-process fallback client can never send it.
 - **WDS packet stats are broker-only (0.6.0).** `0x0024` (Get Packet Statistics) answers `0x0046` (invalid client / no session) for a client that is not bound to the data call, which is what Phase 0 saw. The broker's own bound clients can read it, so it sits in `BROKER_READ`, with the bind messages in `BROKER_CONFIG`; none are in `CLIENT_ALLOWED` or `INTERNAL_ONLY`, so the `QMI` verb, `qcmd` and the fallback client can never send them. WDS `0x002D` (current settings) stays excluded. See [WDS packet statistics](#wds-packet-statistics-broker-060).
-- Four allow-listed messages (NAS `0x0020`, `0x0034`, `0x004D`, `0x005A`) are not used by any named read. A client can only run the named reads, never an arbitrary `(service, message)`.
+- Three allow-listed messages (NAS `0x0020`, `0x0034`, `0x005A`) are not used by any named read. NAS `0x004D` (`sysinfo`, `bundle`) and DMS `0x0045` (`bands`) are used since 0.7.0. A client can only run the named reads, never an arbitrary `(service, message)`.
 
 ### WDS packet statistics (broker 0.6.0)
 
@@ -65,7 +65,7 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 
 ## Reads and envelope
 
-`qmi <read> [<read>...]` prints one JSON line; rc 0 ok, rc 1 failure. Up to 16 arguments; repeats are dropped; `bundle` must be alone (its keys `serving`, `signal`, `cell`, `ca`, `rf` become `data`'s own keys).
+`qmi <read> [<read>...]` prints one JSON line; rc 0 ok, rc 1 failure. Up to 20 arguments (16 before 0.7.0); repeats are dropped; `bundle` must be alone (its keys `serving`, `signal`, `cell`, `ca`, `rf` become `data`'s own keys).
 
 ```json
 {"v":1,"ok":true,"mono_ms":123456,"ssr_count":0,"data":{"serving":{...},"ca":{...}}}
@@ -81,8 +81,9 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | `command_failed` | Any other QMI failure |
 
 - **Partial failure:** `data` has one key per requested read. A failed read is `{"error":"<word>"}` in its slot and the envelope stays `ok:true` while at least one read succeeded; `ok:false` (first read's error) only when every read failed. Consumers needing all reads check each slot.
+- **`sysinfo` and `bands` (0.7.0).** `sysinfo` is NAS `0x004D` and returns `{"nr":{"pci","arfcn","endc"}}` from TLVs `0x54` (u16 PCI), `0x60` (u32 ARFCN) and `0x4E` (EN-DC flag). It is identity, so it is not registration-gated. `bands` is DMS `0x0045` and returns `{"lte":[..],"nr":[..]}` of plain band numbers (TLVs `0x12` and `0x13`: a u16 count, then u16 band numbers). It reports hardware capability, not the SIM's policy set. `bands` is not part of `bundle`.
 - **`mono_ms` is `CLOCK_MONOTONIC` milliseconds**, the clock of `sent_ms`. It is **not** the clock of the sidecar's `qmi_mono` (below).
-- `bundle` = serving + cell + CA + RF + Signal Info (`0x004F`) in one round trip (5 requests). The Signal Info request is optional: the bundle fails only if all five fail. Its `signal` block carries LTE SINR and NR RSRP/RSRQ/SINR from Signal Info, live while the signal config is held (0.5.0) and cached otherwise. The `signal` read asks the same three requests (serving, cell, Signal Info).
+- `bundle` = serving + cell + CA + RF + Signal Info (`0x004F`) + Sys Info (`0x004D`, since 0.7.0) in one round trip (6 requests). Each request is optional: the bundle fails only if all six fail. Its `signal` block carries LTE SINR and NR RSRP/RSRQ/SINR from Signal Info, live while the signal config is held (0.5.0) and cached otherwise. The `signal` read asks the same three requests (serving, cell, Signal Info).
 - `ssr_count` in a client's in-process fallback is its own fresh registry's (always 0). Only the daemon's counter says anything about SSRs.
 
 ## Field coverage (RM551E, Phase 0)
@@ -92,21 +93,22 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | LTE PCI, EARFCN, TAC, cell ID, band, bandwidth | GO | Cell Location `0x0043` + RF Band `0x0031`. Band/bandwidth are the RF entry on the serving EARFCN, else the first LTE entry, else the CA PCC. `cell` also gives eNodeB id, sector, MCC/MNC (exact digit strings). |
 | Registration, RAT, PS/CS attach | GO | Serving System `0x0024`; also gates the signal fields. |
 | LTE CA (PCC + SCCs: EARFCN, PCI, band, bandwidth, active) | GO | `0x00AC`. Count is at least 1 when LTE is up. SCC state 1 = configured, 2 = activated (`active`). **NR SCC is not in this message.** |
-| LTE per-carrier RSRP/RSRQ/RSSI (PCC + SCCs) | candidate, **not decoded** | `0x0043` TLV `0x13` (PCC) and TLV `0x14` (one entry per SCC frequency, join on EARFCN + PCI from `0x00AC`). Equal to QCAINFO after truncation to whole dB on 30/30 pairs (2026-10-29, one SCC). See [`../research/qmi-ca-per-carrier.md`](../research/qmi-ca-per-carrier.md). |
+| LTE per-carrier RSRP/RSRQ/RSSI (PCC + SCCs) | GO (0.7.0) | `0x0043` TLV `0x13` (PCC serving row) and TLV `0x14` (one entry per SCC frequency; the u32 EARFCNs of TLV `0x28` override when the counts match), joined on (EARFCN, PCI) against `0x00AC`. Whole dB after truncation matched QCAINFO on 30/30 pairs (2026-10-29, one SCC), and on the 2026-11-06 paired run 55/60 PCC and 9/10 SCC (see [Validation](#validation)). See [`../research/qmi-ca-per-carrier.md`](../research/qmi-ca-per-carrier.md). |
 | LTE RSRP | GO, live | Serving row of `0x0043` (0.1 dB), source `cell_location`. |
 | LTE RSRQ, RSSI | partial, live | Different rounding/averaging than AT. |
 | LTE SINR | live while held (0.5.0) | Signal Info `0x004F`, source `signal_info`. Cached until the signal config is held. Matched AT on the device at 22.8-26.0 dB only; low values not yet compared (see the status table below). |
 | NR ARFCN (NSA) | GO | `0x0043` TLV `0x2E`; also `0x004D` TLV `0x60` (u32). |
 | NR RSRP/RSRQ/SINR (NSA) | live while held (0.5.0) | Signal Info. The 60-83 % agreement with AT was measured on the cached values (Phase 0), not re-measured with the config held. NR RSRP is the **mean of the NR RX chains**, not QENG's strongest chain. |
-| NR PCI (NSA) | candidate, **not decoded** | `0x004D` Sys Info TLV `0x54` (u16) matched QENG's NR PCI on 30/30 reads (2026-10-29), but with one cell only, so tracking a change is unproven. `0x0043` TLV `0x2F` stays absent in NSA. The broker does not read `0x004D`, so `cell.nr.pci` is `null` today. |
+| NR PCI (NSA) | GO in NSA (0.7.0) | `0x004D` Sys Info TLV `0x54` (u16), read by `sysinfo` and the bundle. Matched QENG's NR PCI on 60/60 reads (2026-11-06, one cell). `0x0043` TLV `0x2F` stays absent in NSA. A PCI change across a handover is still unproven. |
 | NR band | not available | No QMI TLV carries it (`0x0031` lists only the LTE anchor, `0x004D` has no band). Derivable from the NR ARFCN with a band table. |
 | Per-antenna RSRP/RSRQ/SINR | not available | `0x005A` answers `QMI_ERR_NOT_SUPPORTED` on this firmware. Stays AT. Outside QMI, DIAG DCI carries LTE 4-chain and NR 2-chain values (research only, [`../research/diag-dci-nr.md`](../research/diag-dci-nr.md)). |
 | LTE timing advance | not available | No TLV tracked AT consistently. Stays AT (on-demand radio details). |
 | WDS packet stats | GO (0.6.0, broker-only) | Needs a client bound to the data call; the broker binds its own (above). Matches `QCMAP_CLI` within one read. Not reachable by the `qmi` verb. |
 | WDS current settings | not available | Needs data-session ownership; `0x002D` stays excluded. |
+| LTE band capability | GO (0.7.0) | DMS `0x0045` TLVs `0x12` (LTE) and `0x13` (NR), read by `bands`. The LTE list equals AT `lte_band` (32 bands, 2026-11-06). Values are band numbers, not NAS enums. |
 | IDs, revision, op mode, time, card, slots, profiles, DSD | GO candidates | Answer in 0.1-0.6 ms; not compared field by field. |
 
-In NSA, QMI cannot replace `QENG servingcell` or `QCAINFO` today: it fills the gaps where AT is absent (idle/deep tiers, scan and SIM-switch suppression, busy streaks). For `QCAINFO`, the only field with no QMI source found is the NR bandwidth; the per-carrier LTE signal and the NR PCI are candidates the broker does not decode yet (2026-10-29).
+In NSA, QMI cannot replace `QENG servingcell`, and the NR row of `QCAINFO` stays AT (QMI has no NR bandwidth, and its NR signal disagrees with QCAINFO's NR values). Since 0.7.0 QMI supplies the LTE rows of `QCAINFO` (identity, per-carrier signal, PCC SINR); the NR row still comes from the last AT parse ([Carrier list from QMI](#carrier-list-from-qmi-broker-070)). Before 0.7.0 QMI only filled the gaps where AT was absent (idle and deep tiers, scan and SIM-switch suppression, busy streaks).
 
 ### Status and how to validate later
 
@@ -114,16 +116,16 @@ Fields that could not be validated on the device yet. Until the condition occurs
 
 | Field | Verdict now | What the code does today | Condition to validate | Recipe |
 |---|---|---|---|---|
-| NR PCI / band (SA) | Untested; absent in NSA | The `0x0043` NR5G serving cell (TLV `0x2F`) is decoded when present: `cell.nr.pci` is `null` in NSA and nothing NR-identity is published in the live file or the poller sidecar. The poller and the dashboard keep AT. | The modem camped in 5G SA (needs the user's OK to switch mode). | 1. `qmi cell` and `qcmd 'AT+QENG="servingcell"'` together, 30 reads. 2. Compare `cell.nr` PCI, TAC and cell id with the QENG SA row. 3. Derive band and ARFCN only if `cell.nr` carries them; if `pci` stays `null`, record NO-GO for `0x0043` in SA. 4. Dump `0x004D` beside it: TLV `0x54` (PCI), `0x50` (likely NR TAC) and `0x5E` (u64, possible NR cell ID) are the SA candidates. |
+| NR PCI / band (SA) | Untested; absent in NSA | The `0x0043` NR5G serving cell (TLV `0x2F`) is decoded when present: `cell.nr.pci` is `null` in NSA and NR identity is in the poller sidecar only (`qmi_nr_*`, from `0x004D`, since 0.7.0), not in the live file. The poller and the dashboard keep AT. | The modem camped in 5G SA (needs the user's OK to switch mode). | 1. `qmi cell` and `qcmd 'AT+QENG="servingcell"'` together, 30 reads. 2. Compare `cell.nr` PCI, TAC and cell id with the QENG SA row. 3. Derive band and ARFCN only if `cell.nr` carries them; if `pci` stays `null`, record NO-GO for `0x0043` in SA. 4. Dump `0x004D` beside it: TLV `0x54` (PCI), `0x50` (likely NR TAC) and `0x5E` (u64, possible NR cell ID) are the SA candidates. |
 | LTE timing advance | Unconfirmed; no TLV tracked AT | Not decoded (`nas.rs`: "timing advance (no TLV tracked AT consistently)"). On-demand radio details keep `QNWCFG lte_time_advance`. | A moving device, so TA takes at least 3 distinct values. | 1. Raw-dump `0x0043` with the Phase 0 spike (`docs/research/qmi-spike/`) every 2 s while the device moves. 2. Log TLV `0x2D` (candidate) and `0x1E` beside `AT+QNWCFG="lte_time_advance"`. 3. Adopt a TLV only if it tracks AT on every change. |
 | LTE SINR at low values | Live and matched with AT at 22.8-26.0 dB only | `0x004F` SINR passes through at 0.1 dB (`i16::MIN` becomes `null`). The dashboard overlay reads it through `normalizeSignalValue`, so -20.0 dB (the AT floor sentinel) is `null` and the 2 s AT value stands. | A poor-signal location (LTE SINR below 10 dB, ideally near the floor). | 1. Repeat the paired run in the [QMI vs AT SINR](live-signal.md#qmi-vs-at-sinr-2026-10-23-broker-050) section (`qmi signal` vs `QCAINFO` RSSNR) with 90 reads. 2. Check bias within 1.5 dB at 0 to 10 dB. 3. Check what QMI reports at the floor and whether -20.0 is a real value or a sentinel. |
-| `0x00AC` under multi-carrier LTE CA | Decoded; fixture-tested, not seen with LTE SCCs | One PCC plus SCCs from the PCC/SCC lists. `0x4A` (info unavailable, seen in EN-DC) becomes `ca: null` in the live file. No consumer reads `ca` yet. | A CA-capable LTE cell with at least one LTE SCC. | 1. `qmi ca` with `qcmd 'AT+QCAINFO'`, 30 reads. 2. Match each SCC's band, EARFCN, PCI, bandwidth and `active` (state 2). 3. Check the count on a CA drop and re-add. |
-| NR PCI in NSA (`0x004D` TLV `0x54`) | Candidate; agrees 30/30 on one cell | Not read: no named read sends `0x004D` and no codec decodes it. | An NR PCI change (handover or re-add), and an LTE-only moment with EN-DC released. | Recipe in [`qmi-nr-sweep.md`](../research/qmi-nr-sweep.md#open-items). Adopt only if every AT PCI change shows in `0x54` within one sample and `0x54` is absent with no NR leg. |
+| `0x00AC` under multi-carrier LTE CA | Seen live (2026-11-06) | One PCC plus SCCs from the PCC/SCC lists. Live on a B1 PCC with B3 and B41 SCCs at PCI 295 on distinct EARFCNs, read through the poller. `0x4A` (info unavailable, seen in EN-DC) becomes `ca: null` in the live file. The poller reads the sidecar carrier keys (0.7.0). | A CA drop and re-add with SCCs. | 1. `qmi ca` with `qcmd 'AT+QCAINFO'` over a drop and re-add. 2. Match the count and each SCC's EARFCN and PCI. 3. Check that the poller's `ca_change` events match the AT path. |
+| NR PCI in NSA (`0x004D` TLV `0x54`) | Decoded (0.7.0); 60/60 agreement on one cell | `sysinfo` and the sidecar `qmi_nr_pci`. Not yet used by the poller: its NR refresh gate compares QENG's NR PCI. | An NR PCI change (handover or re-add), and an LTE-only moment with EN-DC released. | Recipe in [`qmi-nr-sweep.md`](../research/qmi-nr-sweep.md#open-items). Adopt it into the gate only if every AT PCI change shows in `0x54` within one sample and `0x54` is absent with no NR leg. |
 | NR SCC in the CA list | NO-GO via `0x00AC`; one candidate | `0x00AC` never carries NR carriers. The NR leg stays on AT (`QCAINFO`, `t2_carrier_components`). The 2026-10-29 sweep of all 229 NAS messages found one NR carrier list, `0x00D2` TLV `0x1C` (counted u32 ARFCNs, one entry in NSA). | NR-CA (two NR carriers on air). | 1. `0x00D2` beside `qcmd 'AT+QCAINFO'`, 30 reads. 2. Match the list against the `QCAINFO` NR rows. 3. Until it matches, keep AT. |
 | NAS `0x0003` push (`0x0051`) | Built, unused | The registry stores the indication register and replays it after the signal config on every rebuilt socket. The sampler polls `0x004F` instead of consuming pushes. | Only if a push feed is wanted later (to cut polling). | 1. With the config held, count `0x0051` per minute on the broker's own client (Phase 0 saw 53-71). 2. Compare push-to-AT agreement with the polled value. 3. Switch the sampler only if it saves CPU without losing freshness. |
 | NR5G `QSCAN` row | Not evaluated; QMI has no scan list | The neighbour list (`0x0043` TLV `0x14`) is not decoded. Cell Scanner and the NR5G scan rows stay on `AT+QSCAN`. | A user-approved scan (it runs about 180 s and suspends the serving fields). | 1. Dump `0x0043` TLV `0x14` with the spike during a scan. 2. Compare cell ids and levels with the `AT+QSCAN` NR rows. 3. Decode only if it matches; otherwise keep AT. |
 
-**Null-safety audit (2026-10-25).** Read, no fix needed: `qmi_overlay_apply` (rejects non-integer or empty PCI, EARFCN, RSRP, RSRQ, RSSI and refuses to merge when AT knows only an NR PCI, so SA stays AT); `render_sample` in `live.rs` (every serving, SINR, NR and CA field is `opt_*` and `ca` is `null`, pinned by the `reg:null` and `reg:false` tests); `types/live-signal.ts` (all fields nullable, `sampleDb` maps `undefined`/non-finite to `null`); the dashboard overlay (`pci`/`earfcn` null disables it, and each live value falls back to the snapshot per field); `useLiveLead` (no RSRP means the console renders as before). The only other reader of the JSON sidecar is the dev-only SSR watcher, which uses `// "none"`. Nothing reads `ca`, `cell.nr` or TA yet.
+**Null-safety audit (2026-10-25).** Read, no fix needed: `qmi_overlay_apply` (rejects non-integer or empty PCI, EARFCN, RSRP, RSRQ, RSSI and refuses to merge when AT knows only an NR PCI, so SA stays AT); `render_sample` in `live.rs` (every serving, SINR, NR and CA field is `opt_*` and `ca` is `null`, pinned by the `reg:null` and `reg:false` tests); `types/live-signal.ts` (all fields nullable, `sampleDb` maps `undefined`/non-finite to `null`); the dashboard overlay (`pci`/`earfcn` null disables it, and each live value falls back to the snapshot per field); `useLiveLead` (no RSRP means the console renders as before). The only other reader of the JSON sidecar is the dev-only SSR watcher, which uses `// "none"`. The JSON `ca`, `cell.nr` and TA are still read by no consumer. Since 0.7.0 the poller reads the `qmi_*` carrier keys of the sidecar, not the JSON `ca`.
 
 ## Freshness rules
 
@@ -173,7 +175,7 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 
 | File | For | Contents |
 |---|---|---|
-| `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 42 `name='value'` lines, then `qm_sidecar_end='1'` |
+| `/var/run/qmanager/qmi.env` | the poller (`qmi_merge.sh`) | 61 `name='value'` lines (42 before 0.7.0), then `qm_sidecar_end='1'` |
 | `/tmp/qmanager_qmi.json` | CGIs | `{"v":1,"qmi_mono","qmi_state","qmi_ssr_count","qmi_sig_config","registered","data":<bundle>,"wds":{"ok","rx_bytes","tx_bytes","mux"}}` |
 
 **Env contract** (same as `ping.env` / `ondemand.env`, validated and sourced by `cq_env_source`):
@@ -181,7 +183,8 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 - Names come from a compiled list, all `qmi_`-prefixed (never the poller's `lte_*`, `t2_*`, `nr_*`).
 - Every value is an integer or empty, except `qmi_state` (`up|down|unavailable`). Never a float, `N/A` or `null`. The poller's `_qmi_env_source` is stricter than `cq_env_source`: it accepts only `qmi_*` assignments whose line is made of `[A-Za-z0-9_='-]`, so keep every value inside that set.
 - Names (in file order): `qmi_mono`, `qmi_state`, `qmi_ssr_count`, `qmi_registered` (`1`/`0`, empty = unknown), `qmi_lte_{pci,earfcn,tac,cell_id,band,bw_mhz,rsrp,rsrq,rssi}`, `qmi_ca_count`, `qmi_pcc_{pci,earfcn,band,bw_mhz}`, `qmi_scc{1..4}_{pci,earfcn,band,bw_mhz,active}`. Bands are the LTE number (`41`, not `B41`); signals are whole dBm/dB, empty unless registered. Only the PCC and up to four SCCs are published; a fifth SCC is dropped.
-- **WDS keys (0.6.0)** are the last four names, appended before `qm_sidecar_end`: `qmi_wds_ok` (`1`, `0` or empty), `qmi_wds_rx_bytes`, `qmi_wds_tx_bytes` (both empty unless ok is 1), `qmi_wds_mux`. They are **current-cycle only** (not republished from an older read) and blank when `qmi_state` is `down` or `unavailable`. The JSON gains a trailing `"wds":{"ok","rx_bytes","tx_bytes","mux"}` object. The capability file is unchanged (`proto=3`, `qmi=1`, `live=1`); detect 0.6.0 by the keys.
+- **WDS keys (0.6.0)** follow the SCC names, before `qm_sidecar_end` (the 0.7.0 keys come after them): `qmi_wds_ok` (`1`, `0` or empty), `qmi_wds_rx_bytes`, `qmi_wds_tx_bytes` (both empty unless ok is 1), `qmi_wds_mux`. They are **current-cycle only** (not republished from an older read) and blank when `qmi_state` is `down` or `unavailable`. The JSON gains a trailing `"wds":{"ok","rx_bytes","tx_bytes","mux"}` object. The capability file is unchanged (`proto=3`, `qmi=1`, `live=1`); detect 0.6.0 by the keys.
+- **0.7.0 keys** come last, after the WDS keys: `qmi_pcc_{rsrp,rsrq,rssi,sinr}`, `qmi_scc{1..4}_{rsrp,rsrq,rssi}` and `qmi_nr_{pci,arfcn,endc}` (19 names). Carrier signal is whole dB, **truncated toward zero** (what `AT+QCAINFO` prints; the JSON `value` fields round). An SCC's signal is empty unless its own (EARFCN, PCI) row matched, and SCC SINR is not published. `qmi_nr_pci` and `qmi_nr_arfcn` are identity, so they are not registration-gated; the ARFCN falls back to the cell location's. `qmi_nr_endc` is `1` or `0`. The capability file is unchanged; the poller detects 0.7.0 by `qmi_pcc_rsrp`.
 - **A second env reader.** Besides `qmi_merge.sh`, the poller's `data_used.sh` reads this file. It **parses the lines and never sources them**, so it cannot clobber the `qmi_*` globals the overlay owns. It requires `qm_sidecar_end`, `qmi_state=up`, `qmi_wds_ok=1` and a `qmi_mono` within 30 s of `/proc/uptime`.
 
 **Semantics:**
@@ -197,6 +200,25 @@ The sampler thread (`qmi-sampler`, `daemon/qmi_snapshot.rs`) reads the bundle ev
 **Device cost (0.4.0 re-measure, 2026-10-22, RM551E):** the sampler thread adds +0.80 % of one core under an `aim` lease, and uhttpd + CGI + broker together come to 2.55 % of one core, with 5.00 Hz delivered and no samples lost. The `qmi.env` cadence under a lease is covered by unit and thread tests only and is not yet checked on the device; see [`live-signal.md`](live-signal.md#device-gate-2026-10-22-rm551e-broker-040).
 
 **Lifecycle.** `init.d` `service_stopped` (after the broker is gone) and `uninstall.sh` remove the env (+ `.new`), JSON (+ `.new`), the old lease path and the live-signal files ([`live-signal.md`](live-signal.md#lifecycle)). Files persist across a daemon crash with stale content; judge freshness by `qmi_mono` and `qmi_state`, never by existence.
+
+## Carrier list from QMI (broker 0.7.0)
+
+Since 0.7.0 the broker publishes the per-carrier signal and the NR identity that the carrier list needs, so the poller can build `network.carrier_components` from QMI on AT-due cycles and skip `AT+QCAINFO`. The poller side (gates, NR cache, `device.ca_source`) is in [`adaptive-polling.md`, Invariant 14](adaptive-polling.md#14-the-carrier-list-comes-from-qmi-on-at-due-cycles-with-an-at-fallback). The build is `qmi_ca_build` in `scripts/usr/lib/qmanager/qmi_merge.sh`.
+
+| Carrier field | Source |
+|---|---|
+| Band, EARFCN, PCI, bandwidth, active | `0x00AC` (as before) |
+| PCC RSRP / RSRQ / RSSI | `0x0043` TLV `0x13`, serving row, joined on (EARFCN, PCI) |
+| SCC RSRP / RSRQ / RSSI | `0x0043` TLV `0x14`, per frequency and cell, joined on (EARFCN, PCI) |
+| PCC SINR | `0x004F` cached `signal_info` (as before) |
+| SCC SINR | None: always `null` (AT reports 0 for LTE SCC SINR on this firmware) |
+| NR row (NSA) | None: the last successful `AT+QCAINFO` NR row, kept whole |
+
+- **Join.** Each carrier takes only its own row. No match is `null`, never a neighbour's value. Signal is registration-gated like `signal`.
+- **Fallback.** Any failed gate runs the unchanged `AT+QCAINFO` read. A broker below 0.7.0 has no `qmi_pcc_rsrp` key, so the poller takes the AT path on it.
+- **Sources.** `device.ca_source` is `qmi` (LTE only), `mixed` (LTE from QMI plus the cached NR row) or `at`.
+
+> ⚠️ WARNING: Do not publish a per-carrier signal without the (EARFCN, PCI) join. **Why:** one PCI can appear on two frequencies in the same cell (the PCC and an SCC can share it), so a PCI-only match shows the other carrier's signal under this carrier's name.
 
 ## Daemon limits (cap, deadline, circuit)
 
@@ -214,11 +236,12 @@ These keep a silent QMI service from starving AT of reader threads. Constants: `
 
 ## Invariants a future editor must not break
 
-- **Keep the client allow-list read-only and exact (18 pairs).** The test `exactly_the_read_only_gets` pins it. Adding a write, a client path to `0x006C`, or a client path to `0x0003` needs explicit approval. `0x006C` stays in `BROKER_CONFIG` only. The WDS binds stay in `BROKER_CONFIG` and `0x0024` in `BROKER_READ`; the test pins both lists and that they are disjoint from the client list.
+- **Keep the client allow-list read-only and exact (19 pairs).** The test `exactly_the_read_only_gets` pins it. DMS `0x0045` (0.7.0) is the most recent addition. Adding a write, a client path to `0x006C`, or a client path to `0x0003` needs explicit approval. `0x006C` stays in `BROKER_CONFIG` only. The WDS binds stay in `BROKER_CONFIG` and `0x0024` in `BROKER_READ`; the test pins both lists and that they are disjoint from the client list.
 - **Never send WDS `0x0086` (Reset Statistics).** Data Used relies on a monotonic counter.
 - **The WDS sum never shrinks.** A family that read ok and then fails (not `0x000F`) forces `ok=0` for the cycle rather than dropping its bytes.
 - **Keep the signal config daemon-only and compiled-in.** Only the daemon lane calls `hold_config()`, with the seven delta TLVs from `sig_config_tlvs()`. Replay order is config first, then `ind_reg`.
 - **QMI never goes through the AT lane or the modem lock.** That independence is the feature.
+- **A per-carrier signal is the carrier's own row or `null`.** Join on (EARFCN, PCI) only. **Why:** the PCC and an SCC can share a PCI on different EARFCNs, so a PCI-only match would show another cell's signal under the carrier's name.
 - **Signal values stay gated by registration**, and cached (`signal_info`) values stay tagged.
 - **Sidecar contract:** `qmi_` prefix, integer-or-empty values, `qm_sidecar_end` last, single-quoted. A float or `N/A` breaks the poller's `jq --argjson` fallback composer; a bad line makes `cq_env_source` reject the whole file.
 - **The env lives in the verified root-only dir.** Do not move it back to `/tmp`.
@@ -251,13 +274,27 @@ Lifecycle on device (2026-10-22, init.d + at_engine.sh from development-home): s
 
 Host: `cargo test --release` 222 tests at 0.3.0 (236 with the since-removed `poll` feature); 267 at 0.6.0, including fake-QRTR tests for demux, timeout, SSR and allow-list refusal.
 
+### Broker 0.7.0 (2026-11-06)
+
+Run on the RM551E in NSA (B1 PCC at PCI 295, N41 SCC), broker 0.7.0 with the signal config held. Fixtures are the live captures in `native/qmanager_atd/tests/fixtures/qmi/nsa_*`. The Phase 0 spike (`docs/research/qmi-spike/`) reads `dms:0045`. `cargo test --release` runs 305 tests.
+
+| Check | Result |
+|---|---|
+| Paired run, 60 reads at 2 s (B1 PCC + N41; LTE B3 SCC in 10 reads) | PCC signal equal to QCAINFO in 55/60 (the misses are 1-3 dB in RSSI or RSRQ, mostly timing). SCC signal 9/10. |
+| NR PCI, `0x004D` TLV `0x54` | 60/60 equal to QENG's NR PCI. Still unproven across a cell change. |
+| PCC SINR, `0x004F` | Mean difference 0.3 dB (±3.6 dB) from QCAINFO. |
+| NR SINR, `0x004F` | About 9 dB above QCAINFO's NR SINR over 20 pairs. NR RSRP within 2 dB, NR RSRQ equal. QCAINFO's NR row held one value for 36 s. |
+| LTE band list, DMS `0x0045` | Equals AT `lte_band` (32 bands). Values are band numbers. |
+| 3-carrier CA, B1 + B3 + B41 (all PCI 295, distinct EARFCNs) | Each SCC got its own signal through the poller. |
+| Poller carrier source, NSA, 4 min active | 109 cycles built from QMI (`mixed`), 11 read `AT+QCAINFO`. |
+
 ## Gotchas for Phase 2 consumers
 
 - **`serving.mcc` / `serving.mnc` are integers.** The leading zero is lost (`"mnc":3` for `"03"`), so a 2- and 3-digit MNC cannot be told apart from `serving`. Read MCC and MNC from `cell.lte.mcc` and `cell.lte.mnc`, which are strings.
-- **In NSA, `serving.rats` is `["lte"]`.** Do not detect NSA from it. In the broker's reads the NR leg shows only as `cell.nr.arfcn` and `signal.nr` (live while the config is held). On the modem, `0x004D` also carries the NR PCI (TLV `0x54`, candidate) and an EN-DC availability flag (TLV `0x4E`, inferred), but no named read decodes `0x004D` yet.
+- **In NSA, `serving.rats` is `["lte"]`.** Do not detect NSA from it. In the broker's reads the NR leg shows only as `cell.nr.arfcn` and `signal.nr` (live while the config is held). Sys Info `0x004D` carries the NR PCI (TLV `0x54`) and the EN-DC flag (TLV `0x4E`); since 0.7.0 `sysinfo` and the bundle's `sysinfo` key decode them (`nr.pci`, `nr.endc`).
 - **During a network scan the QMI serving EARFCN follows the scanned carriers.** Mid-scan the serving row showed 38927/39125 at RSRP −95 on 47 samples. Do not treat that as a handover; gate on the long/scan flag (`scan_in_progress`).
 - **Timing on BusyBox.** `date` has no `%N`. Read `/proc/timer_list` (`now at N nsecs`) with shell builtins for a monotonic microsecond clock, measure the exec floor (`qmi --version`) alongside, and say whether a figure includes process spawn. See `tools/atd-parity/parity.sh` for the helper.
 
 ## Phase 2 (built) and what is left
 
-Built: the poller gap-fill and `lte.source` / `device.qmi_*` keys ([`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), the live lease and static feed ([`live-signal.md`](live-signal.md)), and the Antenna Alignment / dashboard consumers. Decided against (2026-10-25, [`../plans/2026-10-25-qmi-ca-gap-fill.md`](../plans/2026-10-25-qmi-ca-gap-fill.md)): CA gap-fill and `network.ca_source` (QCAINFO already runs every AT-due cycle, deep-tier CA is read by no one without waking the poller, and `device.ca_read_mono` already labels its age). Not built (separate approval): the `radio_details.sh` network-type gate (keeps its QENG crash guard), the cell-scanner serving-cell strip, per-antenna live values, any UI reading of the live SINR/NR fields (published since 0.5.0, see [`live-signal.md`](live-signal.md)), and NAS `0x0003` push sampling. Design: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md).
+Built: the poller gap-fill and `lte.source` / `device.qmi_*` keys ([`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), the live lease and static feed ([`live-signal.md`](live-signal.md)), and the Antenna Alignment / dashboard consumers. Decided against on 2026-10-25 ([`../plans/2026-10-25-qmi-ca-gap-fill.md`](../plans/2026-10-25-qmi-ca-gap-fill.md)): CA gap-fill and `network.ca_source`. Reversed for the AT-due carrier list on 2026-11-06 (broker 0.7.0, [Carrier list from QMI](#carrier-list-from-qmi-broker-070); plan [`../plans/2026-11-06-qmi-at-offload.md`](../plans/2026-11-06-qmi-at-offload.md)). Off-cycle freshness is still a follow-up. Not built (separate approval): the `radio_details.sh` network-type gate (keeps its QENG crash guard), the cell-scanner serving-cell strip, per-antenna live values, any UI reading of the live SINR/NR fields (published since 0.5.0, see [`live-signal.md`](live-signal.md)), and NAS `0x0003` push sampling. Design: [`../plans/2026-10-22-qmi-phase2-live-tiers.md`](../plans/2026-10-22-qmi-phase2-live-tiers.md).

@@ -613,6 +613,7 @@ mod tests {
             ca: Some(&fx!("ca_0x15_two_scells")),
             rf: Some(&fx!("r1_3_0x0031")),
             sig_info: Some(&fx!("r1_3_0x004F")),
+            sys_info: None,
         })
     }
 
@@ -774,7 +775,7 @@ mod tests {
     fn identifier_keys_stay_absent_for_any_input() {
         for base in crate::qmi::codec::testfix::all() {
             for m in crate::qmi::codec::testfix::mangled(&base) {
-                let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m) });
+                let b = Bundle::build(&Inputs { serving: Some(&m), cell: Some(&m), ca: Some(&m), rf: Some(&m), sig_info: Some(&m), sys_info: Some(&m) });
                 let s = render_sample(1, 1, Some(&b), false);
                 for key in ["cell_id", "tac", "enodeb", "sector", "mcc", "mnc", "operator", "imsi"] {
                     assert!(!s.contains(key), "{key} in {s}");
@@ -792,6 +793,7 @@ mod tests {
             ca: None,
             rf: Some(&fx!("r1_3_0x0031")),
             sig_info: Some(&fx!("r1_3_0x004F")),
+            sys_info: None,
         });
         let s = render_sample(1, 2, Some(&b), false);
         assert!(s.contains("\"reg\":false,\"rsrp\":null,\"rsrq\":null,\"rssi\":null,\"sinr\":null,\"nr_rsrp\":null,\"nr_rsrq\":null,\"nr_sinr\":null,\"pci\":295"), "{s}");

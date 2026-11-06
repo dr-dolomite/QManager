@@ -162,6 +162,8 @@ The poller's `poll_cycle` checks for this flag after the `LONG_FLAG` early-retur
 
 **Flag placement in `poll_cycle`.** The flag is consumed after the `LONG_FLAG` early-return on purpose: a long-running cell scan short-circuits `poll_cycle` before reaching the flag check. The flag survives until the next normal cycle, guaranteeing it is eventually processed without interrupting a scan.
 
+**QMI fallback (broker 0.7.0).** If `AT+QNWPREFCFG="policy_band"` gives no LTE list at boot or on a refresh, the poller takes the LTE list from `qmi bands` (DMS `0x0045`) for that run. When AT answered with no list, the cache file is removed and nothing is written from QMI, so the next refresh asks AT again. When the AT read failed, the QMI list is used and the cache is left as it was. NR lists always stay AT-sourced. DMS `0x0045` reports hardware band capability, not the SIM's policy set, so this is a boot-robustness fallback only.
+
 ---
 
 ## Env Cache and `status.json` Emission

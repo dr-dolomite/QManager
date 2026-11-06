@@ -3,14 +3,19 @@
 //! Device-verified against an RM551E (R02A01), 2026-10-22, and AT ground
 //! truth (`AT+QENG="servingcell"`, `AT+QCAINFO`):
 //! - 0x0024 Get Serving System   TLV 0x01 / 0x10 / 0x12
-//! - 0x0043 Get Cell Location    TLV 0x13 (LTE intra), 0x27, 0x2E
+//! - 0x0043 Get Cell Location    TLV 0x13 (LTE intra), 0x27, 0x2E, 0x14 / 0x28
+//!   (the frequency list that carries each SCC's own cell; paired run
+//!   2026-11-06: PCC 55/60 and SCC 9/10 exact against `AT+QCAINFO`)
 //! - 0x0031 Get RF Band Info     TLV 0x11 (else 0x01), 0x12
 //! - 0x00AC Get LTE CPHY CA Info TLV 0x13, 0x15 / 0x19, 0x16, 0x17
 //! - 0x004F Get Signal Info      TLV 0x14, 0x17, 0x18 (values are CACHED)
 //! - 0x0020 Get Signal Strength  TLV 0x01
 //!
-//! Not decoded: 0x0043 inter-frequency neighbours (TLV 0x14), timing
-//! advance (no TLV tracked AT consistently), 0x0034 / 0x004D / 0x005A.
+//! - 0x004D Get Sys Info         TLV 0x54 (NR PCI), 0x60 (NR ARFCN), 0x4E
+//!   (EN-DC available); NSA capture 2026-11-06, NR PCI 60/60 against AT
+//!
+//! Not decoded: timing advance (no TLV tracked AT consistently), 0x0034 /
+//! 0x005A, the rest of 0x004D.
 
 use super::{plmn3, text, Rat, Rd};
 use crate::qmi::msg::Msg;
@@ -212,9 +217,20 @@ pub struct Nr5gServingCell {
     pub pci: u16,
 }
 
+/// One frequency of the TLV 0x14 list (the serving cell's measurement
+/// objects): its EARFCN and the cells measured on it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterFreq {
+    pub earfcn: u32,
+    pub cells: Vec<CellRow>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CellLocation {
     pub lte: Option<LteServingCell>,
+    /// TLV 0x14 (with the u32 EARFCNs of 0x28): in connected mode with CA it
+    /// holds a row for every SCC's cell, plus any measured neighbours.
+    pub inter: Vec<InterFreq>,
     /// TLV 0x2E: NR ARFCN of the NSA carrier (matches AT).
     pub nr_arfcn: Option<u32>,
     pub nr: Option<Nr5gServingCell>,
@@ -225,10 +241,53 @@ pub fn cell_location(m: &Msg) -> CellLocation {
     if let Some(v) = m.tlv(0x13) {
         c.lte = lte_intra(v, m.tlv(0x27));
     }
+    c.inter = m.tlv(0x14).map(|v| inter_freqs(v, m.tlv(0x28))).unwrap_or_default();
     c.nr_arfcn = m.tlv(0x2e).and_then(|v| Rd::new(v).u32());
     // UNTESTED (see Nr5gServingCell).
     c.nr = m.tlv(0x2f).and_then(nr5g_serving);
     c
+}
+
+/// `{idle u8; n u8; per freq {earfcn u16, thresh_x_low u8, thresh_x_high u8,
+/// resel_priority u8, cells u8; per cell 10 bytes like TLV 0x13's rows}}`.
+/// TLV 0x28 `{n u8; n x u32}` replaces the u16 EARFCNs, but only when it lists
+/// exactly the frequencies parsed (the rule 0x00AC TLV 0x17 follows too). An
+/// incomplete frequency or cell is dropped, never half-filled.
+fn inter_freqs(v: &[u8], earfcn32: Option<&[u8]>) -> Vec<InterFreq> {
+    let mut r = Rd::new(v);
+    let mut out = Vec::new();
+    let declared = match (r.u8(), r.u8()) {
+        (Some(_idle), Some(n)) => n as usize,
+        _ => return out,
+    };
+    for _ in 0..declared {
+        let f = (|| {
+            let earfcn = r.u16()? as u32;
+            r.skip(3)?; // thresholds, reselection priority
+            let n = r.u8()?;
+            let mut cells = Vec::new();
+            for _ in 0..n {
+                cells.push(CellRow { pci: r.u16()?, rsrq_x10: r.i16()?, rsrp_x10: r.i16()?, rssi_x10: r.i16()?, srxlev: r.i16()? });
+            }
+            Some(InterFreq { earfcn, cells })
+        })();
+        match f {
+            Some(f) => out.push(f),
+            None => break,
+        }
+    }
+    if let Some(b) = earfcn32 {
+        let mut r = Rd::new(b);
+        if r.u8().map(|n| n as usize) == Some(out.len()) && out.len() == declared {
+            for f in out.iter_mut() {
+                match r.u32() {
+                    Some(e) => f.earfcn = e,
+                    None => break,
+                }
+            }
+        }
+    }
+    out
 }
 
 fn lte_intra(v: &[u8], earfcn32: Option<&[u8]>) -> Option<LteServingCell> {
@@ -423,6 +482,32 @@ fn scell_list(v: &[u8], wide: bool) -> Vec<CaCarrier> {
     out
 }
 
+// ------------------------------------------------------------ 0x004D sys info
+
+/// The NR half of Get Sys Info. Absent TLV = None (an LTE-only attach sends
+/// no NR TLVs). Range checks are the model's job.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SysInfo {
+    /// TLV 0x54: NR physical cell id.
+    pub nr_pci: Option<u16>,
+    /// TLV 0x60: NR ARFCN of the NSA / SA carrier.
+    pub nr_arfcn: Option<u32>,
+    /// TLV 0x4E: EN-DC available (0 / 1).
+    pub endc: Option<bool>,
+}
+
+pub fn sys_info(m: &Msg) -> SysInfo {
+    SysInfo {
+        nr_pci: m.tlv(0x54).and_then(|v| Rd::new(v).u16()),
+        nr_arfcn: m.tlv(0x60).and_then(|v| Rd::new(v).u32()),
+        endc: match m.tlv(0x4e).and_then(|v| Rd::new(v).u8()) {
+            Some(0) => Some(false),
+            Some(1) => Some(true),
+            _ => None,
+        },
+    }
+}
+
 // --------------------------------------------------- 0x004F / 0x0020 signal
 
 /// LTE values of Signal Info. CACHED by the modem (4 distinct RSRP values
@@ -555,6 +640,92 @@ mod tests {
     }
 
     #[test]
+    fn inter_frequency_list_carries_the_scc_cell() {
+        // NSA, PCC B1 EARFCN 150 + SCC B3 EARFCN 1350, both PCI 295. AT at the
+        // same moment: PCC -93/-8/-67, SCC -94/-11/-75 (truncated tenths).
+        let c = cell_location(&fx!("nsa_scc_3_0x0043"));
+        let l = c.lte.unwrap();
+        assert_eq!((l.pci, l.earfcn), (295, 150));
+        let row = l.serving_row().unwrap();
+        assert_eq!((row.rsrp_x10, row.rsrq_x10, row.rssi_x10), (-934, -87, -675));
+        assert_eq!(c.inter.len(), 1);
+        assert_eq!(c.inter[0].earfcn, 1350);
+        assert_eq!(c.inter[0].cells.len(), 1);
+        let s = c.inter[0].cells[0];
+        assert_eq!((s.pci, s.rsrp_x10, s.rsrq_x10, s.rssi_x10, s.srxlev), (295, -942, -113, -751, 0));
+        assert_eq!(c.nr_arfcn, Some(528030));
+        // Idle-mode captures have no frequency list.
+        assert!(cell_location(&fx!("r1_3_0x0043")).inter.is_empty());
+    }
+
+    #[test]
+    fn tlv28_replaces_the_u16_earfcns_only_for_the_same_count() {
+        let mut m = fx!("nsa_scc_3_0x0043");
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x28 {
+                t.v = vec![1, 0x10, 0x11, 0x01, 0x00]; // 69904
+            }
+        }
+        assert_eq!(cell_location(&m).inter[0].earfcn, 69904);
+        // A count that does not match the list leaves the u16 EARFCN alone.
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x28 {
+                t.v = vec![2, 0x10, 0x11, 0x01, 0x00, 1, 0, 0, 0];
+            }
+        }
+        assert_eq!(cell_location(&m).inter[0].earfcn, 1350);
+        m.tlvs.retain(|t| t.t != 0x28);
+        assert_eq!(cell_location(&m).inter[0].earfcn, 1350);
+    }
+
+    #[test]
+    fn an_incomplete_frequency_or_cell_is_dropped() {
+        let mut m = fx!("nsa_scc_3_0x0043");
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x14 {
+                // Declares two frequencies; the second is cut off mid-cell.
+                t.v[1] = 2;
+                t.v.extend_from_slice(&[0x96, 0, 0, 0, 0, 1, 0x27, 0x01]);
+            }
+        }
+        let c = cell_location(&m);
+        assert_eq!(c.inter.len(), 1);
+        // 0x28 lists one frequency but two were declared: no override either.
+        assert_eq!(c.inter[0].earfcn, 1350);
+    }
+
+    #[test]
+    fn sys_info_fixture() {
+        let s = sys_info(&fx!("nsa_3_0x004D"));
+        assert_eq!((s.nr_pci, s.nr_arfcn, s.endc), (Some(262), Some(528030), Some(true)));
+        let mut m = fx!("nsa_3_0x004D");
+        m.tlvs.retain(|t| t.t != 0x54 && t.t != 0x60);
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x4e {
+                t.v = vec![0];
+            }
+        }
+        assert_eq!(sys_info(&m), SysInfo { nr_pci: None, nr_arfcn: None, endc: Some(false) });
+        for t in m.tlvs.iter_mut() {
+            if t.t == 0x4e {
+                t.v = vec![7];
+            }
+        }
+        assert_eq!(sys_info(&m).endc, None);
+        assert_eq!(sys_info(&Msg { kind: 2, txn: 1, id: 0, tlvs: vec![] }), SysInfo::default());
+    }
+
+    #[test]
+    fn ca_nsa_scc_fixture() {
+        let ca = lte_ca(&fx!("nsa_scc_3_0x00AC"));
+        let p = ca.pcell.unwrap();
+        assert_eq!((p.pci, p.earfcn, p.bw_enum, p.band_class), (295, 150, 5, 120));
+        assert_eq!(ca.scells.len(), 1);
+        let s = ca.scells[0];
+        assert_eq!((s.pci, s.earfcn, s.bw_enum, s.band_class, s.state), (295, 1350, 4, 122, Some(1)));
+    }
+
+    #[test]
     fn earfcn32_wins_over_u16() {
         let mut m = fx!("r1_3_0x0043");
         for t in m.tlvs.iter_mut() {
@@ -654,6 +825,7 @@ mod tests {
                 let _ = lte_ca(&m);
                 let _ = signal_info(&m);
                 let _ = signal_strength(&m);
+                let _ = sys_info(&m);
             }
         }
     }

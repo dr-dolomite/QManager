@@ -266,6 +266,12 @@ export interface DeviceStatus {
   qmi_state?: "" | "up" | "down" | "unavailable";
   /** Baseband SSR episodes the broker has counted since it started. */
   qmi_ssr_count?: number;
+  /**
+   * Where `network.carrier_components` came from on the last carrier read:
+   * "at" (AT+QCAINFO), "qmi" (LTE carriers from QMI) or "mixed" (LTE carriers
+   * from QMI plus the NR rows of the last AT read). QMI-sourced SCCs carry no SINR.
+   */
+  ca_source?: "at" | "qmi" | "mixed";
   /** Average modem temperature in °C across all available sensors (null if unavailable) */
   temperature: number | null;
   /** CPU usage percentage (0–100), calculated from /proc/stat delta between poll cycles */
@@ -282,7 +288,7 @@ export interface DeviceStatus {
   firmware: string;
   /** Firmware build date, e.g. "Jun 25 2025" (from AT+CVERSION) */
   build_date: string;
-  /** Modem manufacturer, e.g. "Quectel" (the "Authors:" line of ATI) */
+  /** Modem manufacturer, e.g. "Quectel" (the "Authors:" line of AT+CVERSION) */
   manufacturer: string;
   /** Modem model name, e.g. "RM551E-GL" (from AT+CGMM) */
   model: string;
