@@ -1,0 +1,31 @@
+{
+  "name": "watchdog/save_settings_tier3_true_with_slot_null_in_store_and_body_unset",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "tier3_enabled": true,
+    "act_after_sec": 45
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "tier3_enabled"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "watchdog/save_settings_clear_slot_with_tier3_off_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "backup_sim_slot": null
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {
+      "tier3_enabled": false,
+      "backup_sim_slot": 2
+    },
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

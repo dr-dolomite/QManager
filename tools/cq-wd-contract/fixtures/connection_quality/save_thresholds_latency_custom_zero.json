@@ -1,0 +1,36 @@
+{
+  "name": "connection_quality/save_thresholds_latency_custom_zero",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_thresholds",
+    "latency": {
+      "preset": "custom",
+      "custom_ms": 0
+    },
+    "loss": {
+      "preset": "tolerant"
+    }
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "latency.custom_ms"
+    }
+  }
+}

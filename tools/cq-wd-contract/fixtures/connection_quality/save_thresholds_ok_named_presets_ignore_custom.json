@@ -1,0 +1,32 @@
+{
+  "name": "connection_quality/save_thresholds_ok_named_presets_ignore_custom",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_thresholds",
+    "latency": {
+      "preset": "standard",
+      "custom_ms": 0
+    },
+    "loss": {
+      "preset": "very-tolerant",
+      "custom_pct": 500
+    }
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

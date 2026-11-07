@@ -1,0 +1,32 @@
+{
+  "name": "connection_quality/save_thresholds_ok_custom_min_bounds",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_thresholds",
+    "latency": {
+      "preset": "custom",
+      "custom_ms": 1
+    },
+    "loss": {
+      "preset": "custom",
+      "custom_pct": 1
+    }
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

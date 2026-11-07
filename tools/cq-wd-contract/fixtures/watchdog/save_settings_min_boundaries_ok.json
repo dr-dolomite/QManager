@@ -1,0 +1,30 @@
+{
+  "name": "watchdog/save_settings_min_boundaries_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "act_after_sec": 15,
+    "step_wait_sec": 10,
+    "max_reboots_per_hour": 1,
+    "quality_after_sec": 30,
+    "ssr_grace_sec": 10,
+    "failback_every_min": 5
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

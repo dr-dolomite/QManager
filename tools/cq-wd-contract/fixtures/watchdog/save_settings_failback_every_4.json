@@ -1,0 +1,30 @@
+{
+  "name": "watchdog/save_settings_failback_every_4",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "failback_every_min": 4
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "failback_every_min"
+    }
+  }
+}

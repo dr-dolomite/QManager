@@ -1,0 +1,34 @@
+{
+  "name": "watchdog/revert_sim_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "revert_sim"
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": {
+        "active": true,
+        "original_slot": 1,
+        "current_slot": 2,
+        "switched_at": 1730999100,
+        "reason": "outage",
+        "original_iccid": "8901260000000000001",
+        "current_iccid": "8901260000000000002",
+        "confirmed": true,
+        "revert_pending": false
+      }
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

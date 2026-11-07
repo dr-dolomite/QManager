@@ -1,0 +1,30 @@
+{
+  "name": "watchdog/save_settings_max_reboots_0",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "max_reboots_per_hour": 0
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "max_reboots_per_hour"
+    }
+  }
+}
