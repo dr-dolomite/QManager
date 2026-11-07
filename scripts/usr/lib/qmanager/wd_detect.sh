@@ -131,40 +131,30 @@ wd_start_gate() {
 }
 
 # --- SSR (baseband subsystem restart) awareness ---------------------------
-# The RM551E periodically suffers RECOVERABLE Qualcomm MPSS baseband SSRs: the
-# kernel logs "4080000.remoteproc-mss: fatal error received" then brings the
-# remoteproc back up ~3-4s later, with the data path restored in ~10-25s. If
-# watchcat fires its recovery ladder (forced AT+COPS / AT+CFUN detach) WHILE the
-# baseband is mid-self-heal, it amplifies a ~30-60s self-healing outage into a
-# multi-minute thrash. This gate detects an in-progress SSR and HOLDS the ladder
-# for a grace window, only falling through to the normal ladder if connectivity
-# does not return (the genuine stuck / AP-hang case).
+# The modem suffers RECOVERABLE baseband subsystem restarts (SSRs): the baseband
+# crashes and comes back on its own, with the data path restored within tens of
+# seconds. If watchcat fires its recovery ladder (forced AT+COPS / AT+CFUN
+# detach) WHILE the baseband is mid-self-heal, it amplifies a ~30-60s
+# self-healing outage into a multi-minute thrash. This gate detects an
+# in-progress SSR and HOLDS the ladder for a grace window, only falling through
+# to the normal ladder if connectivity does not return (the genuine stuck /
+# AP-hang case).
 
-# Best-effort read-only check of the kernel ring buffer for a RECENT MPSS crash.
-# Returns 0 (true) if a fatal-error line exists AND it is within the detection
-# window of now (CFG_SSR_GRACE + CFG_FAIL_THRESHOLD * ping interval + 2 check
-# intervals); 1 (false) otherwise — including when dmesg yields nothing, the
-# crash line was evicted, or the timestamp fails to parse (graceful degradation:
-# absence of evidence is NOT evidence of absence; we never block recovery on it).
-# dmesg timestamps are monotonic seconds-since-boot floats like "[ 12345.678901]"
-# (BusyBox dmesg has no -T / -l); we parse integer seconds only and compare to
-# /proc/uptime. Calls dmesg ONCE per invocation (only at an escalation decision).
+# Best-effort read-only check for a RECENT baseband crash (plat_ssr_poll gives
+# its time in monotonic seconds since boot). Returns 0 (true) if a crash is
+# known AND it is within the detection window of now (CFG_SSR_GRACE +
+# CFG_FAIL_THRESHOLD * ping interval + 2 check intervals); 1 (false) otherwise,
+# including when the platform knows no crash time (graceful degradation:
+# absence of evidence is NOT evidence of absence; we never block recovery on
+# it). Polls the platform ONCE per invocation (only at an escalation decision).
 ssr_in_progress() {
     [ "$CFG_SSR_AWARE" = "1" ] || return 1
 
-    local crash_line
     local crash_ts
     local now
 
-    crash_line=$(dmesg 2>/dev/null | grep "4080000.remoteproc-mss: fatal error received" | tail -n 1)
-    [ -n "$crash_line" ] || return 1
-
-    # Extract leading integer seconds from the dmesg monotonic timestamp. Real
-    # lines on this kernel are double-bracketed: "[ 12345.678901][ T8033] msg"
-    # (CONFIG_PRINTK_CALLER); the older single-bracket "[ 12345.678901] msg" also
-    # works. sed (not awk -F) because BusyBox awk 1.36.1 rejects a bracket-class
-    # field separator as an "Unknown collating element" — verified on-device.
-    crash_ts=$(printf '%s' "$crash_line" | sed 's/^\[[ ]*\([0-9]*\)\..*/\1/')
+    plat_ssr_poll
+    crash_ts="$PLAT_SSR_MONO"
     case "$crash_ts" in ''|*[!0-9]*) return 1 ;; esac
 
     now=$(cut -d. -f1 /proc/uptime 2>/dev/null)

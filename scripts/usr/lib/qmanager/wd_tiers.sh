@@ -7,7 +7,7 @@
 # Owns: current_tier, last_recovery_time, last_recovery_tier, total_recoveries,
 #       cooldown_remaining, cooldown_stale_retries, recovery_reason,
 #       _recovery_marker_emitted, holdoff_until, holdoff_reason
-# Functions: tower_lock_active, wait_for_modem, execute_tier1, execute_tier2,
+# Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
 #            wd_holdoff_clear, wd_retire_service, execute_tier4, find_next_tier, do_recovery,
 #            _cooldown_handle_failure, wd_cooldown_verdict, finish_cooldown
@@ -43,21 +43,6 @@ wd_holdoff_clear() {
     holdoff_reason=""
 }
 
-# Check if tower lock is active (Tier 2 must be skipped)
-tower_lock_active() {
-    [ ! -f "$TOWER_LOCK_CONFIG" ] && return 1
-    local lte_locked
-    local nr_locked
-    lte_locked=$(jq -r '(.lte.enabled) | if . == null then "false" else tostring end' \
-        "$TOWER_LOCK_CONFIG" 2>/dev/null)
-    nr_locked=$(jq -r '(.nr_sa.enabled) | if . == null then "false" else tostring end' \
-        "$TOWER_LOCK_CONFIG" 2>/dev/null)
-    if [ "$lte_locked" = "true" ] || [ "$nr_locked" = "true" ]; then
-        return 0
-    fi
-    return 1
-}
-
 # Wait for modem to respond to AT commands after recovery action
 wait_for_modem() {
     local elapsed=0
@@ -90,13 +75,13 @@ execute_tier1() {
 
 execute_tier2() {
     # Pre-check: tower lock
-    if tower_lock_active; then
+    if plat_tower_locked; then
         qlog_warn "TIER 2 SKIPPED: tower lock active"
         return 1  # signal to skip this tier
     fi
 
     # Pre-check: long-running command
-    if qm_trusted_file "$LONG_RUNNING_FLAG"; then
+    if plat_long_running; then
         qlog_warn "TIER 2 SKIPPED: long-running AT command active"
         return 1
     fi
@@ -164,14 +149,14 @@ wd_enter_radio_off() {
 }
 
 # Ends the service the way the UI's "off" does (disable, then stop). procd
-# respawns any exit, whatever the code, and start_service's UCI gate is not
+# respawns any exit, whatever the code, and start_service's config gate is not
 # consulted on respawn, so a bare exit would be re-run up to 5 times. `stop`
 # deletes the procd instance and TERMs this daemon; the TERM trap runs once the
 # init script returns. Without procd (manual run) `stop` is a no-op and the
 # caller's exit follows.
 wd_retire_service() {
-    /etc/init.d/qmanager_watchcat disable >/dev/null 2>&1
-    /etc/init.d/qmanager_watchcat stop >/dev/null 2>&1
+    svc_disable qmanager_watchcat >/dev/null 2>&1
+    svc_stop qmanager_watchcat >/dev/null 2>&1
 }
 
 execute_tier4() {
@@ -182,9 +167,9 @@ execute_tier4() {
         qlog_error "TIER 4: Auto-disabling watchcat"
         append_event "watchcat_recovery" "Watchcat disabled: reboot limit exceeded (${reboots_this_hour} reboots/hour)" "error"
 
-        # Permanently disable via UCI
-        uci set quecmanager.watchcat.enabled=0
-        uci commit quecmanager 2>/dev/null
+        # Permanently disable in the config store
+        cfg_set watchdog enabled 0
+        cfg_commit 2>/dev/null
 
         CFG_ENABLED=0
         state="disabled"
@@ -202,6 +187,7 @@ execute_tier4() {
     # Log reboot to crash.log (persists across reboots)
     local ts
     ts=$(date +%s)
+    plat_crash_log_prepare
     echo "${ts}|reboot|tier4_escalation" >> "$CRASH_LOG"
 
     # Trim crash.log to last 20 entries
@@ -221,7 +207,7 @@ execute_tier4() {
     rm -f "$RECOVERY_FLAG"
 
     # Reboot after flushing state
-    ( sleep 1; sync; reboot ) &
+    ( sleep 1; plat_reboot ) &
     exit 0
 }
 

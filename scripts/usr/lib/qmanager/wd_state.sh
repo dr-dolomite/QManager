@@ -154,7 +154,7 @@ check_locked() {
     [ -f "$LOCK_FILE" ] && return 0
 
     # Long-running AT command (cell scan, firmware update)
-    qm_trusted_file "$LONG_RUNNING_FLAG" && return 0
+    plat_long_running && return 0
 
     # Profile apply in progress
     if [ -f "$PROFILE_APPLY_PID" ]; then

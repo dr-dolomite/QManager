@@ -16,9 +16,9 @@
 #            wd_sim_finish_recheck, wd_sim_resume_at_start,
 #            wd_sim_resume_retry, wd_sim_on_unlock
 #
-# The failover record lives in two places: /tmp (fast, what the poller reads)
-# and /etc/qmanager (flash, survives a reboot). Only wd_failover_save and
-# wd_failover_clear write or remove them.
+# The failover record lives in two places: PF_FAILOVER_MIRROR (fast, what the
+# poller reads) and PF_FAILOVER_RECORD (flash, survives a reboot). Only
+# wd_failover_save and wd_failover_clear write or remove them.
 #
 # Every SIM slot change goes through wd_swap_slot, which proves the swap by
 # reading the slot back: AT+QUIMSLOT= can return OK and change nothing.
@@ -44,15 +44,15 @@ last_recheck_time=0             # mono_now of the last failover finalize / reche
                                 # (monotonic: a boot-time clock step must not make a recheck due at once)
 
 # Flags shared with the poller (qmanager_poller) and cellular/settings.sh.
-WD_SIM_SWITCH_FLAG="/tmp/qmanager_sim_switch_active"       # poller pauses AT while present
-WD_FORCE_TIER2_FLAG="/tmp/qmanager_force_tier2"
-WD_REFRESH_POLICY_FLAG="/tmp/qmanager_refresh_policy_band"
+WD_SIM_SWITCH_FLAG="$PF_SIM_SWITCH_FLAG"      # poller pauses AT while present
+WD_FORCE_TIER2_FLAG="$PF_FORCE_TIER2_FLAG"
+WD_REFRESH_POLICY_FLAG="$PF_REFRESH_POLICY_FLAG"
 WD_SWAP_NOOP="false"            # "true" when the last wd_swap_slot found the target already live
 WD_SWAP_FLAG_OWNED=0            # 1 while this daemon holds $WD_SIM_SWITCH_FLAG (exit cleanup removes it)
 wd_sim_revert_pending="false"   # "true": a Tier 3 swap-back was deferred because the user turned the radio off
 WD_RESUME_RETRY_SECS=60         # spacing of wd_sim_resume_retry attempts
 _wd_resume_next=0               # mono_now of the next resume retry; 0 = not armed yet
-SIM_FAILOVER_DURABLE="/etc/qmanager/sim_failover.json"   # flash copy of $SIM_FAILOVER_FILE
+SIM_FAILOVER_DURABLE="$PF_FAILOVER_RECORD"  # flash copy of $SIM_FAILOVER_FILE
 WD_ADOPT_SLOT=""                # live slot digit the last wd_sim_adopt_live_slot read; "" = unreadable / not read
 
 # Persist the failover record (one JSON line) to /tmp and to flash. Flash is
@@ -283,7 +283,7 @@ execute_tier3() {
     _orig_iccid=$(_wd_sim_iccid)
 
     # Stop tower failover daemon (locks are meaningless on different SIM)
-    /etc/init.d/qmanager_tower_failover stop 2>/dev/null
+    plat_tower_failover stop
 
     # Verified Golden Rule swap (wd_swap_slot). If the slot never moved there is
     # no failover to record: put tower failover back and skip the tier. Return 2
@@ -295,7 +295,7 @@ execute_tier3() {
     if [ "$_t3_swap_rc" -eq 1 ]; then
         qlog_error "TIER 3: SIM swap to slot $CFG_BACKUP_SIM_SLOT not verified, skipping tier"
         append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error"
-        /etc/init.d/qmanager_tower_failover start 2>/dev/null
+        plat_tower_failover start
         return 1
     fi
     [ "$_t3_swap_rc" -eq 2 ] && qlog_warn "TIER 3: modem is on slot $CFG_BACKUP_SIM_SLOT, radio not confirmed on"
@@ -323,7 +323,7 @@ execute_tier3() {
                 original_sim_slot="null"
                 original_sim_iccid=""
                 current_sim_slot="null"
-                /etc/init.d/qmanager_tower_failover start 2>/dev/null
+                plat_tower_failover start
                 return 1
                 ;;
             *)
@@ -436,13 +436,13 @@ sim_failover_fallback() {
     fi
 
     if [ -n "$_rv_iccid" ]; then
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_rv_iccid" "watchdog_revert" )
+        plat_profile_apply "$_rv_iccid" "watchdog_revert"
     else
         qlog_info "[watchdog_revert] ICCID query failed after revert, skipping auto-apply"
     fi
 
     # Restart tower failover daemon
-    /etc/init.d/qmanager_tower_failover start 2>/dev/null
+    plat_tower_failover start
 
     current_sim_slot="$original_sim_slot"
     sim_failover_active="false"
@@ -559,7 +559,7 @@ finalize_sim_failover() {
 
     # Auto-apply profile matching new SIM (watchdog)
     if [ -n "$curr_iccid" ]; then
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$curr_iccid" "watchdog" )
+        plat_profile_apply "$curr_iccid" "watchdog"
     fi
 
     # Start the auto-failback clock from the moment failover is confirmed.
@@ -621,11 +621,11 @@ _wd_sim_failback() {
     _fb_iccid=$(_wd_sim_iccid)
     if [ -n "$_fb_iccid" ]; then
         sim_db_add "$_fb_iccid"
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_fb_iccid" "watchdog_failback" )
+        plat_profile_apply "$_fb_iccid" "watchdog_failback"
     fi
 
     # Back on primary — its tower locks are valid again.
-    /etc/init.d/qmanager_tower_failover start 2>/dev/null
+    plat_tower_failover start
 
     append_event "sim_failover" "$1" "info"
 
@@ -721,7 +721,7 @@ wd_sim_finish_recheck() {
     # (If the return swap failed and the modem is still on the primary, the
     # error event above says so and the daemon is left running.)
     if [ "$current_sim_slot" = "$recheck_return_slot" ]; then
-        /etc/init.d/qmanager_tower_failover stop 2>/dev/null
+        plat_tower_failover stop
         append_event "sim_failover" "Watchcat: primary SIM still unhealthy — staying on backup slot $recheck_return_slot" "info"
     fi
 

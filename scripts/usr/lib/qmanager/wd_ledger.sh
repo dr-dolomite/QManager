@@ -9,8 +9,11 @@
 #
 # Reads CRASH_LOG (defined by the daemon). Function definitions and global
 # initialisers only, so a CGI may source it for wd_ledger_recent_json. The last
-# line sets WD_LEDGER_LOADED.
+# line sets WD_LEDGER_LOADED. The one top-level command sources the platform
+# adapter (idempotent) so a CGI gets PF_CRASH_LOG without the daemon.
 # =============================================================================
+
+[ -f /usr/lib/qmanager/qm_platform_cqwd.sh ] && . /usr/lib/qmanager/qm_platform_cqwd.sh
 
 # --- State Variables (owned here) --------------------------------------------
 reboots_this_hour=0
@@ -38,7 +41,7 @@ _wd_clock_sane() {
 # keep their original meaning ("watchdog-caused reboots this hour"), so we count
 # ONLY tier4_escalation rows here. Field layout: <epoch>|reboot|<reason>.
 #
-# The window is a rolling hour on the wall clock. The RM551E boots at 1970 until
+# The window is a rolling hour on the wall clock. The modem boots at 1970 until
 # NITZ/ntp steps the clock, so with an insane clock the window cannot be
 # evaluated: count every row older than 2025-01-01 (the clock-less boot rows).
 # That over-counts, which is the safe direction for the Tier-4 cap; the first
@@ -89,7 +92,7 @@ wd_ledger_tick() {
 
 # Watchdog (Tier-4) reboots for the Watchdog page's Recent Activity: a JSON
 # array of epoch ints, newest first, at most <limit> (default 5), "[]" on any
-# problem. Uses no daemon globals (CRASH_LOG falls back to the device path) and
+# problem. Uses no daemon globals (CRASH_LOG falls back to PF_CRASH_LOG) and
 # is safe to source from a CGI. Same awk approach as monitoring/alerts.sh; the
 # device jq has no regex, so numeric epochs are matched in awk.
 wd_ledger_recent_json() {
@@ -101,7 +104,7 @@ wd_ledger_recent_json() {
     case "$limit" in
         ''|*[!0-9]*) limit=5 ;;
     esac
-    file="${CRASH_LOG:-/etc/qmanager/crash.log}"
+    file="${CRASH_LOG:-$PF_CRASH_LOG}"
     if [ ! -f "$file" ] || [ ! -s "$file" ]; then
         printf '[]'
         return 0

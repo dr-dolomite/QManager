@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# wd_config.sh - qmanager_watchcat: UCI configuration and fixed constants
+# wd_config.sh - qmanager_watchcat: configuration (cfg_get) and fixed constants
 # =============================================================================
 # Sourced by qmanager_watchcat (never executed). BusyBox ash safe.
 #
@@ -14,7 +14,7 @@
 # the daemon can refuse to start on a half-loaded library set.
 # =============================================================================
 
-# --- Configuration (defaults, overridden by UCI) -----------------------------
+# --- Configuration (defaults, overridden by the config store) ----------------
 CFG_ENABLED=0
 CFG_CHECK_INTERVAL=10
 CFG_FAIL_THRESHOLD=5          # consecutive failed PROBES (raw ping streak_fail) before recovery
@@ -26,7 +26,7 @@ CFG_TIER4_ENABLED=1
 CFG_BACKUP_SIM_SLOT=""
 CFG_MAX_REBOOTS_PER_HOUR=3
 CFG_QUALITY_ENABLED=0
-# Shared degraded thresholds resolved from quecmanager.quality_thresholds.*
+# Shared degraded thresholds resolved from connection_quality latency/loss
 # (NOT watchcat.* — the retired latency_ceiling_ms/loss_ceiling_pct keys). These
 # are recomputed by resolve_quality_thresholds() on each config load/reload.
 CFG_LATENCY_THRESHOLD_MS=250
@@ -43,14 +43,14 @@ CFG_PRIMARY_RECHECK_INTERVAL=30
 BOOT_SETTLE=30
 # Ping-cache staleness is conn_state_read's rule: max(3 * interval_sec, 15) s.
 MODEM_WAIT_TIMEOUT=60
-# A physical SIM swap on the RM551E needs ~90s to reach stable connectivity.
+# A physical SIM swap needs ~90s to reach stable connectivity.
 # Any Tier-3 (SIM-failover) recovery — and the reverse revert swap — must hold
 # this floor before the first success/connectivity evaluation, otherwise the
 # generic cooldown fires the success ping while the modem is still attaching and
-# false-fails a swap that was actually fine. FIXED floor by design (not UCI).
+# false-fails a swap that was actually fine. FIXED floor by design (not config).
 SIM_SETTLE_SECS=90
 # Pause after every enabled tier has been tried without restoring connectivity
-# (fixed, not UCI): wd_decide_start returns "holdoff" until it elapses.
+# (fixed, not config): wd_decide_start returns "holdoff" until it elapses.
 HOLDOFF_SECS=900
 
 # =============================================================================
@@ -58,62 +58,62 @@ HOLDOFF_SECS=900
 # =============================================================================
 
 read_config() {
-    CFG_ENABLED=$(uci -q get quecmanager.watchcat.enabled 2>/dev/null)
+    CFG_ENABLED=$(cfg_get watchdog enabled)
     [ -z "$CFG_ENABLED" ] && CFG_ENABLED=0
 
     local val
-    val=$(uci -q get quecmanager.watchcat.check_interval 2>/dev/null)
+    val=$(cfg_get watchdog check_interval)
     [ -n "$val" ] && CFG_CHECK_INTERVAL="$val"
 
     # fail_threshold = consecutive failed PROBES (raw ping streak_fail). Renamed
     # from the retired max_failures (which counted watchcat's own loop cycles).
     # Default 5 if absent so an un-migrated install still works immediately.
-    val=$(uci -q get quecmanager.watchcat.fail_threshold 2>/dev/null)
+    val=$(cfg_get watchdog fail_threshold)
     case "$val" in ''|*[!0-9]*) CFG_FAIL_THRESHOLD=5 ;; *) CFG_FAIL_THRESHOLD="$val" ;; esac
 
-    val=$(uci -q get quecmanager.watchcat.cooldown 2>/dev/null)
+    val=$(cfg_get watchdog cooldown)
     [ -n "$val" ] && CFG_COOLDOWN="$val"
 
-    val=$(uci -q get quecmanager.watchcat.tier1_enabled 2>/dev/null)
+    val=$(cfg_get watchdog tier1_enabled)
     [ -n "$val" ] && CFG_TIER1_ENABLED="$val"
 
-    val=$(uci -q get quecmanager.watchcat.tier2_enabled 2>/dev/null)
+    val=$(cfg_get watchdog tier2_enabled)
     [ -n "$val" ] && CFG_TIER2_ENABLED="$val"
 
-    val=$(uci -q get quecmanager.watchcat.tier3_enabled 2>/dev/null)
+    val=$(cfg_get watchdog tier3_enabled)
     [ -n "$val" ] && CFG_TIER3_ENABLED="$val"
 
-    val=$(uci -q get quecmanager.watchcat.tier4_enabled 2>/dev/null)
+    val=$(cfg_get watchdog tier4_enabled)
     [ -n "$val" ] && CFG_TIER4_ENABLED="$val"
 
-    val=$(uci -q get quecmanager.watchcat.backup_sim_slot 2>/dev/null)
+    val=$(cfg_get watchdog backup_sim_slot)
     CFG_BACKUP_SIM_SLOT="$val"
 
-    val=$(uci -q get quecmanager.watchcat.max_reboots_per_hour 2>/dev/null)
+    val=$(cfg_get watchdog max_reboots_per_hour)
     [ -n "$val" ] && CFG_MAX_REBOOTS_PER_HOUR="$val"
 
-    CFG_QUALITY_ENABLED=$(uci -q get quecmanager.watchcat.quality_enabled 2>/dev/null)
+    CFG_QUALITY_ENABLED=$(cfg_get watchdog quality_enabled)
     [ -z "$CFG_QUALITY_ENABLED" ] && CFG_QUALITY_ENABLED=0
 
     # Degraded thresholds are now SHARED with the poller: read from
-    # quecmanager.quality_thresholds.* (latency_ceiling_ms / loss_ceiling_pct on
+    # connection_quality latency/loss (latency_ceiling_ms / loss_ceiling_pct on
     # watchcat.* are retired and intentionally NOT read here).
     resolve_quality_thresholds
 
-    val=$(uci -q get quecmanager.watchcat.quality_consecutive 2>/dev/null)
+    val=$(cfg_get watchdog quality_consecutive)
     [ -n "$val" ] && CFG_QUALITY_CONSECUTIVE="$val"
 
-    CFG_SSR_AWARE=$(uci -q get quecmanager.watchcat.ssr_aware 2>/dev/null)
+    CFG_SSR_AWARE=$(cfg_get watchdog ssr_aware)
     [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
 
-    val=$(uci -q get quecmanager.watchcat.ssr_grace 2>/dev/null)
+    val=$(cfg_get watchdog ssr_grace)
     [ -n "$val" ] && CFG_SSR_GRACE="$val"
 
-    CFG_PRIMARY_RECHECK_ENABLED=$(uci -q get quecmanager.watchcat.primary_recheck_enabled 2>/dev/null)
+    CFG_PRIMARY_RECHECK_ENABLED=$(cfg_get watchdog primary_recheck_enabled)
     [ -z "$CFG_PRIMARY_RECHECK_ENABLED" ] && CFG_PRIMARY_RECHECK_ENABLED=0
 
     # interval is in MINUTES; non-numeric/empty falls back to 30.
-    val=$(uci -q get quecmanager.watchcat.primary_recheck_interval 2>/dev/null)
+    val=$(cfg_get watchdog primary_recheck_interval)
     case "$val" in ''|*[!0-9]*) CFG_PRIMARY_RECHECK_INTERVAL=30 ;; *) CFG_PRIMARY_RECHECK_INTERVAL="$val" ;; esac
 
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s fail_threshold=${CFG_FAIL_THRESHOLD} probes cooldown=${CFG_COOLDOWN}s"
@@ -123,28 +123,28 @@ read_config() {
     qlog_info "  Primary-recheck (auto-failback): enabled=${CFG_PRIMARY_RECHECK_ENABLED} interval=${CFG_PRIMARY_RECHECK_INTERVAL}min"
 }
 
-# Resolve the SHARED degraded thresholds from quecmanager.quality_thresholds.*
+# Resolve the SHARED degraded thresholds from connection_quality latency/loss
 # into CFG_LATENCY_THRESHOLD_MS / CFG_LOSS_THRESHOLD_PCT. This is the watchdog's
 # local mirror of the poller's resolver (kept in-daemon rather than a new lib —
 # only two consumers, and the watchdog must not depend on poller globals). The
 # section's ABSENCE means "default" -> tolerant/tolerant (250ms / 30%), matching
 # the poller. `custom` reads the latency_custom_ms / loss_custom_pct keys; a
 # non-numeric/empty custom value falls back to the tolerant default so a
-# half-written UCI never yields an empty comparison value.
+# half-written config never yields an empty comparison value.
 resolve_quality_thresholds() {
     local _lat_preset
     local _loss_preset
     local _lat_custom
     local _loss_custom
 
-    _lat_preset=$(uci -q get quecmanager.quality_thresholds.latency_preset 2>/dev/null)
-    _loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
+    _lat_preset=$(cfg_get connection_quality latency_preset)
+    _loss_preset=$(cfg_get connection_quality loss_preset)
 
     case "$_lat_preset" in
         standard)      CFG_LATENCY_THRESHOLD_MS=150 ;;
         very-tolerant) CFG_LATENCY_THRESHOLD_MS=500 ;;
         custom)
-            _lat_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
+            _lat_custom=$(cfg_get connection_quality latency_custom_ms)
             case "$_lat_custom" in
                 ''|*[!0-9]*) CFG_LATENCY_THRESHOLD_MS=250 ;;
                 *)           CFG_LATENCY_THRESHOLD_MS="$_lat_custom" ;;
@@ -157,7 +157,7 @@ resolve_quality_thresholds() {
         standard)      CFG_LOSS_THRESHOLD_PCT=15 ;;
         very-tolerant) CFG_LOSS_THRESHOLD_PCT=50 ;;
         custom)
-            _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
+            _loss_custom=$(cfg_get connection_quality loss_custom_pct)
             case "$_loss_custom" in
                 ''|*[!0-9]*) CFG_LOSS_THRESHOLD_PCT=30 ;;
                 *)           CFG_LOSS_THRESHOLD_PCT="$_loss_custom" ;;

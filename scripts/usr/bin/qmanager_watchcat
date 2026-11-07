@@ -18,13 +18,13 @@
 # Data flow:
 #   Reads:  /tmp/qmanager_ping.json (from ping daemon)
 #   Writes: /tmp/qmanager_watchcat.json (for poller consumption)
-#           /tmp/qmanager_sim_failover (on Tier 3 success)
+#           failover record PF_FAILOVER_MIRROR + PF_FAILOVER_RECORD (Tier 3)
 #           /tmp/qmanager_recovery_active (during any recovery)
-#           /etc/qmanager/crash.log (Tier 4 reboot log)
+#           reboot ledger PF_CRASH_LOG (Tier 4)
 #
 # Libraries (sourced from /usr/lib/qmanager; function definitions and global
 # initialisers only):
-#   wd_config.sh  UCI read, CFG_* defaults, timing constants
+#   wd_config.sh  config read (cfg_get), CFG_* defaults, timing constants
 #   wd_state.sh   state file writer, maintenance-lock check, wd_sleep, radio markers
 #   wd_detect.sh  ping read, start gate, SSR gate
 #   wd_quality.sh quality window, quality trigger
@@ -33,7 +33,7 @@
 #   wd_sim.sh     Tier 3, fallback, revert, auto-failback, failover record
 #
 # Install location: /usr/bin/qmanager_watchcat
-# Dependencies: jq, qcmd, qlog.sh, events.sh, wd_*.sh
+# Dependencies: jq, qcmd, qlog.sh, events.sh, qm_platform_cqwd.sh, wd_*.sh
 # =============================================================================
 
 # --- Logging -----------------------------------------------------------------
@@ -46,11 +46,16 @@ else
     mono_now() { awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0; }
 fi
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
+
+# --- Platform adapter (config store, services, SSR source, PF_* paths) --------
+# Required: checked with the libraries below, before anything runs.
+[ -f /usr/lib/qmanager/qm_platform_cqwd.sh ] && . /usr/lib/qmanager/qm_platform_cqwd.sh
+
 qlog_init "watchcat"
 
 # --- Events (for append_event) -----------------------------------------------
 # Must define EVENTS_FILE and MAX_EVENTS before sourcing events.sh
-EVENTS_FILE="/tmp/qmanager_events.json"
+EVENTS_FILE="$PF_EVENTS_FILE"
 MAX_EVENTS=50
 if [ -f /usr/lib/qmanager/events.sh ]; then
     . /usr/lib/qmanager/events.sh
@@ -84,15 +89,13 @@ STATE_FILE="/tmp/qmanager_watchcat.json"
 STATE_TMP="/tmp/qmanager_watchcat.json.tmp"
 PID_FILE="/tmp/qmanager_watchcat.pid"
 RECOVERY_FLAG="/tmp/qmanager_recovery_active"
-LOCK_FILE="/tmp/qmanager_watchcat.lock"
-RELOAD_FLAG="/tmp/qmanager_watchcat_reload"
+LOCK_FILE="$PF_MAINT_LOCK"
+RELOAD_FLAG="$PF_WD_RELOAD"
 REVERT_FLAG="/tmp/qmanager_watchcat_revert_sim"
 DISABLED_FLAG="/tmp/qmanager_watchcat_disabled"
-SIM_FAILOVER_FILE="/tmp/qmanager_sim_failover"
-LONG_RUNNING_FLAG="/tmp/qmanager_long_running"
-PROFILE_APPLY_PID="/tmp/qmanager_profile_apply.pid"
-TOWER_LOCK_CONFIG="/etc/qmanager/tower_lock.json"
-CRASH_LOG="/etc/qmanager/crash.log"
+SIM_FAILOVER_FILE="$PF_FAILOVER_MIRROR"
+PROFILE_APPLY_PID="$PF_PROFILE_APPLY_PID"
+CRASH_LOG="$PF_CRASH_LOG"
 
 # --- Watchdog libraries ------------------------------------------------------
 # Guarded with -f (BusyBox `.` aborts the shell on a missing file) and each lib
@@ -108,7 +111,7 @@ for _wd_l in wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; 
         exit 1
     fi
 done
-[ "$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_QUALITY_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "1111111" ] || {
+[ "${QM_PLATFORM_CQWD_LOADED:-0}$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_QUALITY_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "11111111" ] || {
     qlog_error "watchcat: library set incomplete, refusing to start"; exit 1; }
 
 # =============================================================================
@@ -230,13 +233,12 @@ main() {
         wd_ledger_tick
 
         # Check for config reload request. read_config re-resolves the SHARED
-        # quality thresholds (quecmanager.quality_thresholds.*) too, so a change
+        # quality thresholds (connection_quality latency/loss) too, so a change
         # to the shared degraded thresholds reaches the watchdog when the CGI
-        # drops $RELOAD_FLAG. NOTE for Pass B: quality_thresholds.sh must drop
-        # /tmp/qmanager_watchcat_reload (in addition to /tmp/qmanager_quality_reload
-        # for the poller) so a live shared-threshold edit reaches the watchdog
-        # without a full daemon restart. The watchdog deliberately does NOT consume
-        # /tmp/qmanager_quality_reload itself — the poller owns that flag's deletion.
+        # drops $RELOAD_FLAG (PF_WD_RELOAD) in addition to PF_QUALITY_RELOAD for
+        # the poller, so a live shared-threshold edit reaches the watchdog without a
+        # full daemon restart. The watchdog deliberately does NOT consume
+        # PF_QUALITY_RELOAD itself: the poller owns that flag's deletion.
         if [ -f "$RELOAD_FLAG" ]; then
             rm -f "$RELOAD_FLAG"
             qlog_info "Config reload requested"
