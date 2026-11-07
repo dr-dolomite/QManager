@@ -9,7 +9,9 @@ read -r H_MAINPID _h_rest < /proc/self/stat
 
 # --- defaults ----------------------------------------------------------------
 SC_PASSES=10
-mkdir -p "$H_STATE/model" "$H_ROOT/tmp" "$H_ROOT/etc/qmanager" "$H_ROOT/var/run/qmanager"
+mkdir -p "$H_STATE/model" "$H_ROOT/tmp" "$H_ROOT/etc/qmanager" "$H_ROOT/etc/config" "$H_ROOT/var/run/qmanager"
+# the adapter reports rc 2 (store unavailable) on a missing key while this file is absent
+: > "$H_ROOT/etc/config/quecmanager"
 printf '%s' "$H_CLOCK0" > "$H_STATE/clock"
 printf '%s.00 0.00\n' "$H_UP0" > "$H_ROOT/proc_uptime"
 : > "$H_STATE/dmesg.txt"

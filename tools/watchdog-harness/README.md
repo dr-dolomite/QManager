@@ -130,3 +130,13 @@ unlock), 68 (startup with a pending swap-back under a lock). Differences to the 
   `known_iccids`, `auto_apply_profile … watchdog_failback`, and the info event
   `primary SIM kept — the modem stayed on slot 1` replaces the `could not return to backup SIM —
   manual check needed` error event and the earlier error line.
+
+## Config store stub (step 1b)
+
+The adapter reports "store unavailable" (rc 2) for a missing key when `/etc/config/quecmanager`
+does not exist, so the harness creates an empty `$root/etc/config/quecmanager` (the `run.sh` sed
+rewrite maps `/etc/config/` into the fake root; the file is left out of `tree.txt`). The `uci`
+stub keeps `uci.db` as `key=value` lines for options and `key+=item` lines for list items, and
+supports `get`, `show <key>` (`key='v'`, or `key='a' 'b'` for a list, embedded quotes as `'\''`),
+`set`, `add_list`, `delete` and `revert` (each logged to `calls.log` like `set` and `commit`).
+Existing baselines are unchanged.

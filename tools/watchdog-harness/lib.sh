@@ -49,16 +49,27 @@ reboot() { echo "reboot" >> "$H_OUT/calls.log"; }
 
 dmesg() { cat "$H_STATE/dmesg.txt" 2>/dev/null; }
 
-uci_set() { # key value
+# uci.db holds one "key=value" line per option and one "key+=item" line per
+# list item (in order). uci_del drops both forms of a key.
+uci_del() { # key
     : > "$H_STATE/uci.new"
     while IFS= read -r _h_l; do
         case "$_h_l" in
-            "$1="*) ;;
+            "$1="*|"$1+="*) ;;
             *) printf '%s\n' "$_h_l" >> "$H_STATE/uci.new" ;;
         esac
     done < "$H_STATE/uci.db"
-    printf '%s=%s\n' "$1" "$2" >> "$H_STATE/uci.new"
     mv "$H_STATE/uci.new" "$H_STATE/uci.db"
+}
+
+uci_set() { # key value
+    uci_del "$1"
+    printf '%s=%s\n' "$1" "$2" >> "$H_STATE/uci.db"
+}
+
+# uci_quote VALUE: 'VALUE' with an embedded ' written as '\'' (uci show style)
+uci_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
 uci() {
@@ -72,9 +83,37 @@ uci() {
             done < "$H_STATE/uci.db"
             return 1
             ;;
+        show)
+            _h_out=""
+            while IFS= read -r _h_l; do
+                case "$_h_l" in
+                    "$2="*)
+                        printf "%s=%s\n" "$2" "$(uci_quote "${_h_l#*=}")"
+                        return 0
+                        ;;
+                    "$2+="*)
+                        _h_out="${_h_out:+$_h_out }$(uci_quote "${_h_l#*+=}")"
+                        ;;
+                esac
+            done < "$H_STATE/uci.db"
+            [ -n "$_h_out" ] || return 1
+            printf '%s=%s\n' "$2" "$_h_out"
+            return 0
+            ;;
         set)
             echo "uci set $2" >> "$H_OUT/calls.log"
             uci_set "${2%%=*}" "${2#*=}"
+            ;;
+        add_list)
+            echo "uci add_list $2" >> "$H_OUT/calls.log"
+            printf '%s+=%s\n' "${2%%=*}" "${2#*=}" >> "$H_STATE/uci.db"
+            ;;
+        delete)
+            echo "uci delete $2" >> "$H_OUT/calls.log"
+            uci_del "$2"
+            ;;
+        revert)
+            echo "uci revert $2" >> "$H_OUT/calls.log"
             ;;
         commit)
             echo "uci commit $2" >> "$H_OUT/calls.log"
