@@ -19,7 +19,7 @@ cat > "$H_STATE/uci.db" <<UCI
 quecmanager.watchcat.enabled=1
 quecmanager.watchcat.check_interval=10
 quecmanager.watchcat.act_after_sec=15
-quecmanager.watchcat.cooldown=30
+quecmanager.watchcat.step_wait_sec=30
 quecmanager.watchcat.tier1_enabled=1
 quecmanager.watchcat.tier2_enabled=1
 quecmanager.watchcat.tier3_enabled=0

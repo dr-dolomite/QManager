@@ -144,22 +144,23 @@ main() {
     # by others. Phase 2 code must write a new global only through its owner's
     # function.
     #   LOCKED entry (below): wd_sim revert_settle_active, recheck_interrupted,
-    #       primary_recheck_active; wd_tiers current_tier, cooldown_stale_retries,
+    #       primary_recheck_active; wd_tiers current_tier, tiers_tried, the step wait,
     #       _recovery_marker_emitted; wd_state failure_counter; wd_detect
     #       quality_breach_since and, via ssr_hold_clear, ssr_hold /
     #       ssr_hold_started.
     #   LOCKED exit: the same set minus revert_settle_active / recheck_interrupted;
     #       then wd_sim_on_unlock (wd_sim) writes wd_state state and wd_tiers
-    #       recovery_reason / cooldown_remaining.
+    #       recovery_reason and the step wait (wd_step_wait_start).
     #   natural recovery (suspect/ssr_hold -> monitor) and the "unexpected
     #       RECOVERY" arm: failure_counter, quality_breach_since, current_tier,
+    #       tiers_tried (also the outage natural-recovery reset below),
     #       primary_recheck_active, _recovery_marker_emitted, ssr_hold_clear.
     #   wd_detect evaluate_quality: wd_state state, wd_tiers recovery_reason and
-    #       current_tier (via find_next_tier).
+    #       current_tier and tiers_tried (via wd_ladder_pick).
     #   wd_tiers wd_enter_radio_off (from the start gates) and the radio_off arm
     #       below: wd_state state and failure_counter, wd_detect
     #       quality_breach_since and ssr_hold, wd_tiers current_tier,
-    #       cooldown_remaining, cooldown_stale_retries, _recovery_marker_emitted.
+    #       tiers_tried, the step wait, _recovery_marker_emitted.
     #   wd_tiers do_recovery / _cooldown_handle_failure / finish_cooldown:
     #       wd_state state and failure_counter, wd_detect
     #       quality_breach_since, wd_sim revert_settle_active.
@@ -167,7 +168,7 @@ main() {
     #   wd_sim execute_tier3 / sim_failover_fallback / finalize_sim_failover /
     #       initiate_primary_recheck / check_revert_request / wd_sim_finish_recheck:
     #       wd_state state and failure_counter, wd_tiers current_tier,
-    #       cooldown_remaining, recovery_reason, _recovery_marker_emitted,
+    #       tiers_tried, the step wait, recovery_reason, _recovery_marker_emitted,
     #       wd_detect quality_breach_since.
     # Loop temporaries _pr_now / _pr_due belong to main.
 
@@ -253,6 +254,9 @@ main() {
             if [ "$CFG_ENABLED" != "1" ]; then
                 qlog_info "Watchcat disabled via config reload, exiting"
                 state="disabled"
+                current_tier=0
+                tiers_tried=""
+                wd_step_wait_clear
                 write_state
                 wd_retire_service
                 exit 0
@@ -277,8 +281,9 @@ main() {
                 [ "$primary_recheck_active" = "true" ] && recheck_interrupted="true"
                 primary_recheck_active="false"
                 current_tier=0
+                tiers_tried=""
                 failure_counter=0
-                cooldown_stale_retries=0
+                wd_step_wait_clear
                 quality_breach_since=0
                 _recovery_marker_emitted=""
                 ssr_hold_clear
@@ -294,6 +299,7 @@ main() {
             qlog_info "Exiting LOCKED state"
             state="monitor"
             current_tier=0
+            tiers_tried=""
             failure_counter=0
             cooldown_stale_retries=0
             quality_breach_since=0
@@ -311,10 +317,10 @@ main() {
         fi
 
         # --- COOLDOWN state ---
+        # Runs to the mono deadline step_wait_until (wd_tiers.sh), not a pass
+        # count, so a slow pass does not stretch the wait.
         if [ "$state" = "cooldown" ]; then
-            cooldown_remaining=$((cooldown_remaining - CFG_CHECK_INTERVAL))
-            if [ "$cooldown_remaining" -le 0 ]; then
-                cooldown_remaining=0
+            if wd_step_wait_due; then
                 finish_cooldown
             fi
             write_state
@@ -331,9 +337,9 @@ main() {
                 qlog_info "Radio is back on (AT+CFUN=1) — resuming monitoring"
                 state="monitor"
                 current_tier=0
+                tiers_tried=""
                 failure_counter=0
-                cooldown_remaining=0
-                cooldown_stale_retries=0
+                wd_step_wait_clear
                 quality_breach_since=0
                 _recovery_marker_emitted=""
                 wd_quality_mark
@@ -387,6 +393,20 @@ main() {
         # after a watchdog reboot (wd_ledger.sh, the long-run guard).
         [ "$ping_reachable" = "true" ] && wd_link_up_seen
 
+        # Natural recovery ends an outage episode that an inconclusive cooldown
+        # left open (wd_tiers.sh, spec section 5.4): the next outage starts at
+        # Tier 1 again. A kept quality tier ends on a clean window instead
+        # (evaluate_quality), since the link is reachable during quality trouble.
+        if [ "$ping_reachable" = "true" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$current_tier" -gt 0 ] && [ "$recovery_reason" != "quality" ]; then
+            case "$state" in
+                monitor|suspect|ssr_hold)
+                    qlog_info "Link is reachable: the kept Tier $current_tier is cleared"
+                    current_tier=0
+                    tiers_tried=""
+                    ;;
+            esac
+        fi
+
         # A reachable link also proves the radio is on (no AT cost), so a radio-down
         # marker that a lost AT+CFUN=1 left behind is cleared here.
         if [ "$state" = "monitor" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$ping_reachable" = "true" ]; then
@@ -411,6 +431,8 @@ main() {
                     # Naturally recovered (the expected SSR self-heal happy path)
                     qlog_info "SUSPECT → MONITOR: connectivity restored naturally"
                     state="monitor"
+                    current_tier=0
+                    tiers_tried=""
                     failure_counter=0
                     quality_breach_since=0
                     primary_recheck_active="false"
@@ -436,15 +458,13 @@ main() {
                             wd_enter_radio_off
                         elif [ "$_wd_gate" != "go" ]; then
                             qlog_debug "SUSPECT: recovery not started ($_wd_gate), outage age ${wd_outage_age}s"
+                        elif ! wd_ladder_pick outage; then
+                            # The kept tier was the last eligible one (an
+                            # inconclusive cooldown before): the ladder is spent.
+                            _wd_ladder_exhausted "SUSPECT: no tier left after the kept Tier $current_tier"
                         else
                             qlog_info "SUSPECT → RECOVERY: outage age ${wd_outage_age}s >= ${wd_act_after_eff}s"
                             state="recovery"
-                            recovery_reason="outage"
-
-                            # Find first enabled tier
-                            if [ "$current_tier" -eq 0 ]; then
-                                find_next_tier 1
-                            fi
 
                             # SSR-aware hold: if a recoverable baseband SSR is
                             # mid-flight, hold the ladder this cycle (leave
@@ -471,6 +491,7 @@ main() {
                 state="monitor"
                 failure_counter=0
                 current_tier=0
+                tiers_tried=""
                 ;;
         esac
 

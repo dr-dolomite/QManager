@@ -2,7 +2,7 @@
 89000000000000000001
 
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
@@ -18,7 +18,7 @@
 [2026-09-21 14:13:50] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: backup SIM failed, reverting to slot 1
 [2026-09-21 14:13:54] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:13:54] INFO  [watchcat:PID] Entering post-revert SIM settle for 90s
-[2026-09-21 14:15:14] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
+[2026-09-21 14:15:24] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 
 === tmp/qmanager_events.json
 {"timestamp":1790000030,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}

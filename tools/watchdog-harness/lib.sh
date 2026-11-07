@@ -171,7 +171,8 @@ h_qcmd_default() {
 # Unreachable -> null; otherwise q_latency, with q_loss percent of the samples
 # null (evenly spread: sample k is null when floor((k+1)*P/100) > floor(k*P/100)).
 h_hist_append() { # dt reachable
-    _h_ns=$(( $1 / 5 ))
+    # one sample per ping interval (model key ping_interval, default 5)
+    _h_ns=$(( $1 / $(mget ping_interval 5) ))
     _h_hf="$H_ROOT/tmp/qmanager_ping_history"
     [ -f "$_h_hf" ] || : > "$_h_hf"
     _h_k=$(mget hist_cnt 0)

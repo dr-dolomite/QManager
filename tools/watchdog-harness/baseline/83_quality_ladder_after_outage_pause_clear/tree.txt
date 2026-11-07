@@ -1,5 +1,5 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=0 T3=0 T4=0 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
@@ -35,21 +35,18 @@
 [2026-09-21 14:17:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
 [2026-09-21 14:17:02] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 [2026-09-21 14:17:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
-[2026-09-21 14:17:04] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
-[2026-09-21 14:17:34] WARN  [watchcat:PID] COOLDOWN(quality): quality data not ready (retry 1/3) — extending by 10s
-[2026-09-21 14:17:44] WARN  [watchcat:PID] COOLDOWN(quality): quality data not ready (retry 2/3) — extending by 10s
-[2026-09-21 14:17:54] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:17:54] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 1
-[2026-09-21 14:17:54] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
-[2026-09-21 14:17:54] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
-[2026-09-21 14:17:54] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:17:04] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
 [2026-09-21 14:18:04] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:04] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:18:04] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 1
+[2026-09-21 14:18:04] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:18:04] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
+[2026-09-21 14:18:04] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
 [2026-09-21 14:18:14] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:14] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:18:14] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
 [2026-09-21 14:18:24] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:24] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:18:24] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
 [2026-09-21 14:18:34] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:18:34] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
 [2026-09-21 14:18:44] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
 
 === tmp/qmanager_events.json
@@ -59,5 +56,5 @@
 {"timestamp":1790000222,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000222,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000222,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000274,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000284,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
 

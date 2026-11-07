@@ -1,6 +1,6 @@
 # Tier 1 runs, then the ping cache goes stale during the cooldown: 3 stale
-# retries (+10 s each) then the failure path escalates to Tier 2, whose CFUN=1
-# restores the cache and the link -> success.
+# retries (+10 s each), then the verdict is inconclusive (R5): back to monitor
+# with Tier 1 kept; the cache stays stale, so nothing else runs.
 SC_PASSES=26
 sc_setup() {
     uci_set quecmanager.watchcat.tier4_enabled 0

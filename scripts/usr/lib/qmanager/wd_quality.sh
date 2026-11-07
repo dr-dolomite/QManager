@@ -9,9 +9,9 @@
 # Functions: wd_probe_period, wd_quality_mark, read_quality, quality_breached,
 #            evaluate_quality
 #
-# evaluate_quality starts the recovery ladder (find_next_tier / do_recovery from
+# evaluate_quality starts the recovery ladder (wd_ladder_pick / do_recovery from
 # wd_tiers.sh, start gate and SSR hold from wd_detect.sh), so it writes state,
-# recovery_reason and current_tier, which other libs own. Function definitions
+# recovery_reason, current_tier and tiers_tried, which other libs own. Function definitions
 # and global initialisers only. The last line sets WD_QUALITY_LOADED.
 # =============================================================================
 
@@ -155,6 +155,13 @@ evaluate_quality() {
             qlog_info "QUALITY: clean window, ending the quality pause"
             wd_holdoff_clear quality
         fi
+        # It also ends a quality episode that an inconclusive cooldown left open
+        # (spec section 5.4): the next quality ladder starts at Tier 1 again.
+        if [ "$current_tier" -gt 0 ] && [ "$recovery_reason" = "quality" ]; then
+            qlog_info "QUALITY: clean window, the kept Tier $current_tier is cleared"
+            current_tier=0
+            tiers_tried=""
+        fi
         return 1
     fi
 
@@ -188,10 +195,15 @@ evaluate_quality() {
             return 0
             ;;
     esac
+    quality_breach_since=0
+    # Tier 1, or the tier after the one an inconclusive quality cooldown kept.
+    # Nothing left below the quality cap (Tier 2): the ladder is exhausted.
+    if ! wd_ladder_pick quality; then
+        _wd_ladder_exhausted "QUALITY: no quality tier left after the kept Tier $current_tier"
+        return 0
+    fi
     qlog_warn "QUALITY → RECOVERY: breach for ${held}s (avg ${q_avg_latency}ms / loss ${q_packet_loss}% vs ${CFG_LATENCY_THRESHOLD_MS}ms / ${CFG_LOSS_THRESHOLD_PCT}%)"
     append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning" "wd_tier_start"
-    quality_breach_since=0
-    recovery_reason="quality"
 
     # SSR-aware hold: if a recoverable baseband SSR is mid-flight, hold
     # the ladder this cycle rather than forcing a detach. Not the main
@@ -203,10 +215,6 @@ evaluate_quality() {
     fi
 
     state="recovery"
-    # A tier above 2 left over from an outage episode is not a quality step.
-    if [ "$current_tier" -eq 0 ] || [ "$current_tier" -gt 2 ]; then
-        find_next_tier 1
-    fi
     do_recovery
     return 0
 }

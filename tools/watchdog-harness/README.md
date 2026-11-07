@@ -383,3 +383,56 @@ empty -> 3, `0000001` -> 1, `007` -> 7, `0010` -> 10), 102 (read-only state dir:
 at start with one "could not be saved" warning and one event, rests for the whole run from memory,
 no re-announce), 103 (hourly budget spent, Tier 3 fails and reverts, then straight to the outage
 pause with one "reboot limit reached" event and no "escalating to Tier 4").
+
+## R5: effective step wait and inconclusive cooldowns (step 1b)
+
+The cooldown after a tier is now a step wait on the mono clock. Config key `step_wait_sec`
+(default 60, clamp 10-300; `cooldown` is no longer read). Effective wait =
+`max(step_wait_sec, recover_secs + 20)` with `recover_secs` from the last fresh ping read (10
+when unknown); Tier 3 and the SIM settles (revert, failback, primary recheck, LOCKED re-arm)
+wait at least 90 s, and a quality cooldown at least `10 x interval_sec + 10` (contract
+Amendment 2, interval from the last fresh read, 5 when unknown), so its window holds the 10
+samples a verdict needs. The cooldown runs to the deadline `step_wait_until` (state file; null
+outside `cooldown`) and `cooldown_remaining = max(0, step_wait_until - mono)`. A verdict without
+data extends the deadline by one check interval, at most 3 times; then the verdict is
+**inconclusive**: an unconfirmed Tier 3 swap is reverted (the failure path's revert), the daemon
+returns to `monitor` and keeps `current_tier`, so the next trigger of the same reason resumes at
+the next eligible tier (`wd_ladder_pick`; nothing left, including above Tier 2 for quality, ends
+the episode in the hold-off). `current_tier` returns to 0 on success, on natural recovery (a
+fresh `reachable=true` with `streak_fail=0` in monitor, suspect or ssr_hold for an outage tier, a
+clean quality window for a quality tier), at the hold-off start and whenever an episode is
+abandoned (LOCKED, radio_off, user revert, failback, disable). The state file gains
+`tiers_tried` (tiers run in the current episode, in order; `[]` when idle). The primary-recheck
+verdict read also refreshes `failure_secs` / `offline_secs`. Harness: `inner.sh` seeds
+`step_wait_sec=30` (was `cooldown=30`), so outage cooldowns keep their 30 s; model key
+`ping_interval` now also sets the history sample rate. Every difference to the R3-follow-up
+baseline in an existing scenario is one of these:
+
+- every scenario: the state JSON gains `tiers_tried` after `current_tier`; `step_wait_until`
+  carries the deadline during a cooldown; the config line reads `step_wait=30s`;
+- 08, 20, 31, 56, 78-83, 94, 97, 99: the quality cooldown waits 60 s (10 samples at 5 s) and
+  reaches its verdict without the two extensions R4 needed; the steps after it move 10 s later
+  (08 runs 16 passes to show the success);
+- 12, 42, 50, 54, 58, 59, 67, 68 and the settle after the unlock in 11 and 15: a settle started
+  before the pass's cooldown arm now lasts the full 90 s (the pass count ended it one pass
+  early); 15's recheck verdict and its `AT+QCCID` move one pass later;
+- 11, 15: LOCKED entry clears the abandoned cooldown (`cooldown_remaining` 0, was the stale
+  value);
+- 09, 39: the SSR-hold natural recovery resets `current_tier` (was left at the picked tier);
+- 14, 48, 65: `offline_secs` carries the primary-recheck read during the backup settle;
+- 21: the stale cooldown is inconclusive (monitor, Tier 1 kept) instead of escalating to Tier 2;
+- 29: malformed `step_wait_until` / `tiers_tried` globals still give valid JSON;
+- 33: `wd_cooldown_verdict` prints `inconclusive` (was `fail`) for no data after 3 retries;
+- 76: with the 30 s minimum step wait a Tier 1 cooldown cannot end before the second drop, so
+  the first outage now ends by itself during the hold; the second escalation still goes
+  straight to Tier 1 without a second hold.
+
+New scenarios: 104 (`step_wait_sec 10` below the floor: 30 s wait, deadline and remaining per
+pass), 105 (`step_wait_sec 60`: Tier 1 waits 60 s, Tier 3 holds 90 s), 106 (stale cooldown x3 ->
+inconclusive keeps Tier 1, next trigger runs Tier 2, success clears `tiers_tried` [1 2]), 107
+(quality no-data inconclusive keeps Tier 1, next quality trigger runs Tier 2, then the quality
+pause), 108 (inconclusive Tier 3 reverts the unconfirmed swap and the next trigger reboots at
+Tier 4), 109 (quiet ping, interval 10: the quality cooldown waits 110 s and succeeds without an
+extension), 110 (inconclusive then a reachable read clears the kept tier; the next outage starts
+at Tier 1), 111 (Tier 1 off: an inconclusive quality Tier 2 leaves no tier under the cap, so the
+next trigger goes straight to the quality pause).

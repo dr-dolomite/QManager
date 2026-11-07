@@ -21,7 +21,10 @@ CFG_CHECK_INTERVAL=10
 # Seconds of outage age (wd_detect.sh wd_outage_update) before recovery starts;
 # the effective value is max(act_after_sec, the ping daemon's fail_secs).
 CFG_ACT_AFTER_SEC=30
-CFG_COOLDOWN=60
+# Seconds a tier gets to work before its verdict (step_wait_sec, 10-300, default
+# 60); the effective wait is max(step_wait_sec, the ping daemon's recover_secs
+# + 20), at least SIM_SETTLE_SECS for Tier 3 and the SIM settles (wd_tiers.sh).
+CFG_STEP_WAIT_SEC=60
 CFG_TIER1_ENABLED=1
 CFG_TIER2_ENABLED=1
 CFG_TIER3_ENABLED=0
@@ -92,8 +95,17 @@ read_config() {
             ;;
     esac
 
-    val=$(cfg_get watchdog cooldown)
-    [ -n "$val" ] && CFG_COOLDOWN="$val"
+    # step_wait_sec: 10-300, default 60 (absent or non-numeric).
+    val=$(cfg_get watchdog step_wait_sec)
+    case "$val" in
+        ''|*[!0-9]*) CFG_STEP_WAIT_SEC=60 ;;
+        *)
+            [ "${#val}" -gt 3 ] && val=300
+            CFG_STEP_WAIT_SEC="$val"
+            [ "$CFG_STEP_WAIT_SEC" -lt 10 ] && CFG_STEP_WAIT_SEC=10
+            [ "$CFG_STEP_WAIT_SEC" -gt 300 ] && CFG_STEP_WAIT_SEC=300
+            ;;
+    esac
 
     val=$(cfg_get watchdog tier1_enabled)
     [ -n "$val" ] && CFG_TIER1_ENABLED="$val"
@@ -168,7 +180,7 @@ read_config() {
     val=$(cfg_get watchdog primary_recheck_interval)
     case "$val" in ''|*[!0-9]*) CFG_PRIMARY_RECHECK_INTERVAL=30 ;; *) CFG_PRIMARY_RECHECK_INTERVAL="$val" ;; esac
 
-    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s cooldown=${CFG_COOLDOWN}s"
+    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s step_wait=${CFG_STEP_WAIT_SEC}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% after=${CFG_QUALITY_AFTER_SEC}s (shared thresholds, floors applied)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"

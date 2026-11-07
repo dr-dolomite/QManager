@@ -24,8 +24,8 @@ T+94 AT+CFUN?
 --- pass 16 ---
 --- pass 17 ---
 --- pass 18 ---
-T+214 AT+QCCID
 --- pass 19 ---
+T+224 AT+QCCID
 --- pass 20 ---
 --- pass 21 ---
 --- pass 22 ---

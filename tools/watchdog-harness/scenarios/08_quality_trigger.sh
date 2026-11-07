@@ -1,8 +1,8 @@
 # Link stays reachable but packet loss breaches the shared ceiling: once the
 # window holds 10 samples (pass 6) and the breach has lasted quality_after_sec
 # (30 s, pass 9) a quality-triggered Tier 1 runs, loss clears, cooldown(quality)
-# extends until the window refills, then succeeds.
-SC_PASSES=14
+# waits 60 s (10 samples at 5 s, R5 quality floor) and succeeds without an extension.
+SC_PASSES=16
 sc_setup() {
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier4_enabled 0

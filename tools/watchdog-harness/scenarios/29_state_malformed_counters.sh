@@ -12,6 +12,8 @@ sc_post_source() {
     last_recovery_tier=""
     last_recovery_time="12x"
     cooldown_remaining="-5"
+    step_wait_until="9x"
+    tiers_tried="1 x 9 2"
     original_sim_slot="x"
     current_sim_slot="007"
     quality_breach_since="1.5"

@@ -3,7 +3,7 @@
 89000000000000000001
 
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=1 T4=0 backup_sim=2
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
@@ -29,7 +29,7 @@
 [2026-09-21 14:15:04] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: backup SIM failed, reverting to slot 1
 [2026-09-21 14:15:08] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:15:08] INFO  [watchcat:PID] Entering post-revert SIM settle for 90s
-[2026-09-21 14:16:28] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
+[2026-09-21 14:16:38] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 
 === tmp/qmanager_events.json
 {"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}

@@ -26,8 +26,8 @@
 # The wd_sim_* functions are verbatim blocks lifted out of finish_cooldown
 # (wd_tiers.sh) and main() (qmanager_watchcat) so every SIM-failover path lives
 # in this file; each is called from the spot it came from. They also write
-# globals owned by other libs (state, cooldown_remaining, recovery_reason,
-# current_tier, ...), as the originals did. Function definitions and global
+# globals owned by other libs (state, the step wait, recovery_reason,
+# current_tier, tiers_tried, ...), as the originals did. Function definitions and global
 # initialisers only. The last line sets WD_SIM_LOADED.
 # =============================================================================
 
@@ -606,9 +606,8 @@ initiate_primary_recheck() {
     # health test uses the quality criterion iff the failover was quality-driven.
     # Do NOT clear sim_failover_active yet — finish_cooldown's recheck arm decides.
     primary_recheck_active="true"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
-    qlog_info "Entering primary-recheck settle for ${SIM_SETTLE_SECS}s (reason=$recovery_reason)"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+    qlog_info "Entering primary-recheck settle for ${cooldown_remaining}s (reason=$recovery_reason)"
 }
 
 # The modem runs on its original (primary) slot for good: drop the failover
@@ -634,6 +633,7 @@ _wd_sim_failback() {
     original_sim_slot="null"
     original_sim_iccid=""
     current_tier=0
+    tiers_tried=""
     failure_counter=0
     quality_breach_since=0
     _recovery_marker_emitted=""
@@ -653,7 +653,7 @@ wd_sim_finish_recheck() {
 
     local _primary_healthy
     _primary_healthy="no"
-    if read_ping && [ "$ping_reachable" = "true" ]; then
+    if read_ping && wd_outage_update && [ "$ping_reachable" = "true" ]; then
         if [ "$recovery_reason" = "quality" ]; then
             # Quality failover: primary must also pass the quality criterion.
             if read_quality && ! quality_breached; then
@@ -689,10 +689,9 @@ wd_sim_finish_recheck() {
             _wd_sim_failback "Watchcat: primary SIM kept — the modem stayed on slot $original_sim_slot"
             revert_settle_active="true"
             recovery_reason="outage"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
             touch "$RECOVERY_FLAG"
-            qlog_info "Entering post-recheck settle for ${SIM_SETTLE_SECS}s"
+            qlog_info "Entering post-recheck settle for ${cooldown_remaining}s"
             return
         fi
         qlog_error "PRIMARY RECHECK: return to backup slot $recheck_return_slot not verified"
@@ -737,10 +736,9 @@ wd_sim_finish_recheck() {
     # stays touched) during the settle, mirroring check_revert_request.
     revert_settle_active="true"
     recovery_reason="outage"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
     touch "$RECOVERY_FLAG"
-    qlog_info "Entering post-recheck backup settle for ${SIM_SETTLE_SECS}s"
+    qlog_info "Entering post-recheck backup settle for ${cooldown_remaining}s"
     return
 }
 
@@ -770,6 +768,7 @@ _wd_sim_revert_run() {
     sim_failover_active="false"
     failure_counter=0
     current_tier=0
+    tiers_tried=""
 
     # Already on the original slot: nothing was cycled, so no settle.
     if [ "$WD_SWAP_NOOP" = "true" ]; then
@@ -784,9 +783,8 @@ _wd_sim_revert_run() {
     # finish_cooldown returns to monitor without recovery escalation.
     revert_settle_active="true"
     recovery_reason="outage"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
-    qlog_info "Entering post-revert SIM settle for ${SIM_SETTLE_SECS}s"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+    qlog_info "Entering post-revert SIM settle for ${cooldown_remaining}s"
     return 0
 }
 
@@ -986,9 +984,8 @@ wd_sim_on_unlock() {
         if sim_failover_fallback; then
             revert_settle_active="true"
             recovery_reason="outage"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
-            qlog_info "Entering post-revert SIM settle for ${SIM_SETTLE_SECS}s"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+            qlog_info "Entering post-revert SIM settle for ${cooldown_remaining}s"
         else
             rm -f "$RECOVERY_FLAG"
             wd_sim_adopt_live_slot
@@ -1002,11 +999,10 @@ wd_sim_on_unlock() {
     if [ "$recheck_interrupted" = "true" ]; then
         recheck_interrupted="false"
         if [ "$sim_failover_active" = "true" ] && [ "$original_sim_slot" != "null" ] && [ "$current_sim_slot" = "$original_sim_slot" ] && [ "$recheck_return_slot" != "null" ]; then
-            qlog_warn "LOCKED exit: primary recheck was interrupted on slot $current_sim_slot, re-arming its settle for ${SIM_SETTLE_SECS}s"
             touch "$RECOVERY_FLAG"
             primary_recheck_active="true"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+            qlog_warn "LOCKED exit: primary recheck was interrupted on slot $current_sim_slot, re-arming its settle for ${cooldown_remaining}s"
         fi
     fi
 }

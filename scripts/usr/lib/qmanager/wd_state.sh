@@ -73,6 +73,9 @@ _wd_write_state_file() {
     local v_rb_spent
     local v_qsince
     local v_qbs
+    local v_swu
+    local v_tried
+    local t
     local json
     stale="$1"
     ts=$(date +%s)
@@ -86,6 +89,14 @@ _wd_write_state_file() {
     _wd_num "$last_recovery_tier" null;    v_last_tier="$_wdn"
     _wd_num "$total_recoveries" 0;         v_total="$_wdn"
     _wd_num "$cooldown_remaining" 0;       v_cooldown="$_wdn"
+    _wd_num "$step_wait_until" 0;          v_swu="$_wdn"
+    # tiers_tried ("1 2") as a JSON int array; anything but a tier digit is dropped.
+    v_tried=""
+    for t in $tiers_tried; do
+        case "$t" in
+            [1-4]) v_tried="${v_tried:+$v_tried,}$t" ;;
+        esac
+    done
     _wd_num "$original_sim_slot" null;     v_orig="$_wdn"
     _wd_num "$current_sim_slot" null;      v_curr="$_wdn"
     _wd_num "$reboots_this_hour" 0;        v_reboots="$_wdn"
@@ -134,8 +145,8 @@ _wd_write_state_file() {
     esac
 
     # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
-    # has not landed yet carry their idle value: step_wait_until,
-    # failback_failures, ping_stale.
+    # has not landed yet carry their idle value: failback_failures, ping_stale.
+    # step_wait_until is null outside a cooldown.
     json=$(jq -n -c \
         --argjson ts "$ts" \
         --argjson mono "$v_mono" \
@@ -150,6 +161,8 @@ _wd_write_state_file() {
         --argjson last_tier "$v_last_tier" \
         --argjson total "$v_total" \
         --argjson cooldown "$v_cooldown" \
+        --argjson swu "$v_swu" \
+        --argjson tried "[$v_tried]" \
         --arg sf_active "$sim_failover_active" \
         --argjson sf_orig "$v_orig" \
         --argjson sf_curr "$v_curr" \
@@ -174,6 +187,7 @@ _wd_write_state_file() {
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
+            tiers_tried: $tried,
             recovery_reason: (if ($state == "recovery" or $state == "cooldown" or $state == "ssr_hold") then $recovery_reason else null end),
             last_recovery_time: $last_time,
             last_recovery_tier: $last_tier,
@@ -183,7 +197,7 @@ _wd_write_state_file() {
             failure_secs: $fsecs,
             offline_secs: $offline,
             cooldown_remaining: $cooldown,
-            step_wait_until: null,
+            step_wait_until: (if ($state == "cooldown" and $swu > 0) then $swu else null end),
             holdoff_until: (if $holdoff_until > $mono then $holdoff_until else null end),
             holdoff_reason: (if $holdoff_until > $mono and $holdoff_reason != "" then $holdoff_reason else null end),
             holdoff_quality_level: $qlevel,

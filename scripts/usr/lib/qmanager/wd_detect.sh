@@ -6,12 +6,13 @@
 #
 # Owns: ping_streak_fail, ping_reachable, ping_during_recovery, ssr_hold,
 #       last_ssr_detected, ssr_hold_started, wd_resume_mono, wd_outage_age,
-#       wd_offline_secs, wd_act_after_eff, _wd_attach_seen, _wd_ssr_cur_id,
-#       _wd_ssr_held_id
+#       wd_offline_secs, wd_act_after_eff, wd_recover_secs, wd_ping_interval,
+#       _wd_attach_seen,
+#       _wd_ssr_cur_id, _wd_ssr_held_id
 # Functions: read_ping, wd_resume_mark, wd_attach_tick, wd_outage_update,
-#            wd_outage_clear, wd_outage_due, wd_decide_start, wd_holdoff_left,
-#            wd_radio_reconcile, wd_start_gate, ssr_in_progress, ssr_hold_gate,
-#            ssr_hold_clear
+#            wd_outage_clear, wd_outage_due, wd_step_wait_secs, wd_decide_start,
+#            wd_holdoff_left, wd_radio_reconcile, wd_start_gate,
+#            ssr_in_progress, ssr_hold_gate, ssr_hold_clear
 #
 # The quality window and the quality trigger (evaluate_quality) live in
 # wd_quality.sh. Function definitions and global initialisers only. The last
@@ -33,6 +34,8 @@ wd_resume_mono=0          # mono of the last point the watchdog could act again
 wd_outage_age=0           # outage age of the last fresh read (failure_secs)
 wd_offline_secs=0         # raw fail_elapsed_sec of the last fresh read (offline_secs)
 wd_act_after_eff=30       # max(CFG_ACT_AFTER_SEC, ping fail_secs) of the last fresh read
+wd_recover_secs=10        # ping recover_secs of the last fresh read (10 when unknown)
+wd_ping_interval=5        # ping interval_sec of the last fresh read (5 when unknown)
 _wd_attach_seen=0         # 1 while the ping attach warm-up flag was seen
 WD_ATTACH_FLAG="/tmp/qmanager_ping_attaching"
 
@@ -97,6 +100,13 @@ wd_outage_update() {
     wd_act_after_eff="$CFG_ACT_AFTER_SEC"
     case "$wd_act_after_eff" in ''|*[!0-9]*) wd_act_after_eff=30 ;; esac
     [ "$fs" -gt "$wd_act_after_eff" ] && wd_act_after_eff="$fs"
+    wd_recover_secs="$CQ_RECOVER_SECS"
+    case "$wd_recover_secs" in ''|*[!0-9]*) wd_recover_secs=10 ;; esac
+    [ "${#wd_recover_secs}" -gt 4 ] && wd_recover_secs=9999
+    wd_ping_interval="$CQ_INTERVAL_SEC"
+    case "$wd_ping_interval" in ''|*[!0-9]*) wd_ping_interval=5 ;; esac
+    [ "${#wd_ping_interval}" -gt 3 ] && wd_ping_interval=300
+    [ "$wd_ping_interval" -ge 1 ] || wd_ping_interval=5
 
     if [ "$ping_reachable" = "true" ]; then
         wd_offline_secs=0
@@ -122,6 +132,24 @@ wd_outage_update() {
         wd_outage_age="$since"
     fi
     return 0
+}
+
+# wd_step_wait_secs [floor]: prints the effective step wait,
+# max(step_wait_sec, recover_secs + 20, floor): an outage verdict needs
+# recover_secs of answered probes, so a shorter wait could only ever fail.
+# Tier 3 and the SIM settles pass SIM_SETTLE_SECS as the floor; a quality
+# cooldown passes 10 x interval_sec + 10, so its window holds the 10 samples a
+# verdict needs (contract Amendment 2).
+wd_step_wait_secs() {
+    local secs
+    local fl
+    secs="$CFG_STEP_WAIT_SEC"
+    case "$secs" in ''|*[!0-9]*) secs=60 ;; esac
+    [ $((wd_recover_secs + 20)) -gt "$secs" ] && secs=$((wd_recover_secs + 20))
+    fl="$1"
+    case "$fl" in ''|*[!0-9]*) fl=0 ;; esac
+    [ "$fl" -gt "$secs" ] && secs="$fl"
+    printf '%s' "$secs"
 }
 
 # LOCKED / radio_off entry: the watchdog cannot act, so no outage age counts.
