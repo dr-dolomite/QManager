@@ -168,20 +168,20 @@ wd_decide_start() {
 # pause after an exhausted ladder (0 = none). Anything but "quality" = outage.
 wd_holdoff_left() {
     local now
-    local until
+    local hold_end
     if [ "$1" = "quality" ]; then
-        until="$wd_hold_q_until"
+        hold_end="$wd_hold_q_until"
     else
-        until="$wd_hold_out_until"
+        hold_end="$wd_hold_out_until"
     fi
-    case "$until" in
+    case "$hold_end" in
         ''|*[!0-9]*) printf '0'; return 0 ;;
     esac
-    [ "$until" -gt 0 ] || { printf '0'; return 0; }
+    [ "$hold_end" -gt 0 ] || { printf '0'; return 0; }
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    if [ "$until" -gt "$now" ]; then
-        printf '%s' $((until - now))
+    if [ "$hold_end" -gt "$now" ]; then
+        printf '%s' $((hold_end - now))
     else
         printf '0'
     fi

@@ -379,6 +379,9 @@ _wd_start_holdoff() {
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
     if [ "$recovery_reason" = "quality" ]; then
+        # A quality pause that ended since this pass's wd_holdoff_tick still
+        # counts as the previous pause, so the level grows instead of resetting.
+        wd_holdoff_tick
         if [ "$wd_hold_q_end" -gt 0 ] && [ $((now - wd_hold_q_end)) -lt "$HOLDOFF_QUALITY_RESET_SECS" ]; then
             [ "$wd_hold_q_level" -lt 2 ] && wd_hold_q_level=$((wd_hold_q_level + 1))
         else

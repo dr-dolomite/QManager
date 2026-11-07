@@ -204,7 +204,9 @@ An exhausted ladder now pauses only new ladders of its own reason. The outage pa
 (`wd_hold_q_until`) lasts 15, 30, then 60 minutes on consecutive quality pauses
 (`wd_hold_q_level` 0/1/2, capped at 2); the level drops back to 0 an hour after the last
 quality pause ended (`wd_hold_q_end`), and a settings reload ends the pause and resets the
-level. A clean quality window ends the quality pause early; reachability never does. The
+level. A quality-threshold save also raises the watchdog reload flag, so it resets the quality
+pause and level like a watchdog save. A clean quality window ends the quality pause early;
+reachability never does. The
 start gate takes the reason (`wd_start_gate outage|quality`, `wd_holdoff_left <reason>`), so a
 quality pause never blocks an outage ladder and vice versa. The state file reports
 `state: holdoff` while idle in monitor under any pause, or in suspect under the outage pause;
@@ -228,8 +230,15 @@ New scenarios: 77 (outage pause, state holdoff, ended by the first reachable rea
 window ends the quality pause early; the next pause within the hour is 30 minutes), 81 (a
 settings reload ends a 30 minute quality pause and the next pause is 15 minutes), 82 (a link
 drop under a quality pause runs the outage ladder, which succeeds; the quality pause keeps
-running), 83 (an outage pause ends when the lossy link returns and the quality ladder runs at
-once).
+running), 83 (`83_quality_ladder_after_outage_pause_clear`: the reachable read of the lossy
+link ends the outage pause and the quality ladder runs at once; an outage pause and a quality
+evaluation cannot overlap by construction: a reachable read ends the outage pause).
+
+R2 validator follow-up: `_wd_start_holdoff` runs `wd_holdoff_tick` before it picks the quality
+level, so a quality pause that expired after this pass's tick and a new quality ladder exhausted
+in the same pass still grows the level instead of resetting it; `wd_holdoff_left` names its
+local `hold_end` (not the reserved word `until`); scenario 83 was renamed (was
+`83_outage_pause_allows_quality_ladder`).
 
 ## R1 follow-ups (step 1b)
 
