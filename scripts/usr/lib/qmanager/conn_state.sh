@@ -153,7 +153,7 @@ EOF
 # builtins instead of forking jq every cycle. conn_state_read above is
 # unchanged and stays the watchcat's reader.
 # ---------------------------------------------------------------------------
-CQ_PING_ENV="${CQ_PING_ENV:-$PF_RUN_DIR/ping.env}"
+CQ_PING_ENV="${CQ_PING_ENV:-${PF_RUN_DIR:-/var/run/qmanager}/ping.env}"
 
 # cq_env_source <file>: source a sidecar only if it is complete and plain.
 # Every line must be a single-quoted assignment and the last must be the end

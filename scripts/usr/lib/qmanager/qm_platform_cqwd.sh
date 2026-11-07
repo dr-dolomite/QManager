@@ -169,8 +169,14 @@ plat_tower_locked() {
     return 1
 }
 
-# plat_tower_failover start|stop
-plat_tower_failover() { /etc/init.d/qmanager_tower_failover "$1" 2>/dev/null; }
+# plat_tower_failover pause|resume (the tower-failover init service stop|start)
+plat_tower_failover() {
+    case "$1" in
+        pause)  /etc/init.d/qmanager_tower_failover stop 2>/dev/null ;;
+        resume) /etc/init.d/qmanager_tower_failover start 2>/dev/null ;;
+        *)      return 2 ;;
+    esac
+}
 
 # plat_profile_apply <iccid> <reason>: SIM profile auto-apply, in a subshell so
 # profile_mgr.sh's globals stay out of the caller.

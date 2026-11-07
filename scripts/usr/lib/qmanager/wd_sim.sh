@@ -283,7 +283,7 @@ execute_tier3() {
     _orig_iccid=$(_wd_sim_iccid)
 
     # Stop tower failover daemon (locks are meaningless on different SIM)
-    plat_tower_failover stop
+    plat_tower_failover pause
 
     # Verified Golden Rule swap (wd_swap_slot). If the slot never moved there is
     # no failover to record: put tower failover back and skip the tier. Return 2
@@ -295,7 +295,7 @@ execute_tier3() {
     if [ "$_t3_swap_rc" -eq 1 ]; then
         qlog_error "TIER 3: SIM swap to slot $CFG_BACKUP_SIM_SLOT not verified, skipping tier"
         append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error"
-        plat_tower_failover start
+        plat_tower_failover resume
         return 1
     fi
     [ "$_t3_swap_rc" -eq 2 ] && qlog_warn "TIER 3: modem is on slot $CFG_BACKUP_SIM_SLOT, radio not confirmed on"
@@ -323,7 +323,7 @@ execute_tier3() {
                 original_sim_slot="null"
                 original_sim_iccid=""
                 current_sim_slot="null"
-                plat_tower_failover start
+                plat_tower_failover resume
                 return 1
                 ;;
             *)
@@ -442,7 +442,7 @@ sim_failover_fallback() {
     fi
 
     # Restart tower failover daemon
-    plat_tower_failover start
+    plat_tower_failover resume
 
     current_sim_slot="$original_sim_slot"
     sim_failover_active="false"
@@ -625,7 +625,7 @@ _wd_sim_failback() {
     fi
 
     # Back on primary — its tower locks are valid again.
-    plat_tower_failover start
+    plat_tower_failover resume
 
     append_event "sim_failover" "$1" "info"
 
@@ -721,7 +721,7 @@ wd_sim_finish_recheck() {
     # (If the return swap failed and the modem is still on the primary, the
     # error event above says so and the daemon is left running.)
     if [ "$current_sim_slot" = "$recheck_return_slot" ]; then
-        plat_tower_failover stop
+        plat_tower_failover pause
         append_event "sim_failover" "Watchcat: primary SIM still unhealthy — staying on backup slot $recheck_return_slot" "info"
     fi
 
