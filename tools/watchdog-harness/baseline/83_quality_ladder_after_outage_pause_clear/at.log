@@ -16,15 +16,21 @@ T+52 AT+COPS=0
 --- pass 13 ---
 --- pass 14 ---
 --- pass 15 ---
-T+182 AT+CFUN?
-T+182 AT+COPS=2
-T+184 AT+COPS=0
 --- pass 16 ---
 --- pass 17 ---
 --- pass 18 ---
 --- pass 19 ---
+T+222 AT+CFUN?
+T+222 AT+COPS=2
+T+224 AT+COPS=0
 --- pass 20 ---
 --- pass 21 ---
 --- pass 22 ---
 --- pass 23 ---
 --- pass 24 ---
+--- pass 25 ---
+--- pass 26 ---
+--- pass 27 ---
+--- pass 28 ---
+--- pass 29 ---
+--- pass 30 ---

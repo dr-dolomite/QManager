@@ -14,7 +14,7 @@ sc_setup() {
 sc_pass_2() { mset reachable false; }
 sc_pass_8() { mset reachable true; }
 sc_snap_extra() {
-    echo "quality_since=$quality_since breach=$quality_breach_counter"
+    echo "quality_since=$quality_since breach=$quality_breach_since"
     if read_quality; then
         echo "window: loss=$q_packet_loss avg=$q_avg_latency"
     else

@@ -58,9 +58,69 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=0 q_level=0 q_end=0
-=== pass 5 (t+72) ===
+=== pass 5 (t+70) ===
 -- state
-{"timestamp":1790000072,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000072,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5072,"stale_after":90}
+{"timestamp":1790000070,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5070,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 6 (t+80) ===
+-- state
+{"timestamp":1790000080,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5080,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 7 (t+90) ===
+-- state
+{"timestamp":1790000090,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":10,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5090,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 8 (t+100) ===
+-- state
+{"timestamp":1790000100,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":20,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5100,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 9 (t+112) ===
+-- state
+{"timestamp":1790000112,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5112,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -74,9 +134,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=0 q_level=0 q_end=0
-=== pass 6 (t+82) ===
+=== pass 10 (t+122) ===
 -- state
-{"timestamp":1790000082,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000072,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5082,"stale_after":90}
+{"timestamp":1790000122,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5122,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -90,9 +150,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=0 q_level=0 q_end=0
-=== pass 7 (t+92) ===
+=== pass 11 (t+132) ===
 -- state
-{"timestamp":1790000092,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000072,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5092,"stale_after":90}
+{"timestamp":1790000132,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5132,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -106,9 +166,41 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=0 q_level=0 q_end=0
-=== pass 8 (t+102) ===
+=== pass 12 (t+142) ===
 -- state
-{"timestamp":1790000102,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000072,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5102,"stale_after":90}
+{"timestamp":1790000142,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5142,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_recovery_active
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 13 (t+152) ===
+-- state
+{"timestamp":1790000152,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"quality","last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5152,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_recovery_active
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=0 q_level=0 q_end=0
+=== pass 14 (t+162) ===
+-- state
+{"timestamp":1790000162,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5162,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -121,9 +213,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=900 q_level=0 q_end=0
-=== pass 9 (t+112) ===
+=== pass 15 (t+172) ===
 -- state
-{"timestamp":1790000112,"enabled":true,"state":"suspect","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000072,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":2,"failure_secs":10,"offline_secs":10,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5112,"stale_after":90}
+{"timestamp":1790000172,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5172,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -136,14 +228,13 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=890 q_level=0 q_end=0
-=== pass 10 (t+124) ===
+=== pass 16 (t+182) ===
 -- state
-{"timestamp":1790000124,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5124,"stale_after":90}
+{"timestamp":1790000182,"enabled":true,"state":"suspect","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000112,"last_recovery_tier":1,"last_recovery_reason":"quality","total_recoveries":1,"failure_count":2,"failure_secs":10,"offline_secs":10,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5182,"stale_after":90}
 -- files
 etc/qmanager:
 
 tmp:
-qmanager_recovery_active
 qmanager_watchcat.pid
 
 var/run:
@@ -151,10 +242,10 @@ qmanager
 -- failover
 (none)
 -- extra
-out_left=0 q_left=878 q_level=0 q_end=0
-=== pass 11 (t+134) ===
+out_left=0 q_left=880 q_level=0 q_end=0
+=== pass 17 (t+194) ===
 -- state
-{"timestamp":1790000134,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":20,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5134,"stale_after":90}
+{"timestamp":1790000194,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5194,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -168,9 +259,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=868 q_level=0 q_end=0
-=== pass 12 (t+144) ===
+=== pass 18 (t+204) ===
 -- state
-{"timestamp":1790000144,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5144,"stale_after":90}
+{"timestamp":1790000204,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":20,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5204,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -184,13 +275,14 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=858 q_level=0 q_end=0
-=== pass 13 (t+154) ===
+=== pass 19 (t+214) ===
 -- state
-{"timestamp":1790000154,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5154,"stale_after":90}
+{"timestamp":1790000214,"enabled":true,"state":"cooldown","current_tier":1,"recovery_reason":"outage","last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":4,"failure_secs":20,"offline_secs":20,"cooldown_remaining":10,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5214,"stale_after":90}
 -- files
 etc/qmanager:
 
 tmp:
+qmanager_recovery_active
 qmanager_watchcat.pid
 
 var/run:
@@ -199,9 +291,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=848 q_level=0 q_end=0
-=== pass 14 (t+164) ===
+=== pass 20 (t+224) ===
 -- state
-{"timestamp":1790000164,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5164,"stale_after":90}
+{"timestamp":1790000224,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5224,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -214,9 +306,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=838 q_level=0 q_end=0
-=== pass 15 (t+174) ===
+=== pass 21 (t+234) ===
 -- state
-{"timestamp":1790000174,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5174,"stale_after":90}
+{"timestamp":1790000234,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5234,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -229,9 +321,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=828 q_level=0 q_end=0
-=== pass 16 (t+184) ===
+=== pass 22 (t+244) ===
 -- state
-{"timestamp":1790000184,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5184,"stale_after":90}
+{"timestamp":1790000244,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5244,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -244,9 +336,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=818 q_level=0 q_end=0
-=== pass 17 (t+194) ===
+=== pass 23 (t+254) ===
 -- state
-{"timestamp":1790000194,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5194,"stale_after":90}
+{"timestamp":1790000254,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5254,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -259,9 +351,9 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=808 q_level=0 q_end=0
-=== pass 18 (t+204) ===
+=== pass 24 (t+264) ===
 -- state
-{"timestamp":1790000204,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000124,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6002,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5204,"stale_after":90}
+{"timestamp":1790000264,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5264,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -274,3 +366,33 @@ qmanager
 (none)
 -- extra
 out_left=0 q_left=798 q_level=0 q_end=0
+=== pass 25 (t+274) ===
+-- state
+{"timestamp":1790000274,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5274,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=788 q_level=0 q_end=0
+=== pass 26 (t+284) ===
+-- state
+{"timestamp":1790000284,"enabled":true,"state":"holdoff","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000194,"last_recovery_tier":1,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":6062,"holdoff_reason":"quality","holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5284,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+out_left=0 q_left=778 q_level=0 q_end=0

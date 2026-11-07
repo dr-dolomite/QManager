@@ -1,0 +1,32 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=120s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:14:50] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:14:50] INFO  [watchcat:PID] QUALITY: breach for 10s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:00] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:15:00] INFO  [watchcat:PID] QUALITY: breach for 20s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:15:10] INFO  [watchcat:PID] QUALITY: breach for 30s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:20] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:15:20] INFO  [watchcat:PID] QUALITY: breach for 40s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:30] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:15:30] INFO  [watchcat:PID] QUALITY: breach for 50s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:40] WARN  [watchcat:PID] QUALITY breach: avg latency 366.3ms > 250ms
+[2026-09-21 14:15:40] INFO  [watchcat:PID] QUALITY: breach for 60s/120s (avg 366.3ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:50] WARN  [watchcat:PID] QUALITY breach: avg latency 337.8ms > 250ms
+[2026-09-21 14:15:50] INFO  [watchcat:PID] QUALITY: breach for 70s/120s (avg 337.8ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:16:00] WARN  [watchcat:PID] QUALITY breach: avg latency 306.5ms > 250ms
+[2026-09-21 14:16:00] INFO  [watchcat:PID] QUALITY: breach for 80s/120s (avg 306.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:16:10] WARN  [watchcat:PID] QUALITY breach: avg latency 275.2ms > 250ms
+[2026-09-21 14:16:10] INFO  [watchcat:PID] QUALITY: breach for 90s/120s (avg 275.2ms vs 250ms, loss 0% vs 30%)
+

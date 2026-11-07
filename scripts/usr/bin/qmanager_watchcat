@@ -146,29 +146,29 @@ main() {
     #   LOCKED entry (below): wd_sim revert_settle_active, recheck_interrupted,
     #       primary_recheck_active; wd_tiers current_tier, cooldown_stale_retries,
     #       _recovery_marker_emitted; wd_state failure_counter; wd_detect
-    #       quality_breach_counter and, via ssr_hold_clear, ssr_hold /
+    #       quality_breach_since and, via ssr_hold_clear, ssr_hold /
     #       ssr_hold_started.
     #   LOCKED exit: the same set minus revert_settle_active / recheck_interrupted;
     #       then wd_sim_on_unlock (wd_sim) writes wd_state state and wd_tiers
     #       recovery_reason / cooldown_remaining.
     #   natural recovery (suspect/ssr_hold -> monitor) and the "unexpected
-    #       RECOVERY" arm: failure_counter, quality_breach_counter, current_tier,
+    #       RECOVERY" arm: failure_counter, quality_breach_since, current_tier,
     #       primary_recheck_active, _recovery_marker_emitted, ssr_hold_clear.
     #   wd_detect evaluate_quality: wd_state state, wd_tiers recovery_reason and
     #       current_tier (via find_next_tier).
     #   wd_tiers wd_enter_radio_off (from the start gates) and the radio_off arm
     #       below: wd_state state and failure_counter, wd_detect
-    #       quality_breach_counter and ssr_hold, wd_tiers current_tier,
+    #       quality_breach_since and ssr_hold, wd_tiers current_tier,
     #       cooldown_remaining, cooldown_stale_retries, _recovery_marker_emitted.
     #   wd_tiers do_recovery / _cooldown_handle_failure / finish_cooldown:
     #       wd_state state and failure_counter, wd_detect
-    #       quality_breach_counter, wd_sim revert_settle_active.
+    #       quality_breach_since, wd_sim revert_settle_active.
     #   main (below): wd_ledger wd_link_up_seen on every fresh reachable read.
     #   wd_sim execute_tier3 / sim_failover_fallback / finalize_sim_failover /
     #       initiate_primary_recheck / check_revert_request / wd_sim_finish_recheck:
     #       wd_state state and failure_counter, wd_tiers current_tier,
     #       cooldown_remaining, recovery_reason, _recovery_marker_emitted,
-    #       wd_detect quality_breach_counter.
+    #       wd_detect quality_breach_since.
     # Loop temporaries _pr_now / _pr_due belong to main.
 
     local _prev_streak
@@ -279,7 +279,7 @@ main() {
                 current_tier=0
                 failure_counter=0
                 cooldown_stale_retries=0
-                quality_breach_counter=0
+                quality_breach_since=0
                 _recovery_marker_emitted=""
                 ssr_hold_clear
                 wd_outage_clear
@@ -296,7 +296,7 @@ main() {
             current_tier=0
             failure_counter=0
             cooldown_stale_retries=0
-            quality_breach_counter=0
+            quality_breach_since=0
             primary_recheck_active="false"
             _recovery_marker_emitted=""
             ssr_hold_clear
@@ -334,7 +334,7 @@ main() {
                 failure_counter=0
                 cooldown_remaining=0
                 cooldown_stale_retries=0
-                quality_breach_counter=0
+                quality_breach_since=0
                 _recovery_marker_emitted=""
                 wd_quality_mark
                 # The ping daemon kept counting failures while the radio was
@@ -412,7 +412,7 @@ main() {
                     qlog_info "SUSPECT → MONITOR: connectivity restored naturally"
                     state="monitor"
                     failure_counter=0
-                    quality_breach_counter=0
+                    quality_breach_since=0
                     primary_recheck_active="false"
                     _recovery_marker_emitted=""
                     ssr_hold_clear

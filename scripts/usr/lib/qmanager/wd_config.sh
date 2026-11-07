@@ -31,10 +31,16 @@ CFG_MAX_REBOOTS_PER_HOUR=3
 CFG_QUALITY_ENABLED=0
 # Shared degraded thresholds resolved from connection_quality latency/loss
 # (NOT watchcat.* — the retired latency_ceiling_ms/loss_ceiling_pct keys). These
-# are recomputed by resolve_quality_thresholds() on each config load/reload.
+# are recomputed by resolve_quality_thresholds() on each config load/reload,
+# then raised to the watchdog floors (spec section 5.2): a quality ladder never
+# acts on a latency limit below 50 ms or a loss limit below 10 %.
 CFG_LATENCY_THRESHOLD_MS=250
 CFG_LOSS_THRESHOLD_PCT=30
-CFG_QUALITY_CONSECUTIVE=5
+QUALITY_LATENCY_FLOOR_MS=50
+QUALITY_LOSS_FLOOR_PCT=10
+# Seconds a quality breach must persist on the monotonic clock before the
+# quality ladder starts (quality_after_sec, 30-1800, default 120).
+CFG_QUALITY_AFTER_SEC=120
 CFG_SSR_AWARE=1
 CFG_SSR_GRACE=45
 # Auto-failback to the primary SIM after a Tier-3 failover. The inactive primary
@@ -127,8 +133,17 @@ read_config() {
     # watchcat.* are retired and intentionally NOT read here).
     resolve_quality_thresholds
 
-    val=$(cfg_get watchdog quality_consecutive)
-    [ -n "$val" ] && CFG_QUALITY_CONSECUTIVE="$val"
+    # quality_after_sec: 30-1800, default 120 (absent or non-numeric).
+    val=$(cfg_get watchdog quality_after_sec)
+    case "$val" in
+        ''|*[!0-9]*) CFG_QUALITY_AFTER_SEC=120 ;;
+        *)
+            [ "${#val}" -gt 4 ] && val=1800
+            CFG_QUALITY_AFTER_SEC="$val"
+            [ "$CFG_QUALITY_AFTER_SEC" -lt 30 ] && CFG_QUALITY_AFTER_SEC=30
+            [ "$CFG_QUALITY_AFTER_SEC" -gt 1800 ] && CFG_QUALITY_AFTER_SEC=1800
+            ;;
+    esac
 
     CFG_SSR_AWARE=$(cfg_get watchdog ssr_aware)
     [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
@@ -153,7 +168,7 @@ read_config() {
 
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s cooldown=${CFG_COOLDOWN}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
-    qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE} (shared thresholds)"
+    qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% after=${CFG_QUALITY_AFTER_SEC}s (shared thresholds, floors applied)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
     qlog_info "  Primary-recheck (auto-failback): enabled=${CFG_PRIMARY_RECHECK_ENABLED} interval=${CFG_PRIMARY_RECHECK_INTERVAL}min"
 }
@@ -200,6 +215,14 @@ resolve_quality_thresholds() {
             ;;
         tolerant|*)    CFG_LOSS_THRESHOLD_PCT=30 ;;
     esac
+
+    # Watchdog floors (contracts section 1): max(latency, 50) ms, max(loss, 10) %.
+    # Custom values are digits only here, so a length check keeps test in range.
+    [ "${#CFG_LATENCY_THRESHOLD_MS}" -gt 6 ] && CFG_LATENCY_THRESHOLD_MS=10000
+    [ "${#CFG_LOSS_THRESHOLD_PCT}" -gt 3 ] && CFG_LOSS_THRESHOLD_PCT=100
+    [ "$CFG_LATENCY_THRESHOLD_MS" -lt "$QUALITY_LATENCY_FLOOR_MS" ] && CFG_LATENCY_THRESHOLD_MS="$QUALITY_LATENCY_FLOOR_MS"
+    [ "$CFG_LOSS_THRESHOLD_PCT" -lt "$QUALITY_LOSS_FLOOR_PCT" ] && CFG_LOSS_THRESHOLD_PCT="$QUALITY_LOSS_FLOOR_PCT"
+    return 0
 }
 
 WD_CONFIG_LOADED=1

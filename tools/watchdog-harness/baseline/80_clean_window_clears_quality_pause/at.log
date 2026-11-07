@@ -1,9 +1,9 @@
 --- pass 1 ---
 --- pass 2 ---
+T+150 AT+CFUN?
+T+150 AT+COPS=2
+T+152 AT+COPS=0
 --- pass 3 ---
-T+210 AT+CFUN?
-T+210 AT+COPS=2
-T+212 AT+COPS=0
 --- pass 4 ---
 --- pass 5 ---
 --- pass 6 ---
@@ -13,10 +13,10 @@ T+212 AT+COPS=0
 --- pass 10 ---
 --- pass 11 ---
 --- pass 12 ---
+T+752 AT+CFUN?
+T+752 AT+COPS=2
+T+754 AT+COPS=0
 --- pass 13 ---
-T+812 AT+CFUN?
-T+812 AT+COPS=2
-T+814 AT+COPS=0
 --- pass 14 ---
 --- pass 15 ---
 --- pass 16 ---

@@ -635,7 +635,7 @@ _wd_sim_failback() {
     original_sim_iccid=""
     current_tier=0
     failure_counter=0
-    quality_breach_counter=0
+    quality_breach_since=0
     _recovery_marker_emitted=""
     last_recheck_time=$(mono_now)
     state="monitor"

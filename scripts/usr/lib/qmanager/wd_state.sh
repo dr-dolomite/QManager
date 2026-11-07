@@ -71,6 +71,8 @@ _wd_write_state_file() {
     local v_rb_limit
     local v_rb_until
     local v_rb_spent
+    local v_qsince
+    local v_qbs
     local json
     stale="$1"
     ts=$(date +%s)
@@ -100,6 +102,12 @@ _wd_write_state_file() {
     _wd_num "$wd_hold_q_level" 0;          v_qlevel="$_wdn"
     _wd_num "$wd_hold_out_until" 0;        v_hold_out="$_wdn"
     _wd_num "$wd_hold_q_until" 0;          v_hold_q="$_wdn"
+    # quality_breach_secs: how long the current quality breach has lasted.
+    _wd_num "$quality_breach_since" 0;     v_qsince="$_wdn"
+    v_qbs=0
+    if [ "$v_qsince" -gt 0 ] && [ "$v_mono" -ge "$v_qsince" ]; then
+        v_qbs=$((v_mono - v_qsince))
+    fi
     # State holdoff (spec section 5.5): idle (monitor) under any active pause, or
     # suspecting an outage that the outage pause blocks. Every other state wins.
     v_state="$state"
@@ -127,7 +135,7 @@ _wd_write_state_file() {
 
     # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
     # has not landed yet carry their idle value: step_wait_until,
-    # quality_breach_secs, failback_failures, ping_stale.
+    # failback_failures, ping_stale.
     json=$(jq -n -c \
         --argjson ts "$ts" \
         --argjson mono "$v_mono" \
@@ -162,6 +170,7 @@ _wd_write_state_file() {
         --argjson pr_interval "$v_pr_interval" \
         --argjson pr_last "$v_pr_last" \
         --argjson pr_active "$v_pr_active" \
+        --argjson qbs "$v_qbs" \
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
@@ -186,7 +195,7 @@ _wd_write_state_file() {
             ssr_hold: $ssr_hold,
             ssr_hold_until: (if $ssr_hold then ($ssr_started + $ssr_grace) else null end),
             last_ssr_mono: $last_ssr_mono,
-            quality_breach_secs: 0,
+            quality_breach_secs: $qbs,
             failback_active: $pr_active,
             failback_failures: 0,
             failback_next_at: (if ($pr_enabled == 1 and $sf_active == "true") then ($pr_last + $pr_interval * 60) else null end),

@@ -1,0 +1,63 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=120s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:14:50] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:14:50] INFO  [watchcat:PID] QUALITY: breach for 10s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:00] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:15:00] INFO  [watchcat:PID] QUALITY: breach for 20s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY breach: avg latency 353.5ms > 250ms
+[2026-09-21 14:15:10] INFO  [watchcat:PID] QUALITY: breach for 30s/120s (avg 353.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:20] WARN  [watchcat:PID] QUALITY breach: avg latency 316.9ms > 250ms
+[2026-09-21 14:15:20] INFO  [watchcat:PID] QUALITY: breach for 40s/120s (avg 316.9ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:30] WARN  [watchcat:PID] QUALITY breach: avg latency 287.7ms > 250ms
+[2026-09-21 14:15:30] INFO  [watchcat:PID] QUALITY: breach for 50s/120s (avg 287.7ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:15:40] WARN  [watchcat:PID] QUALITY breach: avg latency 263.8ms > 250ms
+[2026-09-21 14:15:40] INFO  [watchcat:PID] QUALITY: breach for 60s/120s (avg 263.8ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:17:20] WARN  [watchcat:PID] QUALITY breach: avg latency 275.2ms > 250ms
+[2026-09-21 14:17:20] INFO  [watchcat:PID] QUALITY: breach for 0s/120s (avg 275.2ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:17:30] WARN  [watchcat:PID] QUALITY breach: avg latency 306.5ms > 250ms
+[2026-09-21 14:17:30] INFO  [watchcat:PID] QUALITY: breach for 10s/120s (avg 306.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:17:40] WARN  [watchcat:PID] QUALITY breach: avg latency 337.8ms > 250ms
+[2026-09-21 14:17:40] INFO  [watchcat:PID] QUALITY: breach for 20s/120s (avg 337.8ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:17:50] WARN  [watchcat:PID] QUALITY breach: avg latency 369.2ms > 250ms
+[2026-09-21 14:17:50] INFO  [watchcat:PID] QUALITY: breach for 30s/120s (avg 369.2ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:00] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:00] INFO  [watchcat:PID] QUALITY: breach for 40s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:10] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:10] INFO  [watchcat:PID] QUALITY: breach for 50s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:20] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:20] INFO  [watchcat:PID] QUALITY: breach for 60s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:30] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:30] INFO  [watchcat:PID] QUALITY: breach for 70s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:40] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:40] INFO  [watchcat:PID] QUALITY: breach for 80s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:18:50] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:18:50] INFO  [watchcat:PID] QUALITY: breach for 90s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:19:00] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:19:00] INFO  [watchcat:PID] QUALITY: breach for 100s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:19:10] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:19:10] INFO  [watchcat:PID] QUALITY: breach for 110s/120s (avg 400.5ms vs 250ms, loss 0% vs 30%)
+[2026-09-21 14:19:20] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:19:20] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 120s (avg 400.5ms / loss 0% vs 250ms / 30%)
+[2026-09-21 14:19:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 400.5ms / loss 0%) — starting recovery
+[2026-09-21 14:19:20] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
+[2026-09-21 14:19:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
+[2026-09-21 14:19:20] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:19:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:19:22] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000360,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 400.5ms / loss 0%) — starting recovery","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000360,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000360,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+

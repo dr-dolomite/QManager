@@ -14,7 +14,7 @@ sc_post_source() {
     cooldown_remaining="-5"
     original_sim_slot="x"
     current_sim_slot="007"
-    quality_breach_counter="1.5"
+    quality_breach_since="1.5"
     ssr_hold="maybe"
     last_ssr_detected="soon"
 }

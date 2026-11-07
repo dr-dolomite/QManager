@@ -305,3 +305,49 @@ holds Tier 4 at start with an empty budget), 90 (guard released 24 h after it en
 reboot), 91 (1970 clock: hourly rest with no deadline, no guard, no stamp; once the clock is sane
 the guard engages), 92 (the link-up stamp is written once), 93 (garbage guard and link-up files).
 Outage pauses in 84-91 are cut to 60 s in `sc_post_source` (`HOLDOFF_OUTAGE_SECS`).
+
+## R4: quality cap and time-based persistence (step 1b)
+
+The quality ladder stops after Tier 2 (spec D5): `find_next_tier` caps at 2 while
+`recovery_reason=quality`, so Tier 3 and Tier 4 are never run for a degraded but reachable link,
+and `wd_start_gate quality` counts only Tiers 1-2 (`none` when both are off: no ladder, no event).
+The trigger runs only in `monitor` with a fresh `reachable=true` and `streak_fail=0`; any other
+pass that reaches `evaluate_quality` ends the breach in progress. The window is the last
+`clamp(120 / period, 10, 60)` samples since the mark and needs at least 10 (answers and losses);
+the limits are the CQ thresholds raised to the floors `max(latency, 50)` ms / `max(loss, 10)` %
+(`resolve_quality_thresholds`; a ceiling of 0 no longer means "ignore"). Persistence is on the mono
+clock: `quality_breach_since` is the mono second of the first breaching pass, a clean window resets
+it, a no-signal window keeps it, and the ladder starts once the breach is `quality_after_sec` old
+(config key `quality_after_sec`, default 120, clamp 30-1800; `quality_consecutive` is no longer
+read). The timer also keeps running while the gate says `none` or `holdoff`, so a breach that
+outlasts a quality pause starts the next ladder when the pause ends. The state file reports
+`quality_breach_secs` = mono - since (0 when no breach). The quality cooldown succeeds only when
+the read is reachable and the window clean. The R2 clean-window pause clear uses the same
+10-sample window. Harness: `inner.sh` seeds `quality_after_sec=30` (was `quality_consecutive=3`);
+model key `streak_fail=N` forces the ping `streak_fail` on a reachable link (empty = derived).
+Every difference to the R3 baseline in an existing scenario is one of these:
+
+- every scenario: the config log line reads `after=30s (shared thresholds, floors applied)`
+  instead of `consecutive=3 (shared thresholds)` (32: `after=1800s`, was `consecutive=10`);
+- 08, 20, 31, 56, 82: the first breach is seen at pass 6 (10 samples) and the ladder starts 30 s
+  later (T+110 instead of T+70); each quality cooldown extends twice (the 30 s cooldown starts at a
+  window mark, so the first read has fewer than 10 samples) before its verdict; 82 moves the link
+  drop from pass 9 to 16 and runs 26 passes so the quality pause is in place first;
+- 78-81: at a 60 s check interval the ladder starts one pass earlier (60 s after the first
+  breach instead of 3 breaching passes); in 81 the post-reload ladder starts on the reload pass,
+  because the breach timer ran through the pause;
+- 83: the quality ladder after the outage pause clears starts 40 s later; 30 passes;
+- 30, 31, 32: the `-- extra` lines name `quality_breach_since` (was `quality_breach_counter`);
+  32 now has no signal for passes 1-5 and starts the timer at pass 6; `quality_breach_secs`
+  fills where a breach runs;
+- 33: `wd_cooldown_verdict quality` with a clean window but `reach=false|null` is `fail`
+  (was `success`).
+
+New scenarios: 94 (Tier 3 armed with a slot and Tier 4 enabled: the quality ladder runs Tier 1,
+Tier 2, then the 15 minute quality pause; no QUIMSLOT, no reboot), 95 (Tiers 1-2 off: gate `none`,
+no AT, no event, the timer keeps counting), 96 (a 90 s breach with `quality_after_sec=120` ends in a
+clean window: no ladder), 97 (a clean window resets the timer; the ladder starts 120 s after the
+second breach began), 98 (a window mark mid-breach gives five no-signal passes that keep the timer;
+Tier 1 starts on the first full window), 99 (CQ custom 30 ms / 5 % reads as limits 50 ms / 10 %;
+`streak_fail=1` on a reachable link moves to suspect and blocks the trigger, then the 30 s breach
+starts Tier 1).

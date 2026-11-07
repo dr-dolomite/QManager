@@ -1,9 +1,9 @@
 --- pass 1 ---
 --- pass 2 ---
+T+150 AT+CFUN?
+T+150 AT+COPS=2
+T+152 AT+COPS=0
 --- pass 3 ---
-T+210 AT+CFUN?
-T+210 AT+COPS=2
-T+212 AT+COPS=0
 --- pass 4 ---
 --- pass 5 ---
 --- pass 6 ---
@@ -13,10 +13,10 @@ T+212 AT+COPS=0
 --- pass 10 ---
 --- pass 11 ---
 --- pass 12 ---
+T+752 AT+CFUN?
+T+752 AT+COPS=2
+T+754 AT+COPS=0
 --- pass 13 ---
-T+812 AT+CFUN?
-T+812 AT+COPS=2
-T+814 AT+COPS=0
 --- pass 14 ---
 --- pass 15 ---
 --- pass 16 ---
@@ -47,10 +47,10 @@ T+814 AT+COPS=0
 --- pass 41 ---
 --- pass 42 ---
 --- pass 43 ---
+T+2614 AT+CFUN?
+T+2614 AT+COPS=2
+T+2616 AT+COPS=0
 --- pass 44 ---
-T+2674 AT+CFUN?
-T+2674 AT+COPS=2
-T+2676 AT+COPS=0
 --- pass 45 ---
 --- pass 46 ---
 --- pass 47 ---
@@ -116,10 +116,10 @@ T+2676 AT+COPS=0
 --- pass 107 ---
 --- pass 108 ---
 --- pass 109 ---
+T+6576 AT+CFUN?
+T+6576 AT+COPS=2
+T+6578 AT+COPS=0
 --- pass 110 ---
-T+6636 AT+CFUN?
-T+6636 AT+COPS=2
-T+6638 AT+COPS=0
 --- pass 111 ---
 --- pass 112 ---
 --- pass 113 ---

@@ -219,8 +219,11 @@ wd_start_gate() {
     any=0
     [ "$CFG_TIER1_ENABLED" = "1" ] && any=1
     [ "$CFG_TIER2_ENABLED" = "1" ] && any=1
-    [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
-    [ "$CFG_TIER4_ENABLED" = "1" ] && any=1
+    # The quality ladder is Tier 1-2 only (find_next_tier, spec D5).
+    if [ "$1" != "quality" ]; then
+        [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
+        [ "$CFG_TIER4_ENABLED" = "1" ] && any=1
+    fi
 
     hl=$(wd_holdoff_left "$1")
 

@@ -210,7 +210,7 @@ wd_enter_radio_off() {
     failure_counter=0
     cooldown_remaining=0
     cooldown_stale_retries=0
-    quality_breach_counter=0
+    quality_breach_since=0
     _recovery_marker_emitted=""
     ssr_hold_clear
     wd_outage_clear
@@ -278,12 +278,15 @@ execute_tier4() {
 # =============================================================================
 
 # Find the next enabled tier >= start_tier. Returns 0 if found (sets
-# current_tier), 1 if no tiers left.
+# current_tier), 1 if no tiers left. A quality ladder stops after Tier 2 (spec
+# D5): a SIM swap or a reboot is never run for a reachable but degraded link.
 find_next_tier() {
     local start="$1"
     local t="$start"
+    local top=4
 
-    while [ "$t" -le 4 ]; do
+    [ "$recovery_reason" = "quality" ] && top=2
+    while [ "$t" -le "$top" ]; do
         case "$t" in
             1) [ "$CFG_TIER1_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
             2) [ "$CFG_TIER2_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
@@ -467,7 +470,8 @@ _cooldown_handle_failure() {
 #   wd_cooldown_verdict <reason> <ping_ok 0|1> <reachable> <q_state 0|1|2> <stale_retries>
 #   reason         "quality" or anything else (= reachability)
 #   ping_ok        1 when read_ping returned fresh data this pass
-#   reachable      true | false | null (only read when ping_ok = 1)
+#   reachable      true | false | null (only read when ping_ok = 1; quality
+#                  success needs true as well as a clean window)
 #   q_state        0 quality good, 1 breached, 2 no data (only read for "quality")
 #   stale_retries  extensions already spent (cap 3)
 # Prints success | extend | fail. "no data" (stale ping or too few samples) is
@@ -481,8 +485,9 @@ wd_cooldown_verdict() {
         return 0
     fi
     if [ "$1" = "quality" ]; then
+        # Success = reachable and the window clean (spec section 5.4).
         case "$4" in
-            0) printf 'success' ;;
+            0) if [ "$3" = "true" ]; then printf 'success'; else printf 'fail'; fi ;;
             1) printf 'fail' ;;
             *) if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'fail'; fi ;;
         esac
@@ -516,7 +521,7 @@ finish_cooldown() {
         current_tier=0
         failure_counter=0
         cooldown_stale_retries=0
-        quality_breach_counter=0
+        quality_breach_since=0
         _recovery_marker_emitted=""
         return
     fi
@@ -563,7 +568,7 @@ finish_cooldown() {
                 state="monitor"
                 current_tier=0
                 failure_counter=0
-                quality_breach_counter=0
+                quality_breach_since=0
                 wd_holdoff_clear quality
                 _recovery_marker_emitted=""
                 return
@@ -611,7 +616,7 @@ finish_cooldown() {
             state="monitor"
             current_tier=0
             failure_counter=0
-            quality_breach_counter=0
+            quality_breach_since=0
             wd_holdoff_clear outage
             _recovery_marker_emitted=""
             return

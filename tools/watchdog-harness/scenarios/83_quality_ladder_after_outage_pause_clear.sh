@@ -5,7 +5,7 @@
 # pause). The link returns lossy at pass 12: the reachable read ends the outage
 # pause and the quality ladder starts after the breaches; exhausted, it starts
 # its own 15 minute quality pause.
-SC_PASSES=24
+SC_PASSES=30
 sc_setup() {
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier2_enabled 0

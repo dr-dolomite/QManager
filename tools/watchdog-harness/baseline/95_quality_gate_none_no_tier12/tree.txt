@@ -1,0 +1,24 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=1 T4=1 backup_sim=2
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:14:50] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:14:50] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:15:00] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:15:00] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:15:20] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:15:30] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:15:40] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:15:50] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:16:00] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+
