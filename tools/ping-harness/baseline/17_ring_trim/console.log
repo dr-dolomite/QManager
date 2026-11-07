@@ -1,0 +1,4 @@
+ring never exceeded size + 10 (13): yes
+trimmed back after passing it: yes
+lines after the trim (3 + at most one new cycle): yes
+  orphans: 0

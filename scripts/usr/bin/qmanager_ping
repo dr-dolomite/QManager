@@ -35,12 +35,13 @@
 #         when a write fails), the PF_RUN_DIR/ping.env poller sidecar and
 #         /tmp/qmanager_ping_slots.json (per-slot state of the last cycle).
 # History: /tmp/qmanager_ping_history, one "<rtt|null> <slot>" line per cycle
-#         (slot 1-4, or - when nothing answered), newest last, HISTORY_SIZE
-#         lines. Readers use $1.
+#         (slot 1-4, or - when nothing answered), newest last. Length = ring
+#         size (ceil(window / interval), conn_state_resolve); trimmed to it
+#         only once the count passes size + 10. Readers use $1.
 # DNS: /tmp/qmanager_dns.json + dns.env from a detached job (see below).
 #
-# Stats (avg/min/max/jitter/loss) and the history JSON array are computed by the
-# poller in one awk pass over the history file, not here.
+# Stats (avg/min/max/jitter/loss) and the history points are computed by the
+# poller through cq_ring_stats (conn_state.sh), not here.
 #
 # Install location: /usr/bin/qmanager_ping
 # Dependencies: busybox ping (+ ping -6 or ping6), qm_platform_cqwd.sh, date,
@@ -82,9 +83,10 @@ qlog_init "ping"
 
 # --- Configuration -----------------------------------------------------------
 # Fallbacks only: load_config() re-reads the config (connection_quality) at
-# startup and on every reload-flag trip. The profile name drives interval +
-# fail/recover seconds through conn_state_resolve (the one profile table).
-PING_PROFILE="${PING_PROFILE:-relaxed}"
+# startup and on every reload-flag trip. The sensitivity name drives interval,
+# fail/recover seconds and the ring size through conn_state_resolve (the one
+# sensitivity table).
+PING_SENS="${PING_SENS:-relaxed}"
 # The four target slots (connection_quality targets), slot 1 first.
 DEF_T1="1.1.1.1"
 DEF_T2="8.8.8.8"
@@ -95,12 +97,9 @@ PING_T2="$DEF_T2"
 PING_T3="$DEF_T3"
 PING_T4="$DEF_T4"
 PING_INTERVAL=5
-PING_INTERVAL_OVERRIDE=""  # connection_quality interval_override (1-60); empty = unused
-FAIL_THRESHOLD=3           # logged only: the verdict is timed, not counted
-RECOVER_THRESHOLD=2
-PING_FAIL_SECS=15          # time-to-fail / time-to-recover (seconds), published
+PING_FAIL_SECS=20          # time-to-fail / time-to-recover (seconds), published
 PING_RECOVER_SECS=10       # in the cache as fail_secs / recover_secs
-HISTORY_SIZE=60
+HISTORY_SIZE=60            # ring length = ceil(window / interval), from the table
 PROBE_WAIT=2               # ping -W : wait for the first reply (s)
 PROBE_DEADLINE=3           # ping -w : hard per-leg deadline (s)
 HOST_DEADLINE=4            # timeout for a hostname slot (-w does not bound the lookup)
@@ -199,26 +198,23 @@ _clock() {
     _CS="$_clk_last"
 }
 
-# --- Resolve the active profile name to {interval, fail/recover seconds} ------
+# --- Resolve the sensitivity to {interval, fail/recover seconds, ring size} ---
 # The table lives in conn_state.sh (conn_state_resolve) so the CGIs, poller and
-# watchcat see the cadence this daemon runs: sensitive 1/6/3, regular 2/10/6,
-# relaxed 5/15/10, quiet 10/30/20 (interval / fail / recover s). interval_override
-# changes only the probe cadence. Without the lib, relaxed stands.
-resolve_profile() {
+# watchcat see the cadence this daemon runs. Without the lib, relaxed stands.
+resolve_sensitivity() {
     if command -v conn_state_resolve >/dev/null 2>&1; then
-        conn_state_resolve "$PING_PROFILE" "$PING_INTERVAL_OVERRIDE"
-        PING_PROFILE="$CQ_CFG_PROFILE"
+        conn_state_resolve "$PING_SENS"
+        PING_SENS="$CQ_CFG_SENSITIVITY"
         PING_INTERVAL="$CQ_CFG_INTERVAL_SEC"
         PING_FAIL_SECS="$CQ_CFG_FAIL_SECS"
         PING_RECOVER_SECS="$CQ_CFG_RECOVER_SECS"
-        FAIL_THRESHOLD="$CQ_CFG_FAIL_THRESHOLD"
-        RECOVER_THRESHOLD="$CQ_CFG_RECOVER_THRESHOLD"
+        HISTORY_SIZE="$CQ_CFG_RING_SIZE"
     else
-        PING_PROFILE="relaxed"
+        PING_SENS="relaxed"
         PING_INTERVAL=5
-        PING_FAIL_SECS=15
+        PING_FAIL_SECS=20
         PING_RECOVER_SECS=10
-        [ -n "$PING_INTERVAL_OVERRIDE" ] && PING_INTERVAL="$PING_INTERVAL_OVERRIDE"
+        HISTORY_SIZE=60
     fi
 }
 
@@ -245,7 +241,7 @@ detect_ping6() {
 # Target rule (contract 5.2, same as the CGI): IPv4 literal, IPv6 literal or
 # hostname; non-empty, at most 128 chars, charset [0-9A-Za-z.:%-], no leading '-'
 # so a value can never be parsed as a ping option. Everything written into
-# ping.json therefore needs no escaping beyond the profile name.
+# ping.json therefore needs no escaping beyond the sensitivity name.
 _target_ok() {
     case "$1" in ''|-*|*[!0-9A-Za-z.:%-]*) return 1 ;; esac
     [ "${#1}" -le 128 ]
@@ -281,23 +277,22 @@ _slot_set() {
     esac
 }
 
-# --- Load configuration (cfg_get) and re-resolve the profile -----------------
-# Profile name + the four target slots from connection_quality. A missing
+# --- Load configuration (cfg_get) and re-resolve the sensitivity -----------------
+# Sensitivity + the four target slots from connection_quality. A missing
 # targets list (before the migration seeds it) reads as the defaults; a slot
 # that fails the rule falls back to its own default with a warning.
 load_config() {
-    local _profile
+    local _sens
     local _tl
     local _tv
     local _i
-    local _override
 
-    _profile=$(cfg_get connection_quality profile)
+    _sens=$(cfg_get connection_quality sensitivity)
+    [ -z "$_sens" ] && _sens=$(cfg_get connection_quality profile)
     _tl=$(cfg_get_list connection_quality targets)
-    _override=$(cfg_get connection_quality interval_override)
 
-    PING_PROFILE="relaxed"
-    [ -n "$_profile" ] && PING_PROFILE="$_profile"
+    PING_SENS="relaxed"
+    [ -n "$_sens" ] && PING_SENS="$_sens"
 
     # Reset to the defaults first so a cleared list reverts on reload.
     PING_T1="$DEF_T1"
@@ -324,15 +319,7 @@ $_tl
 EOT
     fi
 
-    # interval_override: integer seconds 1-60, else unused (reset first so a
-    # cleared/invalid value reverts to the profile interval on reload).
-    PING_INTERVAL_OVERRIDE=""
-    case "$_override" in
-        ''|*[!0-9]*) ;;
-        *) [ "$_override" -ge 1 ] && [ "$_override" -le 60 ] && PING_INTERVAL_OVERRIDE="$_override" ;;
-    esac
-
-    resolve_profile
+    resolve_sensitivity
 }
 
 # --- RTT parse (builtins only) -----------------------------------------------
@@ -627,7 +614,7 @@ probe_cycle() {
 
 # --- JSON string escape (builtins) -------------------------------------------
 # _JS = $1 with \ and " backslash-escaped. Targets are charset-checked, so in
-# practice only a hand-edited profile name can carry either.
+# practice only a hand-edited sensitivity name can carry either.
 _json_str() {
     _js_in="$1"
     _JS=""
@@ -649,7 +636,7 @@ _json_str() {
 }
 
 # --- Write the JSON cache atomically -----------------------------------------
-# Keys (contract 2, this order): timestamp, mono, profile, targets[4],
+# Keys (contract 2, this order): timestamp, mono, sensitivity, targets[4],
 # interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success,
 # streak_fail, fail_elapsed_sec, during_recovery, last_family, last_leg,
 # cycle_ms. A failed write keeps the previous file (readers would otherwise see
@@ -667,9 +654,9 @@ write_cache() {
     [ -f "$RECOVERY_FLAG" ] && during_recovery="true"
     case "$rtt" in ''|*[!0-9.]*) rtt="null" ;; esac
 
-    _json_str "$PING_PROFILE"; _jp="$_JS"
+    _json_str "$PING_SENS"; _jp="$_JS"
 
-    if printf '{"timestamp":%s,"mono":%s,"profile":"%s","targets":["%s","%s","%s","%s"],"interval_sec":%s,"fail_secs":%s,"recover_secs":%s,"last_rtt_ms":%s,"reachable":%s,"streak_success":%s,"streak_fail":%s,"fail_elapsed_sec":%s,"during_recovery":%s,"last_family":"%s","last_leg":%s,"cycle_ms":%s}\n' \
+    if printf '{"timestamp":%s,"mono":%s,"sensitivity":"%s","targets":["%s","%s","%s","%s"],"interval_sec":%s,"fail_secs":%s,"recover_secs":%s,"last_rtt_ms":%s,"reachable":%s,"streak_success":%s,"streak_fail":%s,"fail_elapsed_sec":%s,"during_recovery":%s,"last_family":"%s","last_leg":%s,"cycle_ms":%s}\n' \
             "$timestamp" "${_MONO:-0}" "$_jp" "$PING_T1" "$PING_T2" "$PING_T3" "$PING_T4" \
             "${PING_INTERVAL:-5}" "${PING_FAIL_SECS:-15}" "${PING_RECOVER_SECS:-10}" \
             "$rtt" "${reachable:-true}" "${streak_success:-0}" "${streak_fail:-0}" \
@@ -752,7 +739,7 @@ write_ping_env() {
         _sc_sq "$PING_INTERVAL";    printf '_cq_iv=%s\n' "$_SCQ"
         _sc_sq "$PING_FAIL_SECS";   printf '_cq_fs=%s\n' "$_SCQ"
         _sc_sq "$PING_RECOVER_SECS"; printf '_cq_rs=%s\n' "$_SCQ"
-        _sc_sq "$PING_PROFILE";     printf '_cq_prof=%s\n' "$_SCQ"
+        _sc_sq "$PING_SENS";        printf '_cq_sens=%s\n' "$_SCQ"
         _sc_sq "$last_family";      printf '_cq_fam=%s\n' "$_SCQ"
         _sc_sq "$PING_T1";          printf '_cq_tgt=%s\n' "$_SCQ"
         _sc_sq "${last_leg:-0}";    printf '_cq_leg=%s\n' "$_SCQ"
@@ -936,7 +923,7 @@ main() {
 
     qlog_info "========================================"
     qlog_info "QManager Ping Daemon starting (PID $$)"
-    qlog_info "Profile: ${PING_PROFILE}, interval ${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)}, fail ${PING_FAIL_SECS}s, recover ${PING_RECOVER_SECS}s"
+    qlog_info "Sensitivity: ${PING_SENS}, interval ${PING_INTERVAL}s, fail ${PING_FAIL_SECS}s, recover ${PING_RECOVER_SECS}s"
     qlog_info "Slots: 1=${PING_T1} 2=${PING_T2} 3=${PING_T3} 4=${PING_T4}"
     qlog_info "IPv6 probe: ${PING6_CMD:-unavailable}, history ${HISTORY_SIZE}, leg deadline ${PROBE_DEADLINE}s"
     qlog_info "========================================"
@@ -958,7 +945,7 @@ main() {
             load_config
             detect_ping6
             rm -f "$RELOAD_FLAG"
-            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${PING_FAIL_SECS}s recover=${PING_RECOVER_SECS}s slots=${PING_T1},${PING_T2},${PING_T3},${PING_T4} ping6=${PING6_CMD:-none}"
+            qlog_info "Reloaded config: sensitivity=${PING_SENS} interval=${PING_INTERVAL}s fail=${PING_FAIL_SECS}s recover=${PING_RECOVER_SECS}s slots=${PING_T1},${PING_T2},${PING_T3},${PING_T4} ping6=${PING6_CMD:-none}"
         fi
 
         _clock
@@ -1038,7 +1025,7 @@ main() {
         # Trim the ring with the shell counter (no wc -l fork)
         if [ "$record" -eq 1 ]; then
             history_count=$((history_count + 1))
-            if [ "$history_count" -gt "$HISTORY_SIZE" ]; then
+            if [ "$history_count" -gt $(( HISTORY_SIZE + 10 )) ]; then
                 tail -n "$HISTORY_SIZE" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
                 mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
                 history_count=$HISTORY_SIZE

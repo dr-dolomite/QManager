@@ -226,9 +226,12 @@ sc_base() {
     conn_ping_target="1.1.1.1"
     conn_history="[34.2,33.1,null,35.0,36.4]"
     conn_history_interval=5
-    CONN_HISTORY_SIZE=60
+    conn_history_size=60
     conn_during_recovery=false
-    conn_profile=relaxed
+    conn_sensitivity=relaxed
+    conn_last_leg=2
+    conn_fail_secs=20
+    conn_recover_secs=10
     QUALITY_LAT_THRESHOLD=250
     QUALITY_LOSS_THRESHOLD=30
     dns_lookup_ms=12
@@ -325,8 +328,16 @@ sc_connunknown() {
     conn_status=unknown
     conn_latency=null; conn_avg_latency=null; conn_min_latency=null; conn_max_latency=null
     conn_jitter=null; conn_packet_loss=0
-    conn_ping_target=""; conn_history="[]"; conn_profile=""; conn_last_family=""
+    conn_ping_target=""; conn_history="[]"; conn_sensitivity=""; conn_last_family=""
+    conn_last_leg=0; conn_fail_secs=""; conn_recover_secs=""
     dns_lookup_ms=null; dns_resolver=""
+}
+sc_connnull() {
+    # Fewer than the minimum samples: loss and jitter read null.
+    sc_base
+    conn_jitter=null; conn_packet_loss=null
+    conn_history="[null,12.5,null]"; conn_history_interval=10; conn_history_size=3
+    conn_sensitivity=quiet; conn_last_leg=0; conn_fail_secs=40; conn_recover_secs=20
 }
 sc_deepstate() {
     sc_base
@@ -375,7 +386,8 @@ sc_empties() {
     cpu_usage=""; memory_used_mb=""; memory_total_mb=""; uptime_seconds=""; conn_uptime_seconds=""
     ap_tier=""
     conn_packet_loss=""; conn_history=""; conn_history_interval=""
-    CONN_HISTORY_SIZE=""; conn_during_recovery=""
+    conn_history_size=""; conn_during_recovery=""
+    conn_last_leg=""; conn_fail_secs=""; conn_recover_secs=""
     QUALITY_LAT_THRESHOLD=""; QUALITY_LOSS_THRESHOLD=""
     dns_lookup_ms=""
     wc_enabled=""; wc_state=""; wc_current_tier=""; wc_failure_count=""
@@ -391,7 +403,7 @@ sc_empties() {
 
 run_named() {
     local _s
-    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties; do
+    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_connnull sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties; do
         "$_s"
         write_cache_jq "$PH_TMP/a.json" 2>/dev/null
         _wc_compose_pf "$PH_TMP/b.json"
@@ -499,16 +511,16 @@ _pick_num() {
     esac
 }
 
-PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE"
+PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_sensitivity conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE"
 # Numeric fields that have a default in BOTH composers (empty is allowed).
-PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
+PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval conn_history_size conn_last_leg conn_fail_secs conn_recover_secs QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
 
 run_random() {
     local _i=0
     local _cnt="$1"
     local _v
     local _k
-    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_deepstate sc_qmi"
+    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_connnull sc_deepstate sc_qmi"
     local _b
     local _nstr
     local _nnum
@@ -517,7 +529,7 @@ run_random() {
     set -- $PH_NUM_VARS
     _nnum=$#
     while [ "$_i" -lt "$_cnt" ]; do
-        _rand 7
+        _rand 8
         _k=0
         for _b in $_bases; do
             [ "$_k" -eq "$_R" ] && break

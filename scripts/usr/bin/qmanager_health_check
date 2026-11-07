@@ -784,7 +784,7 @@ t_net_reachable() {
         echo "fail|ping cache missing"
         return
     fi
-    jq -c '{reachable, last_family, last_leg, streak_fail, streak_success, profile, targets}' "$f" >> "$OUT" 2>&1
+    jq -c '{reachable, last_family, last_leg, streak_fail, streak_success, sensitivity, targets}' "$f" >> "$OUT" 2>&1
     r=$(jq -r '.reachable | if . == null then "null" else tostring end' "$f" 2>/dev/null)
     fam=$(jq -r '.last_family // "none"' "$f" 2>/dev/null)
     case "$r" in

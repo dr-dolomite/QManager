@@ -74,6 +74,8 @@ leg jobs makes it print 4, so the check has teeth.
 | 13_main_failover | real main: ring `<rtt> 2`, ping.json `last_leg`, slots.json, ping.env `_cq_leg` |
 | 14_main_ok_then_down | real main: ring `<rtt> 1` then `null -`, `last_leg` 0 |
 | 15_main_attach_warmup | real main: failed cycles stay out of the ring during the attach warm-up |
+| 16_sensitivity_table | `load_config` resolves the contract table; old `profile` key fallback; unknown reads relaxed; `interval_override` ignored |
+| 17_ring_trim | real main with the ring size forced to 3: the ring passes size + 10 once, then trims back (about 15 s) |
 
 ## Output per scenario
 

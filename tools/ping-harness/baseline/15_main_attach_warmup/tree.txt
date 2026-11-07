@@ -3,13 +3,13 @@
 === tmp/qmanager.log
 [TS] INFO  [ping:PID] ========================================
 [TS] INFO  [ping:PID] QManager Ping Daemon starting (PID N)
-[TS] INFO  [ping:PID] Profile: sensitive, interval 1s, fail 6s, recover 3s
+[TS] INFO  [ping:PID] Sensitivity: sensitive, interval 1s, fail 8s, recover 3s
 [TS] INFO  [ping:PID] Slots: 1=1.1.1.1 2=8.8.8.8 3=2606:4700:4700::1111 4=cloudflare.com
-[TS] INFO  [ping:PID] IPv6 probe: ping -6, history 60, leg deadline 3s
+[TS] INFO  [ping:PID] IPv6 probe: ping -6, history 300, leg deadline 3s
 [TS] INFO  [ping:PID] ========================================
 
 === tmp/qmanager_ping.json
-{"timestamp":T,"mono":M,"profile":"sensitive","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":1,"fail_secs":6,"recover_secs":3,"last_rtt_ms":null,"reachable":true,"streak_success":0,"streak_fail":4,"fail_elapsed_sec":F,"during_recovery":false,"last_family":"none","last_leg":0,"cycle_ms":C}
+{"timestamp":T,"mono":M,"sensitivity":"sensitive","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":1,"fail_secs":8,"recover_secs":3,"last_rtt_ms":null,"reachable":true,"streak_success":0,"streak_fail":4,"fail_elapsed_sec":F,"during_recovery":false,"last_family":"none","last_leg":0,"cycle_ms":C}
 
 === tmp/qmanager_ping_history
 
@@ -26,9 +26,9 @@ _cq_sf='4'
 _cq_fe='F'
 _cq_dr='false'
 _cq_iv='1'
-_cq_fs='6'
+_cq_fs='8'
 _cq_rs='3'
-_cq_prof='sensitive'
+_cq_sens='sensitive'
 _cq_fam='none'
 _cq_tgt='1.1.1.1'
 _cq_leg='0'

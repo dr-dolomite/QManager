@@ -12,12 +12,13 @@
 #   Read:  network_type, lte_band, lte_pci, nr_band, nr_pci, nr_state,
 #          modem_reachable, conn_internet_available, conn_during_recovery,
 #          conn_latency, conn_avg_latency, conn_packet_loss,
-#          conn_history_interval, CONN_HISTORY_SIZE, CQ_STREAK_FAIL,
-#          QUALITY_*, t2_ca_count, t2_nr_ca_count, t2_carrier_components,
+#          conn_window_sec, conn_qdeb_sec, conn_qdeb_vt_sec, CQ_TIMESTAMP,
+#          CQ_STREAK_FAIL, QUALITY_*, t2_ca_count, t2_nr_ca_count, t2_carrier_components,
 #          service_status, ap_tier
 #   Write: prev_ev_*, ev_high_lat_streak, ev_high_loss_streak,
-#          ev_lat_clear_streak, ev_loss_clear_streak, ev_lat_alerted,
-#          ev_loss_alerted, ev_link_state, events_initialized,
+#          ev_lat_clear_streak, ev_loss_clear_streak (new-sample counts),
+#          ev_*_since (uptime at the first sample of a run), ev_q_ts,
+#          ev_lat_alerted, ev_loss_alerted, ev_link_state, events_initialized,
 #          _ev_* settle state
 # =============================================================================
 
@@ -513,12 +514,13 @@ _ev_uptime() {
     case "$_EV_UP" in ''|*[!0-9]*) _EV_UP="" ;; esac
 }
 
-# After a restore, hold quality ENTRY for one history window.
+# After a restore, hold quality ENTRY for one stats window (the sensitivity's
+# window_sec: the outage nulls are still in the ring).
 _ev_arm_hold() {
     local _w=300
-    case "${CONN_HISTORY_SIZE:-}${conn_history_interval:-}" in
+    case "${conn_window_sec:-}" in
         ''|*[!0-9]*) ;;
-        *) _w=$(( ${CONN_HISTORY_SIZE:-0} * ${conn_history_interval:-0} )) ;;
+        *) _w="$conn_window_sec" ;;
     esac
     [ "$_w" -gt 0 ] || _w=300
     _ev_uptime
@@ -531,6 +533,15 @@ _ev_entry_held() {
     [ -n "$ev_hold_until" ] || return 1
     _ev_uptime
     [ -n "$_EV_UP" ] && [ "$_EV_UP" -lt "$ev_hold_until" ]
+}
+
+# _ev_qdeb_due <samples> <since_uptime> <debounce_s>: a quality run is due once
+# it spans at least 2 NEW samples and at least <debounce_s> seconds of uptime.
+# Needs _EV_UP (a failed /proc/uptime read never fires, it only delays).
+_ev_qdeb_due() {
+    [ "$1" -ge 2 ] || return 1
+    [ -n "$_EV_UP" ] && [ -n "$2" ] || return 1
+    [ $(( _EV_UP - $2 )) -ge "$3" ]
 }
 
 detect_data_connection_events() {
@@ -575,36 +586,59 @@ detect_data_connection_events() {
     local _held=0
     _ev_entry_held && _held=1
 
+    # Quality debounce counts NEW samples (a changed ping timestamp), not poller
+    # cycles, over a span in seconds taken from the sensitivity table.
+    local _newq=0
+    if [ "$CQ_TIMESTAMP" != "$ev_q_ts" ]; then
+        _newq=1
+        ev_q_ts="$CQ_TIMESTAMP"
+    fi
+    _ev_uptime
+
     # --- Latency: configured cut, debounce on entry and on exit ---
     # Thresholds come from quecmanager.quality_thresholds via the poller's
     # resolve_quality_thresholds(), default-guarded to the "tolerant" preset.
     # Basis = WINDOWED AVERAGE (conn_avg_latency), the same field the watchdog
     # compares, not the single last RTT. "null" (too few samples) is no reading.
     local _lat_threshold="${QUALITY_LAT_THRESHOLD:-250}"
-    local _lat_debounce="${QUALITY_LAT_DEBOUNCE:-3}"
+    local _lat_debounce="${conn_qdeb_sec:-15}"
+    [ "${QUALITY_LAT_VT:-0}" = "1" ] && _lat_debounce="${conn_qdeb_vt_sec:-10}"
     if [ "$conn_avg_latency" != "null" ] && [ -n "$conn_avg_latency" ]; then
         if _ev_gt "$conn_avg_latency" "$_lat_threshold"; then
             ev_lat_clear_streak=0
+            ev_lat_clear_since=""
             if [ "$_held" = "1" ]; then
                 ev_high_lat_streak=0
+                ev_high_lat_since=""
             elif [ "$ev_lat_alerted" != "true" ]; then
-                ev_high_lat_streak=$((ev_high_lat_streak + 1))
-                if [ "$ev_high_lat_streak" -ge "$_lat_debounce" ]; then
+                if [ -z "$ev_high_lat_since" ]; then
+                    ev_high_lat_since="$_EV_UP"
+                    ev_high_lat_streak=0
+                fi
+                [ "$_newq" = "1" ] && ev_high_lat_streak=$((ev_high_lat_streak + 1))
+                if _ev_qdeb_due "$ev_high_lat_streak" "$ev_high_lat_since" "$_lat_debounce"; then
                     append_event "high_latency" \
                         "High latency detected (avg ${conn_avg_latency}ms, last ${conn_latency}ms)" "warning"
                     ev_lat_alerted=true
                     ev_high_lat_streak=0
+                    ev_high_lat_since=""
                 fi
             fi
         else
             ev_high_lat_streak=0
+            ev_high_lat_since=""
             if [ "$ev_lat_alerted" = "true" ]; then
-                ev_lat_clear_streak=$((ev_lat_clear_streak + 1))
-                if [ "$ev_lat_clear_streak" -ge "$_lat_debounce" ]; then
+                if [ -z "$ev_lat_clear_since" ]; then
+                    ev_lat_clear_since="$_EV_UP"
+                    ev_lat_clear_streak=0
+                fi
+                [ "$_newq" = "1" ] && ev_lat_clear_streak=$((ev_lat_clear_streak + 1))
+                if _ev_qdeb_due "$ev_lat_clear_streak" "$ev_lat_clear_since" "$_lat_debounce"; then
                     append_event "latency_recovered" \
                         "Latency recovered (avg ${conn_avg_latency}ms)" "info"
                     ev_lat_alerted=false
                     ev_lat_clear_streak=0
+                    ev_lat_clear_since=""
                 fi
             fi
         fi
@@ -612,32 +646,46 @@ detect_data_connection_events() {
 
     # --- Packet loss: same shape ---
     local _loss_threshold="${QUALITY_LOSS_THRESHOLD:-30}"
-    local _loss_debounce="${QUALITY_LOSS_DEBOUNCE:-3}"
+    local _loss_debounce="${conn_qdeb_sec:-15}"
+    [ "${QUALITY_LOSS_VT:-0}" = "1" ] && _loss_debounce="${conn_qdeb_vt_sec:-10}"
     case "$conn_packet_loss" in
         ''|null|*[!0-9]*) ;;
         *)
             if [ "$conn_packet_loss" -ge "$_loss_threshold" ] 2>/dev/null; then
                 ev_loss_clear_streak=0
+                ev_loss_clear_since=""
                 if [ "$_held" = "1" ]; then
                     ev_high_loss_streak=0
+                    ev_high_loss_since=""
                 elif [ "$ev_loss_alerted" != "true" ]; then
-                    ev_high_loss_streak=$((ev_high_loss_streak + 1))
-                    if [ "$ev_high_loss_streak" -ge "$_loss_debounce" ]; then
+                    if [ -z "$ev_high_loss_since" ]; then
+                        ev_high_loss_since="$_EV_UP"
+                        ev_high_loss_streak=0
+                    fi
+                    [ "$_newq" = "1" ] && ev_high_loss_streak=$((ev_high_loss_streak + 1))
+                    if _ev_qdeb_due "$ev_high_loss_streak" "$ev_high_loss_since" "$_loss_debounce"; then
                         append_event "high_packet_loss" \
                             "High packet loss detected (${conn_packet_loss}%)" "warning"
                         ev_loss_alerted=true
                         ev_high_loss_streak=0
+                        ev_high_loss_since=""
                     fi
                 fi
             else
                 ev_high_loss_streak=0
+                ev_high_loss_since=""
                 if [ "$ev_loss_alerted" = "true" ]; then
-                    ev_loss_clear_streak=$((ev_loss_clear_streak + 1))
-                    if [ "$ev_loss_clear_streak" -ge "$_loss_debounce" ]; then
+                    if [ -z "$ev_loss_clear_since" ]; then
+                        ev_loss_clear_since="$_EV_UP"
+                        ev_loss_clear_streak=0
+                    fi
+                    [ "$_newq" = "1" ] && ev_loss_clear_streak=$((ev_loss_clear_streak + 1))
+                    if _ev_qdeb_due "$ev_loss_clear_streak" "$ev_loss_clear_since" "$_loss_debounce"; then
                         append_event "packet_loss_recovered" \
                             "Packet loss recovered (${conn_packet_loss}%)" "info"
                         ev_loss_alerted=false
                         ev_loss_clear_streak=0
+                        ev_loss_clear_since=""
                     fi
                 fi
             fi ;;

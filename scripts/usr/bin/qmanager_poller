@@ -163,11 +163,18 @@ prev_ev_nr_ca_count=""
 prev_ev_service_status=""
 prev_ev_carrier_components=""
 
-# Data connection quality event debounce state
+# Data connection quality event debounce state: new-sample counts plus the
+# uptime second each run started (events.sh _ev_qdeb_due); ev_q_ts is the ping
+# timestamp last counted.
 ev_high_lat_streak=0
 ev_high_loss_streak=0
 ev_lat_clear_streak=0
 ev_loss_clear_streak=0
+ev_high_lat_since=""
+ev_high_loss_since=""
+ev_lat_clear_since=""
+ev_loss_clear_since=""
+ev_q_ts=""
 ev_lat_alerted=false
 ev_loss_alerted=false
 
@@ -278,25 +285,32 @@ conn_jitter="null"
 conn_packet_loss=0
 conn_ping_target=""
 conn_history="[]"
-conn_history_interval=5
-conn_history_size=60
+conn_history_interval=5  # seconds between latency_history points (cq_ring_stats)
+conn_history_size=60     # number of latency_history points (cq_ring_stats)
 conn_during_recovery="false"
-conn_profile=""          # active ping profile name from ping.json (.profile)
+conn_sensitivity=""      # active sensitivity name from ping.json (.sensitivity)
 conn_last_family=""      # address family of the last successful probe (.last_family)
-_last_ping_ts=0          # tracks last processed ping.json timestamp (awk gate)
-
-# History size constant (must match ping daemon)
-CONN_HISTORY_SIZE=60
+conn_last_leg=0          # answering target slot of the last cycle, 0 = none (.last_leg)
+conn_fail_secs=""        # time-to-fail the daemon runs (.fail_secs)
+conn_recover_secs=""     # time-to-recover the daemon runs (.recover_secs)
+conn_ring_size=60        # ring lines the stats window reads (conn_state_resolve)
+conn_window_sec=300      # stats window in seconds (conn_state_resolve)
+conn_qdeb_sec=15         # quality-event debounce, seconds of new samples
+conn_qdeb_vt_sec=10      # ... when the metric's preset is very-tolerant
+_conn_sens_applied=""    # sensitivity the four values above were resolved for
+_last_ping_ts=0          # tracks last processed ping.json timestamp (stats gate)
 
 # Connection-quality event thresholds (consumed by events.sh
 # detect_data_connection_events). Resolved from UCI presets by
 # resolve_quality_thresholds(); the table lives here, UCI stores only the
 # preset names. Defaults mirror the "tolerant" preset (used when the
-# quecmanager.quality_thresholds section is absent).
+# quecmanager.quality_thresholds section is absent). The debounce is in seconds
+# of new samples and comes from the sensitivity table (conn_qdeb_sec, or
+# conn_qdeb_vt_sec when the metric's preset is very-tolerant: *_VT=1).
 QUALITY_LAT_THRESHOLD=250    # ms
-QUALITY_LAT_DEBOUNCE=3       # consecutive readings
+QUALITY_LAT_VT=0
 QUALITY_LOSS_THRESHOLD=30    # percent
-QUALITY_LOSS_DEBOUNCE=3      # consecutive readings
+QUALITY_LOSS_VT=0
 QUALITY_RELOAD_FLAG="/tmp/qmanager_quality_reload"
 
 # Connection uptime tracking
@@ -1453,7 +1467,8 @@ PING_HISTORY_RAW="/tmp/qmanager_ping_history"   # flat-file ring buffer from pin
 # Window-maturity floor: packet_loss_pct = int(lost*100/n) is meaningless on a
 # tiny history (e.g. just after a reboot truncates it) — 2 transient boot-attach
 # nulls in a 4-sample window reads as 50% loss and can falsely trip the watchdog
-# quality trigger. Suppress loss% to 0 until at least this many samples exist.
+# quality trigger. Loss% and jitter read null until at least this many samples
+# exist (cq_ring_stats).
 PING_MIN_SAMPLES=10
 
 # =============================================================================
@@ -1463,8 +1478,8 @@ PING_MIN_SAMPLES=10
 # QUALITY_* globals that events.sh reads. The section's ABSENCE means "default"
 # -> both presets fall back to "tolerant". Unknown values also fall back to
 # tolerant so a hand-edited UCI never leaves an empty/invalid threshold.
-#   Latency: standard{150,3} · tolerant{250,3} · very-tolerant{500,2}
-#   Loss:    standard{15,3}  · tolerant{30,3}  · very-tolerant{50,2}
+#   Latency: standard 150 · tolerant 250 · very-tolerant 500 (VT debounce)
+#   Loss:    standard 15  · tolerant 30  · very-tolerant 50  (VT debounce)
 resolve_quality_thresholds() {
     local _lat_preset
     local _loss_preset
@@ -1475,8 +1490,8 @@ resolve_quality_thresholds() {
     _loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
 
     case "$_lat_preset" in
-        standard)      QUALITY_LAT_THRESHOLD=150; QUALITY_LAT_DEBOUNCE=3 ;;
-        very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_DEBOUNCE=2 ;;
+        standard)      QUALITY_LAT_THRESHOLD=150; QUALITY_LAT_VT=0 ;;
+        very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_VT=1 ;;
         custom)
             # latency_custom_ms drives the threshold; debounce mirrors tolerant.
             # Non-numeric/empty custom value falls back to the tolerant default
@@ -1486,23 +1501,23 @@ resolve_quality_thresholds() {
                 ''|*[!0-9]*) QUALITY_LAT_THRESHOLD=250 ;;
                 *)           QUALITY_LAT_THRESHOLD="$_lat_custom" ;;
             esac
-            QUALITY_LAT_DEBOUNCE=3
+            QUALITY_LAT_VT=0
             ;;
-        tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_DEBOUNCE=3 ;;
+        tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_VT=0 ;;
     esac
 
     case "$_loss_preset" in
-        standard)      QUALITY_LOSS_THRESHOLD=15; QUALITY_LOSS_DEBOUNCE=3 ;;
-        very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_DEBOUNCE=2 ;;
+        standard)      QUALITY_LOSS_THRESHOLD=15; QUALITY_LOSS_VT=0 ;;
+        very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_VT=1 ;;
         custom)
             _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
             case "$_loss_custom" in
                 ''|*[!0-9]*) QUALITY_LOSS_THRESHOLD=30 ;;
                 *)           QUALITY_LOSS_THRESHOLD="$_loss_custom" ;;
             esac
-            QUALITY_LOSS_DEBOUNCE=3
+            QUALITY_LOSS_VT=0
             ;;
-        tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_DEBOUNCE=3 ;;
+        tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_VT=0 ;;
     esac
 }
 
@@ -1681,10 +1696,13 @@ read_ping_data() {
         conn_during_recovery="false"
         # Force a stats pass on the first fresh read after a gap.
         _last_ping_ts=0
+        conn_last_leg=0
         if [ "$CQ_STALE_REASON" = "missing" ]; then
             conn_ping_target=""
-            conn_profile=""
+            conn_sensitivity=""
             conn_last_family=""
+            conn_fail_secs=""
+            conn_recover_secs=""
         else
             qlog_warn "Ping data stale ($(conn_state_why)), marking unknown"
         fi
@@ -1696,68 +1714,41 @@ read_ping_data() {
     conn_internet_available="$CQ_REACHABLE"
     conn_latency="$CQ_RTT_MS"
     conn_during_recovery="$CQ_DURING_RECOVERY"
-    conn_history_interval="$CQ_INTERVAL_SEC"
     conn_ping_target="$CQ_TARGET"
-    conn_profile="$CQ_PROFILE"
+    conn_sensitivity="$CQ_SENSITIVITY"
     conn_last_family="$CQ_LAST_FAMILY"
+    conn_last_leg="$CQ_LAST_LEG"
+    conn_fail_secs="$CQ_FAIL_SECS"
+    conn_recover_secs="$CQ_RECOVER_SECS"
+
+    # The table owns ring size, window and quality debounce; resolve once per
+    # sensitivity change. An absent name (older daemon) reads as relaxed.
+    if [ "$conn_sensitivity" != "$_conn_sens_applied" ] || [ -z "$_conn_sens_applied" ]; then
+        conn_state_resolve "${conn_sensitivity:-relaxed}"
+        conn_ring_size="$CQ_CFG_RING_SIZE"
+        conn_window_sec="$CQ_CFG_WINDOW_SEC"
+        conn_qdeb_sec="$CQ_CFG_QDEB_SEC"
+        conn_qdeb_vt_sec="$CQ_CFG_QDEB_VT_SEC"
+        _conn_sens_applied="$conn_sensitivity"
+        _last_ping_ts=0
+    fi
 
     # Step B: Single awk pass — only when ping timestamp changed (saves awk fork every 2s)
     # With ping daemon at 5s, awk runs ~every 5s instead of every cycle.
     if [ "$ping_ts" != "$_last_ping_ts" ]; then
         _last_ping_ts="$ping_ts"
 
-        local _ha=""
-        if [ -s "$PING_HISTORY_RAW" ]; then
-            # Ring lines are "<rtt|null> <leg>" (leg p4|s4|p6|s6|-; an older
-            # one-column file has no leg). Jitter only pairs consecutive answers
-            # from the same leg, so a switch to the second provider is not jitter.
-            _ha=$(awk -v min_samples="$PING_MIN_SAMPLES" '
-            BEGIN { n=0; lost=0; nv=0; have=0; sum=0; jsum=0; nj=0 }
-            NF > 0 {
-                n++; arr[n]=$1
-                if ($1=="null") { lost++ }
-                else {
-                    val=$1+0; sum+=val; nv++
-                    if (!have||val<min) min=val
-                    if (!have||val>max) max=val
-                    have=1
-                    if (nv>1 && $2==pleg) { d=val-prev; if(d<0)d=-d; jsum+=d; nj++ }
-                    prev=val; pleg=$2
-                }
-            }
-            END {
-                # Maturity guard: only trust loss% once the window has filled to
-                # min_samples. Below that, a couple of transient nulls dominate a
-                # tiny denominator and read as huge loss. Genuine sustained outages
-                # are still caught by the reachability/streak_fail path (independent
-                # of this stat), so suppressing immature loss% loses no real signal.
-                mloss = (n >= min_samples) ? int(lost*100/n) : 0
-                if (nv>0)
-                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nj>0?jsum/nj:0),mloss
-                else
-                    printf "null|null|null|null|%d|", (n>0 && n>=min_samples ? 100 : 0)
-                printf "["
-                for(i=1;i<=n;i++) { if(i>1) printf ","; printf "%s",arr[i] }
-                printf "]\n"
-            }' "$PING_HISTORY_RAW")
-        fi
-
-        if [ -n "$_ha" ]; then
-            local _rest="$_ha"
-            conn_min_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_avg_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_max_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_jitter="${_rest%%|*}";       _rest="${_rest#*|}"
-            conn_packet_loss="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_history="${_rest}"           # remaining is "[json_array]"
-        else
-            conn_min_latency="null"
-            conn_avg_latency="null"
-            conn_max_latency="null"
-            conn_jitter="null"
-            conn_packet_loss=0
-            conn_history="[]"
-        fi
+        # Stats and the <=60 latency_history points come from the one reducer in
+        # conn_state.sh (last conn_ring_size ring lines).
+        cq_ring_stats "$PING_HISTORY_RAW" "$CQ_INTERVAL_SEC" "$conn_ring_size" "$PING_MIN_SAMPLES"
+        conn_min_latency="$CQ_RS_MIN"
+        conn_avg_latency="$CQ_RS_AVG"
+        conn_max_latency="$CQ_RS_MAX"
+        conn_jitter="$CQ_RS_JITTER"
+        conn_packet_loss="$CQ_RS_LOSS"
+        conn_history="$CQ_RS_HISTORY"
+        conn_history_interval="$CQ_RS_HIST_INTERVAL_SEC"
+        conn_history_size="$CQ_RS_HIST_SIZE"
     fi
     # (if ts unchanged: cached conn_* stats remain valid)
 
@@ -1768,6 +1759,7 @@ read_ping_data() {
         # Degraded = loss at or above the configured Connection Quality cut
         # (was a hard-coded 10 %). Latency alone never makes the link degraded.
         local loss="${conn_packet_loss:-0}"
+        [ "$loss" = "null" ] && loss=0
         if [ "$loss" -ge "${QUALITY_LOSS_THRESHOLD:-30}" ] 2>/dev/null; then
             conn_status="degraded"
         else
@@ -1781,6 +1773,7 @@ read_ping_data() {
 
     # Sanitize: ensure numeric fields are valid
     case "$conn_packet_loss" in
+        null) ;;
         *[!0-9]*|'') conn_packet_loss=0 ;;
     esac
     case "$conn_history_interval" in
@@ -2227,10 +2220,10 @@ _wc_compose_pf() {
         _JC_CH_JSON="$_JV"
     fi
     _kR latency_history "$_JC_CH_JSON"
-    _kN history_interval_sec "$conn_history_interval" 2
-    _kN history_size "${CONN_HISTORY_SIZE:-}" 60
+    _kN history_interval_sec "$conn_history_interval" 5
+    _kN history_size "$conn_history_size" 60
     _kB during_recovery "$conn_during_recovery" false
-    _kS profile "$conn_profile"
+    _kS profile "$conn_sensitivity"
     _kO thresholds
     _kN latency_ms "$QUALITY_LAT_THRESHOLD" 250
     _kN loss_pct "$QUALITY_LOSS_THRESHOLD" 30
@@ -2242,6 +2235,10 @@ _wc_compose_pf() {
     _kN last_outage_ago_s "$_WC_LO_AGO" null
     _kSN last_outage_wan_ip "$_WC_LO_IP"
     _kB last_outage_wan_changed "$_WC_LO_CHG" null
+    _kS sensitivity "$conn_sensitivity"
+    _kN last_leg "$conn_last_leg" 0
+    _kN fail_secs "$conn_fail_secs" null
+    _kN recover_secs "$conn_recover_secs" null
     _kE
     _kO watchcat
     _kB enabled "$wc_enabled" false
@@ -2381,7 +2378,10 @@ write_cache_jq() {
         --argjson jit "${conn_jitter:-null}" \
         --argjson pkt_loss "${conn_packet_loss:-0}" \
         --arg ping_tgt "$conn_ping_target" \
-        --arg conn_profile "$conn_profile" \
+        --arg conn_sens "$conn_sensitivity" \
+        --argjson conn_leg "${conn_last_leg:-0}" \
+        --argjson conn_fail_secs "${conn_fail_secs:-null}" \
+        --argjson conn_rec_secs "${conn_recover_secs:-null}" \
         --arg conn_last_family "$conn_last_family" \
         --argjson dns_ms "${dns_lookup_ms:-null}" \
         --arg dns_res "$dns_resolver" \
@@ -2390,8 +2390,8 @@ write_cache_jq() {
         --arg lo_ip "$_WC_LO_IP" \
         --argjson lo_chg "${_WC_LO_CHG:-null}" \
         --argjson lat_hist "${conn_history:-[]}" \
-        --argjson hist_int "${conn_history_interval:-2}" \
-        --argjson hist_size "${CONN_HISTORY_SIZE:-60}" \
+        --argjson hist_int "${conn_history_interval:-5}" \
+        --argjson hist_size "${conn_history_size:-60}" \
         --argjson during_rec "${conn_during_recovery:-false}" \
         --argjson thr_lat "${QUALITY_LAT_THRESHOLD:-250}" \
         --argjson thr_loss "${QUALITY_LOSS_THRESHOLD:-30}" \
@@ -2501,14 +2501,16 @@ write_cache_jq() {
                 jitter_ms: $jit, packet_loss_pct: $pkt_loss,
                 ping_target: $ping_tgt, latency_history: $lat_hist,
                 history_interval_sec: $hist_int, history_size: $hist_size,
-                during_recovery: $during_rec, profile: $conn_profile,
+                during_recovery: $during_rec, profile: $conn_sens,
                 thresholds: {latency_ms: $thr_lat, loss_pct: $thr_loss},
                 dns_lookup_ms: $dns_ms,
                 dns_resolver: (if $dns_res == "" then null else $dns_res end),
                 last_family: $conn_last_family,
                 last_outage_s: $lo_s, last_outage_ago_s: $lo_ago,
                 last_outage_wan_ip: (if $lo_ip == "" then null else $lo_ip end),
-                last_outage_wan_changed: $lo_chg
+                last_outage_wan_changed: $lo_chg,
+                sensitivity: $conn_sens, last_leg: $conn_leg,
+                fail_secs: $conn_fail_secs, recover_secs: $conn_rec_secs
             },
             watchcat: {
                 enabled: $wc_enabled, state: $wc_state,
@@ -2789,7 +2791,7 @@ poll_cycle() {
         rm -f "$QUALITY_RELOAD_FLAG"
         # The single alert wait lives in the same UCI section.
         command -v cq_alert_after_min >/dev/null 2>&1 && cq_alert_after_min
-        qlog_info "Reloaded quality thresholds: lat=${QUALITY_LAT_THRESHOLD}ms/${QUALITY_LAT_DEBOUNCE} loss=${QUALITY_LOSS_THRESHOLD}%/${QUALITY_LOSS_DEBOUNCE} wait=${CQ_ALERT_AFTER_MIN:-5}m"
+        qlog_info "Reloaded quality thresholds: lat=${QUALITY_LAT_THRESHOLD}ms/vt=${QUALITY_LAT_VT} loss=${QUALITY_LOSS_THRESHOLD}%/vt=${QUALITY_LOSS_VT} wait=${CQ_ALERT_AFTER_MIN:-5}m"
     fi
 
     # Live reload of adaptive-backoff config when adaptive_polling.sh drops it.

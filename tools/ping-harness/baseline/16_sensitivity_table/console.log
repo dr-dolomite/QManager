@@ -1,0 +1,9 @@
+none: sens=relaxed interval=5 fail=20 recover=10 ring=60
+sensitive: sens=sensitive interval=1 fail=8 recover=3 ring=300
+regular: sens=regular interval=2 fail=12 recover=6 ring=150
+relaxed: sens=relaxed interval=5 fail=20 recover=10 ring=60
+quiet: sens=quiet interval=10 fail=40 recover=20 ring=60
+old profile key: sens=quiet interval=10 fail=40 recover=20 ring=60
+sensitivity beats profile: sens=regular interval=2 fail=12 recover=6 ring=150
+unknown name: sens=relaxed interval=5 fail=20 recover=10 ring=60
+interval_override ignored: sens=sensitive interval=1 fail=8 recover=3 ring=300
