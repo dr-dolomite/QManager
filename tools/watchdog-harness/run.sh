@@ -15,6 +15,7 @@
 #      rewrite is applied to the monolith and to the split files:
 #        /usr/lib/qmanager/ -> <stage>/lib/     /etc/init.d/ -> <stage>/initd/
 #        /etc/qmanager/ -> <root>/etc/qmanager/ /etc/config/ -> <root>/etc/config/
+#        "/etc/qmanager" (PF_STATE_DIR) -> "<root>/etc/qmanager"
 #        /tmp/ -> <root>/tmp/
 #        /var/run/ -> <root>/var/run/           /proc/uptime -> <root>/proc_uptime
 #   3. puts only BusyBox applets (+ jq) on PATH, like the device;
@@ -111,6 +112,7 @@ run_one() { # scenario name
         sed -e "s#/usr/lib/qmanager/#$stage/lib/#g" \
             -e "s#/etc/init\\.d/#$stage/initd/#g" \
             -e "s#/etc/qmanager/#$root/etc/qmanager/#g" \
+            -e "s#\"/etc/qmanager\"#\"$root/etc/qmanager\"#g" \
             -e "s#/etc/config/#$root/etc/config/#g" \
             -e "s#/tmp/#$root/tmp/#g" \
             -e "s#/var/run/#$root/var/run/#g" \

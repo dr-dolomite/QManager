@@ -216,7 +216,8 @@ wd_enter_radio_off() {
     wd_outage_clear
 }
 
-# Ends the service the way the UI's "off" does (disable, then stop). procd
+# The config says disabled (start, reload): end the service the way the UI's
+# "off" does (disable, then stop). Tier 4 never calls it (reboot budget). procd
 # respawns any exit, whatever the code, and start_service's config gate is not
 # consulted on respawn, so a bare exit would be re-run up to 5 times. `stop`
 # deletes the procd instance and TERMs this daemon; the TERM trap runs once the
@@ -228,25 +229,18 @@ wd_retire_service() {
 }
 
 execute_tier4() {
-    # Token bucket check
-    count_recent_reboots
-    if [ "$reboots_this_hour" -ge "$CFG_MAX_REBOOTS_PER_HOUR" ]; then
-        qlog_error "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour)"
-        qlog_error "TIER 4: Auto-disabling watchcat"
-        append_event "watchcat_recovery" "Watchcat disabled: reboot limit exceeded (${reboots_this_hour} reboots/hour)" "error"
-
-        # Permanently disable in the config store
-        cfg_set watchdog enabled 0
-        cfg_commit 2>/dev/null
-
-        CFG_ENABLED=0
-        state="disabled"
-        touch "$DISABLED_FLAG"
-        write_state
-        rm -f "$RECOVERY_FLAG"
-
-        wd_retire_service
-        exit 0
+    # Reboot budget (wd_ledger.sh, spec section 5.6): a spent budget or the
+    # long-run guard makes Tier 4 rest. It is skipped like a disabled tier
+    # (rc 1); the watchdog stays enabled and Tiers 1-3 keep working.
+    wd_reboot_rest_eval
+    if [ -n "$reboot_rest_reason" ]; then
+        if [ "$reboot_rest_reason" = "hourly" ]; then
+            qlog_warn "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour), Tier 4 rests"
+            wd_budget_spent_event
+        else
+            qlog_warn "TIER 4: Reboots paused until the link comes back (long outage)"
+        fi
+        return 1
     fi
 
     qlog_error "TIER 4: System reboot (recovery ${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR})"

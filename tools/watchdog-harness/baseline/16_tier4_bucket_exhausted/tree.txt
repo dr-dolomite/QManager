@@ -5,6 +5,9 @@
 1789999900|reboot|tier4_escalation
 1789999950|reboot|user_reboot
 
+=== etc/qmanager/wd_link_up
+1790000030
+
 === tmp/qmanager.log
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=0 T4=1 backup_sim=none
@@ -15,18 +18,22 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 3
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Tier 4 resting at start (hourly)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] Link up after a watchdog reboot, link-up stamp written
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
 [2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:14:10] ERROR [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour)
-[2026-09-21 14:14:10] ERROR [watchcat:PID] TIER 4: Auto-disabling watchcat
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat disabled: reboot limit exceeded (3 reboots/hour)
+[2026-09-21 14:14:10] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: reboot limit reached (3 per hour), reboots paused
+[2026-09-21 14:14:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
+[2026-09-21 14:14:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (act after 15s)
 
 === tmp/qmanager_events.json
 {"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat disabled: reboot limit exceeded (3 reboots/hour)","severity":"error"}
-
-=== tmp/qmanager_watchcat_disabled
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: reboot limit reached (3 per hour), reboots paused","severity":"warning","code":"wd_budget_spent"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
 

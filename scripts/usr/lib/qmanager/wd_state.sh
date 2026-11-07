@@ -68,6 +68,9 @@ _wd_write_state_file() {
     local v_pr_interval
     local v_pr_last
     local v_pr_active
+    local v_rb_limit
+    local v_rb_until
+    local v_rb_spent
     local json
     stale="$1"
     ts=$(date +%s)
@@ -84,6 +87,12 @@ _wd_write_state_file() {
     _wd_num "$original_sim_slot" null;     v_orig="$_wdn"
     _wd_num "$current_sim_slot" null;      v_curr="$_wdn"
     _wd_num "$reboots_this_hour" 0;        v_reboots="$_wdn"
+    _wd_num "$CFG_MAX_REBOOTS_PER_HOUR" 3; v_rb_limit="$_wdn"
+    _wd_num "$reboot_rest_until" null;   v_rb_until="$_wdn"
+    case "$reboot_budget_exhausted" in
+        true) v_rb_spent=true ;;
+        *) v_rb_spent=false ;;
+    esac
     _wd_num "$last_ssr_detected" null;     v_ssr_det="$_wdn"
     _wd_num "$ssr_hold_started" 0;         v_ssr_started="$_wdn"
     _wd_num "$CFG_SSR_GRACE" 45;           v_ssr_grace="$_wdn"
@@ -118,8 +127,7 @@ _wd_write_state_file() {
 
     # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
     # has not landed yet carry their idle value: step_wait_until,
-    # reboot_budget_exhausted, reboot_rest_reason, quality_breach_secs,
-    # failback_failures, ping_stale.
+    # quality_breach_secs, failback_failures, ping_stale.
     json=$(jq -n -c \
         --argjson ts "$ts" \
         --argjson mono "$v_mono" \
@@ -138,6 +146,10 @@ _wd_write_state_file() {
         --argjson sf_orig "$v_orig" \
         --argjson sf_curr "$v_curr" \
         --argjson reboots "$v_reboots" \
+        --argjson rb_limit "$v_rb_limit" \
+        --argjson rb_spent "$v_rb_spent" \
+        --arg rb_reason "$reboot_rest_reason" \
+        --argjson rb_until "$v_rb_until" \
         --arg recovery_reason "$recovery_reason" \
         --argjson ssr_hold "$v_ssr_hold" \
         --argjson ssr_started "$v_ssr_started" \
@@ -167,8 +179,10 @@ _wd_write_state_file() {
             holdoff_reason: (if $holdoff_until > $mono and $holdoff_reason != "" then $holdoff_reason else null end),
             holdoff_quality_level: $qlevel,
             reboots_this_hour: $reboots,
-            reboot_budget_exhausted: false,
-            reboot_rest_reason: null,
+            reboot_limit: $rb_limit,
+            reboot_budget_exhausted: $rb_spent,
+            reboot_rest_reason: (if $rb_reason == "" then null else $rb_reason end),
+            reboot_rest_until: (if $rb_reason == "" then null else $rb_until end),
             ssr_hold: $ssr_hold,
             ssr_hold_until: (if $ssr_hold then ($ssr_started + $ssr_grace) else null end),
             last_ssr_mono: $last_ssr_mono,

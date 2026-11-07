@@ -20,6 +20,9 @@
 1789999880|reboot|tier4_escalation
 1790000050|reboot|tier4_escalation
 
+=== etc/qmanager/wd_link_up
+1790000030
+
 === tmp/qmanager.log
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=0 T4=1 backup_sim=none
@@ -31,6 +34,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 1
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] Link up after a watchdog reboot, link-up stamp written
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
 [2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)

@@ -249,3 +249,50 @@ one of these:
   last value before entry.
 
 No AT, call, event or log difference; the attach-edge change and the clamp change no output.
+
+## R3: reboot budget and long-run guard (step 1b)
+
+A spent reboot budget no longer disables the watchdog. Budget = `tier4_escalation` rows in the
+rolling hour (`max_reboots_per_hour`, clamped 1-10, default 3). When it is spent, Tier 4 rests:
+`execute_tier4` returns "skipped", so the ladder ends like a disabled last tier (outage pause per
+R2), Tiers 1-3 keep running, and the `wd_budget_spent` event (`reboot limit reached (N per
+hour)`) fires once per episode (until the next fresh `reachable=true`). The daemon never writes
+`enabled=0`, never creates `/tmp/qmanager_watchcat_disabled` and never retires the service for
+this; `wd_retire_service` is left for the config-disabled start and reload paths. Long-run guard
+(`wd_ledger.sh`): `$PF_STATE_DIR/wd_reboot_guard` (`<engage epoch>`) is written when the budget
+is spent now and in the previous hour (`(now-7200, now-3600)`) with no link-up stamp newer than
+the oldest previous-hour row; Tier 4 then rests with `long_outage` until a link-up stamp newer
+than the engage epoch, or 24 h. `$PF_STATE_DIR/wd_link_up` is written (durably) on the first
+reachable read after a watchdog reboot newer than the stamp, and only then. An insane clock
+neither engages nor releases the guard (an engaged file still holds Tier 4) and writes no stamp.
+Garbage in either file reads as absent; a garbage guard file is removed. The state file gains
+`reboot_limit` and `reboot_rest_until` (mono; `hourly`: when enough rows leave the hour,
+`long_outage`: engage + 24 h; epoch to mono via `now_epoch - now_mono`; null when not resting or
+the clock is insane) and fills `reboot_budget_exhausted` / `reboot_rest_reason`. `run.sh` also
+rewrites the literal `"/etc/qmanager"` (the adapter's `PF_STATE_DIR`) into the fake root, so the
+two files appear in the pass file lists and `tree.txt`. Every difference to the R2-follow-up
+baseline in an existing scenario is one of these:
+
+- every scenario: the state JSON gains `reboot_limit` after `reboots_this_hour` and
+  `reboot_rest_until` after `reboot_rest_reason` (also `state_before_term.json` in 28);
+  where the budget is spent (16, 26) `reboot_budget_exhausted` is true and
+  `reboot_rest_reason` `hourly`;
+- 16: the full budget no longer disables: no `uci set enabled=0` / commit / `watchcat_init
+  disable|stop`, no disabled flag, no exit; the `reboot limit reached (3 per hour)` warning
+  event replaces `Watchcat disabled: reboot limit exceeded`, Tier 4 is skipped, the 15 minute
+  outage pause starts and the daemon runs all 12 passes;
+- 16, 17, 24, 25: crash.log holds watchdog rows newer than any link-up stamp, so the first
+  reachable read writes `etc/qmanager/wd_link_up` (file list from that pass, `tree.txt`, one
+  `Link up after a watchdog reboot` log line); in 25 that happens on the first pass with a
+  sane clock;
+- 16, 26: one `Tier 4 resting at start (hourly)` log line.
+
+New scenarios: 84 (budget spent: Tiers 1 and 2 run, Tier 4 rests, one event over two ladders of
+one episode, never disabled), 85 (the event fires again after a reachable read ends the episode),
+86 (rows age out: `reboot_rest_until` = mono 5101, the next ladder reboots), 87 (guard engages at
+start, Tier 4 keeps resting with `long_outage` after the hourly window frees up), 88 (seeded guard
+released by the first link-up, the spent budget then rests as `hourly`), 89 (a seeded guard file
+holds Tier 4 at start with an empty budget), 90 (guard released 24 h after it engaged, then
+reboot), 91 (1970 clock: hourly rest with no deadline, no guard, no stamp; once the clock is sane
+the guard engages), 92 (the link-up stamp is written once), 93 (garbage guard and link-up files).
+Outage pauses in 84-91 are cut to 60 s in `sc_post_source` (`HOLDOFF_OUTAGE_SECS`).

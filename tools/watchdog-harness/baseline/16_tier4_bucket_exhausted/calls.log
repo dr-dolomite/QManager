@@ -1,6 +1,12 @@
 --- pass 1 ---
 --- pass 2 ---
-uci set quecmanager.watchcat.enabled=0
-uci commit quecmanager
-watchcat_init disable
-watchcat_init stop
+--- pass 3 ---
+--- pass 4 ---
+--- pass 5 ---
+--- pass 6 ---
+--- pass 7 ---
+--- pass 8 ---
+--- pass 9 ---
+--- pass 10 ---
+--- pass 11 ---
+--- pass 12 ---

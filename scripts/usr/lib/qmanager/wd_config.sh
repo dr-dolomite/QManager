@@ -105,7 +105,19 @@ read_config() {
     CFG_BACKUP_SIM_SLOT="$val"
 
     val=$(cfg_get watchdog max_reboots_per_hour)
-    [ -n "$val" ] && CFG_MAX_REBOOTS_PER_HOUR="$val"
+    # max_reboots_per_hour: 1-10, default 3 (absent or non-numeric).
+    case "$val" in
+        ''|*[!0-9]*) CFG_MAX_REBOOTS_PER_HOUR=3 ;;
+        *)
+            # Length first (test overflows on huge values), then drop one
+            # leading zero so the value stays a plain decimal.
+            [ "${#val}" -gt 2 ] && val=10
+            val="${val#0}"
+            CFG_MAX_REBOOTS_PER_HOUR="${val:-0}"
+            [ "$CFG_MAX_REBOOTS_PER_HOUR" -lt 1 ] && CFG_MAX_REBOOTS_PER_HOUR=1
+            [ "$CFG_MAX_REBOOTS_PER_HOUR" -gt 10 ] && CFG_MAX_REBOOTS_PER_HOUR=10
+            ;;
+    esac
 
     CFG_QUALITY_ENABLED=$(cfg_get watchdog quality_enabled)
     [ -z "$CFG_QUALITY_ENABLED" ] && CFG_QUALITY_ENABLED=0

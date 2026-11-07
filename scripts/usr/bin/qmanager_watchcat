@@ -13,7 +13,7 @@
 #   Tier 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 #   Tier 2: Radio toggle (AT+CFUN=0/1) — skipped if tower lock active
 #   Tier 3: SIM failover (AT+QUIMSLOT) — Golden Rule sequence
-#   Tier 4: System reboot — token bucket: max N/hour, auto-disables
+#   Tier 4: System reboot — max N/hour, then Tier 4 rests (never disables)
 #
 # Data flow:
 #   Reads:  /tmp/qmanager_ping.json (from ping daemon)
@@ -92,7 +92,6 @@ RECOVERY_FLAG="/tmp/qmanager_recovery_active"
 LOCK_FILE="$PF_MAINT_LOCK"
 RELOAD_FLAG="$PF_WD_RELOAD"
 REVERT_FLAG="/tmp/qmanager_watchcat_revert_sim"
-DISABLED_FLAG="/tmp/qmanager_watchcat_disabled"
 SIM_FAILOVER_FILE="$PF_FAILOVER_MIRROR"
 PROFILE_APPLY_PID="$PF_PROFILE_APPLY_PID"
 CRASH_LOG="$PF_CRASH_LOG"
@@ -161,10 +160,10 @@ main() {
     #       below: wd_state state and failure_counter, wd_detect
     #       quality_breach_counter and ssr_hold, wd_tiers current_tier,
     #       cooldown_remaining, cooldown_stale_retries, _recovery_marker_emitted.
-    #   wd_tiers do_recovery / _cooldown_handle_failure / finish_cooldown /
-    #       execute_tier4: wd_state state and failure_counter, wd_detect
-    #       quality_breach_counter, wd_sim revert_settle_active, wd_config
-    #       CFG_ENABLED.
+    #   wd_tiers do_recovery / _cooldown_handle_failure / finish_cooldown:
+    #       wd_state state and failure_counter, wd_detect
+    #       quality_breach_counter, wd_sim revert_settle_active.
+    #   main (below): wd_ledger wd_link_up_seen on every fresh reachable read.
     #   wd_sim execute_tier3 / sim_failover_fallback / finalize_sim_failover /
     #       initiate_primary_recheck / check_revert_request / wd_sim_finish_recheck:
     #       wd_state state and failure_counter, wd_tiers current_tier,
@@ -206,9 +205,11 @@ main() {
     qlog_info "QManager Watchcat starting (PID $$)"
     qlog_info "========================================"
 
-    # Count reboots from crash.log (persisted across reboots)
-    count_recent_reboots
+    # Count reboots from crash.log (persisted across reboots) and read the
+    # long-run reboot guard, which survives the reboot it is there to cap.
+    wd_reboot_rest_eval
     qlog_info "Reboots in last hour: $reboots_this_hour"
+    [ -n "$reboot_rest_reason" ] && qlog_info "Tier 4 resting at start ($reboot_rest_reason)"
 
     # Boot settle — let modem and other daemons stabilize
     qlog_info "Boot settle: waiting ${BOOT_SETTLE}s"
@@ -382,6 +383,9 @@ main() {
         # read, in any state that gets here. A quality pause is never ended by
         # reachability (wd_holdoff_clear, wd_tiers.sh).
         [ "$ping_reachable" = "true" ] && wd_holdoff_clear outage
+        # It also ends the reboot-budget episode and stamps the first link-up
+        # after a watchdog reboot (wd_ledger.sh, the long-run guard).
+        [ "$ping_reachable" = "true" ] && wd_link_up_seen
 
         # A reachable link also proves the radio is on (no AT cost), so a radio-down
         # marker that a lost AT+CFUN=1 left behind is cleared here.

@@ -10,5 +10,6 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 3
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Tier 4 resting at start (hourly)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 

@@ -1,0 +1,118 @@
+=== etc/qmanager/crash.log
+1789999700|reboot|tier4_escalation
+1789999800|reboot|tier4_escalation
+1789999900|reboot|tier4_escalation
+
+=== etc/qmanager/wd_link_up
+1790000030
+
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 3
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Tier 4 resting at start (hourly)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] Link up after a watchdog reboot, link-up stamp written
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:14:12] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:14:42] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 1
+[2026-09-21 14:14:42] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:14:42] INFO  [watchcat:PID] Escalating to Tier 2 (reason=outage)
+[2026-09-21 14:14:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection
+[2026-09-21 14:14:42] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=outage)
+[2026-09-21 14:14:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
+[2026-09-21 14:14:42] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
+[2026-09-21 14:14:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
+[2026-09-21 14:14:45] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:14:45] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
+[2026-09-21 14:15:15] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 2
+[2026-09-21 14:15:15] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
+[2026-09-21 14:15:15] INFO  [watchcat:PID] Escalating to Tier 4 (reason=outage)
+[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection
+[2026-09-21 14:15:15] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
+[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
+[2026-09-21 14:15:15] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
+[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: reboot limit reached (3 per hour), reboots paused
+[2026-09-21 14:15:15] INFO  [watchcat:PID] Tier 4 skipped, trying next
+[2026-09-21 14:15:15] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
+[2026-09-21 14:15:25] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=19 (act after 15s)
+[2026-09-21 14:16:15] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 145s >= 15s
+[2026-09-21 14:16:15] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:16:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:16:15] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:16:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:16:17] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:16:47] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 1
+[2026-09-21 14:16:47] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:16:47] INFO  [watchcat:PID] Escalating to Tier 2 (reason=outage)
+[2026-09-21 14:16:47] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection
+[2026-09-21 14:16:47] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=outage)
+[2026-09-21 14:16:47] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
+[2026-09-21 14:16:47] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
+[2026-09-21 14:16:47] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
+[2026-09-21 14:16:50] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:16:50] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
+[2026-09-21 14:17:20] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 2
+[2026-09-21 14:17:20] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
+[2026-09-21 14:17:20] INFO  [watchcat:PID] Escalating to Tier 4 (reason=outage)
+[2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection
+[2026-09-21 14:17:20] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
+[2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
+[2026-09-21 14:17:20] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
+[2026-09-21 14:17:20] INFO  [watchcat:PID] Tier 4 skipped, trying next
+[2026-09-21 14:17:20] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
+[2026-09-21 14:17:30] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=44 (act after 15s)
+[2026-09-21 14:18:20] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 270s >= 15s
+[2026-09-21 14:18:20] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:18:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:18:20] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:18:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:18:22] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:18:52] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 1
+[2026-09-21 14:18:52] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:18:52] INFO  [watchcat:PID] Escalating to Tier 2 (reason=outage)
+[2026-09-21 14:18:52] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection
+[2026-09-21 14:18:52] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=outage)
+[2026-09-21 14:18:52] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
+[2026-09-21 14:18:52] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
+[2026-09-21 14:18:52] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
+[2026-09-21 14:18:55] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:18:55] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: reboot limit reached (3 per hour), reboots paused","severity":"warning","code":"wd_budget_spent"}
+{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000175,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000175,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000300,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000300,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000332,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000332,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000332,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+
