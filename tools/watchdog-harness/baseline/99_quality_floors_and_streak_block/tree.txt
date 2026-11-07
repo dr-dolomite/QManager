@@ -9,17 +9,9 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:13:50] WARN  [watchcat:PID] QUALITY breach: avg latency 55.0ms > 50ms
-[2026-09-21 14:13:50] WARN  [watchcat:PID] QUALITY breach: loss 10% >= 10%
 [2026-09-21 14:15:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=1 (act after 600s)
 [2026-09-21 14:16:20] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
-[2026-09-21 14:17:10] WARN  [watchcat:PID] QUALITY breach: avg latency 60.0ms > 50ms
-[2026-09-21 14:17:10] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 60.0ms vs 50ms, loss 0% vs 10%)
-[2026-09-21 14:17:20] WARN  [watchcat:PID] QUALITY breach: avg latency 60.0ms > 50ms
-[2026-09-21 14:17:20] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 60.0ms vs 50ms, loss 0% vs 10%)
-[2026-09-21 14:17:30] WARN  [watchcat:PID] QUALITY breach: avg latency 60.0ms > 50ms
-[2026-09-21 14:17:30] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 60.0ms vs 50ms, loss 0% vs 10%)
-[2026-09-21 14:17:40] WARN  [watchcat:PID] QUALITY breach: avg latency 60.0ms > 50ms
+[2026-09-21 14:17:10] WARN  [watchcat:PID] QUALITY: breach started (avg 60.0ms vs 50ms, loss 0% vs 10%), recovery after 30s
 [2026-09-21 14:17:40] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 60.0ms / loss 0% vs 50ms / 10%)
 [2026-09-21 14:17:40] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 60.0ms / loss 0%) — starting recovery
 [2026-09-21 14:17:40] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)

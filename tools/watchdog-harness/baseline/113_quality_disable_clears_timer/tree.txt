@@ -1,0 +1,38 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=60s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg n/a vs 250ms, loss 100% vs 30%), recovery after 60s
+[2026-09-21 14:15:00] INFO  [watchcat:PID] Config reload requested
+[2026-09-21 14:15:00] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:15:00] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:15:00] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=60s (shared thresholds, floors applied)
+[2026-09-21 14:15:00] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:15:00] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:16:00] INFO  [watchcat:PID] Config reload requested
+[2026-09-21 14:16:00] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:16:00] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:16:00] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=60s (shared thresholds, floors applied)
+[2026-09-21 14:16:00] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:16:00] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:16:00] WARN  [watchcat:PID] QUALITY: breach started (avg n/a vs 250ms, loss 100% vs 30%), recovery after 60s
+[2026-09-21 14:17:00] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 60s (avg n/a / loss 100% vs 250ms / 30%)
+[2026-09-21 14:17:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency n/a / loss 100%) — starting recovery
+[2026-09-21 14:17:00] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
+[2026-09-21 14:17:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
+[2026-09-21 14:17:00] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:17:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:17:02] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000220,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency n/a / loss 100%) — starting recovery","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000220,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000220,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+

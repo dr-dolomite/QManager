@@ -114,12 +114,12 @@ read_quality() {
 quality_breached() {
     if [ "$q_avg_latency" != "null" ]; then
         if awk -v a="$q_avg_latency" -v c="$CFG_LATENCY_THRESHOLD_MS" 'BEGIN{ exit !((a+0) > (c+0)) }'; then
-            qlog_warn "QUALITY breach: avg latency ${q_avg_latency}ms > ${CFG_LATENCY_THRESHOLD_MS}ms"
+            qlog_debug "QUALITY breach: avg latency ${q_avg_latency}ms > ${CFG_LATENCY_THRESHOLD_MS}ms"
             return 0
         fi
     fi
     if [ "$q_packet_loss" -ge "$CFG_LOSS_THRESHOLD_PCT" ] 2>/dev/null; then
-        qlog_warn "QUALITY breach: loss ${q_packet_loss}% >= ${CFG_LOSS_THRESHOLD_PCT}%"
+        qlog_debug "QUALITY breach: loss ${q_packet_loss}% >= ${CFG_LOSS_THRESHOLD_PCT}%"
         return 0
     fi
     return 1
@@ -138,7 +138,8 @@ evaluate_quality() {
     local now
     local held
     local gate
-    [ "$CFG_QUALITY_ENABLED" = "1" ] || return 1
+    local avg
+    [ "$CFG_QUALITY_ENABLED" = "1" ] || { quality_breach_since=0; return 1; }
     if [ "$state" != "monitor" ] || [ "$ping_reachable" != "true" ] || [ "$ping_streak_fail" != "0" ]; then
         quality_breach_since=0
         return 1
@@ -165,17 +166,23 @@ evaluate_quality() {
         return 1
     fi
 
+    # An all-lost window has no average.
+    avg="${q_avg_latency}ms"
+    [ "$q_avg_latency" = "null" ] && avg="n/a"
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) return 1 ;; esac
     case "$quality_breach_since" in ''|*[!0-9]*) quality_breach_since=0 ;; esac
+    # WARN once when the timer starts and once when it fires; every pass in
+    # between logs at debug only (a breach can last up to 30 minutes).
     if [ "$quality_breach_since" -le 0 ] || [ "$quality_breach_since" -gt "$now" ]; then
         quality_breach_since="$now"
         # mono 0 cannot mark a breach (0 = none): count from second 1.
         [ "$quality_breach_since" -gt 0 ] || quality_breach_since=1
+        qlog_warn "QUALITY: breach started (avg $avg vs ${CFG_LATENCY_THRESHOLD_MS}ms, loss ${q_packet_loss}% vs ${CFG_LOSS_THRESHOLD_PCT}%), recovery after ${CFG_QUALITY_AFTER_SEC}s"
     fi
     held=$((now - quality_breach_since))
     if [ "$held" -lt "$CFG_QUALITY_AFTER_SEC" ]; then
-        qlog_info "QUALITY: breach for ${held}s/${CFG_QUALITY_AFTER_SEC}s (avg ${q_avg_latency}ms vs ${CFG_LATENCY_THRESHOLD_MS}ms, loss ${q_packet_loss}% vs ${CFG_LOSS_THRESHOLD_PCT}%)"
+        qlog_debug "QUALITY: breach for ${held}s/${CFG_QUALITY_AFTER_SEC}s (avg $avg vs ${CFG_LATENCY_THRESHOLD_MS}ms, loss ${q_packet_loss}% vs ${CFG_LOSS_THRESHOLD_PCT}%)"
         return 1
     fi
 
@@ -202,8 +209,8 @@ evaluate_quality() {
         _wd_ladder_exhausted "QUALITY: no quality tier left after the kept Tier $current_tier"
         return 0
     fi
-    qlog_warn "QUALITY → RECOVERY: breach for ${held}s (avg ${q_avg_latency}ms / loss ${q_packet_loss}% vs ${CFG_LATENCY_THRESHOLD_MS}ms / ${CFG_LOSS_THRESHOLD_PCT}%)"
-    append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning" "wd_tier_start"
+    qlog_warn "QUALITY → RECOVERY: breach for ${held}s (avg $avg / loss ${q_packet_loss}% vs ${CFG_LATENCY_THRESHOLD_MS}ms / ${CFG_LOSS_THRESHOLD_PCT}%)"
+    append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency $avg / loss ${q_packet_loss}%) — starting recovery" "warning" "wd_tier_start"
 
     # SSR-aware hold: if a recoverable baseband SSR is mid-flight, hold
     # the ladder this cycle rather than forcing a detach. Not the main

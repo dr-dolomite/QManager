@@ -100,6 +100,10 @@ read_config() {
     case "$val" in
         ''|*[!0-9]*) CFG_STEP_WAIT_SEC=60 ;;
         *)
+            # Leading zeros first ("0090" is 90, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
             [ "${#val}" -gt 3 ] && val=300
             CFG_STEP_WAIT_SEC="$val"
             [ "$CFG_STEP_WAIT_SEC" -lt 10 ] && CFG_STEP_WAIT_SEC=10
@@ -152,6 +156,10 @@ read_config() {
     case "$val" in
         ''|*[!0-9]*) CFG_QUALITY_AFTER_SEC=120 ;;
         *)
+            # Leading zeros first ("0090" is 90, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
             [ "${#val}" -gt 4 ] && val=1800
             CFG_QUALITY_AFTER_SEC="$val"
             [ "$CFG_QUALITY_AFTER_SEC" -lt 30 ] && CFG_QUALITY_AFTER_SEC=30

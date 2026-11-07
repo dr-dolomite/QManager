@@ -436,3 +436,24 @@ Tier 4), 109 (quiet ping, interval 10: the quality cooldown waits 110 s and succ
 extension), 110 (inconclusive then a reachable read clears the kept tier; the next outage starts
 at Tier 1), 111 (Tier 1 off: an inconclusive quality Tier 2 leaves no tier under the cap, so the
 next trigger goes straight to the quality pause).
+
+## R4/R3 validator follow-ups after R5 (step 1b)
+
+Quality timer: `evaluate_quality` clears `quality_breach_since` when quality is disabled, so a
+disable then re-enable starts a fresh breach and `quality_breach_secs` does not grow while it is
+off. The breach logs one WARN when the timer starts (`QUALITY: breach started ...`) and one when
+it fires (`QUALITY → RECOVERY`); `quality_breached` and the per-pass `breach for Ns/Ms` line are
+debug now. An all-lost window prints `avg n/a` (log and event) instead of `nullms`.
+`quality_after_sec` and `step_wait_sec` strip leading zeros before the length and clamp checks.
+Link-up stamp: when `$PF_STATE_DIR/wd_link_up` cannot be written the stamp is kept in memory
+(`_wd_link_up_mem`, this run only) with one warning, so the per-minute recount no longer makes
+every reachable read retry and re-log the write. Every difference to the R5 baseline is one of
+these:
+
+- quality scenarios (08, 20, 31, 32, 56, 78-83, 94-99, 107, 109, 111): the per-pass
+  `QUALITY breach:` WARN and `QUALITY: breach for` INFO lines are gone (debug), and one
+  `QUALITY: breach started` WARN marks each new breach.
+
+New scenarios: 112 (read-only state dir: one link-up stamp attempt and warning, kept in memory
+across recounts and a later outage), 113 (quality disabled mid-breach clears the timer; re-enabled,
+a fresh breach starts; `quality_after_sec 0060` reads as 60; all-lost window logs `avg n/a`).

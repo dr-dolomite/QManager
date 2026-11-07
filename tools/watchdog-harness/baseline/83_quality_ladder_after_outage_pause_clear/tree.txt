@@ -22,13 +22,7 @@
 [2026-09-21 14:14:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
 [2026-09-21 14:14:52] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=12 (act after 15s)
 [2026-09-21 14:15:42] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
-[2026-09-21 14:16:32] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:16:32] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:16:42] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:16:42] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:16:52] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:16:52] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:17:02] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:16:32] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
 [2026-09-21 14:17:02] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 24.5ms / loss 50% vs 250ms / 30%)
 [2026-09-21 14:17:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
 [2026-09-21 14:17:02] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
@@ -36,18 +30,11 @@
 [2026-09-21 14:17:02] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 [2026-09-21 14:17:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
 [2026-09-21 14:17:04] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
-[2026-09-21 14:18:04] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
 [2026-09-21 14:18:04] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 1
 [2026-09-21 14:18:04] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
 [2026-09-21 14:18:04] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:18:04] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
-[2026-09-21 14:18:14] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:14] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:18:24] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:24] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:18:34] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:34] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:18:44] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:18:14] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
 
 === tmp/qmanager_events.json
 {"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}

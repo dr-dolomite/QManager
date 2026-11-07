@@ -9,13 +9,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:14:50] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:14:50] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:15:00] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:15:00] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
 [2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 24.5ms / loss 50% vs 250ms / 30%)
 [2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
 [2026-09-21 14:15:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
@@ -34,13 +28,7 @@
 [2026-09-21 14:16:42] WARN  [watchcat:PID] COOLDOWN: no verdict for Tier 1 after 3 extensions — keeping it, the next trigger resumes at the next tier
 [2026-09-21 14:16:52] WARN  [watchcat:PID] Ping data stale (age 100s > 15s), skipping cycle
 [2026-09-21 14:17:02] WARN  [watchcat:PID] Ping data stale (age 110s > 15s), skipping cycle
-[2026-09-21 14:17:12] WARN  [watchcat:PID] QUALITY breach: loss 37% >= 30%
-[2026-09-21 14:17:12] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 37% vs 30%)
-[2026-09-21 14:17:22] WARN  [watchcat:PID] QUALITY breach: loss 41% >= 30%
-[2026-09-21 14:17:22] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 41% vs 30%)
-[2026-09-21 14:17:32] WARN  [watchcat:PID] QUALITY breach: loss 45% >= 30%
-[2026-09-21 14:17:32] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 45% vs 30%)
-[2026-09-21 14:17:42] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:17:12] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 37% vs 30%), recovery after 30s
 [2026-09-21 14:17:42] INFO  [watchcat:PID] Resuming the ladder after the kept Tier 1 (reason=quality)
 [2026-09-21 14:17:42] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 24.5ms / loss 50% vs 250ms / 30%)
 [2026-09-21 14:17:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
@@ -50,24 +38,11 @@
 [2026-09-21 14:17:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
 [2026-09-21 14:17:45] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:17:45] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 2)
-[2026-09-21 14:18:45] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
 [2026-09-21 14:18:45] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 2
 [2026-09-21 14:18:45] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
 [2026-09-21 14:18:45] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:18:45] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
-[2026-09-21 14:18:55] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:18:55] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:19:05] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:19:05] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:19:15] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:19:15] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:19:25] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:19:35] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:19:45] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:19:55] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:20:05] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:20:15] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
-[2026-09-21 14:20:25] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30%
+[2026-09-21 14:18:55] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
 
 === tmp/qmanager_events.json
 {"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning","code":"wd_tier_start"}

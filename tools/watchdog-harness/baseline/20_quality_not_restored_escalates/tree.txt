@@ -9,13 +9,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
-[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/30s (avg 400.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:14:50] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
-[2026-09-21 14:14:50] INFO  [watchcat:PID] QUALITY: breach for 10s/30s (avg 400.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:15:00] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
-[2026-09-21 14:15:00] INFO  [watchcat:PID] QUALITY: breach for 20s/30s (avg 400.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg 400.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
 [2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 400.5ms / loss 50% vs 250ms / 30%)
 [2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 400.5ms / loss 50%) — starting recovery
 [2026-09-21 14:15:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
@@ -23,7 +17,6 @@
 [2026-09-21 14:15:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 [2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
 [2026-09-21 14:15:12] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
-[2026-09-21 14:16:12] WARN  [watchcat:PID] QUALITY breach: avg latency 400.5ms > 250ms
 [2026-09-21 14:16:12] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 1
 [2026-09-21 14:16:12] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
 [2026-09-21 14:16:12] INFO  [watchcat:PID] Escalating to Tier 2 (reason=quality)

@@ -9,6 +9,5 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: loss 100% >= 30%
-[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach for 0s/1800s (avg nullms vs 250ms, loss 100% vs 30%)
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg n/a vs 250ms, loss 100% vs 30%), recovery after 1800s
 

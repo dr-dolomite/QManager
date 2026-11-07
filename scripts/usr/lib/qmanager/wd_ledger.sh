@@ -7,6 +7,7 @@
 # Owns: reboots_this_hour, _rb_next, reboot_budget_exhausted,
 #       reboot_rest_reason, reboot_rest_until, _wd_rb_prev, _wd_rb_prev_oldest,
 #       _wd_rb_newest, _wd_rb_free_at, _wd_guard_at, _wd_guard_mem, _wd_link_up,
+#       _wd_link_up_mem,
 #       _wd_budget_ev
 # Functions: count_recent_reboots, wd_reboot_rest_eval, _wd_rest_derive,
 #            wd_link_up_seen, _wd_epoch_file, _wd_persist,
@@ -41,6 +42,7 @@ _wd_rb_free_at=0          # epoch at which the hourly count drops below the limi
 _wd_guard_at=0            # long-run guard engage epoch, 0 = not engaged
 _wd_guard_mem=0           # engage epoch kept in memory when the guard file could not be written
 _wd_link_up=0             # link-up stamp epoch, 0 = none
+_wd_link_up_mem=0         # link-up stamp kept in memory when the stamp file could not be written
 _wd_budget_ev=0           # 1 once the hourly wd_budget_spent fired this episode
 WD_GUARD_SECS=86400
 WD_REBOOT_GUARD_FILE="$PF_STATE_DIR/wd_reboot_guard"
@@ -196,6 +198,9 @@ wd_reboot_rest_eval() {
         _wd_guard_at="$_wd_guard_mem"
     fi
     _wd_link_up=$(_wd_epoch_file "$WD_LINK_UP_FILE")
+    # A stamp that could not be saved still counts for this run, so the next
+    # reachable read does not try (and log) the write again every minute.
+    [ "$_wd_link_up_mem" -gt "$_wd_link_up" ] && _wd_link_up="$_wd_link_up_mem"
 
     now=$(date +%s)
     mnow=$(mono_now)
@@ -268,9 +273,16 @@ wd_link_up_seen() {
     now=$(date +%s)
     case "$now" in ''|*[!0-9]*) return 0 ;; esac
     [ "$now" -gt "$_wd_rb_newest" ] || return 0
-    _wd_persist "$WD_LINK_UP_FILE" "$now"
     _wd_link_up="$now"
-    qlog_info "Link up after a watchdog reboot, link-up stamp written"
+    if _wd_persist "$WD_LINK_UP_FILE" "$now"; then
+        _wd_link_up_mem=0
+        qlog_info "Link up after a watchdog reboot, link-up stamp written"
+    else
+        # Kept for this run only: the per-minute recount rereads the file, and
+        # without the in-memory stamp it would retry and warn every minute.
+        _wd_link_up_mem="$now"
+        qlog_warn "Link up after a watchdog reboot, but the link-up stamp could not be saved (kept until the daemon restarts)"
+    fi
     # Release an engaged guard here, without a recount (that stays on the
     # once-a-minute tick).
     if [ "$_wd_guard_at" -gt 0 ] && [ "$now" -gt "$_wd_guard_at" ]; then
