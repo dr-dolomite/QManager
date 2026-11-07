@@ -7,9 +7,10 @@
 # Owns: ping_streak_fail, ping_reachable, ping_during_recovery, ssr_hold,
 #       last_ssr_detected, ssr_hold_started, wd_resume_mono, wd_outage_age,
 #       wd_offline_secs, wd_act_after_eff, wd_recover_secs, wd_ping_interval,
-#       _wd_attach_seen, wd_stale_since, wd_ping_stale, wd_stale_restart_at,
+#       _wd_attach_seen, wd_stale_since, wd_ping_stale, wd_stale_restart_at, _wdd,
 #       _wd_ssr_cur_id, _wd_ssr_held_id
-# Functions: read_ping, wd_stale_clear, wd_ping_stale_tick, wd_resume_mark, wd_attach_tick, wd_outage_update,
+# Functions: read_ping, wd_stale_clear, wd_ping_stale_tick, _wd_dec,
+#            wd_resume_mark, wd_attach_tick, wd_outage_update,
 #            wd_outage_clear, wd_outage_due, wd_step_wait_secs, wd_decide_start,
 #            wd_holdoff_left, wd_radio_reconcile, wd_start_gate,
 #            ssr_in_progress, ssr_hold_gate, ssr_hold_clear
@@ -142,6 +143,18 @@ wd_attach_tick() {
     fi
 }
 
+# _wd_dec <value> <default>: _wdd = value as a plain decimal, leading zeros
+# stripped (ash arithmetic reads "08" as a bad octal and aborts); the default
+# when the value is not all digits.
+_wd_dec() {
+    _wdd="$1"
+    case "$_wdd" in ''|*[!0-9]*) _wdd="$2"; return 0 ;; esac
+    while [ "${#_wdd}" -gt 1 ] && [ "${_wdd#0}" != "$_wdd" ]; do
+        _wdd="${_wdd#0}"
+    done
+    return 0
+}
+
 # After a fresh read_ping: sets wd_act_after_eff, wd_offline_secs and
 # wd_outage_age (0 while reachable or while the attach flag exists).
 wd_outage_update() {
@@ -154,13 +167,17 @@ wd_outage_update() {
     wd_act_after_eff="$CFG_ACT_AFTER_SEC"
     case "$wd_act_after_eff" in ''|*[!0-9]*) wd_act_after_eff=30 ;; esac
     [ "$fs" -gt "$wd_act_after_eff" ] && wd_act_after_eff="$fs"
-    wd_recover_secs="$CQ_RECOVER_SECS"
-    case "$wd_recover_secs" in ''|*[!0-9]*) wd_recover_secs=10 ;; esac
+    _wd_dec "$CQ_RECOVER_SECS" 10
+    wd_recover_secs="$_wdd"
     [ "${#wd_recover_secs}" -gt 4 ] && wd_recover_secs=9999
-    wd_ping_interval="$CQ_INTERVAL_SEC"
-    case "$wd_ping_interval" in ''|*[!0-9]*) wd_ping_interval=5 ;; esac
-    [ "${#wd_ping_interval}" -gt 3 ] && wd_ping_interval=300
-    [ "$wd_ping_interval" -ge 1 ] || wd_ping_interval=5
+    # Intervals are 1-10 s by the sensitivity table: anything outside 1-60 is
+    # garbage and reads as the 5 s default.
+    _wd_dec "$CQ_INTERVAL_SEC" 5
+    wd_ping_interval="$_wdd"
+    [ "${#wd_ping_interval}" -gt 2 ] && wd_ping_interval=5
+    if [ "$wd_ping_interval" -lt 1 ] || [ "$wd_ping_interval" -gt 60 ]; then
+        wd_ping_interval=5
+    fi
 
     if [ "$ping_reachable" = "true" ]; then
         wd_offline_secs=0
@@ -197,9 +214,13 @@ wd_outage_update() {
 wd_step_wait_secs() {
     local secs
     local fl
-    secs="$CFG_STEP_WAIT_SEC"
-    case "$secs" in ''|*[!0-9]*) secs=60 ;; esac
-    [ $((wd_recover_secs + 20)) -gt "$secs" ] && secs=$((wd_recover_secs + 20))
+    local rs
+    _wd_dec "$CFG_STEP_WAIT_SEC" 60
+    secs="$_wdd"
+    _wd_dec "$wd_recover_secs" 10
+    rs="$_wdd"
+    [ "${#rs}" -gt 4 ] && rs=9999
+    [ $((rs + 20)) -gt "$secs" ] && secs=$((rs + 20))
     fl="$1"
     case "$fl" in ''|*[!0-9]*) fl=0 ;; esac
     [ "$fl" -gt "$secs" ] && secs="$fl"

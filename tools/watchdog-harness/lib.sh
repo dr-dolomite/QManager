@@ -31,7 +31,12 @@ h_clock_adv() { # seconds
     _h_c=$(cat "$H_STATE/clock")
     _h_c=$(( _h_c + $1 ))
     printf '%s' "$_h_c" > "$H_STATE/clock"
-    printf '%s.00 0.00\n' "$(( H_UP0 + _h_c - H_CLOCK0 ))" > "$H_ROOT/proc_uptime"
+    # model key uptime_bad=1: /proc/uptime unreadable (mono_now prints 0)
+    if [ "$(mget uptime_bad 0)" = "1" ]; then
+        printf 'garbage\n' > "$H_ROOT/proc_uptime"
+    else
+        printf '%s.00 0.00\n' "$(( H_UP0 + _h_c - H_CLOCK0 ))" > "$H_ROOT/proc_uptime"
+    fi
 }
 
 # --- command stubs -----------------------------------------------------------

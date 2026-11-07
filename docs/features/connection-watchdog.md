@@ -1,6 +1,8 @@
 # Connection Watchdog (`qmanager_watchcat`)
 
-`qmanager_watchcat` is QManager's connection health daemon. It watches internet reachability (and, opt-in, link quality) through the ping daemon's output and, when the connection fails or degrades, runs a tiered recovery ladder: network re-registration, radio toggle, SIM failover, system reboot. It is opt-in (`enabled=0` on a fresh install). Since v0.1.33 the daemon is a thin main script plus six sourced `wd_*.sh` libraries, it publishes a heartbeat so the UI can tell when it has stopped, and it keeps its reboot count and SIM-failover record honest across restarts and reboots.
+> ℹ️ NOTE: **Branch `feat/cq-watchdog-unify` (not released): the R9 items, the settings migration and the CGIs are pending.** This document describes the daemon as built on that branch for rules R1-R6 (seconds trigger, per-reason hold-offs, reboot budget, quality cap, step wait, dead prober). The released v0.1.x behaviour (probe-count `fail_threshold`, one shared hold-off, auto-disable on the reboot cap, quality ladder up to Tier 4) is replaced, not kept as an option. The daemon reads only the new UCI keys (`act_after_sec`, `ssr_grace_sec`, `step_wait_sec`, `quality_after_sec`, `max_reboots_per_hour`); the CGI and UI still write the old keys (`fail_threshold`, `cooldown`, `quality_consecutive`, `ssr_grace`), so **saved settings are ignored on this branch until Step 2 (migration) and Step 3 (CGIs, poller) land**. Nothing from this branch is deployed. Design and contracts: [`docs/plans/2026-11-07-cq-watchdog-unified-architecture.md`](../plans/2026-11-07-cq-watchdog-unified-architecture.md), [`docs/plans/2026-11-07-cq-watchdog-contracts.md`](../plans/2026-11-07-cq-watchdog-contracts.md) (including Amendments 1 and 2); progress: [`docs/plans/2026-11-07-cq-watchdog-1b-plan.md`](../plans/2026-11-07-cq-watchdog-1b-plan.md). The CGI sections below still describe the released CGI.
+
+`qmanager_watchcat` is QManager's connection health daemon. It watches internet reachability (and, opt-in, link quality) through the ping daemon's output and, when the connection fails or degrades, runs a tiered recovery ladder: network re-registration, radio toggle, SIM failover, system reboot. It is opt-in (`enabled=0` on a fresh install). The daemon is a thin main script plus seven sourced `wd_*.sh` libraries and a platform adapter (`qm_platform_cqwd.sh`), it publishes a heartbeat so the UI can tell when it has stopped, and it keeps its reboot count and SIM-failover record honest across restarts and reboots. It never disables itself: a spent reboot budget only rests Tier 4.
 
 ---
 
@@ -9,25 +11,26 @@
 | Item | Value |
 |---|---|
 | Daemon | `scripts/usr/bin/qmanager_watchcat` -> `/usr/bin/qmanager_watchcat` (main loop, loader, exit cleanup) |
-| Libraries | `scripts/usr/lib/qmanager/wd_{config,state,detect,ledger,tiers,sim}.sh` -> `/usr/lib/qmanager/` (see [Module layout](#module-layout)) |
+| Libraries | `scripts/usr/lib/qmanager/wd_{config,state,detect,quality,ledger,tiers,sim}.sh` and the adapter `qm_platform_cqwd.sh` -> `/usr/lib/qmanager/` (see [Module layout](#module-layout)) |
 | Init script | `scripts/etc/init.d/qmanager_watchcat` (procd, `respawn 3600 5 5`, `term_timeout 15`) |
 | CGI endpoint | `GET/POST /cgi-bin/quecmanager/monitoring/watchdog.sh` |
-| UCI section | `quecmanager.watchcat` (plus the shared `quecmanager.quality_thresholds`, `quecmanager.ping_profile`) |
+| UCI section | `quecmanager.watchcat` (plus the shared `quecmanager.quality_thresholds`, `quecmanager.ping_profile`); read through the adapter's `cfg_get watchdog <key>` |
 | State file (heartbeat) | `/tmp/qmanager_watchcat.json`, rewritten every pass; removed on exit |
 | PID file | `/tmp/qmanager_watchcat.pid` |
-| Reachability input | `/tmp/qmanager_ping.json` `.streak_fail`, read through `conn_state_read` ([connection-quality.md](connection-quality.md#shared-ping-cache-reader-conn_statesh)) |
+| Reachability input | `/tmp/qmanager_ping.json` `.reachable` (debounced verdict), `.fail_elapsed_sec`, `.fail_secs`, `.recover_secs`, `.streak_fail`, read through `conn_state_read` ([connection-quality.md](connection-quality.md#shared-ping-cache-reader-conn_statesh)); `/tmp/qmanager_ping_attaching` (ping attach warm-up flag) |
 | Quality input | `/tmp/qmanager_ping_history` (`<rtt ms or null> <leg>` per line, newest last, read as `$1`; written by `qmanager_ping`). Sample spacing is `wd_probe_period`: the larger of `interval_sec` and the cache's rounded `cycle_ms` |
-| Quality thresholds | `quecmanager.quality_thresholds.*` (shared with Connection Quality Network Events) |
+| Quality thresholds | `quecmanager.quality_thresholds.*` (shared with Connection Quality Network Events), raised to the watchdog floors 50 ms / 10 % |
 | Recovery active flag | `/tmp/qmanager_recovery_active` |
 | Maintenance lock | `/tmp/qmanager_watchcat.lock` (also `/tmp/qmanager_long_running` and a live `/tmp/qmanager_profile_apply.pid`) |
 | Config reload flag | `/tmp/qmanager_watchcat_reload` |
 | Ping reload flag | `/tmp/qmanager_ping_reload` (touched by a save that changes the probe interval) |
 | SIM revert flag | `/tmp/qmanager_watchcat_revert_sim` (written by CGI `revert_sim`; consumed by `check_revert_request`) |
 | SIM-switch flag | `/tmp/qmanager_sim_switch_active` (held by `wd_swap_slot`; the poller pauses AT traffic while it exists) |
-| Auto-disabled flag | `/tmp/qmanager_watchcat_disabled` |
+| Auto-disabled flag | `/tmp/qmanager_watchcat_disabled`: **no longer created by the daemon** (it never auto-disables); only the CGI's `auto_disabled` read, the config-restore clear and the uninstaller still touch it |
 | SIM failover record | two copies: `/tmp/qmanager_sim_failover` and `/etc/qmanager/sim_failover.json` |
 | Reboot ledger | `/etc/qmanager/crash.log`, rows `<epoch>\|reboot\|<reason>`; watchdog writes `tier4_escalation`, shared with [Alerts](alerts.md#reboot-alerts) |
-| Constants | `BOOT_SETTLE=30`, `MODEM_WAIT_TIMEOUT=60`, `SIM_SETTLE_SECS=90`, `HOLDOFF_SECS=900` (all in `wd_config.sh`, none is a UCI key) |
+| Long-run guard files | `/etc/qmanager/wd_reboot_guard` (`<engage epoch>`) and `/etc/qmanager/wd_link_up` (`<epoch>`), flash, written **only on their edges** (see [Reboot budget](#reboot-budget-and-the-long-run-guard)); `$PF_STATE_DIR` in the adapter |
+| Constants | `BOOT_SETTLE=30`, `MODEM_WAIT_TIMEOUT=60`, `SIM_SETTLE_SECS=90`, `HOLDOFF_OUTAGE_SECS=900`, `HOLDOFF_QUALITY_SECS_0/1/2=900/1800/3600`, `HOLDOFF_QUALITY_RESET_SECS=3600`, `QUALITY_LATENCY_FLOOR_MS=50`, `QUALITY_LOSS_FLOOR_PCT=10` (all in `wd_config.sh`, none is a UCI key); `WD_GUARD_SECS=86400` in `wd_ledger.sh` |
 | Reboot? | Tier 4 only: state written, then `( sleep 1; sync; reboot ) &` and `exit 0` |
 | Frontend hook | `hooks/use-watchdog-settings.ts` |
 | Frontend cards | `components/monitoring/watchdog/` (see [Frontend files](#frontend-files)) |

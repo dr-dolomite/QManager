@@ -9,6 +9,7 @@
 #       cooldown_stale_retries, recovery_reason,
 #       _recovery_marker_emitted, wd_hold_out_until, wd_hold_q_until,
 #       wd_hold_q_level, wd_hold_q_end, holdoff_until, holdoff_reason (derived)
+#       Uses wd_detect.sh _wd_dec / _wdd (scratch, consumed at once).
 # Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
 #            _wd_holdoff_sync, wd_holdoff_clear, wd_holdoff_reload, wd_holdoff_tick,
@@ -131,26 +132,33 @@ wd_step_wait_start() {
     case "$secs" in ''|*[!0-9]*) secs=$(wd_step_wait_secs) ;; esac
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    step_wait_until=$((now + secs))
+    # mono_now prints 0 on an unreadable clock: no deadline then
+    # (step_wait_until 0), wd_step_wait_due counts passes instead.
+    if [ "$now" -gt 0 ]; then
+        step_wait_until=$((now + secs))
+    else
+        step_wait_until=0
+    fi
     cooldown_remaining="$secs"
     cooldown_stale_retries=0
     state="cooldown"
 }
 
 # One cooldown pass: refreshes cooldown_remaining from the deadline; rc 0 once
-# it is reached. An unreadable clock falls back to counting passes.
+# it is reached. An unreadable clock (mono 0) or no deadline (step_wait_until
+# 0, started on an unreadable clock) falls back to counting passes.
 wd_step_wait_due() {
     local now
     now=$(mono_now)
-    case "$now" in
-        ''|*[!0-9]*)
-            cooldown_remaining=$((cooldown_remaining - CFG_CHECK_INTERVAL))
-            [ "$cooldown_remaining" -gt 0 ] && return 1
-            cooldown_remaining=0
-            return 0
-            ;;
-    esac
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
     case "$step_wait_until" in ''|*[!0-9]*) step_wait_until=0 ;; esac
+    if [ "$now" -eq 0 ] || [ "$step_wait_until" -eq 0 ]; then
+        case "$cooldown_remaining" in ''|*[!0-9]*) cooldown_remaining=0 ;; esac
+        cooldown_remaining=$((cooldown_remaining - CFG_CHECK_INTERVAL))
+        [ "$cooldown_remaining" -gt 0 ] && return 1
+        cooldown_remaining=0
+        return 0
+    fi
     if [ "$step_wait_until" -gt "$now" ]; then
         cooldown_remaining=$((step_wait_until - now))
         return 1
@@ -166,6 +174,11 @@ wd_step_wait_extend() {
     local base
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    if [ "$now" -eq 0 ]; then
+        step_wait_until=0
+        cooldown_remaining="$CFG_CHECK_INTERVAL"
+        return 0
+    fi
     base="$step_wait_until"
     case "$base" in ''|*[!0-9]*) base=0 ;; esac
     [ "$now" -gt "$base" ] && base="$now"
@@ -480,7 +493,9 @@ do_recovery() {
     if [ "$current_tier" -eq 3 ]; then
         wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
     elif [ "$recovery_reason" = "quality" ]; then
-        wd_step_wait_start "$(wd_step_wait_secs $((10 * wd_ping_interval + 10)))"
+        _wd_dec "$wd_ping_interval" 5
+        { [ "$_wdd" -ge 1 ] && [ "$_wdd" -le 60 ]; } || _wdd=5
+        wd_step_wait_start "$(wd_step_wait_secs $((10 * _wdd + 10)))"
     else
         wd_step_wait_start "$(wd_step_wait_secs)"
     fi

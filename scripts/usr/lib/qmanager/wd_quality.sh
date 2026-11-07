@@ -139,7 +139,17 @@ evaluate_quality() {
     local held
     local gate
     local avg
-    [ "$CFG_QUALITY_ENABLED" = "1" ] || { quality_breach_since=0; return 1; }
+    if [ "$CFG_QUALITY_ENABLED" != "1" ]; then
+        quality_breach_since=0
+        # A quality tier kept by an inconclusive cooldown has no episode left to
+        # resume once quality is off (callers run this in monitor/suspect only).
+        if [ "$current_tier" -gt 0 ] && [ "$recovery_reason" = "quality" ]; then
+            qlog_info "QUALITY: disabled, the kept Tier $current_tier is cleared"
+            current_tier=0
+            tiers_tried=""
+        fi
+        return 1
+    fi
     if [ "$state" != "monitor" ] || [ "$ping_reachable" != "true" ] || [ "$ping_streak_fail" != "0" ]; then
         quality_breach_since=0
         return 1

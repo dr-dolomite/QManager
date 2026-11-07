@@ -477,3 +477,18 @@ New scenarios: 114 (stale about 190 s, then fresh: no event, no start), 115 (sta
 124, one event), 117 (fresh read clears; the second episode logs a second event at pass 77 and
 its start waits for the 900 s spacing, pass 124), 118 (link down, then stale: the dead prober
 fires but no tier runs, state stays suspect), 119 (ping cache file missing counts as stale).
+
+## R5 validator follow-ups after R6 (step 1b)
+
+Numbers read from the ping cache and config (`recover_secs`, `interval_sec`, `step_wait_sec`) go
+through `_wd_dec` (`wd_detect.sh`), which strips leading zeros so ash arithmetic never reads `08`
+as a bad octal; a ping interval outside 1-60 s reads as the 5 s default. An unreadable mono clock
+(`mono_now` prints 0) no longer sets a deadline: `wd_step_wait_start` stores `step_wait_until 0`
+and `wd_step_wait_due` counts passes whenever the clock or the deadline is 0, so a cooldown still
+ends. Turning quality off clears a quality tier kept by an inconclusive cooldown (`current_tier`
+and `tiers_tried`) instead of leaving it to resume later. Harness: model key `uptime_bad 1` makes
+`/proc/uptime` unreadable. No existing scenario changed.
+
+New scenarios: 120 (clock turns unreadable after the Tier 1 action: Tier 1 and Tier 2 cooldowns
+end by pass count and the link comes back), 121 (quality cooldown without data ends inconclusive
+and keeps Tier 1; disabling quality clears it at once).

@@ -81,8 +81,16 @@ read_config() {
     [ -z "$CFG_ENABLED" ] && CFG_ENABLED=0
 
     local val
+    # check_interval feeds cooldown arithmetic: digits only, leading zeros
+    # stripped (ash reads "08" as a bad octal), 0 or garbage keeps the default.
     val=$(cfg_get watchdog check_interval)
-    [ -n "$val" ] && CFG_CHECK_INTERVAL="$val"
+    case "$val" in
+        ''|*[!0-9]*) ;;
+        *)
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do val="${val#0}"; done
+            [ "${#val}" -le 4 ] && [ "$val" -ge 1 ] && CFG_CHECK_INTERVAL="$val"
+            ;;
+    esac
 
     # act_after_sec: 15-600, default 30 (absent or non-numeric).
     val=$(cfg_get watchdog act_after_sec)
