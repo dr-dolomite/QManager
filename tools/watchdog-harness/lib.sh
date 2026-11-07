@@ -193,7 +193,8 @@ h_hist_append() { # dt reachable
 # Rewrites ping.json and status.json from the model at the current fake time.
 # Called after every clock advance, so cached data is always as fresh as the
 # newest sleep. Model keys: reachable, link_slot_<n> (overrides reachable by SIM
-# slot), slot, ping_stale=1 / status_stale=1 (stop refreshing), q_latency, q_loss.
+# slot), slot, ping_stale=1 / status_stale=1 (stop refreshing), q_latency, q_loss,
+# attaching=1 (creates tmp/qmanager_ping_attaching, 0 removes it).
 h_refresh() {
     _h_now=$(cat "$H_STATE/clock")
     _h_up=$(( H_UP0 + _h_now - H_CLOCK0 ))
@@ -214,11 +215,24 @@ h_refresh() {
         _h_sf=0
         _h_ss=10
     fi
+    if [ "$(mget attaching 0)" = "1" ]; then
+        : > "$H_ROOT/tmp/qmanager_ping_attaching"
+    else
+        rm -f "$H_ROOT/tmp/qmanager_ping_attaching"
+    fi
     if [ "$(mget ping_stale 0)" != "1" ]; then
         _h_dr=false
         [ -f "$H_ROOT/tmp/qmanager_recovery_active" ] && _h_dr=true
-        printf '{"timestamp":%s,"mono":%s,"reachable":%s,"last_rtt_ms":24.5,"streak_success":%s,"streak_fail":%s,"during_recovery":%s,"interval_sec":%s,"fail_secs":15,"recover_secs":10,"profile":"relaxed","last_family":"v4","targets":["192.0.2.1"]}\n' \
-            "$_h_now" "$_h_up" "$_h_reach" "$_h_ss" "$_h_sf" "$_h_dr" "$(mget ping_interval 5)" > "$H_ROOT/tmp/qmanager_ping.json"
+        # Contract ping.json (docs/plans cq-watchdog-contracts section 2): the
+        # scenario sets the debounced verdict (reachable) directly; fail_elapsed_sec
+        # is the modelled outage age (down_secs, 0 while reachable).
+        if [ "$_h_reach" = "false" ]; then
+            _h_fe="$_h_down"; _h_fam=none; _h_leg=0
+        else
+            _h_fe=0; _h_fam=ipv4; _h_leg=1
+        fi
+        printf '{"timestamp":%s,"mono":%s,"sensitivity":"relaxed","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":%s,"fail_secs":15,"recover_secs":10,"last_rtt_ms":24.5,"reachable":%s,"streak_success":%s,"streak_fail":%s,"fail_elapsed_sec":%s,"during_recovery":%s,"last_family":"%s","last_leg":%s,"cycle_ms":0}\n' \
+            "$_h_now" "$_h_up" "$(mget ping_interval 5)" "$_h_reach" "$_h_ss" "$_h_sf" "$_h_fe" "$_h_dr" "$_h_fam" "$_h_leg" > "$H_ROOT/tmp/qmanager_ping.json"
         h_hist_append "$_h_dt" "$_h_reach"
     fi
     if [ "$(mget status_stale 0)" != "1" ]; then

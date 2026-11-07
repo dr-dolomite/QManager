@@ -43,7 +43,7 @@ Optional: `SC_PASSES`, `sc_setup` (before `main`), `sc_pass_N` (at the start of 
 `sc_qcmd CMD` (print a reply; return 100 to fall back to the default reply table; any other
 code becomes qcmd's exit code). Helpers: `mset`/`mget` (model: `reachable`, `link_slot_<n>`,
 `slot`, `ping_stale`, `status_stale`, `q_loss`, `q_latency`, `cpin_slot<n>`,
-`quimslot_swallow`), `uci_set`, `h_touch`/`h_rm` (files under the fake `/tmp`), `dmesg_crash`,
+`quimslot_swallow`, `attaching`), `uci_set`, `h_touch`/`h_rm` (files under the fake `/tmp`), `dmesg_crash`,
 `failover_write`, `crash_log_add`.
 
 ## Output per scenario
@@ -157,3 +157,13 @@ difference to the previous baseline, in every scenario, is one of these:
   `RECOVERY: Executing Tier N (reason=...)` / `Entering primary-recheck settle ... (reason=...)`
   prints `outage` instead of `unreachable`;
 - `at.log`, `calls.log`, `console.log`, `exit.code` are byte-identical in all scenarios.
+
+## R0b: ping model follows the contract (step 1b)
+
+`h_refresh` now writes the contract `ping.json` key set: `sensitivity`, four `targets`,
+`fail_elapsed_sec` (= the modelled outage age `down_secs`, 0 while reachable), `last_family`
+`ipv4` (`none` while down) and `last_leg` (1 / 0). The scenario still sets the debounced verdict
+(`reachable`) directly. New model key `attaching`: `mset attaching 1` creates
+`/tmp/qmanager_ping_attaching` (the ping daemon's attach warm-up flag), `0` removes it; it is
+applied on every refresh, also while `ping_stale` is set. No daemon code reads either yet, and
+`ping.json` is excluded from the outputs, so the baseline is unchanged.
