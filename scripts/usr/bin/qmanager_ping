@@ -578,7 +578,7 @@ _sc_dir_ok() {
     fi
 }
 
-# write_ping_env <timestamp> <mono> <rtt> <during_recovery>: the 15 raw fields
+# write_ping_env <timestamp> <mono> <rtt> <during_recovery>: the 16 raw fields
 # conn_state_read extracts from ping.json (null/empty -> '-'), i.e. what
 # conn_state_read_env sources. Best effort: a failure only means the poller
 # falls back to reading ping.json.
@@ -592,6 +592,7 @@ write_ping_env() {
         printf '_cq_rtt=%s\n' "$_SCQ"
         _sc_sq "$streak_success";   printf '_cq_ss=%s\n' "$_SCQ"
         _sc_sq "$streak_fail";      printf '_cq_sf=%s\n' "$_SCQ"
+        _sc_sq "${fail_elapsed_sec:-0}"; printf '_cq_fe=%s\n' "$_SCQ"
         _sc_sq "$4";                printf '_cq_dr=%s\n' "$_SCQ"
         _sc_sq "$PING_INTERVAL";    printf '_cq_iv=%s\n' "$_SCQ"
         _sc_sq "$PING_FAIL_SECS";   printf '_cq_fs=%s\n' "$_SCQ"

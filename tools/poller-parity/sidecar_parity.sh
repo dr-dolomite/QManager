@@ -126,7 +126,7 @@ dump_cq() {
     _dq_reason="$CQ_STALE_REASON"
     case "$_dq_reason" in "age "*) _dq_reason="age" ;; esac
     printf '%s|' "$CQ_STALE" "$_dq_reason" "$CQ_STALE_THRESHOLD" "$CQ_TIMESTAMP" "$CQ_MONO" \
-        "$CQ_REACHABLE" "$CQ_RTT_MS" "$CQ_STREAK_SUCCESS" "$CQ_STREAK_FAIL" "$CQ_DURING_RECOVERY" \
+        "$CQ_REACHABLE" "$CQ_RTT_MS" "$CQ_STREAK_SUCCESS" "$CQ_STREAK_FAIL" "$CQ_FAIL_ELAPSED" "$CQ_DURING_RECOVERY" \
         "$CQ_INTERVAL_SEC" "$CQ_PROFILE" "$CQ_LAST_FAMILY" "$CQ_TARGET" "$CQ_FAIL_SECS" "$CQ_RECOVER_SECS" \
         "$CQ_LAST_TARGET" "$CQ_CYCLE_MS"
 }

@@ -42,6 +42,7 @@ _cq_reset() {
     CQ_RTT_MS="null"
     CQ_STREAK_SUCCESS=0
     CQ_STREAK_FAIL=0
+    CQ_FAIL_ELAPSED=0
     CQ_DURING_RECOVERY="false"
     CQ_INTERVAL_SEC=5
     CQ_PROFILE=""
@@ -71,7 +72,7 @@ conn_state_read() {
     # "-" stands in for empty/null: IFS whitespace (tab) collapses empty fields.
     _cq_row=$(jq -r 'def s: if . == null or . == "" then "-" else tostring end;
         [(.timestamp|s), (.mono|s), (.reachable|s), (.last_rtt_ms|s),
-         (.streak_success|s), (.streak_fail|s), (.during_recovery|s),
+         (.streak_success|s), (.streak_fail|s), (.fail_elapsed_sec|s), (.during_recovery|s),
          (.interval_sec|s), (.fail_secs|s), (.recover_secs|s), (.profile|s),
          (.last_family|s), ((.targets // [])[0]|s), (.last_target|s),
          (.cycle_ms|s)] | @tsv' \
@@ -81,7 +82,7 @@ conn_state_read() {
         return 1
     fi
 
-    IFS="$_CQ_TAB" read -r _cq_ts _cq_mono _cq_reach _cq_rtt _cq_ss _cq_sf _cq_dr \
+    IFS="$_CQ_TAB" read -r _cq_ts _cq_mono _cq_reach _cq_rtt _cq_ss _cq_sf _cq_fe _cq_dr \
         _cq_iv _cq_fs _cq_rs _cq_prof _cq_fam _cq_tgt _cq_last_target _cq_cyc <<EOF
 $_cq_row
 EOF
@@ -135,6 +136,7 @@ EOF
     case "$_cq_rtt" in ''|-|*[!0-9.]*) ;; *) CQ_RTT_MS="$_cq_rtt" ;; esac
     case "$_cq_ss" in ''|*[!0-9]*) ;; *) CQ_STREAK_SUCCESS="$_cq_ss" ;; esac
     case "$_cq_sf" in ''|*[!0-9]*) ;; *) CQ_STREAK_FAIL="$_cq_sf" ;; esac
+    case "$_cq_fe" in ''|*[!0-9]*) ;; *) CQ_FAIL_ELAPSED="$_cq_fe" ;; esac
     [ "$_cq_dr" = "true" ] && CQ_DURING_RECOVERY="true"
     case "$_cq_fs" in ''|*[!0-9]*) ;; *) CQ_FAIL_SECS="$_cq_fs" ;; esac
     case "$_cq_rs" in ''|*[!0-9]*) ;; *) CQ_RECOVER_SECS="$_cq_rs" ;; esac
@@ -147,7 +149,7 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Sidecar reader (B5.29 Phase C). qmanager_ping also writes the 15 raw fields
+# Sidecar reader (B5.29 Phase C). qmanager_ping also writes the 16 raw fields
 # conn_state_read extracts with jq to PF_RUN_DIR/ping.env (shell
 # assignments, tmp + mv, written after ping.json). The poller reads that with
 # builtins instead of forking jq every cycle. conn_state_read above is
@@ -186,7 +188,7 @@ conn_state_read_env() {
     [ -f "$CQ_PING_CACHE" ] || return 2
     [ -f "$CQ_PING_ENV" ] || return 2
     [ "$CQ_PING_CACHE" -nt "$CQ_PING_ENV" ] && return 2
-    _cq_ts=""; _cq_mono=""; _cq_reach=""; _cq_rtt=""; _cq_ss=""; _cq_sf=""
+    _cq_ts=""; _cq_mono=""; _cq_reach=""; _cq_rtt=""; _cq_ss=""; _cq_sf=""; _cq_fe=""
     _cq_dr=""; _cq_iv=""; _cq_fs=""; _cq_rs=""; _cq_prof=""; _cq_fam=""; _cq_tgt=""
     _cq_last_target=""; _cq_cyc=""
     cq_env_source "$CQ_PING_ENV" || return 2
@@ -241,6 +243,7 @@ conn_state_read_env() {
     case "$_cq_rtt" in ''|-|*[!0-9.]*) ;; *) CQ_RTT_MS="$_cq_rtt" ;; esac
     case "$_cq_ss" in ''|*[!0-9]*) ;; *) CQ_STREAK_SUCCESS="$_cq_ss" ;; esac
     case "$_cq_sf" in ''|*[!0-9]*) ;; *) CQ_STREAK_FAIL="$_cq_sf" ;; esac
+    case "$_cq_fe" in ''|*[!0-9]*) ;; *) CQ_FAIL_ELAPSED="$_cq_fe" ;; esac
     [ "$_cq_dr" = "true" ] && CQ_DURING_RECOVERY="true"
     case "$_cq_fs" in ''|*[!0-9]*) ;; *) CQ_FAIL_SECS="$_cq_fs" ;; esac
     case "$_cq_rs" in ''|*[!0-9]*) ;; *) CQ_RECOVER_SECS="$_cq_rs" ;; esac
