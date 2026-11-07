@@ -15,7 +15,7 @@
 #        P6 is already Google)
 #
 # Cycle: P4 alone (`ping -c1 -W2 -w3`, a hard 3 s deadline; a hostname P4 gets
-# `timeout 4` instead because -w does not cover the lookup). A healthy cycle sends
+# `plat_timeout 4` instead because -w does not cover the lookup). A healthy cycle sends
 # one probe. When P4 fails, S4, P6 and S6 run IN PARALLEL (the IPv6 legs only when
 # the kernel has an IPv6 default route), and the winner is the first leg in the
 # fixed priority S4 > P6 > S6 that answered, so the reported RTT is deterministic.
@@ -33,7 +33,7 @@
 # prints no round-trip line, so no rtt, so failure: the fail-safe.
 #
 # Output: /tmp/qmanager_ping.json (printf, tmp + mv; the last good file is kept
-#         when a write fails) and the /var/run/qmanager/ping.env poller sidecar.
+#         when a write fails) and the PF_RUN_DIR/ping.env poller sidecar.
 # History: /tmp/qmanager_ping_history, one "<rtt|null> <leg>" line per cycle
 #         (leg p4|s4|p6|s6|-), newest last, HISTORY_SIZE lines. Readers use $1.
 # DNS: /tmp/qmanager_dns.json + dns.env from a detached job (see below).
@@ -42,7 +42,8 @@
 # poller in one awk pass over the history file, not here.
 #
 # Install location: /usr/bin/qmanager_ping
-# Dependencies: busybox ping (+ ping -6 or ping6), timeout, date, tail, mv, jq
+# Dependencies: busybox ping (+ ping -6 or ping6), qm_platform_cqwd.sh, date,
+# tail, mv, jq
 # (DNS job only), nslookup (DNS job only)
 # =============================================================================
 
@@ -73,19 +74,13 @@ qlog_init "ping"
 # --- Root-safe runtime dir for the poller sidecars (qm_root_dir) -------------
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
 
-# --- Bounded command runner --------------------------------------------------
-# No platform.sh on this target, so qm_timeout is defined here: the BusyBox
-# `timeout SECS cmd` applet (exits 143 on kill), else the command runs unbounded.
-if ! command -v qm_timeout >/dev/null 2>&1; then
-    if command -v timeout >/dev/null 2>&1; then
-        qm_timeout() { timeout "$@"; }
-    else
-        qm_timeout() { shift; "$@"; }
-    fi
-fi
+# --- Platform adapter (cfg_get, plat_timeout, PF_* paths) ---------------------
+# conn_state.sh already sourced it (idempotent). Required: main() refuses to
+# start without it.
+[ -f /usr/lib/qmanager/qm_platform_cqwd.sh ] && . /usr/lib/qmanager/qm_platform_cqwd.sh
 
 # --- Configuration -----------------------------------------------------------
-# Fallbacks only: load_config() re-reads UCI (quecmanager.ping_profile) at
+# Fallbacks only: load_config() re-reads the config (connection_quality) at
 # startup and on every reload-flag trip. The profile name drives interval +
 # fail/recover seconds through conn_state_resolve (the one profile table).
 PING_PROFILE="${PING_PROFILE:-relaxed}"
@@ -94,7 +89,7 @@ PING_TARGET_IPV6="2606:4700:4700::1111"
 ALT_TARGET_IPV4="8.8.8.8"
 ALT_TARGET_IPV6="2001:4860:4860::8888"
 PING_INTERVAL=5
-PING_INTERVAL_OVERRIDE=""  # quecmanager.ping_profile.interval_override (1-60); empty = unused
+PING_INTERVAL_OVERRIDE=""  # connection_quality interval_override (1-60); empty = unused
 FAIL_THRESHOLD=3           # logged only: the verdict is timed, not counted
 RECOVER_THRESHOLD=2
 PING_FAIL_SECS=15          # time-to-fail / time-to-recover (seconds), published
@@ -120,7 +115,7 @@ CACHE_FILE="/tmp/qmanager_ping.json"
 CACHE_TMP="/tmp/qmanager_ping.json.tmp"
 HISTORY_FILE="/tmp/qmanager_ping_history"
 RECOVERY_FLAG="/tmp/qmanager_recovery_active"
-RELOAD_FLAG="/tmp/qmanager_ping_reload"
+RELOAD_FLAG="$PF_PING_RELOAD"
 PID_FILE="/tmp/qmanager_ping.pid"
 ATTACH_FLAG="/tmp/qmanager_ping_attaching"   # present during the attach warm-up; the poller skips archive rows
 IPV6_ROUTE="/proc/net/ipv6_route"
@@ -129,7 +124,7 @@ IPV6_ROUTE="/proc/net/ipv6_route"
 # from ping.json / dns.json with jq, as shell assignments, written tmp + mv right
 # AFTER the JSON so they are never older than it unless a write failed (the
 # poller then falls back to the JSON). Last line is an end marker.
-SC_DIR="/var/run/qmanager"
+SC_DIR="$PF_RUN_DIR"
 SC_PING="$SC_DIR/ping.env"
 SC_DNS="$SC_DIR/dns.env"
 # Result files of the parallel fan-out (one per leg), inside the root-only dir.
@@ -260,8 +255,8 @@ _set_alternates() {
     esac
 }
 
-# --- Load configuration from UCI and re-resolve the profile ------------------
-# Profile name + the IPv4/IPv6 targets from quecmanager.ping_profile, falling back
+# --- Load configuration (cfg_get) and re-resolve the profile -----------------
+# Profile name + the IPv4/IPv6 targets from connection_quality, falling back
 # to relaxed / Cloudflare when a key is unset or fails the charset check. The
 # legacy target_1/target_2 keys (old HTTP URLs) are deliberately NOT read.
 load_config() {
@@ -270,15 +265,15 @@ load_config() {
     local _t6
     local _override
 
-    _profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
-    _t4=$(uci -q get quecmanager.ping_profile.target_ipv4 2>/dev/null)
-    _t6=$(uci -q get quecmanager.ping_profile.target_ipv6 2>/dev/null)
-    _override=$(uci -q get quecmanager.ping_profile.interval_override 2>/dev/null)
+    _profile=$(cfg_get connection_quality profile)
+    _t4=$(cfg_get connection_quality target_ipv4)
+    _t6=$(cfg_get connection_quality target_ipv6)
+    _override=$(cfg_get connection_quality interval_override)
 
     PING_PROFILE="relaxed"
     [ -n "$_profile" ] && PING_PROFILE="$_profile"
 
-    # Reset to the defaults first so a cleared UCI key reverts on reload.
+    # Reset to the defaults first so a cleared config key reverts on reload.
     PING_TARGET_IPV4="1.1.1.1"
     PING_TARGET_IPV6="2606:4700:4700::1111"
     if [ -n "$_t4" ]; then
@@ -358,7 +353,7 @@ probe_leg() {
     else
         case "$1" in
             *[!0-9.]*)
-                _pl_out=$(qm_timeout "$HOST_DEADLINE" ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
+                _pl_out=$(plat_timeout "$HOST_DEADLINE" ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
                 ;;
             *)
                 _pl_out=$(ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
@@ -573,7 +568,7 @@ _sc_sq() {
     done
 }
 
-# _sc_dir_ok: SC_DIR exists as a root-owned dir (re-created if /var/run was cleared).
+# _sc_dir_ok: SC_DIR exists as a root-owned dir (re-created if the run dir was cleared).
 _sc_dir_ok() {
     [ -d "$SC_DIR" ] && return 0
     if command -v qm_root_dir >/dev/null 2>&1; then
@@ -657,7 +652,7 @@ dns_job() {
         _out=$(mktemp /tmp/qmanager_dns_out.XXXXXX 2>/dev/null)
         if [ -n "$_out" ]; then
             _uptime_cs; _t0="$_CS"
-            qm_timeout "$DNS_LOOKUP_TIMEOUT" nslookup "$DNS_NAME" "$_res" >"$_out" 2>&1 </dev/null
+            plat_timeout "$DNS_LOOKUP_TIMEOUT" nslookup "$DNS_NAME" "$_res" >"$_out" 2>&1 </dev/null
             _rc=$?
             _uptime_cs; _t1="$_CS"
             # Success = exit 0 and an Address line after a Name line (the server header has one too).
@@ -756,6 +751,12 @@ main() {
     local record
     local old_pid
 
+    if [ -z "${QM_PLATFORM_CQWD_LOADED:-}" ]; then
+        qlog_error "ping: platform adapter qm_platform_cqwd.sh missing, refusing to start"
+        echo "qmanager_ping: missing /usr/lib/qmanager/qm_platform_cqwd.sh" >&2
+        exit 1
+    fi
+
     # Prevent duplicate instances
     if [ -f "$PID_FILE" ]; then
         old_pid=$(cat "$PID_FILE" 2>/dev/null)
@@ -768,7 +769,7 @@ main() {
     echo $$ > "$PID_FILE"
 
     # BusyBox ash runs an INT/TERM trap handler but does NOT exit afterward, so
-    # the INT/TERM trap ends in an explicit `exit` (confirmed on RM551E
+    # the INT/TERM trap ends in an explicit `exit` (confirmed on device
     # 2026-06-26, docs/development/busybox-quirks.md). The fan-out jobs are
     # killed and their scratch dir removed on every path.
     trap '_cleanup' EXIT
@@ -796,7 +797,7 @@ main() {
     _clock
 
     while true; do
-        # Live reload: re-read UCI within one cycle when the CGI drops the flag.
+        # Live reload: re-read the config within one cycle when the CGI drops the flag.
         if [ -f "$RELOAD_FLAG" ]; then
             load_config
             detect_ping6
