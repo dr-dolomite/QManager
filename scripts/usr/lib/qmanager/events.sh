@@ -32,7 +32,10 @@ PCI_STATE_FILE="/tmp/qmanager_pci_state.json"
 # append_event <type> <message> [severity] [code]: a non-empty code adds
 # "code":"<code>" after severity; without it the row is unchanged.
 append_event() {
-    local etype="$1" message="$2" severity="${3:-info}" code="${4:-}"
+    local etype="$1"
+    local message="$2"
+    local severity="${3:-info}"
+    local code="${4:-}"
     local ts
     ts=$(date +%s)
 

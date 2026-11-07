@@ -156,6 +156,7 @@ difference to the previous baseline, in every scenario, is one of these:
 - `tree.txt`: watchdog event rows gain `"code":"..."` after `severity`, and the log line
   `RECOVERY: Executing Tier N (reason=...)` / `Entering primary-recheck settle ... (reason=...)`
   prints `outage` instead of `unreachable`;
+- `state_before_term.json` (28 only): the same state-key change as `passes.txt`;
 - `at.log`, `calls.log`, `console.log`, `exit.code` are byte-identical in all scenarios.
 
 ## R0b: ping model follows the contract (step 1b)
