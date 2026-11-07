@@ -26,7 +26,8 @@
 # initialisers only):
 #   wd_config.sh  UCI read, CFG_* defaults, timing constants
 #   wd_state.sh   state file writer, maintenance-lock check, wd_sleep, radio markers
-#   wd_detect.sh  ping read, quality window, SSR gate
+#   wd_detect.sh  ping read, start gate, SSR gate
+#   wd_quality.sh quality window, quality trigger
 #   wd_ledger.sh  reboot count from crash.log
 #   wd_tiers.sh   Tiers 1/2/4, escalation, cooldown verdict
 #   wd_sim.sh     Tier 3, fallback, revert, auto-failback, failover record
@@ -98,7 +99,7 @@ CRASH_LOG="/etc/qmanager/crash.log"
 # ends by setting WD_<NAME>_LOADED, so a missing or truncated lib refuses to
 # start here, before the PID file, the trap or any AT command.
 WD_LIB_DIR="${WD_LIB_DIR:-/usr/lib/qmanager}"   # override for the harness only
-for _wd_l in wd_config wd_state wd_detect wd_ledger wd_tiers wd_sim; do
+for _wd_l in wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; do
     if [ -f "$WD_LIB_DIR/$_wd_l.sh" ]; then
         . "$WD_LIB_DIR/$_wd_l.sh"
     else
@@ -107,7 +108,7 @@ for _wd_l in wd_config wd_state wd_detect wd_ledger wd_tiers wd_sim; do
         exit 1
     fi
 done
-[ "$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "111111" ] || {
+[ "$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_QUALITY_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "1111111" ] || {
     qlog_error "watchcat: library set incomplete, refusing to start"; exit 1; }
 
 # =============================================================================
