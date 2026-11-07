@@ -2,8 +2,8 @@
 # deadline: reboot_rest_until null), and the rows that would engage the guard
 # on a sane clock are not evaluated: no guard, and the reachable start writes
 # no link-up stamp. The clock turns sane at pass 8: the next evaluation (the
-# Tier 4 attempt at t+120) sees both hours spent with no link-up and engages
-# the guard.
+# refresh on the next due outage pass, t+100) sees both hours spent with no
+# link-up and engages the guard.
 SC_PASSES=14
 sc_setup() {
     QM_TEST_YEAR=1970

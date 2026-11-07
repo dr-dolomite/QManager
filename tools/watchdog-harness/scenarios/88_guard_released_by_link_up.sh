@@ -1,8 +1,9 @@
 # R3 long-run guard: engaged 600 s ago (seeded file), the newest watchdog
 # reboot is 700 s old. The first reachable read writes the link-up stamp once
 # and releases the guard (file removed). The budget is still spent, so the
-# outage at pass 4 rests Tier 4 as hourly (event), the guard does not
-# re-engage (the link-up is newer than the previous-hour rows).
+# outage at pass 4 finds Tier 4 resting as hourly (no eligible tier: gate none,
+# no event), and the guard does not re-engage (the link-up is newer than the
+# previous-hour rows).
 SC_PASSES=14
 sc_setup() {
     uci_set quecmanager.watchcat.tier1_enabled 0

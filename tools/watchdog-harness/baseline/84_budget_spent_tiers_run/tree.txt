@@ -38,14 +38,9 @@
 [2026-09-21 14:14:45] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
 [2026-09-21 14:15:15] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 2
 [2026-09-21 14:15:15] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
-[2026-09-21 14:15:15] INFO  [watchcat:PID] Escalating to Tier 4 (reason=outage)
-[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection
-[2026-09-21 14:15:15] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
 [2026-09-21 14:15:15] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
 [2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: reboot limit reached (3 per hour), reboots paused
-[2026-09-21 14:15:15] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:15:15] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:15:15] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:15:15] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
 [2026-09-21 14:15:25] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=19 (act after 15s)
 [2026-09-21 14:16:15] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 145s >= 15s
@@ -66,13 +61,8 @@
 [2026-09-21 14:16:50] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
 [2026-09-21 14:17:20] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 2
 [2026-09-21 14:17:20] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
-[2026-09-21 14:17:20] INFO  [watchcat:PID] Escalating to Tier 4 (reason=outage)
-[2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection
-[2026-09-21 14:17:20] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
 [2026-09-21 14:17:20] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
-[2026-09-21 14:17:20] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:17:20] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:17:20] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:17:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
 [2026-09-21 14:17:30] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=44 (act after 15s)
 [2026-09-21 14:18:20] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 270s >= 15s
@@ -98,8 +88,6 @@
 {"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
 {"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
-{"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: reboot limit reached (3 per hour), reboots paused","severity":"warning","code":"wd_budget_spent"}
 {"timestamp":1790000115,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
 {"timestamp":1790000175,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
@@ -107,8 +95,6 @@
 {"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
 {"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000207,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 4 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
-{"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000240,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
 {"timestamp":1790000300,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000300,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}

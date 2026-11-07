@@ -1,7 +1,7 @@
 # R3: Tier 4 only, budget spent by rows 3500/3400/3300 s old. reboot_rest_until
-# is the mono at which the oldest row leaves the hour (t+101 = mono 5101). The
-# first ladder rests Tier 4 and pauses 60 s; the next ladder after the row has
-# aged out runs Tier 4 (crash.log row, reboot).
+# is the mono at which the oldest row leaves the hour (t+101 = mono 5101). While
+# Tier 4 rests there is no eligible tier (gate none, no event, no pause); once the
+# row has aged out the next due pass runs Tier 4 (crash.log row, reboot).
 SC_PASSES=20
 sc_setup() {
     uci_set quecmanager.watchcat.tier1_enabled 0

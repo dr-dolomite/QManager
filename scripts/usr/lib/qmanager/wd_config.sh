@@ -115,11 +115,13 @@ read_config() {
     case "$val" in
         ''|*[!0-9]*) CFG_MAX_REBOOTS_PER_HOUR=3 ;;
         *)
-            # Length first (test overflows on huge values), then drop one
-            # leading zero so the value stays a plain decimal.
+            # Leading zeros first ("0000001" is 1), then the length (test
+            # overflows on huge values), so the value stays a plain decimal.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
             [ "${#val}" -gt 2 ] && val=10
-            val="${val#0}"
-            CFG_MAX_REBOOTS_PER_HOUR="${val:-0}"
+            CFG_MAX_REBOOTS_PER_HOUR="$val"
             [ "$CFG_MAX_REBOOTS_PER_HOUR" -lt 1 ] && CFG_MAX_REBOOTS_PER_HOUR=1
             [ "$CFG_MAX_REBOOTS_PER_HOUR" -gt 10 ] && CFG_MAX_REBOOTS_PER_HOUR=10
             ;;

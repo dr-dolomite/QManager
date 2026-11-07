@@ -1,9 +1,10 @@
-# R3: Tier 4 only, budget spent. The first outage skips Tier 4 with the
-# wd_budget_spent event and pauses; the link comes back at pass 9 (episode
-# over); the second outage at pass 11 fires the event again.
+# R3: Tier 1 and Tier 4 only, budget spent. The first outage runs Tier 1, which
+# fails; the resting Tier 4 is passed over with the wd_budget_spent event and the
+# ladder pauses; the link comes back at pass 9 (episode over); the second outage
+# at pass 11 fires the event again.
 SC_PASSES=20
 sc_setup() {
-    uci_set quecmanager.watchcat.tier1_enabled 0
+    uci_set quecmanager.watchcat.tier1_enabled 1
     uci_set quecmanager.watchcat.tier2_enabled 0
     crash_log_add 300 tier4_escalation
     crash_log_add 200 tier4_escalation

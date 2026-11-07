@@ -6,7 +6,8 @@
 #
 # Owns: reboots_this_hour, _rb_next, reboot_budget_exhausted,
 #       reboot_rest_reason, reboot_rest_until, _wd_rb_prev, _wd_rb_prev_oldest,
-#       _wd_rb_newest, _wd_rb_free_at, _wd_guard_at, _wd_link_up, _wd_budget_ev
+#       _wd_rb_newest, _wd_rb_free_at, _wd_guard_at, _wd_guard_mem, _wd_link_up,
+#       _wd_budget_ev
 # Functions: count_recent_reboots, wd_reboot_rest_eval, _wd_rest_derive,
 #            wd_link_up_seen, _wd_epoch_file, _wd_persist,
 #            wd_budget_spent_event, wd_ledger_tick, wd_ledger_recent_json
@@ -38,6 +39,7 @@ _wd_rb_prev_oldest=0      # epoch of the oldest of those rows
 _wd_rb_newest=0           # epoch of the newest tier4_escalation row
 _wd_rb_free_at=0          # epoch at which the hourly count drops below the limit
 _wd_guard_at=0            # long-run guard engage epoch, 0 = not engaged
+_wd_guard_mem=0           # engage epoch kept in memory when the guard file could not be written
 _wd_link_up=0             # link-up stamp epoch, 0 = none
 _wd_budget_ev=0           # 1 once the hourly wd_budget_spent fired this episode
 WD_GUARD_SECS=86400
@@ -191,7 +193,7 @@ wd_reboot_rest_eval() {
             rm -f "$WD_REBOOT_GUARD_FILE"
         fi
     else
-        _wd_guard_at=0
+        _wd_guard_at="$_wd_guard_mem"
     fi
     _wd_link_up=$(_wd_epoch_file "$WD_LINK_UP_FILE")
 
@@ -207,14 +209,23 @@ wd_reboot_rest_eval() {
                 qlog_info "Reboot guard released: the link came back"
                 rm -f "$WD_REBOOT_GUARD_FILE"
                 _wd_guard_at=0
+                _wd_guard_mem=0
             elif [ "$now" -ge $((_wd_guard_at + WD_GUARD_SECS)) ]; then
                 qlog_info "Reboot guard released: 24 h since it engaged"
                 rm -f "$WD_REBOOT_GUARD_FILE"
                 _wd_guard_at=0
+                _wd_guard_mem=0
             fi
         elif [ "$reboot_budget_exhausted" = "true" ] && [ "$_wd_rb_prev" -ge "$max" ] \
             && [ "$_wd_link_up" -le "$_wd_rb_prev_oldest" ]; then
-            _wd_persist "$WD_REBOOT_GUARD_FILE" "$now"
+            if _wd_persist "$WD_REBOOT_GUARD_FILE" "$now"; then
+                _wd_guard_mem=0
+            else
+                # Engaged for this run only: without the in-memory epoch the
+                # next recount would re-engage (and re-announce) every minute.
+                _wd_guard_mem="$now"
+                qlog_warn "Reboot guard could not be saved, it holds until the daemon restarts"
+            fi
             _wd_guard_at="$now"
             qlog_warn "Reboot guard engaged: limit reached in two consecutive hours with no link-up"
             append_event "watchcat_recovery" "Watchcat: reboots paused until the connection comes back (long outage)" "warning" "wd_budget_spent"
@@ -266,6 +277,7 @@ wd_link_up_seen() {
         qlog_info "Reboot guard released: the link came back"
         rm -f "$WD_REBOOT_GUARD_FILE"
         _wd_guard_at=0
+        _wd_guard_mem=0
         mnow=$(mono_now)
         case "$mnow" in ''|*[!0-9]*) mnow=0 ;; esac
         _wd_rest_derive $((now - mnow))

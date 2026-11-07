@@ -1,0 +1,56 @@
+=== etc/qmanager/crash.log
+1789999700|reboot|tier4_escalation
+1789999800|reboot|tier4_escalation
+1789999900|reboot|tier4_escalation
+
+=== etc/qmanager/known_iccids
+89000000000000000002
+89000000000000000001
+
+=== etc/qmanager/wd_link_up
+1790000030
+
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=1 T4=1 backup_sim=2
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 3
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Tier 4 resting at start (hourly)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] Link up after a watchdog reboot, link-up stamp written
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
+[2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 3: SIM failover from slot 1 to slot 2
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: switching to SIM slot 2 (Tier 3)
+[2026-09-21 14:14:14] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:14:14] INFO  [watchcat:PID] TIER 3: Switched to slot 2 (ICCID: ...0002)
+[2026-09-21 14:14:14] INFO  [watchcat:PID] Entering COOLDOWN for 90s (after Tier 3)
+[2026-09-21 14:15:44] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 3
+[2026-09-21 14:15:44] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 3
+[2026-09-21 14:15:44] WARN  [watchcat:PID] SIM failover fallback: reverting to slot 1
+[2026-09-21 14:15:44] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: backup SIM failed, reverting to slot 1
+[2026-09-21 14:15:48] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:15:48] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
+[2026-09-21 14:15:48] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: reboot limit reached (3 per hour), reboots paused
+[2026-09-21 14:15:48] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
+[2026-09-21 14:15:48] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:15:58] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=25 (act after 15s)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning","code":"sim_swap"}
+{"timestamp":1790000144,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
+{"timestamp":1790000148,"type":"watchcat_recovery","message":"Watchcat: reboot limit reached (3 per hour), reboots paused","severity":"warning","code":"wd_budget_spent"}
+{"timestamp":1790000148,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+
+=== tmp/qmanager_force_tier2
+
+=== tmp/qmanager_refresh_policy_band
+

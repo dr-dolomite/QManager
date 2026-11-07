@@ -14,7 +14,6 @@ T+85 AT+CFUN?
 --- pass 6 ---
 --- pass 7 ---
 --- pass 8 ---
-T+115 AT+CFUN?
 --- pass 9 ---
 --- pass 10 ---
 --- pass 11 ---
@@ -35,7 +34,6 @@ T+210 AT+CFUN?
 --- pass 18 ---
 --- pass 19 ---
 --- pass 20 ---
-T+240 AT+CFUN?
 --- pass 21 ---
 --- pass 22 ---
 --- pass 23 ---

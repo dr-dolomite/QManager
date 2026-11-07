@@ -1,6 +1,6 @@
 # Only Tier 4 enabled and the hourly reboot bucket is already full (3 watchdog
-# rows in the last hour; a user row and an old row must not count): the daemon
-# auto-disables itself (UCI enabled=0, disabled flag) instead of rebooting.
+# rows in the last hour; a user row and an old row must not count): Tier 4
+# rests, which leaves no eligible tier: gate none, no event, no pause, no reboot.
 SC_PASSES=12
 sc_setup() {
     uci_set quecmanager.watchcat.tier1_enabled 0

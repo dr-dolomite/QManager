@@ -228,18 +228,27 @@ wd_retire_service() {
     svc_stop qmanager_watchcat >/dev/null 2>&1
 }
 
+# A resting Tier 4 (spent budget or long-run guard) is not an eligible tier:
+# find_next_tier passes over it and the start gate does not count it. Logs the
+# rest and fires the hourly wd_budget_spent event (once per episode).
+_wd_tier4_rest_note() {
+    if [ "$reboot_rest_reason" = "hourly" ]; then
+        qlog_warn "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour), Tier 4 rests"
+        wd_budget_spent_event
+    else
+        qlog_warn "TIER 4: Reboots paused until the link comes back (long outage)"
+    fi
+}
+
 execute_tier4() {
     # Reboot budget (wd_ledger.sh, spec section 5.6): a spent budget or the
     # long-run guard makes Tier 4 rest. It is skipped like a disabled tier
-    # (rc 1); the watchdog stays enabled and Tiers 1-3 keep working.
+    # (rc 1); the watchdog stays enabled and Tiers 1-3 keep working. Backstop
+    # for a rest that began after the last per-minute recount: find_next_tier
+    # already passes over a known resting Tier 4.
     wd_reboot_rest_eval
     if [ -n "$reboot_rest_reason" ]; then
-        if [ "$reboot_rest_reason" = "hourly" ]; then
-            qlog_warn "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour), Tier 4 rests"
-            wd_budget_spent_event
-        else
-            qlog_warn "TIER 4: Reboots paused until the link comes back (long outage)"
-        fi
+        _wd_tier4_rest_note
         return 1
     fi
 
@@ -291,7 +300,15 @@ find_next_tier() {
             1) [ "$CFG_TIER1_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
             2) [ "$CFG_TIER2_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
             3) [ "$CFG_TIER3_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
-            4) [ "$CFG_TIER4_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
+            4)
+                if [ "$CFG_TIER4_ENABLED" = "1" ]; then
+                    # A resting Tier 4 is not eligible (spec section 5.3); the
+                    # rest is refreshed first, since it may have just ended.
+                    [ -n "$reboot_rest_reason" ] && wd_reboot_rest_eval
+                    [ -z "$reboot_rest_reason" ] && { current_tier="$t"; return 0; }
+                    _wd_tier4_rest_note
+                fi
+                ;;
         esac
         t=$((t + 1))
     done

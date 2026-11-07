@@ -351,3 +351,35 @@ second breach began), 98 (a window mark mid-breach gives five no-signal passes t
 Tier 1 starts on the first full window), 99 (CQ custom 30 ms / 5 % reads as limits 50 ms / 10 %;
 `streak_fail=1` on a reachable link moves to suspect and blocks the trigger, then the 30 s breach
 starts Tier 1).
+
+## R3 follow-ups: a resting Tier 4 is not eligible (step 1b)
+
+Validator findings on R3. Spec 5.3 says gate `none` = no eligible tier for the reason. A resting
+Tier 4 (spent budget or long-run guard) no longer counts: `find_next_tier` passes over it (it
+logs the rest and fires the hourly `wd_budget_spent` once per episode, `_wd_tier4_rest_note`) and
+`wd_start_gate outage` does not count it. Both refresh the rest first (`wd_reboot_rest_eval`)
+while it is set, so a rest that just ended is seen on the deciding pass; `execute_tier4` keeps its
+own evaluation as a backstop. With Tiers 1-3 off the outage gate is `none` (no event, no pause,
+no AT) instead of a "starting recovery (Tier 4)" + 15 minute pause every pause length, and a
+failed Tier 3 ends straight in the hold-off instead of announcing "escalating to Tier 4". A guard
+file that cannot be written (`_wd_persist` fails) logs one warning, keeps the engage epoch in
+memory (`_wd_guard_mem`, this run only) and announces the guard once, instead of re-engaging and
+re-announcing on every per-minute recount. `max_reboots_per_hour` strips leading zeros before its
+length check (`0000001` is 1, was 10). Every difference to the R4 baseline is one of these:
+
+- 16, 85-91: Tier 4 only (85 now enables Tier 1, see below): while Tier 4 rests no ladder starts
+  (no `AT+CFUN?`, no "starting recovery (Tier 4)", "Tier 4 skipped" or pause rows); the hourly
+  event and its log lines go with it (16, 86, 88, 91); 86 and 90 run Tier 4 on the same pass
+  once the rest ends (90: t+100 instead of t+110); 91 engages the guard on the t+100 refresh;
+- 84: the "escalating to Tier 4" and "starting recovery (Tier 4)" rows after a failed Tier 2 are
+  gone; the ladder ends in the pause ("All recovery tiers exhausted");
+- 85: enables Tier 1 so each outage reaches the resting Tier 4 through the ladder and the
+  per-episode `wd_budget_spent` event is still exercised (Tier 1 AT commands and events added).
+
+New scenarios: 100 (engaged guard file plus a newer link-up stamp under a 1970 clock: Tier 4 keeps
+resting, no release, no deadline; once the clock is sane the next recount releases the guard and
+Tier 4 reboots), 101 (`max_reboots_per_hour` clamp table: 0 -> 1, 99 and 1000 -> 10, garbage or
+empty -> 3, `0000001` -> 1, `007` -> 7, `0010` -> 10), 102 (read-only state dir: the guard engages
+at start with one "could not be saved" warning and one event, rests for the whole run from memory,
+no re-announce), 103 (hourly budget spent, Tier 3 fails and reverts, then straight to the outage
+pause with one "reboot limit reached" event and no "escalating to Tier 4").

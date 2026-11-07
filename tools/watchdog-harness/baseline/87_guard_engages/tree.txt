@@ -24,47 +24,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Tier 4 resting at start (long_outage)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:13:50] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (act after 15s)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:14:10] WARN  [watchcat:PID] TIER 4: Reboots paused until the link comes back (long outage)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:14:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
-[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=12 (act after 15s)
-[2026-09-21 14:15:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 80s >= 15s
-[2026-09-21 14:15:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:15:10] WARN  [watchcat:PID] TIER 4: Reboots paused until the link comes back (long outage)
-[2026-09-21 14:15:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:15:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
-[2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
-[2026-09-21 14:15:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=24 (act after 15s)
-[2026-09-21 14:16:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 140s >= 15s
-[2026-09-21 14:16:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:16:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:16:10] WARN  [watchcat:PID] TIER 4: Reboots paused until the link comes back (long outage)
-[2026-09-21 14:16:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:16:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
-[2026-09-21 14:16:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
-[2026-09-21 14:16:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=36 (act after 15s)
-[2026-09-21 14:17:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 200s >= 15s
-[2026-09-21 14:17:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:17:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:17:10] WARN  [watchcat:PID] TIER 4: Reboots paused until the link comes back (long outage)
-[2026-09-21 14:17:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:17:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
-[2026-09-21 14:17:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
-[2026-09-21 14:17:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=48 (act after 15s)
 
 === tmp/qmanager_events.json
 {"timestamp":1790000000,"type":"watchcat_recovery","message":"Watchcat: reboots paused until the connection comes back (long outage)","severity":"warning","code":"wd_budget_spent"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
-{"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
-{"timestamp":1790000170,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000170,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
-{"timestamp":1790000230,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000230,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
 

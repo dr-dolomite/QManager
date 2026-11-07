@@ -1,7 +1,7 @@
 # R3 long-run guard: engaged 86300 s ago (seeded), the link stays down. The
-# first ladder rests Tier 4 (long_outage, reboot_rest_until = mono 5100); the
-# 24 h end passes at t+100, the guard file is removed and the next ladder runs
-# Tier 4 (reboot).
+# guard holds Tier 4 (long_outage, reboot_rest_until = mono 5100: no eligible
+# tier, gate none); the 24 h end passes at t+100, the guard file is removed and
+# Tier 4 runs on that pass (reboot).
 SC_PASSES=20
 sc_setup() {
     uci_set quecmanager.watchcat.tier1_enabled 0

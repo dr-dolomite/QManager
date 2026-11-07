@@ -222,7 +222,8 @@ wd_start_gate() {
     # The quality ladder is Tier 1-2 only (find_next_tier, spec D5).
     if [ "$1" != "quality" ]; then
         [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
-        [ "$CFG_TIER4_ENABLED" = "1" ] && any=1
+        # A resting Tier 4 (wd_ledger.sh) is not an eligible tier.
+        [ "$CFG_TIER4_ENABLED" = "1" ] && [ -z "$reboot_rest_reason" ] && any=1
     fi
 
     hl=$(wd_holdoff_left "$1")

@@ -427,6 +427,9 @@ main() {
                         # after an exhausted ladder leaves state, counters and
                         # events alone; a radio turned off on purpose parks in
                         # radio_off. Only "go" runs the ladder.
+                        # A resting Tier 4 is not eligible: refresh the rest
+                        # (it may have just ended) before the gate counts tiers.
+                        [ -n "$reboot_rest_reason" ] && wd_reboot_rest_eval
                         wd_radio_reconcile outage
                         _wd_gate=$(wd_start_gate outage)
                         if [ "$_wd_gate" = "radio_off" ]; then

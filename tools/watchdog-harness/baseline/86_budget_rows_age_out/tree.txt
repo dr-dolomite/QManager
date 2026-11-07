@@ -21,15 +21,6 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:13:50] INFO  [watchcat:PID] Link up after a watchdog reboot, link-up stamp written
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
-[2026-09-21 14:14:10] WARN  [watchcat:PID] TIER 4: Reboot limit reached (3/3 per hour), Tier 4 rests
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: reboot limit reached (3 per hour), reboots paused
-[2026-09-21 14:14:10] INFO  [watchcat:PID] Tier 4 skipped, trying next
-[2026-09-21 14:14:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
-[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 1 minutes
-[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (act after 15s)
 [2026-09-21 14:15:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 80s >= 15s
 [2026-09-21 14:15:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 4 (reason=outage)
 [2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 4) — internet unreachable
@@ -37,9 +28,6 @@
 [2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: rebooting system (Tier 4)
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: reboot limit reached (3 per hour), reboots paused","severity":"warning","code":"wd_budget_spent"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 1 minutes","severity":"error","code":"wd_holdoff"}
 {"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 4) — internet unreachable","severity":"warning","code":"wd_tier_start"}
 {"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: rebooting system (Tier 4)","severity":"error","code":"wd_tier4_reboot"}
 
