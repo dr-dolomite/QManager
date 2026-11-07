@@ -136,6 +136,11 @@ STUB
 echo "watchcat_init \$*" >> "$out/calls.log"
 STUB
     chmod 755 "$stage/initd/qmanager_watchcat"
+    cat > "$stage/initd/qmanager" <<STUB
+#!/bin/sh
+echo "qmanager_init \$*" >> "$out/calls.log"
+STUB
+    chmod 755 "$stage/initd/qmanager"
     cat > "$stage/lib/profile_mgr.sh" <<STUB
 auto_apply_profile() { echo "auto_apply_profile \$1 \$2" >> "$out/calls.log"; }
 STUB

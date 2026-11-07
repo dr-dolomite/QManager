@@ -360,7 +360,9 @@ main() {
 
         # --- Read ping data ---
         if ! read_ping; then
-            # Stale or missing data — don't make recovery decisions
+            # Stale or missing data — don't make recovery decisions. A probe
+            # silent for minutes is restarted (dead prober, wd_detect.sh).
+            wd_ping_stale_tick
             write_state
             wd_sleep "$CFG_CHECK_INTERVAL"
             continue

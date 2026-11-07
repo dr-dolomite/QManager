@@ -1,0 +1,141 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:10] WARN  [watchcat:PID] Ping data stale (age 20s > 15s), skipping cycle
+[2026-09-21 14:14:20] WARN  [watchcat:PID] Ping data stale (age 30s > 15s), skipping cycle
+[2026-09-21 14:14:30] WARN  [watchcat:PID] Ping data stale (age 40s > 15s), skipping cycle
+[2026-09-21 14:14:40] WARN  [watchcat:PID] Ping data stale (age 50s > 15s), skipping cycle
+[2026-09-21 14:14:50] WARN  [watchcat:PID] Ping data stale (age 60s > 15s), skipping cycle
+[2026-09-21 14:15:00] WARN  [watchcat:PID] Ping data stale (age 70s > 15s), skipping cycle
+[2026-09-21 14:15:10] WARN  [watchcat:PID] Ping data stale (age 80s > 15s), skipping cycle
+[2026-09-21 14:15:20] WARN  [watchcat:PID] Ping data stale (age 90s > 15s), skipping cycle
+[2026-09-21 14:15:30] WARN  [watchcat:PID] Ping data stale (age 100s > 15s), skipping cycle
+[2026-09-21 14:15:40] WARN  [watchcat:PID] Ping data stale (age 110s > 15s), skipping cycle
+[2026-09-21 14:15:50] WARN  [watchcat:PID] Ping data stale (age 120s > 15s), skipping cycle
+[2026-09-21 14:16:00] WARN  [watchcat:PID] Ping data stale (age 130s > 15s), skipping cycle
+[2026-09-21 14:16:10] WARN  [watchcat:PID] Ping data stale (age 140s > 15s), skipping cycle
+[2026-09-21 14:16:20] WARN  [watchcat:PID] Ping data stale (age 150s > 15s), skipping cycle
+[2026-09-21 14:16:30] WARN  [watchcat:PID] Ping data stale (age 160s > 15s), skipping cycle
+[2026-09-21 14:16:40] WARN  [watchcat:PID] Ping data stale (age 170s > 15s), skipping cycle
+[2026-09-21 14:16:50] WARN  [watchcat:PID] Ping data stale (age 180s > 15s), skipping cycle
+[2026-09-21 14:17:00] WARN  [watchcat:PID] Ping data stale (age 190s > 15s), skipping cycle
+[2026-09-21 14:17:10] WARN  [watchcat:PID] Ping data stale (age 200s > 15s), skipping cycle
+[2026-09-21 14:17:20] WARN  [watchcat:PID] Ping data stale (age 210s > 15s), skipping cycle
+[2026-09-21 14:17:30] WARN  [watchcat:PID] Ping data stale (age 220s > 15s), skipping cycle
+[2026-09-21 14:17:40] WARN  [watchcat:PID] Ping data stale (age 230s > 15s), skipping cycle
+[2026-09-21 14:17:50] WARN  [watchcat:PID] Ping data stale (age 240s > 15s), skipping cycle
+[2026-09-21 14:18:00] WARN  [watchcat:PID] Ping data stale (age 250s > 15s), skipping cycle
+[2026-09-21 14:18:10] WARN  [watchcat:PID] Ping data stale (age 260s > 15s), skipping cycle
+[2026-09-21 14:18:20] WARN  [watchcat:PID] Ping data stale (age 270s > 15s), skipping cycle
+[2026-09-21 14:18:30] WARN  [watchcat:PID] Ping data stale (age 280s > 15s), skipping cycle
+[2026-09-21 14:18:40] WARN  [watchcat:PID] Ping data stale (age 290s > 15s), skipping cycle
+[2026-09-21 14:18:50] WARN  [watchcat:PID] Ping data stale (age 300s > 15s), skipping cycle
+[2026-09-21 14:19:00] WARN  [watchcat:PID] Ping data stale (age 310s > 15s), skipping cycle
+[2026-09-21 14:19:10] WARN  [watchcat:PID] Ping data stale (age 320s > 15s), skipping cycle
+[2026-09-21 14:19:20] WARN  [watchcat:PID] Ping data stale (age 330s > 15s), skipping cycle
+[2026-09-21 14:19:20] WARN  [watchcat:PID] Ping data stale for over 300s: the connection probe is not reporting
+[2026-09-21 14:19:20] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection probe not reporting, restarting it
+[2026-09-21 14:19:20] WARN  [watchcat:PID] Starting the connection probe service (qmanager)
+[2026-09-21 14:19:30] WARN  [watchcat:PID] Ping data stale (age 340s > 15s), skipping cycle
+[2026-09-21 14:19:40] WARN  [watchcat:PID] Ping data stale (age 350s > 15s), skipping cycle
+[2026-09-21 14:19:50] WARN  [watchcat:PID] Ping data stale (age 360s > 15s), skipping cycle
+[2026-09-21 14:20:00] WARN  [watchcat:PID] Ping data stale (age 370s > 15s), skipping cycle
+[2026-09-21 14:20:10] WARN  [watchcat:PID] Ping data stale (age 380s > 15s), skipping cycle
+[2026-09-21 14:20:20] INFO  [watchcat:PID] Ping data fresh again: the connection probe is reporting
+[2026-09-21 14:21:20] WARN  [watchcat:PID] Ping data stale (age 20s > 15s), skipping cycle
+[2026-09-21 14:21:30] WARN  [watchcat:PID] Ping data stale (age 30s > 15s), skipping cycle
+[2026-09-21 14:21:40] WARN  [watchcat:PID] Ping data stale (age 40s > 15s), skipping cycle
+[2026-09-21 14:21:50] WARN  [watchcat:PID] Ping data stale (age 50s > 15s), skipping cycle
+[2026-09-21 14:22:00] WARN  [watchcat:PID] Ping data stale (age 60s > 15s), skipping cycle
+[2026-09-21 14:22:10] WARN  [watchcat:PID] Ping data stale (age 70s > 15s), skipping cycle
+[2026-09-21 14:22:20] WARN  [watchcat:PID] Ping data stale (age 80s > 15s), skipping cycle
+[2026-09-21 14:22:30] WARN  [watchcat:PID] Ping data stale (age 90s > 15s), skipping cycle
+[2026-09-21 14:22:40] WARN  [watchcat:PID] Ping data stale (age 100s > 15s), skipping cycle
+[2026-09-21 14:22:50] WARN  [watchcat:PID] Ping data stale (age 110s > 15s), skipping cycle
+[2026-09-21 14:23:00] WARN  [watchcat:PID] Ping data stale (age 120s > 15s), skipping cycle
+[2026-09-21 14:23:10] WARN  [watchcat:PID] Ping data stale (age 130s > 15s), skipping cycle
+[2026-09-21 14:23:20] WARN  [watchcat:PID] Ping data stale (age 140s > 15s), skipping cycle
+[2026-09-21 14:23:30] WARN  [watchcat:PID] Ping data stale (age 150s > 15s), skipping cycle
+[2026-09-21 14:23:40] WARN  [watchcat:PID] Ping data stale (age 160s > 15s), skipping cycle
+[2026-09-21 14:23:50] WARN  [watchcat:PID] Ping data stale (age 170s > 15s), skipping cycle
+[2026-09-21 14:24:00] WARN  [watchcat:PID] Ping data stale (age 180s > 15s), skipping cycle
+[2026-09-21 14:24:10] WARN  [watchcat:PID] Ping data stale (age 190s > 15s), skipping cycle
+[2026-09-21 14:24:20] WARN  [watchcat:PID] Ping data stale (age 200s > 15s), skipping cycle
+[2026-09-21 14:24:30] WARN  [watchcat:PID] Ping data stale (age 210s > 15s), skipping cycle
+[2026-09-21 14:24:40] WARN  [watchcat:PID] Ping data stale (age 220s > 15s), skipping cycle
+[2026-09-21 14:24:50] WARN  [watchcat:PID] Ping data stale (age 230s > 15s), skipping cycle
+[2026-09-21 14:25:00] WARN  [watchcat:PID] Ping data stale (age 240s > 15s), skipping cycle
+[2026-09-21 14:25:10] WARN  [watchcat:PID] Ping data stale (age 250s > 15s), skipping cycle
+[2026-09-21 14:25:20] WARN  [watchcat:PID] Ping data stale (age 260s > 15s), skipping cycle
+[2026-09-21 14:25:30] WARN  [watchcat:PID] Ping data stale (age 270s > 15s), skipping cycle
+[2026-09-21 14:25:40] WARN  [watchcat:PID] Ping data stale (age 280s > 15s), skipping cycle
+[2026-09-21 14:25:50] WARN  [watchcat:PID] Ping data stale (age 290s > 15s), skipping cycle
+[2026-09-21 14:26:00] WARN  [watchcat:PID] Ping data stale (age 300s > 15s), skipping cycle
+[2026-09-21 14:26:10] WARN  [watchcat:PID] Ping data stale (age 310s > 15s), skipping cycle
+[2026-09-21 14:26:20] WARN  [watchcat:PID] Ping data stale (age 320s > 15s), skipping cycle
+[2026-09-21 14:26:30] WARN  [watchcat:PID] Ping data stale (age 330s > 15s), skipping cycle
+[2026-09-21 14:26:30] WARN  [watchcat:PID] Ping data stale for over 300s: the connection probe is not reporting
+[2026-09-21 14:26:30] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection probe not reporting, restarting it
+[2026-09-21 14:26:40] WARN  [watchcat:PID] Ping data stale (age 340s > 15s), skipping cycle
+[2026-09-21 14:26:50] WARN  [watchcat:PID] Ping data stale (age 350s > 15s), skipping cycle
+[2026-09-21 14:27:00] WARN  [watchcat:PID] Ping data stale (age 360s > 15s), skipping cycle
+[2026-09-21 14:27:10] WARN  [watchcat:PID] Ping data stale (age 370s > 15s), skipping cycle
+[2026-09-21 14:27:20] WARN  [watchcat:PID] Ping data stale (age 380s > 15s), skipping cycle
+[2026-09-21 14:27:30] WARN  [watchcat:PID] Ping data stale (age 390s > 15s), skipping cycle
+[2026-09-21 14:27:40] WARN  [watchcat:PID] Ping data stale (age 400s > 15s), skipping cycle
+[2026-09-21 14:27:50] WARN  [watchcat:PID] Ping data stale (age 410s > 15s), skipping cycle
+[2026-09-21 14:28:00] WARN  [watchcat:PID] Ping data stale (age 420s > 15s), skipping cycle
+[2026-09-21 14:28:10] WARN  [watchcat:PID] Ping data stale (age 430s > 15s), skipping cycle
+[2026-09-21 14:28:20] WARN  [watchcat:PID] Ping data stale (age 440s > 15s), skipping cycle
+[2026-09-21 14:28:30] WARN  [watchcat:PID] Ping data stale (age 450s > 15s), skipping cycle
+[2026-09-21 14:28:40] WARN  [watchcat:PID] Ping data stale (age 460s > 15s), skipping cycle
+[2026-09-21 14:28:50] WARN  [watchcat:PID] Ping data stale (age 470s > 15s), skipping cycle
+[2026-09-21 14:29:00] WARN  [watchcat:PID] Ping data stale (age 480s > 15s), skipping cycle
+[2026-09-21 14:29:10] WARN  [watchcat:PID] Ping data stale (age 490s > 15s), skipping cycle
+[2026-09-21 14:29:20] WARN  [watchcat:PID] Ping data stale (age 500s > 15s), skipping cycle
+[2026-09-21 14:29:30] WARN  [watchcat:PID] Ping data stale (age 510s > 15s), skipping cycle
+[2026-09-21 14:29:40] WARN  [watchcat:PID] Ping data stale (age 520s > 15s), skipping cycle
+[2026-09-21 14:29:50] WARN  [watchcat:PID] Ping data stale (age 530s > 15s), skipping cycle
+[2026-09-21 14:30:00] WARN  [watchcat:PID] Ping data stale (age 540s > 15s), skipping cycle
+[2026-09-21 14:30:10] WARN  [watchcat:PID] Ping data stale (age 550s > 15s), skipping cycle
+[2026-09-21 14:30:20] WARN  [watchcat:PID] Ping data stale (age 560s > 15s), skipping cycle
+[2026-09-21 14:30:30] WARN  [watchcat:PID] Ping data stale (age 570s > 15s), skipping cycle
+[2026-09-21 14:30:40] WARN  [watchcat:PID] Ping data stale (age 580s > 15s), skipping cycle
+[2026-09-21 14:30:50] WARN  [watchcat:PID] Ping data stale (age 590s > 15s), skipping cycle
+[2026-09-21 14:31:00] WARN  [watchcat:PID] Ping data stale (age 600s > 15s), skipping cycle
+[2026-09-21 14:31:10] WARN  [watchcat:PID] Ping data stale (age 610s > 15s), skipping cycle
+[2026-09-21 14:31:20] WARN  [watchcat:PID] Ping data stale (age 620s > 15s), skipping cycle
+[2026-09-21 14:31:30] WARN  [watchcat:PID] Ping data stale (age 630s > 15s), skipping cycle
+[2026-09-21 14:31:40] WARN  [watchcat:PID] Ping data stale (age 640s > 15s), skipping cycle
+[2026-09-21 14:31:50] WARN  [watchcat:PID] Ping data stale (age 650s > 15s), skipping cycle
+[2026-09-21 14:32:00] WARN  [watchcat:PID] Ping data stale (age 660s > 15s), skipping cycle
+[2026-09-21 14:32:10] WARN  [watchcat:PID] Ping data stale (age 670s > 15s), skipping cycle
+[2026-09-21 14:32:20] WARN  [watchcat:PID] Ping data stale (age 680s > 15s), skipping cycle
+[2026-09-21 14:32:30] WARN  [watchcat:PID] Ping data stale (age 690s > 15s), skipping cycle
+[2026-09-21 14:32:40] WARN  [watchcat:PID] Ping data stale (age 700s > 15s), skipping cycle
+[2026-09-21 14:32:50] WARN  [watchcat:PID] Ping data stale (age 710s > 15s), skipping cycle
+[2026-09-21 14:33:00] WARN  [watchcat:PID] Ping data stale (age 720s > 15s), skipping cycle
+[2026-09-21 14:33:10] WARN  [watchcat:PID] Ping data stale (age 730s > 15s), skipping cycle
+[2026-09-21 14:33:20] WARN  [watchcat:PID] Ping data stale (age 740s > 15s), skipping cycle
+[2026-09-21 14:33:30] WARN  [watchcat:PID] Ping data stale (age 750s > 15s), skipping cycle
+[2026-09-21 14:33:40] WARN  [watchcat:PID] Ping data stale (age 760s > 15s), skipping cycle
+[2026-09-21 14:33:50] WARN  [watchcat:PID] Ping data stale (age 770s > 15s), skipping cycle
+[2026-09-21 14:34:00] WARN  [watchcat:PID] Ping data stale (age 780s > 15s), skipping cycle
+[2026-09-21 14:34:10] WARN  [watchcat:PID] Ping data stale (age 790s > 15s), skipping cycle
+[2026-09-21 14:34:20] WARN  [watchcat:PID] Ping data stale (age 800s > 15s), skipping cycle
+[2026-09-21 14:34:20] WARN  [watchcat:PID] Starting the connection probe service (qmanager)
+[2026-09-21 14:34:30] WARN  [watchcat:PID] Ping data stale (age 810s > 15s), skipping cycle
+[2026-09-21 14:34:40] WARN  [watchcat:PID] Ping data stale (age 820s > 15s), skipping cycle
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000360,"type":"watchcat_recovery","message":"Watchcat: connection probe not reporting, restarting it","severity":"warning","code":"wd_ping_stale"}
+{"timestamp":1790000790,"type":"watchcat_recovery","message":"Watchcat: connection probe not reporting, restarting it","severity":"warning","code":"wd_ping_stale"}
+

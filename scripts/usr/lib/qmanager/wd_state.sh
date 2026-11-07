@@ -68,6 +68,7 @@ _wd_write_state_file() {
     local v_pr_interval
     local v_pr_last
     local v_pr_active
+    local v_ping_stale
     local v_rb_limit
     local v_rb_until
     local v_rb_spent
@@ -139,13 +140,17 @@ _wd_write_state_file() {
         true) v_ssr_hold=true ;;
         *) v_ssr_hold=false ;;
     esac
+    case "$wd_ping_stale" in
+        true) v_ping_stale=true ;;
+        *) v_ping_stale=false ;;
+    esac
     case "$primary_recheck_active" in
         true) v_pr_active=true ;;
         *) v_pr_active=false ;;
     esac
 
     # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
-    # has not landed yet carry their idle value: failback_failures, ping_stale.
+    # has not landed yet carry their idle value: failback_failures.
     # step_wait_until is null outside a cooldown.
     json=$(jq -n -c \
         --argjson ts "$ts" \
@@ -184,6 +189,7 @@ _wd_write_state_file() {
         --argjson pr_last "$v_pr_last" \
         --argjson pr_active "$v_pr_active" \
         --argjson qbs "$v_qbs" \
+        --argjson ping_stale "$v_ping_stale" \
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
@@ -216,7 +222,7 @@ _wd_write_state_file() {
             sim_failover_active: ($sf_active == "true"),
             original_sim_slot: $sf_orig,
             current_sim_slot: $sf_curr,
-            ping_stale: false,
+            ping_stale: $ping_stale,
             mono: $mono,
             stale_after: $stale_after
         }' 2>/dev/null)

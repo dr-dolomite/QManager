@@ -457,3 +457,23 @@ these:
 New scenarios: 112 (read-only state dir: one link-up stamp attempt and warning, kept in memory
 across recounts and a later outage), 113 (quality disabled mid-breach clears the timer; re-enabled,
 a fresh breach starts; `quality_after_sec 0060` reads as 60; all-lost window logs `avg n/a`).
+
+## R6: dead prober (step 1b)
+
+A stale episode starts at the first stale or missing ping read (`read_ping`, any caller) and ends
+at the first fresh one (`wd_stale_clear`: `ping_stale` back to false, one INFO line if it was
+raised). Only the main loop's stale branch acts on it (`wd_ping_stale_tick`, `wd_detect.sh`): once
+the episode is older than 300 s on the mono clock the state file's `ping_stale` turns true, one
+`wd_ping_stale` warning event is logged per episode ("Watchcat: connection probe not reporting,
+restarting it") and the ping service named by the adapter (`PF_PING_SVC`; RM551E `qmanager`,
+whose procd `start` only starts the instances that are not running) gets one `svc_start`, at most
+once per 900 s. The spacing is measured from the last start and spans episodes. No recovery
+decision is made on stale data. Harness: `run.sh` stages an `/etc/init.d/qmanager` stub that logs
+`qmanager_init <args>` to `calls.log`. No existing scenario changed (no baseline scenario stays
+stale for 300 s).
+
+New scenarios: 114 (stale about 190 s, then fresh: no event, no start), 115 (stale from pass 3:
+`ping_stale` true, one event and one start at pass 34), 116 (stale 30 min: starts at pass 34 and
+124, one event), 117 (fresh read clears; the second episode logs a second event at pass 77 and
+its start waits for the 900 s spacing, pass 124), 118 (link down, then stale: the dead prober
+fires but no tier runs, state stays suspect), 119 (ping cache file missing counts as stale).

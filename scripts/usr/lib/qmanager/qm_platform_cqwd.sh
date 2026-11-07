@@ -147,6 +147,10 @@ plat_paths() {
     PF_TOWER_LOCK_CONFIG="/etc/qmanager/tower_lock.json"
     PF_FORCE_TIER2_FLAG="/tmp/qmanager_force_tier2"
     PF_REFRESH_POLICY_FLAG="/tmp/qmanager_refresh_policy_band"
+    # Init service owning the ping daemon (procd instance "ping"). `start` on a
+    # running procd service only starts instances that are not running; the
+    # poller instance is left alone.
+    PF_PING_SVC="qmanager"
 }
 
 # --- Platform probes and actions ---------------------------------------------

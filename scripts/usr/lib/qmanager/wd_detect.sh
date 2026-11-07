@@ -7,9 +7,9 @@
 # Owns: ping_streak_fail, ping_reachable, ping_during_recovery, ssr_hold,
 #       last_ssr_detected, ssr_hold_started, wd_resume_mono, wd_outage_age,
 #       wd_offline_secs, wd_act_after_eff, wd_recover_secs, wd_ping_interval,
-#       _wd_attach_seen,
+#       _wd_attach_seen, wd_stale_since, wd_ping_stale, wd_stale_restart_at,
 #       _wd_ssr_cur_id, _wd_ssr_held_id
-# Functions: read_ping, wd_resume_mark, wd_attach_tick, wd_outage_update,
+# Functions: read_ping, wd_stale_clear, wd_ping_stale_tick, wd_resume_mark, wd_attach_tick, wd_outage_update,
 #            wd_outage_clear, wd_outage_due, wd_step_wait_secs, wd_decide_start,
 #            wd_holdoff_left, wd_radio_reconcile, wd_start_gate,
 #            ssr_in_progress, ssr_hold_gate, ssr_hold_clear
@@ -45,6 +45,55 @@ ping_streak_fail=0
 ping_reachable="true"
 ping_during_recovery="false"
 
+# --- Dead prober (spec section 5.2) ------------------------------------------
+# A stale episode starts at the first stale or missing read (any read_ping
+# caller) and ends at the first fresh one. Only the main loop acts on it
+# (wd_ping_stale_tick): past WD_STALE_AFTER seconds it raises ping_stale, logs
+# one event per episode and starts the ping service (PF_PING_SVC) at most once
+# per WD_STALE_RESTART_GAP seconds; the spacing spans episodes.
+WD_STALE_AFTER=300
+WD_STALE_RESTART_GAP=900
+wd_stale_since=0          # mono of the episode's first stale read; 0 = no episode
+wd_ping_stale="false"     # JSON bool literal for write_state
+wd_stale_restart_at=0     # mono of the last svc_start; 0 = never
+
+wd_stale_clear() {
+    if [ "$wd_ping_stale" = "true" ]; then
+        qlog_info "Ping data fresh again: the connection probe is reporting"
+    fi
+    wd_stale_since=0
+    wd_ping_stale="false"
+}
+
+# Main-loop stale branch only. Never makes a recovery decision.
+wd_ping_stale_tick() {
+    local now
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    [ "$now" -gt 0 ] || return 0
+    if [ "$wd_stale_since" -eq 0 ]; then
+        wd_stale_since="$now"
+        return 0
+    fi
+    [ $((now - wd_stale_since)) -gt "$WD_STALE_AFTER" ] || return 0
+    if [ "$wd_ping_stale" != "true" ]; then
+        wd_ping_stale="true"
+        qlog_warn "Ping data stale for over ${WD_STALE_AFTER}s: the connection probe is not reporting"
+        append_event "watchcat_recovery" "Watchcat: connection probe not reporting, restarting it" "warning" "wd_ping_stale"
+    fi
+    if [ "$wd_stale_restart_at" -gt 0 ] && [ $((now - wd_stale_restart_at)) -lt "$WD_STALE_RESTART_GAP" ]; then
+        return 0
+    fi
+    wd_stale_restart_at="$now"
+    if [ -z "$PF_PING_SVC" ]; then
+        qlog_warn "No ping service named by the platform adapter: not restarting it"
+        return 0
+    fi
+    qlog_warn "Starting the connection probe service ($PF_PING_SVC)"
+    svc_start "$PF_PING_SVC" >/dev/null 2>&1
+    return 0
+}
+
 read_ping() {
     # conn_state_read owns the read + staleness rule (max(3 * interval_sec, 15)
     # on the monotonic clock). On failure the ping_* vars keep their previous
@@ -55,8 +104,13 @@ read_ping() {
         else
             qlog_warn "Ping data stale ($(conn_state_why)), skipping cycle"
         fi
+        if [ "$wd_stale_since" -eq 0 ]; then
+            wd_stale_since=$(mono_now)
+            case "$wd_stale_since" in ''|*[!0-9]*) wd_stale_since=0 ;; esac
+        fi
         return 1
     fi
+    wd_stale_clear
 
     # reachable is true/false, or "null" when the cache did not say — "null"
     # is never treated as up. The down decision stays on the probe-count streak.
