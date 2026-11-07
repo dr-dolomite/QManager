@@ -5,9 +5,13 @@
 # Sourced by qmanager_watchcat (never executed). BusyBox ash safe.
 #
 # Owns: ping_streak_fail, ping_reachable, ping_during_recovery, ssr_hold,
-#       last_ssr_detected, ssr_hold_started
-# Functions: read_ping, wd_decide_start, wd_holdoff_left, wd_radio_reconcile,
-#            wd_start_gate, ssr_in_progress, ssr_hold_gate, ssr_hold_clear
+#       last_ssr_detected, ssr_hold_started, wd_resume_mono, wd_outage_age,
+#       wd_offline_secs, wd_act_after_eff, _wd_attach_seen, _wd_ssr_cur_id,
+#       _wd_ssr_held_id
+# Functions: read_ping, wd_resume_mark, wd_attach_tick, wd_outage_update,
+#            wd_outage_clear, wd_outage_due, wd_decide_start, wd_holdoff_left,
+#            wd_radio_reconcile, wd_start_gate, ssr_in_progress, ssr_hold_gate,
+#            ssr_hold_clear
 #
 # The quality window and the quality trigger (evaluate_quality) live in
 # wd_quality.sh. Function definitions and global initialisers only. The last
@@ -18,6 +22,19 @@
 ssr_hold="false"          # JSON bool literal for write_state
 last_ssr_detected="null"  # JSON null literal or monotonic-seconds integer
 ssr_hold_started=0        # monotonic seconds-since-boot when hold began; 0 = not holding
+_wd_ssr_cur_id=""         # identity of the SSR ssr_in_progress last saw in its window
+_wd_ssr_held_id=""        # identity of the SSR that already held once ("" = none)
+
+# --- Outage age (spec section 5.2) -------------------------------------------
+# outage age = min(fail_elapsed_sec, now - wd_resume_mono): an outage that aged
+# while the watchdog could not act (boot settle, attach warm-up, radio off,
+# LOCKED, a SIM settle) only counts from the moment it could act again.
+wd_resume_mono=0          # mono of the last point the watchdog could act again
+wd_outage_age=0           # outage age of the last fresh read (failure_secs)
+wd_offline_secs=0         # raw fail_elapsed_sec of the last fresh read (offline_secs)
+wd_act_after_eff=30       # max(CFG_ACT_AFTER_SEC, ping fail_secs) of the last fresh read
+_wd_attach_seen=0         # 1 while the ping attach warm-up flag was seen
+WD_ATTACH_FLAG="/tmp/qmanager_ping_attaching"
 
 # Read ping daemon data — returns 0 if valid, 1 if stale/missing
 # Sets: ping_streak_fail, ping_reachable, ping_during_recovery
@@ -44,6 +61,76 @@ read_ping() {
     ping_reachable="$CQ_REACHABLE"
     ping_during_recovery="$CQ_DURING_RECOVERY"
     return 0
+}
+
+# Stamps the moment the watchdog can act again; the outage age restarts at 0.
+wd_resume_mark() {
+    local now
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    wd_resume_mono="$now"
+    wd_outage_age=0
+}
+
+# Once per pass: the first pass without the ping attach warm-up flag after a
+# pass with it is a resume point (the failures counted during the warm-up are
+# not an outage the watchdog could have acted on).
+wd_attach_tick() {
+    if [ -f "$WD_ATTACH_FLAG" ]; then
+        _wd_attach_seen=1
+    elif [ "$_wd_attach_seen" = "1" ]; then
+        _wd_attach_seen=0
+        qlog_info "Ping attach warm-up over: outage age restarts now"
+        wd_resume_mark
+    fi
+}
+
+# After a fresh read_ping: sets wd_act_after_eff, wd_offline_secs and
+# wd_outage_age (0 while reachable or while the attach flag exists).
+wd_outage_update() {
+    local fs
+    local fe
+    local now
+    local since
+    fs="$CQ_FAIL_SECS"
+    case "$fs" in ''|*[!0-9]*) fs=20 ;; esac
+    wd_act_after_eff="$CFG_ACT_AFTER_SEC"
+    case "$wd_act_after_eff" in ''|*[!0-9]*) wd_act_after_eff=30 ;; esac
+    [ "$fs" -gt "$wd_act_after_eff" ] && wd_act_after_eff="$fs"
+
+    if [ "$ping_reachable" = "true" ]; then
+        wd_offline_secs=0
+        wd_outage_age=0
+        return 0
+    fi
+    fe="$CQ_FAIL_ELAPSED"
+    case "$fe" in ''|*[!0-9]*) fe=0 ;; esac
+    wd_offline_secs="$fe"
+    if [ -f "$WD_ATTACH_FLAG" ]; then
+        wd_outage_age=0
+        return 0
+    fi
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    since=$((now - wd_resume_mono))
+    [ "$since" -lt 0 ] && since=0
+    if [ "$fe" -lt "$since" ]; then
+        wd_outage_age="$fe"
+    else
+        wd_outage_age="$since"
+    fi
+    return 0
+}
+
+# LOCKED / radio_off entry: the watchdog cannot act, so no outage age counts.
+wd_outage_clear() {
+    wd_outage_age=0
+}
+
+# rc 0 when the last fresh read is an outage old enough to start recovery.
+wd_outage_due() {
+    [ "$ping_reachable" = "false" ] || return 1
+    [ "$wd_outage_age" -ge "$wd_act_after_eff" ]
 }
 
 # Pure start gate (no I/O, no globals), in this order:
@@ -142,16 +229,17 @@ wd_start_gate() {
 
 # Best-effort read-only check for a RECENT baseband crash (plat_ssr_poll gives
 # its time in monotonic seconds since boot). Returns 0 (true) if a crash is
-# known AND it is within the detection window of now (CFG_SSR_GRACE +
-# CFG_FAIL_THRESHOLD * ping interval + 2 check intervals); 1 (false) otherwise,
-# including when the platform knows no crash time (graceful degradation:
-# absence of evidence is NOT evidence of absence; we never block recovery on
-# it). Polls the platform ONCE per invocation (only at an escalation decision).
+# known, it is within the detection window of now, and that SSR identity has not
+# held before; 1 (false) otherwise, including when the platform knows no crash
+# time (graceful degradation: absence of evidence is NOT evidence of absence; we
+# never block recovery on it). Polls the platform ONCE per invocation (only at
+# an escalation decision). Sets _wd_ssr_cur_id for ssr_hold_gate.
 ssr_in_progress() {
     [ "$CFG_SSR_AWARE" = "1" ] || return 1
 
     local crash_ts
     local now
+    local id
 
     plat_ssr_poll
     crash_ts="$PLAT_SSR_MONO"
@@ -160,30 +248,31 @@ ssr_in_progress() {
     now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
     case "$now" in ''|*[!0-9]*) return 1 ;; esac
 
-    # The crash is only visible to the ladder once the ping daemon has counted
-    # CFG_FAIL_THRESHOLD failed probes (one probe period apart, WD_PERIOD: the
-    # failing cycle can outlast the interval) and a check pass has seen them, so
-    # the look-back must cover that detection delay as well as the grace. A bare
-    # grace window always expired first on slow ping profiles (the hold never
-    # engaged and every SSR was amplified).
-    local iv
-    local ft
-    local ci
+    # One hold per SSR identity: once a restart has held, a later escalation for
+    # the same restart (the Tier 4 re-check, a second trigger) goes to the ladder.
+    # A platform without an identity falls back to the crash mono.
+    id="$PLAT_SSR_ID"
+    [ -n "$id" ] || id="mono:$crash_ts"
+    [ "$id" = "$_wd_ssr_held_id" ] && return 1
+
+    # The crash is only visible to the ladder once the outage age has reached
+    # act_after_eff, so the look-back covers the grace, the trigger, one worst
+    # probe cycle (8 s) and two check passes (2 x 10 s).
     local gr
+    local aa
     local win
     gr="$CFG_SSR_GRACE"
     case "$gr" in ''|*[!0-9]*) gr=45 ;; esac
-    wd_probe_period
-    iv="$WD_PERIOD"
-    ft="$CFG_FAIL_THRESHOLD"
-    case "$ft" in ''|*[!0-9]*) ft=5 ;; esac
-    ci="$CFG_CHECK_INTERVAL"
-    case "$ci" in ''|*[!0-9]*) ci=10 ;; esac
-    win=$((gr + ft * iv + 2 * ci))
+    aa="$wd_act_after_eff"
+    case "$aa" in ''|*[!0-9]*) aa=30 ;; esac
+    win=$((gr + aa + 8 + 2 * 10))
 
     local delta
     delta=$((now - crash_ts))
-    [ "$delta" -ge 0 ] && [ "$delta" -le "$win" ] && return 0
+    if [ "$delta" -ge 0 ] && [ "$delta" -le "$win" ]; then
+        _wd_ssr_cur_id="$id"
+        return 0
+    fi
     return 1
 }
 
@@ -215,6 +304,7 @@ ssr_hold_gate() {
         case "$now" in ''|*[!0-9]*) now=0 ;; esac
         ssr_hold="true"
         ssr_hold_started="$now"
+        _wd_ssr_held_id="$_wd_ssr_cur_id"
         last_ssr_detected="$now"   # monotonic seconds; UI surfaces "self-recovery"
         qlog_warn "Recoverable baseband SSR detected; holding recovery ladder up to ${CFG_SSR_GRACE}s for self-heal"
         append_event "watchcat_recovery" "Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal" "info" "wd_ssr_hold"

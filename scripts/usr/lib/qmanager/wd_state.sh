@@ -46,6 +46,8 @@ _wd_write_state_file() {
     local v_enabled
     local v_tier
     local v_failures
+    local v_fsecs
+    local v_offline
     local v_last_time
     local v_last_tier
     local v_total
@@ -69,6 +71,8 @@ _wd_write_state_file() {
     _wd_num "$CFG_ENABLED" 0;              v_enabled="$_wdn"
     _wd_num "$current_tier" 0;             v_tier="$_wdn"
     _wd_num "$failure_counter" 0;          v_failures="$_wdn"
+    _wd_num "$wd_outage_age" 0;            v_fsecs="$_wdn"
+    _wd_num "$wd_offline_secs" 0;          v_offline="$_wdn"
     _wd_num "$last_recovery_time" null;    v_last_time="$_wdn"
     _wd_num "$last_recovery_tier" null;    v_last_tier="$_wdn"
     _wd_num "$total_recoveries" 0;         v_total="$_wdn"
@@ -93,7 +97,7 @@ _wd_write_state_file() {
     esac
 
     # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
-    # has not landed yet carry their idle value: step_wait_until, failure_secs,
+    # has not landed yet carry their idle value: step_wait_until,
     # reboot_budget_exhausted, reboot_rest_reason, quality_breach_secs,
     # failback_failures, ping_stale.
     json=$(jq -n -c \
@@ -103,7 +107,7 @@ _wd_write_state_file() {
         --argjson enabled "$v_enabled" \
         --arg state "$state" \
         --argjson tier "$v_tier" \
-        --argjson failures "$v_failures" \
+        --argjson failures "$v_failures"         --argjson fsecs "$v_fsecs"         --argjson offline "$v_offline" \
         --argjson last_time "$v_last_time" \
         --argjson last_tier "$v_last_tier" \
         --argjson total "$v_total" \
@@ -132,7 +136,8 @@ _wd_write_state_file() {
             last_recovery_reason: $recovery_reason,
             total_recoveries: $total,
             failure_count: $failures,
-            failure_secs: 0,
+            failure_secs: $fsecs,
+            offline_secs: $offline,
             cooldown_remaining: $cooldown,
             step_wait_until: null,
             holdoff_until: (if $holdoff_until > $mono then $holdoff_until else null end),

@@ -18,7 +18,7 @@ printf '%s.00 0.00\n' "$H_UP0" > "$H_ROOT/proc_uptime"
 cat > "$H_STATE/uci.db" <<UCI
 quecmanager.watchcat.enabled=1
 quecmanager.watchcat.check_interval=10
-quecmanager.watchcat.fail_threshold=3
+quecmanager.watchcat.act_after_sec=15
 quecmanager.watchcat.cooldown=30
 quecmanager.watchcat.tier1_enabled=1
 quecmanager.watchcat.tier2_enabled=1
@@ -28,7 +28,7 @@ quecmanager.watchcat.max_reboots_per_hour=3
 quecmanager.watchcat.quality_enabled=0
 quecmanager.watchcat.quality_consecutive=3
 quecmanager.watchcat.ssr_aware=1
-quecmanager.watchcat.ssr_grace=45
+quecmanager.watchcat.ssr_grace_sec=45
 quecmanager.watchcat.primary_recheck_enabled=0
 quecmanager.watchcat.primary_recheck_interval=1
 UCI

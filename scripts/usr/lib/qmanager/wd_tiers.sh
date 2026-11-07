@@ -146,6 +146,7 @@ wd_enter_radio_off() {
     quality_breach_counter=0
     _recovery_marker_emitted=""
     ssr_hold_clear
+    wd_outage_clear
 }
 
 # Ends the service the way the UI's "off" does (disable, then stop). procd
@@ -344,6 +345,8 @@ _cooldown_handle_failure() {
         # A revert that cannot be verified leaves the modem on the backup slot:
         # record that as the failover it is (wd_sim_adopt_live_slot).
         sim_failover_fallback || wd_sim_adopt_live_slot
+        # The Tier 3 settle is over: outage age counts from here.
+        wd_resume_mark
     fi
 
     # Escalate to the next enabled tier. Cooldown already verified the prior tier
@@ -426,6 +429,7 @@ finish_cooldown() {
     if [ "$revert_settle_active" = "true" ]; then
         revert_settle_active="false"
         qlog_info "Post-revert SIM settle complete — resuming monitoring"
+        wd_resume_mark
         state="monitor"
         current_tier=0
         failure_counter=0

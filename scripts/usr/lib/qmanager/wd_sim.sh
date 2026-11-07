@@ -530,6 +530,8 @@ finalize_sim_failover() {
     [ "$current_sim_slot" != "$original_sim_slot" ] || return 0
     [ "$original_sim_slot" != "null" ] || return 0
 
+    # The Tier 3 settle is over: outage age counts from here.
+    wd_resume_mark
     sim_failover_active="true"
 
     # Reason recorded in the failover file mirrors WHY recovery fired.
@@ -646,6 +648,8 @@ _wd_sim_failback() {
 # caller returns right after this.
 wd_sim_finish_recheck() {
     primary_recheck_active="false"
+    # The failback settle is over: outage age counts from here.
+    wd_resume_mark
 
     local _primary_healthy
     _primary_healthy="no"

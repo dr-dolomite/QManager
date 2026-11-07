@@ -17,7 +17,9 @@
 # --- Configuration (defaults, overridden by the config store) ----------------
 CFG_ENABLED=0
 CFG_CHECK_INTERVAL=10
-CFG_FAIL_THRESHOLD=5          # consecutive failed PROBES (raw ping streak_fail) before recovery
+# Seconds of outage age (wd_detect.sh wd_outage_update) before recovery starts;
+# the effective value is max(act_after_sec, the ping daemon's fail_secs).
+CFG_ACT_AFTER_SEC=30
 CFG_COOLDOWN=60
 CFG_TIER1_ENABLED=1
 CFG_TIER2_ENABLED=1
@@ -65,11 +67,16 @@ read_config() {
     val=$(cfg_get watchdog check_interval)
     [ -n "$val" ] && CFG_CHECK_INTERVAL="$val"
 
-    # fail_threshold = consecutive failed PROBES (raw ping streak_fail). Renamed
-    # from the retired max_failures (which counted watchcat's own loop cycles).
-    # Default 5 if absent so an un-migrated install still works immediately.
-    val=$(cfg_get watchdog fail_threshold)
-    case "$val" in ''|*[!0-9]*) CFG_FAIL_THRESHOLD=5 ;; *) CFG_FAIL_THRESHOLD="$val" ;; esac
+    # act_after_sec: 15-600, default 30 (absent or non-numeric).
+    val=$(cfg_get watchdog act_after_sec)
+    case "$val" in
+        ''|*[!0-9]*) CFG_ACT_AFTER_SEC=30 ;;
+        *)
+            CFG_ACT_AFTER_SEC="$val"
+            [ "$CFG_ACT_AFTER_SEC" -lt 15 ] && CFG_ACT_AFTER_SEC=15
+            [ "$CFG_ACT_AFTER_SEC" -gt 600 ] && CFG_ACT_AFTER_SEC=600
+            ;;
+    esac
 
     val=$(cfg_get watchdog cooldown)
     [ -n "$val" ] && CFG_COOLDOWN="$val"
@@ -106,8 +113,8 @@ read_config() {
     CFG_SSR_AWARE=$(cfg_get watchdog ssr_aware)
     [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
 
-    val=$(cfg_get watchdog ssr_grace)
-    [ -n "$val" ] && CFG_SSR_GRACE="$val"
+    val=$(cfg_get watchdog ssr_grace_sec)
+    case "$val" in ''|*[!0-9]*) CFG_SSR_GRACE=45 ;; *) CFG_SSR_GRACE="$val" ;; esac
 
     CFG_PRIMARY_RECHECK_ENABLED=$(cfg_get watchdog primary_recheck_enabled)
     [ -z "$CFG_PRIMARY_RECHECK_ENABLED" ] && CFG_PRIMARY_RECHECK_ENABLED=0
@@ -116,7 +123,7 @@ read_config() {
     val=$(cfg_get watchdog primary_recheck_interval)
     case "$val" in ''|*[!0-9]*) CFG_PRIMARY_RECHECK_INTERVAL=30 ;; *) CFG_PRIMARY_RECHECK_INTERVAL="$val" ;; esac
 
-    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s fail_threshold=${CFG_FAIL_THRESHOLD} probes cooldown=${CFG_COOLDOWN}s"
+    qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s cooldown=${CFG_COOLDOWN}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% consecutive=${CFG_QUALITY_CONSECUTIVE} (shared thresholds)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"

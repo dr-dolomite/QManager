@@ -1,5 +1,5 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
@@ -10,13 +10,13 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:14:00] INFO  [watchcat:PID] Config reload requested
-[2026-09-21 14:14:00] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=5 probes cooldown=30s
+[2026-09-21 14:14:00] INFO  [watchcat:PID] Config loaded: interval=10s act_after=30s cooldown=30s
 [2026-09-21 14:14:00] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=1 T4=0 backup_sim=2
 [2026-09-21 14:14:00] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=15% consecutive=3 (shared thresholds)
 [2026-09-21 14:14:00] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
 [2026-09-21 14:14:00] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=5min
-[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=5)
-[2026-09-21 14:14:40] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=6 >= 5
+[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 30s)
+[2026-09-21 14:14:40] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 30s >= 30s
 [2026-09-21 14:14:40] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
 [2026-09-21 14:14:40] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
 [2026-09-21 14:14:40] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)

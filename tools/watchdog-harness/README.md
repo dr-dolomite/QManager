@@ -167,3 +167,29 @@ difference to the previous baseline, in every scenario, is one of these:
 `/tmp/qmanager_ping_attaching` (the ping daemon's attach warm-up flag), `0` removes it; it is
 applied on every refresh, also while `ping_stale` is set. No daemon code reads either yet, and
 `ping.json` is excluded from the outputs, so the baseline is unchanged.
+
+## R1: time trigger + outage age (step 1b)
+
+The outage trigger is now in seconds: fresh read, `reachable=false` and outage age
+`min(fail_elapsed_sec, now - resume_mono) >= max(act_after_sec, fail_secs)`. `resume_mono` is
+stamped at the end of the boot settle, when the ping attach flag disappears, on the `radio_off`
+and `locked` exits and at the end of every SIM settle; `_radio_streak_base` and `fail_threshold`
+are gone. The SSR window is `ssr_grace_sec + act_after_eff + 8 + 2 x 10`, and one SSR identity
+holds only once. `inner.sh` seeds `act_after_sec=15` (with the model's `fail_secs` 15 and one
+`streak_fail` per 5 s this triggers on the same pass as the old `fail_threshold=3`) and
+`ssr_grace_sec=45` instead of `ssr_grace`. Scenarios that set `fail_threshold` use the equivalent
+seconds: 19 and 39 `act_after_sec 30` (was 5), 30 `120` (was 20, still never reached), 69 and 70
+`40` (was 8 failures after the resume); 69 and 70 print the outage age, resume stamp and
+`offline_secs` instead of `streak_base`. Every difference to the R0b baseline is one of these:
+
+- every scenario: the state JSON gains `offline_secs` (raw `fail_elapsed_sec`, 0 while
+  reachable) and `failure_secs` carries the outage age; the `Config loaded` line shows
+  `act_after=` and the suspect/recovery log lines print seconds instead of the streak;
+- 23: the LOCKED exit is a resume point, so Tier 1 runs one pass later (outage age 20 s after
+  the exit) instead of on the first pass after it with the streak that grew under the lock;
+- 69, 70: only the `-- extra` line (same AT and call sequence as before).
+
+New scenarios: 73 (radio off for 10 minutes, back on with the link down: Tier 1 30 s after the
+resume), 74 (LOCKED exit after a 6-minute outage: Tier 1 30 s after the exit), 75 (attach flag
+present: outage age 0, trigger only after it disappears), 76 (the same SSR identity holds once:
+the second escalation inside the SSR window goes straight to Tier 1).

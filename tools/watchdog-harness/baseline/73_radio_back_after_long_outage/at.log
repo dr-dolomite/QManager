@@ -1,0 +1,131 @@
+--- pass 1 ---
+--- pass 2 ---
+--- pass 3 ---
+T+60 AT+CFUN?
+--- pass 4 ---
+T+70 AT+CFUN?
+--- pass 5 ---
+T+80 AT+CFUN?
+--- pass 6 ---
+T+90 AT+CFUN?
+--- pass 7 ---
+T+100 AT+CFUN?
+--- pass 8 ---
+T+110 AT+CFUN?
+--- pass 9 ---
+T+120 AT+CFUN?
+--- pass 10 ---
+T+130 AT+CFUN?
+--- pass 11 ---
+T+140 AT+CFUN?
+--- pass 12 ---
+T+150 AT+CFUN?
+--- pass 13 ---
+T+160 AT+CFUN?
+--- pass 14 ---
+T+170 AT+CFUN?
+--- pass 15 ---
+T+180 AT+CFUN?
+--- pass 16 ---
+T+190 AT+CFUN?
+--- pass 17 ---
+T+200 AT+CFUN?
+--- pass 18 ---
+T+210 AT+CFUN?
+--- pass 19 ---
+T+220 AT+CFUN?
+--- pass 20 ---
+T+230 AT+CFUN?
+--- pass 21 ---
+T+240 AT+CFUN?
+--- pass 22 ---
+T+250 AT+CFUN?
+--- pass 23 ---
+T+260 AT+CFUN?
+--- pass 24 ---
+T+270 AT+CFUN?
+--- pass 25 ---
+T+280 AT+CFUN?
+--- pass 26 ---
+T+290 AT+CFUN?
+--- pass 27 ---
+T+300 AT+CFUN?
+--- pass 28 ---
+T+310 AT+CFUN?
+--- pass 29 ---
+T+320 AT+CFUN?
+--- pass 30 ---
+T+330 AT+CFUN?
+--- pass 31 ---
+T+340 AT+CFUN?
+--- pass 32 ---
+T+350 AT+CFUN?
+--- pass 33 ---
+T+360 AT+CFUN?
+--- pass 34 ---
+T+370 AT+CFUN?
+--- pass 35 ---
+T+380 AT+CFUN?
+--- pass 36 ---
+T+390 AT+CFUN?
+--- pass 37 ---
+T+400 AT+CFUN?
+--- pass 38 ---
+T+410 AT+CFUN?
+--- pass 39 ---
+T+420 AT+CFUN?
+--- pass 40 ---
+T+430 AT+CFUN?
+--- pass 41 ---
+T+440 AT+CFUN?
+--- pass 42 ---
+T+450 AT+CFUN?
+--- pass 43 ---
+T+460 AT+CFUN?
+--- pass 44 ---
+T+470 AT+CFUN?
+--- pass 45 ---
+T+480 AT+CFUN?
+--- pass 46 ---
+T+490 AT+CFUN?
+--- pass 47 ---
+T+500 AT+CFUN?
+--- pass 48 ---
+T+510 AT+CFUN?
+--- pass 49 ---
+T+520 AT+CFUN?
+--- pass 50 ---
+T+530 AT+CFUN?
+--- pass 51 ---
+T+540 AT+CFUN?
+--- pass 52 ---
+T+550 AT+CFUN?
+--- pass 53 ---
+T+560 AT+CFUN?
+--- pass 54 ---
+T+570 AT+CFUN?
+--- pass 55 ---
+T+580 AT+CFUN?
+--- pass 56 ---
+T+590 AT+CFUN?
+--- pass 57 ---
+T+600 AT+CFUN?
+--- pass 58 ---
+T+610 AT+CFUN?
+--- pass 59 ---
+T+620 AT+CFUN?
+--- pass 60 ---
+T+630 AT+CFUN?
+--- pass 61 ---
+T+640 AT+CFUN?
+--- pass 62 ---
+T+650 AT+CFUN?
+--- pass 63 ---
+--- pass 64 ---
+--- pass 65 ---
+T+680 AT+CFUN?
+T+680 AT+COPS=2
+T+682 AT+COPS=0
+--- pass 66 ---
+--- pass 67 ---
+--- pass 68 ---

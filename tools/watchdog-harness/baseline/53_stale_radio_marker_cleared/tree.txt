@@ -1,5 +1,5 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=30s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=30s act_after=15s cooldown=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
@@ -9,8 +9,8 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (threshold=3)
-[2026-09-21 14:14:50] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=12 >= 3
+[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (act after 15s)
+[2026-09-21 14:14:50] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 60s >= 15s
 [2026-09-21 14:14:50] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
 [2026-09-21 14:14:50] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
 [2026-09-21 14:14:50] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
@@ -32,9 +32,9 @@
 [2026-09-21 14:15:55] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
 [2026-09-21 14:15:55] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:15:55] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
-[2026-09-21 14:16:25] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=31 (threshold=3)
+[2026-09-21 14:16:25] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=31 (act after 15s)
 [2026-09-21 14:30:55] INFO  [watchcat:PID] Radio reads AT+CFUN=1: clearing the stale radio-down marker
-[2026-09-21 14:30:55] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=205 >= 3
+[2026-09-21 14:30:55] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 1025s >= 15s
 [2026-09-21 14:30:55] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
 [2026-09-21 14:30:55] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
 [2026-09-21 14:30:55] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
