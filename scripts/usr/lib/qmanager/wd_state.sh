@@ -127,7 +127,9 @@ _wd_write_state_file() {
         --argjson enabled "$v_enabled" \
         --arg state "$v_state" \
         --argjson tier "$v_tier" \
-        --argjson failures "$v_failures"         --argjson fsecs "$v_fsecs"         --argjson offline "$v_offline" \
+        --argjson failures "$v_failures" \
+        --argjson fsecs "$v_fsecs" \
+        --argjson offline "$v_offline" \
         --argjson last_time "$v_last_time" \
         --argjson last_tier "$v_last_tier" \
         --argjson total "$v_total" \

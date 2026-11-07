@@ -716,7 +716,7 @@ qmanager
 outage_age=30 resume=5420 offline=420 eff=30
 === pass 46 (t+485) ===
 -- state
-{"timestamp":1790000485,"enabled":true,"state":"cooldown","current_tier":2,"recovery_reason":"outage","last_recovery_time":1790000485,"last_recovery_tier":2,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":84,"failure_secs":30,"offline_secs":420,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5485,"stale_after":90}
+{"timestamp":1790000485,"enabled":true,"state":"cooldown","current_tier":2,"recovery_reason":"outage","last_recovery_time":1790000485,"last_recovery_tier":2,"last_recovery_reason":"outage","total_recoveries":2,"failure_count":84,"failure_secs":62,"offline_secs":452,"cooldown_remaining":30,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5485,"stale_after":90}
 -- files
 etc/qmanager:
 
@@ -729,4 +729,4 @@ qmanager
 -- failover
 (none)
 -- extra
-outage_age=30 resume=5420 offline=420 eff=30
+outage_age=62 resume=5420 offline=452 eff=30

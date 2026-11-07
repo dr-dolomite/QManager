@@ -122,7 +122,15 @@ read_config() {
     [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
 
     val=$(cfg_get watchdog ssr_grace_sec)
-    case "$val" in ''|*[!0-9]*) CFG_SSR_GRACE=45 ;; *) CFG_SSR_GRACE="$val" ;; esac
+    # ssr_grace_sec: 10-120, default 45 (absent or non-numeric).
+    case "$val" in
+        ''|*[!0-9]*) CFG_SSR_GRACE=45 ;;
+        *)
+            CFG_SSR_GRACE="$val"
+            [ "$CFG_SSR_GRACE" -lt 10 ] && CFG_SSR_GRACE=10
+            [ "$CFG_SSR_GRACE" -gt 120 ] && CFG_SSR_GRACE=120
+            ;;
+    esac
 
     CFG_PRIMARY_RECHECK_ENABLED=$(cfg_get watchdog primary_recheck_enabled)
     [ -z "$CFG_PRIMARY_RECHECK_ENABLED" ] && CFG_PRIMARY_RECHECK_ENABLED=0

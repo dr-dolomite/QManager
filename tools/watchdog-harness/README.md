@@ -188,7 +188,9 @@ seconds: 19 and 39 `act_after_sec 30` (was 5), 30 `120` (was 20, still never rea
   `act_after=` and the suspect/recovery log lines print seconds instead of the streak;
 - 23: the LOCKED exit is a resume point, so Tier 1 runs one pass later (outage age 20 s after
   the exit) instead of on the first pass after it with the streak that grew under the lock;
-- 69, 70: only the `-- extra` line (same AT and call sequence as before).
+- 69, 70: the `-- extra` line, and `failure_count` after the radio comes back is the raw
+  ping streak (20/22/24/26) instead of the streak discounted at the resume (2/4/6/8), per
+  spec; the AT and call sequences are the same as before.
 
 New scenarios: 73 (radio off for 10 minutes, back on with the link down: Tier 1 30 s after the
 resume), 74 (LOCKED exit after a 6-minute outage: Tier 1 30 s after the exit), 75 (attach flag
@@ -228,3 +230,22 @@ settings reload ends a 30 minute quality pause and the next pause is 15 minutes)
 drop under a quality pause runs the outage ladder, which succeeds; the quality pause keeps
 running), 83 (an outage pause ends when the lossy link returns and the quality ladder runs at
 once).
+
+## R1 follow-ups (step 1b)
+
+Validator findings on R1: `finish_cooldown` refreshes the outage fields after its fresh ping
+read (`wd_outage_update`); `wd_outage_update` treats an attach flag seen on the last tick as
+still present, so the next pass's tick stamps the resume; `wd_outage_clear` (radio_off and
+LOCKED entry) also zeroes `offline_secs`; `ssr_grace_sec` is clamped to 10-120. Every
+difference to the R2 baseline is in `passes.txt` (and the `-- extra` lines of 69 and 70) and is
+one of these:
+
+- 04, 06, 07, 10, 19, 21, 34, 36-38, 41, 50-52, 61, 62, 71, 74, 76, 77, 82, 83: the pass that
+  finishes a cooldown shows the fresh `failure_secs` / `offline_secs` (0 after a success, the
+  current outage age after a failure) instead of the values from before the cooldown; in 05
+  the escalated cooldowns carry the current outage age (52, 85) instead of 20;
+- 11, 23, 35, 53, 55, 57, 64, 66, 67, 69, 70, 73: `offline_secs` is 0 while in `radio_off` or
+  `locked`, and in a cooldown entered from either, until the next fresh read, instead of the
+  last value before entry.
+
+No AT, call, event or log difference; the attach-edge change and the clamp change no output.

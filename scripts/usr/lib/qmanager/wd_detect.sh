@@ -106,7 +106,9 @@ wd_outage_update() {
     fe="$CQ_FAIL_ELAPSED"
     case "$fe" in ''|*[!0-9]*) fe=0 ;; esac
     wd_offline_secs="$fe"
-    if [ -f "$WD_ATTACH_FLAG" ]; then
+    # The flag may vanish between wd_attach_tick and this read: until the next
+    # pass's tick stamps the resume, a seen flag still counts as present.
+    if [ -f "$WD_ATTACH_FLAG" ] || [ "$_wd_attach_seen" = "1" ]; then
         wd_outage_age=0
         return 0
     fi
@@ -125,6 +127,7 @@ wd_outage_update() {
 # LOCKED / radio_off entry: the watchdog cannot act, so no outage age counts.
 wd_outage_clear() {
     wd_outage_age=0
+    wd_offline_secs=0
 }
 
 # rc 0 when the last fresh read is an outage old enough to start recovery.

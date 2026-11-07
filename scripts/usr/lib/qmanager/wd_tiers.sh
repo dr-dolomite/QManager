@@ -536,6 +536,8 @@ finish_cooldown() {
         local qs=2
         if read_ping; then
             pok=1
+            # The cooldown's fresh read refreshes failure_secs / offline_secs too.
+            wd_outage_update
             if read_quality; then
                 if quality_breached; then
                     qs=1
@@ -585,7 +587,11 @@ finish_cooldown() {
     # --- Reachability path (recovery_reason="outage") ---
     # Try to read fresh ping data
     local rok=0
-    read_ping && rok=1
+    if read_ping; then
+        rok=1
+        # The cooldown's fresh read refreshes failure_secs / offline_secs too.
+        wd_outage_update
+    fi
 
     case "$(wd_cooldown_verdict outage "$rok" "$ping_reachable" 2 "$cooldown_stale_retries")" in
         extend)

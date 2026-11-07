@@ -219,7 +219,7 @@ qmanager
 slot=2 ureads=10 sim_failover_active=true
 === pass 12 (t+148) ===
 -- state
-{"timestamp":1790000148,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000058,"last_recovery_tier":3,"last_recovery_reason":"outage","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":20,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5148,"stale_after":90}
+{"timestamp":1790000148,"enabled":true,"state":"monitor","current_tier":0,"recovery_reason":null,"last_recovery_time":1790000058,"last_recovery_tier":3,"last_recovery_reason":"outage","total_recoveries":1,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5148,"stale_after":90}
 -- files
 etc/qmanager:
 known_iccids
