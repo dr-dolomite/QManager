@@ -490,7 +490,8 @@ _fan_read() {
 # with _FW_RTT / _FW_FAM, and records every slot's state. Polls the result files
 # every FAN_POLL s; the winner is the lowest-numbered slot that answered, decided
 # once every lower slot has finished; the rest are killed. Hard stop one second
-# past the hostname deadline, so a vanished leg cannot hang the cycle.
+# past the hostname deadline, so a vanished leg cannot hang the cycle; at that
+# stop the lowest slot that answered wins.
 _fan_run() {
     _FW=0
     _FW_RTT=""
@@ -522,6 +523,7 @@ _fan_run() {
         _fan_pids="$_fan_pids $!"
     done
 
+    _fhard=0
     _clock
     _fd=$(( _CS + (HOST_DEADLINE + 1) * 100 ))
     while :; do
@@ -537,20 +539,37 @@ _fan_run() {
         [ "$_FW" -ne 0 ] && break
         [ "$_fpend" -eq 0 ] && break
         _clock
-        [ "$_CS" -ge "$_fd" ] && break
+        if [ "$_CS" -ge "$_fd" ]; then
+            _fhard=1
+            break
+        fi
         sleep "$FAN_POLL"
     done
     _fan_kill
 
+    # Hard stop with a lower slot still pending (a hung hostname lookup with no
+    # timeout applet) and a higher one answered: take the lowest answered slot
+    # rather than report an outage on a link that works.
+    if [ "$_FW" -eq 0 ]; then
+        for _fs in $1; do
+            _fan_read "$_fs"
+            if [ "$_FR_ST" = "ok" ]; then
+                _FW="$_fs"; _FW_RTT="$_FR_RTT"; _FW_FAM="$_FR_FAM"
+                break
+            fi
+        done
+    fi
+
     # What each slot reported before it was cut off. A slot with no result was
-    # killed for a lower slot's win ("standby") or timed out with no winner ("miss").
+    # killed for a lower slot's win ("standby"), or still silent at the hard stop
+    # or with no winner ("miss").
     for _fs in $1; do
         _fan_read "$_fs"
         case "$_FR_ST" in
             ok) _slot_set "$_fs" ok "$_FR_RTT" ;;
             miss) _slot_set "$_fs" miss "" ;;
             *)
-                if [ "$_FW" -ne 0 ]; then _slot_set "$_fs" standby ""; else _slot_set "$_fs" miss ""; fi
+                if [ "$_FW" -ne 0 ] && [ "$_fhard" -eq 0 ]; then _slot_set "$_fs" standby ""; else _slot_set "$_fs" miss ""; fi
                 ;;
         esac
     done

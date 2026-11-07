@@ -298,6 +298,7 @@ conn_window_sec=300      # stats window in seconds (conn_state_resolve)
 conn_qdeb_sec=15         # quality-event debounce, seconds of new samples
 conn_qdeb_vt_sec=10      # ... when the metric's preset is very-tolerant
 _conn_sens_applied=""    # sensitivity the four values above were resolved for
+_conn_sens_resolved=0    # 1 once resolved, so an absent name ("") resolves only once
 _last_ping_ts=0          # tracks last processed ping.json timestamp (stats gate)
 
 # Connection-quality event thresholds (consumed by events.sh
@@ -1723,13 +1724,14 @@ read_ping_data() {
 
     # The table owns ring size, window and quality debounce; resolve once per
     # sensitivity change. An absent name (older daemon) reads as relaxed.
-    if [ "$conn_sensitivity" != "$_conn_sens_applied" ] || [ -z "$_conn_sens_applied" ]; then
+    if [ "$conn_sensitivity" != "$_conn_sens_applied" ] || [ "$_conn_sens_resolved" != "1" ]; then
         conn_state_resolve "${conn_sensitivity:-relaxed}"
         conn_ring_size="$CQ_CFG_RING_SIZE"
         conn_window_sec="$CQ_CFG_WINDOW_SEC"
         conn_qdeb_sec="$CQ_CFG_QDEB_SEC"
         conn_qdeb_vt_sec="$CQ_CFG_QDEB_VT_SEC"
         _conn_sens_applied="$conn_sensitivity"
+        _conn_sens_resolved=1
         _last_ping_ts=0
     fi
 

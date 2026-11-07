@@ -320,14 +320,19 @@ conn_state_cadence() {
 
 # conn_state_tables_json: the `tables` object of the connection_quality CGI
 # (contract 5.1), generated from conn_state_resolve so the CGI never carries a
-# second copy of the table.
+# second copy of the table. It walks all four names through conn_state_resolve,
+# so it restores the caller's CQ_CFG_* (re-resolving the name that was set on
+# entry) before returning; a caller that had resolved nothing keeps the last
+# walked name.
 conn_state_tables_json() {
+    _cq_tj_keep="$CQ_CFG_SENSITIVITY"
     _cq_tj=""
     for _cq_tn in sensitive regular relaxed quiet; do
         conn_state_resolve "$_cq_tn"
         [ -n "$_cq_tj" ] && _cq_tj="$_cq_tj,"
         _cq_tj="$_cq_tj\"$_cq_tn\":{\"interval_sec\":$CQ_CFG_INTERVAL_SEC,\"fail_secs\":$CQ_CFG_FAIL_SECS,\"recover_secs\":$CQ_CFG_RECOVER_SECS,\"window_sec\":$CQ_CFG_WINDOW_SEC,\"quality_debounce_sec\":$CQ_CFG_QDEB_SEC,\"quality_debounce_vt_sec\":$CQ_CFG_QDEB_VT_SEC}"
     done
+    [ -n "$_cq_tj_keep" ] && conn_state_resolve "$_cq_tj_keep"
     printf '{"sensitivity":{%s},"presets":{"latency":{"standard":150,"tolerant":250,"very-tolerant":500},"loss":{"standard":15,"tolerant":30,"very-tolerant":50},"custom_range":{"latency_ms":[1,10000],"loss_pct":[1,100]}}}' "$_cq_tj"
 }
 

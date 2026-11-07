@@ -76,6 +76,9 @@ leg jobs makes it print 4, so the check has teeth.
 | 15_main_attach_warmup | real main: failed cycles stay out of the ring during the attach warm-up |
 | 16_sensitivity_table | `load_config` resolves the contract table; old `profile` key fallback; unknown reads relaxed; `interval_override` ignored |
 | 17_ring_trim | real main with the ring size forced to 3: the ring passes size + 10 once, then trims back (about 15 s) |
+| 18_hard_stop_lower_pending | no timeout applet, a lower hostname slot hangs, higher slots answered: at the 5 s hard stop the lowest answered slot wins |
+| 19_term_mid_fanout | SIGTERM with legs in flight: no orphan, fan dir and pid file removed, daemon gone |
+| 20_ring_stats_table | `cq_ring_stats` over 0/9/10/60/61/300/600-line rings, downsampling, an all-lost bucket |
 
 ## Output per scenario
 
