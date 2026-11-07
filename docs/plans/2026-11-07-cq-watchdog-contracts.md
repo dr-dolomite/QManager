@@ -316,3 +316,11 @@ C. **Watchdog status additions** (contract §3 object and the CGI `status`): `of
 `max(step_wait_eff, 10 × interval_sec + 10)` seconds (110 s on `quiet`; unchanged on the other
 sensitivities with the default `step_wait_sec`). Outage cooldowns and the Tier 3 / SIM settle floor
 (90 s) are unchanged. `effective.step_wait_sec` in the watchdog GET stays the outage value.
+
+## 11. Adapter addition (R6, 2026-11-07)
+
+`plat_paths` also sets `PF_PING_SVC`, the service the dead-prober (§5.2) passes to `svc_start` when
+the ping cache has been stale for more than 300 s (at most once per 900 s). RM551E: `qmanager` (the
+procd service whose `ping` instance is the probe daemon; procd `start` on a running service only
+starts missing instances, so the poller instance is left alone; `restart` is never used). RM520N sets
+its own unit name in the port.
