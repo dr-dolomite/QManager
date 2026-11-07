@@ -221,7 +221,9 @@ never auto-disables, §5.6).
   be JSON booleans; slot `1|2|null`. Two passes: validate everything first, then stage and commit
   once. Cross-field (against the merged result): `tier3_enabled:true` with no slot →
   `invalid_field` `field:"tier3_enabled"`; clearing the slot while Tier 3 stays on →
-  `invalid_field` `field:"backup_sim_slot"`. Turning Tier 3 off during an active failover is
+  `invalid_field` `field:"backup_sim_slot"`; a body that sets `tier3_enabled:true` and
+`backup_sim_slot:null` together reports `field:"tier3_enabled"`. Unknown `settings` keys (including
+the retired `fail_threshold`, `check_interval`, `cooldown`) → `invalid_field` with that key. Turning Tier 3 off during an active failover is
   allowed. Raises the watchdog reload flag (never restarts the daemon); `enabled` changes
   enable+start / stop+disable the service; a save resets failback give-up and the quality
   hold-off growth. → `{"success":true}`.
@@ -272,7 +274,10 @@ Function contracts exactly as spec §7, with these RM551E bindings:
 missing). `cfg_commit` commits the `quecmanager` package. `PF_*` names set by `plat_paths`:
 `PF_PING_RELOAD PF_QUALITY_RELOAD PF_WD_RELOAD PF_MAINT_LOCK PF_PROFILE_APPLY_PID
 PF_RESTORE_PID PF_SIM_SWITCH_FLAG PF_LONG_RUNNING PF_STATE_DIR PF_FAILOVER_RECORD
-PF_FAILOVER_MIRROR PF_CRASH_LOG PF_RUN_DIR PF_DUAL_SIM_CACHE`. `plat_ssr_poll` sets
+PF_FAILOVER_MIRROR PF_CRASH_LOG PF_RUN_DIR PF_DUAL_SIM_CACHE PF_EVENTS_FILE PF_TOWER_LOCK_CONFIG
+PF_FORCE_TIER2_FLAG PF_REFRESH_POLICY_FLAG` (the last four added in step 1a; a platform without the
+poller-tier or policy-band flags sets them empty and the neutral code skips them).
+`plat_tower_failover pause|resume`. `plat_ssr_poll` sets
 `PLAT_SSR_MONO` (int or empty) and `PLAT_SSR_ID` (identity string or empty).
 
 ## 8. Contract tests
