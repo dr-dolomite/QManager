@@ -225,7 +225,9 @@ _tower_failover_wanted() {
 # --- Test catalog ------------------------------------------------------------
 # id|category|label|function   (ids are frontend translation keys: keep stable)
 
-PING_TARGET=$(_uci ping_profile.target_ipv4)
+# Slot 1 of the probe targets (a UCI list; `uci get` joins items with spaces).
+PING_TARGET=$(_uci ping_profile.targets)
+PING_TARGET="${PING_TARGET%% *}"
 case "$PING_TARGET" in
     ''|*[!0-9.]*) PING_TARGET="8.8.8.8" ;;
 esac
@@ -782,7 +784,7 @@ t_net_reachable() {
         echo "fail|ping cache missing"
         return
     fi
-    jq -c '{reachable, last_family, streak_fail, streak_success, profile, targets}' "$f" >> "$OUT" 2>&1
+    jq -c '{reachable, last_family, last_leg, streak_fail, streak_success, profile, targets}' "$f" >> "$OUT" 2>&1
     r=$(jq -r '.reachable | if . == null then "null" else tostring end' "$f" 2>/dev/null)
     fam=$(jq -r '.last_family // "none"' "$f" 2>/dev/null)
     case "$r" in

@@ -1,0 +1,41 @@
+=== etc/config/quecmanager
+
+=== tmp/qmanager.log
+[TS] INFO  [ping:PID] ========================================
+[TS] INFO  [ping:PID] QManager Ping Daemon starting (PID N)
+[TS] INFO  [ping:PID] Profile: sensitive, interval 1s, fail 6s, recover 3s
+[TS] INFO  [ping:PID] Slots: 1=1.1.1.1 2=8.8.8.8 3=2606:4700:4700::1111 4=cloudflare.com
+[TS] INFO  [ping:PID] IPv6 probe: ping -6, history 60, leg deadline 3s
+[TS] INFO  [ping:PID] ========================================
+[TS] INFO  [ping:PID] First probe answered, attach warm-up over
+
+=== tmp/qmanager_ping.json
+{"timestamp":T,"mono":M,"profile":"sensitive","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":1,"fail_secs":6,"recover_secs":3,"last_rtt_ms":20.0,"reachable":true,"streak_success":3,"streak_fail":0,"fail_elapsed_sec":F,"during_recovery":false,"last_family":"ipv4","last_leg":2,"cycle_ms":C}
+
+=== tmp/qmanager_ping_history
+20.0 2
+20.0 2
+20.0 2
+
+=== tmp/qmanager_ping_slots.json
+{"mono":M,"slots":[{"state":"miss","rtt_ms":null},{"state":"ok","rtt_ms":20.0},{"state":"standby","rtt_ms":null},{"state":"standby","rtt_ms":null}]}
+
+=== var/run/qmanager/ping.env
+_cq_ts='T'
+_cq_mono='M'
+_cq_reach='true'
+_cq_rtt='20.0'
+_cq_ss='3'
+_cq_sf='0'
+_cq_fe='F'
+_cq_dr='false'
+_cq_iv='1'
+_cq_fs='6'
+_cq_rs='3'
+_cq_prof='sensitive'
+_cq_fam='ipv4'
+_cq_tgt='1.1.1.1'
+_cq_leg='2'
+_cq_cyc='C'
+qm_sidecar_end='1'
+

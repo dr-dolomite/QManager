@@ -1,0 +1,11 @@
+=== etc/config/quecmanager
+
+=== tmp/qmanager.log
+[TS] WARN  [ping:PID] IPv6 probing unavailable (no working ping -6 or ping6), IPv4-only reachability
+
+=== var/run/qmanager/ping_fan/r2
+ok 20.0 ipv4
+
+=== var/run/qmanager/ping_fan/r4
+miss
+

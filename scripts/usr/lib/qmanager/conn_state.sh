@@ -50,7 +50,7 @@ _cq_reset() {
     CQ_TARGET=""
     CQ_FAIL_SECS=""
     CQ_RECOVER_SECS=""
-    CQ_LAST_TARGET=""
+    CQ_LAST_LEG=0
     CQ_CYCLE_MS=""
 }
 _cq_reset
@@ -74,7 +74,7 @@ conn_state_read() {
         [(.timestamp|s), (.mono|s), (.reachable|s), (.last_rtt_ms|s),
          (.streak_success|s), (.streak_fail|s), (.fail_elapsed_sec|s), (.during_recovery|s),
          (.interval_sec|s), (.fail_secs|s), (.recover_secs|s), (.profile|s),
-         (.last_family|s), ((.targets // [])[0]|s), (.last_target|s),
+         (.last_family|s), ((.targets // [])[0]|s), (.last_leg|s),
          (.cycle_ms|s)] | @tsv' \
         "$CQ_PING_CACHE" 2>/dev/null </dev/null)
     if [ -z "$_cq_row" ]; then
@@ -83,7 +83,7 @@ conn_state_read() {
     fi
 
     IFS="$_CQ_TAB" read -r _cq_ts _cq_mono _cq_reach _cq_rtt _cq_ss _cq_sf _cq_fe _cq_dr \
-        _cq_iv _cq_fs _cq_rs _cq_prof _cq_fam _cq_tgt _cq_last_target _cq_cyc <<EOF
+        _cq_iv _cq_fs _cq_rs _cq_prof _cq_fam _cq_tgt _cq_leg _cq_cyc <<EOF
 $_cq_row
 EOF
 
@@ -143,7 +143,7 @@ EOF
     [ "$_cq_prof" != "-" ] && CQ_PROFILE="$_cq_prof"
     [ "$_cq_fam" != "-" ] && CQ_LAST_FAMILY="$_cq_fam"
     [ "$_cq_tgt" != "-" ] && CQ_TARGET="$_cq_tgt"
-    [ "$_cq_last_target" != "-" ] && CQ_LAST_TARGET="$_cq_last_target"
+    case "$_cq_leg" in [0-4]) CQ_LAST_LEG="$_cq_leg" ;; esac
     case "$_cq_cyc" in ''|*[!0-9]*) ;; *) CQ_CYCLE_MS="$_cq_cyc" ;; esac
     return 0
 }
@@ -190,7 +190,7 @@ conn_state_read_env() {
     [ "$CQ_PING_CACHE" -nt "$CQ_PING_ENV" ] && return 2
     _cq_ts=""; _cq_mono=""; _cq_reach=""; _cq_rtt=""; _cq_ss=""; _cq_sf=""; _cq_fe=""
     _cq_dr=""; _cq_iv=""; _cq_fs=""; _cq_rs=""; _cq_prof=""; _cq_fam=""; _cq_tgt=""
-    _cq_last_target=""; _cq_cyc=""
+    _cq_leg=""; _cq_cyc=""
     cq_env_source "$CQ_PING_ENV" || return 2
     _cq_reset
 
@@ -250,7 +250,7 @@ conn_state_read_env() {
     [ "$_cq_prof" != "-" ] && CQ_PROFILE="$_cq_prof"
     [ "$_cq_fam" != "-" ] && CQ_LAST_FAMILY="$_cq_fam"
     [ "$_cq_tgt" != "-" ] && CQ_TARGET="$_cq_tgt"
-    [ "$_cq_last_target" != "-" ] && CQ_LAST_TARGET="$_cq_last_target"
+    case "$_cq_leg" in [0-4]) CQ_LAST_LEG="$_cq_leg" ;; esac
     case "$_cq_cyc" in ''|*[!0-9]*) ;; *) CQ_CYCLE_MS="$_cq_cyc" ;; esac
     return 0
 }

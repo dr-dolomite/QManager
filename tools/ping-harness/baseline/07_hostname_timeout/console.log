@@ -1,0 +1,8 @@
+hostname timeout: rc=0 rtt=20.0 family=ipv4 leg=2
+  slots: 1=miss(null) 2=ok(20.0) 3=standby(null) 4=standby(null)
+  elapsed < 520 cs: yes
+  elapsed >= 400 cs: yes
+  probed: 2606:4700:4700::1111 8.8.8.8 cloudflare.com slow.example.org
+  finished: 8.8.8.8
+  cut short: 2606:4700:4700::1111 cloudflare.com slow.example.org
+  orphans: 0

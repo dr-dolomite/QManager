@@ -6,20 +6,19 @@
 # (poller, watchcat, frontend via status.json) reads this daemon's output. It
 # never touches the modem serial port.
 #
-# Probing is ICMP (BusyBox ping), never HTTP and never a hostname leg of its own.
-# Four legs, all IP literals except a user-set hostname primary:
-#   P4 = target_ipv4 (default 1.1.1.1)
-#   S4 = the other provider's IPv4 (8.8.8.8; 1.1.1.1 when P4 is already Google)
-#   P6 = target_ipv6 (default 2606:4700:4700::1111)
-#   S6 = the other provider's IPv6 (2001:4860:4860::8888, or Cloudflare's when
-#        P6 is already Google)
+# Probing is ICMP (BusyBox ping), never HTTP. Four target SLOTS (connection_quality
+# targets, defaults 1.1.1.1 8.8.8.8 2606:4700:4700::1111 cloudflare.com); each is an
+# IPv4 literal, an IPv6 literal or a hostname.
 #
-# Cycle: P4 alone (`ping -c1 -W2 -w3`, a hard 3 s deadline; a hostname P4 gets
-# `plat_timeout 4` instead because -w does not cover the lookup). A healthy cycle sends
-# one probe. When P4 fails, S4, P6 and S6 run IN PARALLEL (the IPv6 legs only when
-# the kernel has an IPv6 default route), and the winner is the first leg in the
-# fixed priority S4 > P6 > S6 that answered, so the reported RTT is deterministic.
-# Worst case ~4 s (blackholed P4 2 s + parallel fan-out 2 s).
+# Cycle: the first usable slot alone (`ping -c1 -W2 -w3`, a hard 3 s deadline; a
+# hostname gets `plat_timeout 4` as well because -w does not cover the lookup).
+# A slot whose address family has no route (an IPv6 literal with no non-lo ::/0
+# route, or no working ping -6) is skipped, not failed, and the next usable slot
+# is promoted to "alone". A healthy cycle sends one probe. When that fails, every
+# other usable slot runs IN PARALLEL; the result files are polled every 0.2 s and
+# the winner is the lowest-numbered slot that answered, decided as soon as every
+# lower slot has finished. The rest are killed (with their ping children), so the
+# fan-out never waits for its slowest leg.
 #
 # Debounce is wall-clock on the monotonic clock (/proc/uptime centiseconds, read
 # with the `read` builtin): `reachable` flips false once the failure run, timed
@@ -33,9 +32,11 @@
 # prints no round-trip line, so no rtt, so failure: the fail-safe.
 #
 # Output: /tmp/qmanager_ping.json (printf, tmp + mv; the last good file is kept
-#         when a write fails) and the PF_RUN_DIR/ping.env poller sidecar.
-# History: /tmp/qmanager_ping_history, one "<rtt|null> <leg>" line per cycle
-#         (leg p4|s4|p6|s6|-), newest last, HISTORY_SIZE lines. Readers use $1.
+#         when a write fails), the PF_RUN_DIR/ping.env poller sidecar and
+#         /tmp/qmanager_ping_slots.json (per-slot state of the last cycle).
+# History: /tmp/qmanager_ping_history, one "<rtt|null> <slot>" line per cycle
+#         (slot 1-4, or - when nothing answered), newest last, HISTORY_SIZE
+#         lines. Readers use $1.
 # DNS: /tmp/qmanager_dns.json + dns.env from a detached job (see below).
 #
 # Stats (avg/min/max/jitter/loss) and the history JSON array are computed by the
@@ -84,10 +85,15 @@ qlog_init "ping"
 # startup and on every reload-flag trip. The profile name drives interval +
 # fail/recover seconds through conn_state_resolve (the one profile table).
 PING_PROFILE="${PING_PROFILE:-relaxed}"
-PING_TARGET_IPV4="1.1.1.1"
-PING_TARGET_IPV6="2606:4700:4700::1111"
-ALT_TARGET_IPV4="8.8.8.8"
-ALT_TARGET_IPV6="2001:4860:4860::8888"
+# The four target slots (connection_quality targets), slot 1 first.
+DEF_T1="1.1.1.1"
+DEF_T2="8.8.8.8"
+DEF_T3="2606:4700:4700::1111"
+DEF_T4="cloudflare.com"
+PING_T1="$DEF_T1"
+PING_T2="$DEF_T2"
+PING_T3="$DEF_T3"
+PING_T4="$DEF_T4"
 PING_INTERVAL=5
 PING_INTERVAL_OVERRIDE=""  # connection_quality interval_override (1-60); empty = unused
 FAIL_THRESHOLD=3           # logged only: the verdict is timed, not counted
@@ -97,7 +103,8 @@ PING_RECOVER_SECS=10       # in the cache as fail_secs / recover_secs
 HISTORY_SIZE=60
 PROBE_WAIT=2               # ping -W : wait for the first reply (s)
 PROBE_DEADLINE=3           # ping -w : hard per-leg deadline (s)
-HOST_DEADLINE=4            # timeout for a hostname P4 (-w does not bound the lookup)
+HOST_DEADLINE=4            # timeout for a hostname slot (-w does not bound the lookup)
+FAN_POLL="0.2"             # fan-out: how often the result files are polled (s)
 SLEEP_FLOOR_CS=20          # fixed-rate loop: never sleep less than 0.2 s
 # Attach warm-up: until the first probe answers (at most this long after start),
 # a failed probe still drives the streaks and `reachable`, but it is not written to
@@ -114,6 +121,8 @@ PING6_WARNED=0
 CACHE_FILE="/tmp/qmanager_ping.json"
 CACHE_TMP="/tmp/qmanager_ping.json.tmp"
 HISTORY_FILE="/tmp/qmanager_ping_history"
+SLOTS_FILE="/tmp/qmanager_ping_slots.json"
+SLOTS_TMP="/tmp/qmanager_ping_slots.json.tmp"
 RECOVERY_FLAG="/tmp/qmanager_recovery_active"
 RELOAD_FLAG="$PF_PING_RELOAD"
 PID_FILE="/tmp/qmanager_ping.pid"
@@ -127,7 +136,7 @@ IPV6_ROUTE="/proc/net/ipv6_route"
 SC_DIR="$PF_RUN_DIR"
 SC_PING="$SC_DIR/ping.env"
 SC_DNS="$SC_DIR/dns.env"
-# Result files of the parallel fan-out (one per leg), inside the root-only dir.
+# Result files of the parallel fan-out (one per slot), inside the root-only dir.
 FAN_DIR="$SC_DIR/ping_fan"
 
 # --- State Variables ---------------------------------------------------------
@@ -135,8 +144,11 @@ streak_success=0
 streak_fail=0
 reachable="true"
 last_family="none"     # ipv4 | ipv6 | none: which family answered last cycle
-last_target=""         # the literal (or hostname) that answered last cycle, "" = none
-last_leg="-"           # p4 | s4 | p6 | s6 | -
+last_leg=0             # slot (1-4) that answered last cycle, 0 = none
+# Per-slot outcome of the last cycle (SS = state, SR = rtt or "null"):
+# ok | miss | skipped | standby.
+SS1="standby"; SS2="standby"; SS3="standby"; SS4="standby"
+SR1="null"; SR2="null"; SR3="null"; SR4="null"
 fail_elapsed_sec=0     # seconds into the current failure run, 0 when not failing
 cycle_ms=0             # last measured cycle period (start to start), ms
 history_count=0        # tracked in shell: avoids a wc -l fork every cycle
@@ -230,67 +242,87 @@ detect_ping6() {
     return 1
 }
 
-# Target charsets (same rules as ping_profile.sh validate_target, plus no leading
-# '-' so a value can never be parsed as a ping option). Everything written into
+# Target rule (contract 5.2, same as the CGI): IPv4 literal, IPv6 literal or
+# hostname; non-empty, at most 128 chars, charset [0-9A-Za-z.:%-], no leading '-'
+# so a value can never be parsed as a ping option. Everything written into
 # ping.json therefore needs no escaping beyond the profile name.
-_target4_ok() {
-    case "$1" in ''|-*|*[!0-9A-Za-z.-]*) return 1 ;; esac
-    [ "${#1}" -le 128 ]
-}
-_target6_ok() {
-    case "$1" in ''|-*|*[!0-9A-Fa-f:.%]*) return 1 ;; esac
+_target_ok() {
+    case "$1" in ''|-*|*[!0-9A-Za-z.:%-]*) return 1 ;; esac
     [ "${#1}" -le 128 ]
 }
 
-# The built-in alternate is "the other provider": Google when the primary is
-# Cloudflare or anything custom, Cloudflare when the primary is already Google.
-_set_alternates() {
-    case "$PING_TARGET_IPV4" in
-        8.8.8.8|8.8.4.4|dns.google) ALT_TARGET_IPV4="1.1.1.1" ;;
-        *) ALT_TARGET_IPV4="8.8.8.8" ;;
+# _t_kind <target>: _TK = v6 (has a colon) | host (anything but digits and dots) | v4.
+_t_kind() {
+    case "$1" in
+        *:*) _TK="v6" ;;
+        *[!0-9.]*) _TK="host" ;;
+        *) _TK="v4" ;;
     esac
-    case "$PING_TARGET_IPV6" in
-        2001:4860:4860:*) ALT_TARGET_IPV6="2606:4700:4700::1111" ;;
-        *) ALT_TARGET_IPV6="2001:4860:4860::8888" ;;
+}
+
+# _slot_target <1-4>: _ST = that slot's target.
+_slot_target() {
+    case "$1" in
+        1) _ST="$PING_T1" ;;
+        2) _ST="$PING_T2" ;;
+        3) _ST="$PING_T3" ;;
+        *) _ST="$PING_T4" ;;
+    esac
+}
+
+# _slot_set <1-4> <state> <rtt|"">: record one slot's outcome of this cycle.
+_slot_set() {
+    _ss_r="${3:-null}"
+    case "$1" in
+        1) SS1="$2"; SR1="$_ss_r" ;;
+        2) SS2="$2"; SR2="$_ss_r" ;;
+        3) SS3="$2"; SR3="$_ss_r" ;;
+        *) SS4="$2"; SR4="$_ss_r" ;;
     esac
 }
 
 # --- Load configuration (cfg_get) and re-resolve the profile -----------------
-# Profile name + the IPv4/IPv6 targets from connection_quality, falling back
-# to relaxed / Cloudflare when a key is unset or fails the charset check. The
-# legacy target_1/target_2 keys (old HTTP URLs) are deliberately NOT read.
+# Profile name + the four target slots from connection_quality. A missing
+# targets list (before the migration seeds it) reads as the defaults; a slot
+# that fails the rule falls back to its own default with a warning.
 load_config() {
     local _profile
-    local _t4
-    local _t6
+    local _tl
+    local _tv
+    local _i
     local _override
 
     _profile=$(cfg_get connection_quality profile)
-    _t4=$(cfg_get connection_quality target_ipv4)
-    _t6=$(cfg_get connection_quality target_ipv6)
+    _tl=$(cfg_get_list connection_quality targets)
     _override=$(cfg_get connection_quality interval_override)
 
     PING_PROFILE="relaxed"
     [ -n "$_profile" ] && PING_PROFILE="$_profile"
 
-    # Reset to the defaults first so a cleared config key reverts on reload.
-    PING_TARGET_IPV4="1.1.1.1"
-    PING_TARGET_IPV6="2606:4700:4700::1111"
-    if [ -n "$_t4" ]; then
-        if _target4_ok "$_t4"; then
-            PING_TARGET_IPV4="$_t4"
-        else
-            qlog_warn "target_ipv4 rejected (bad charset or length), using 1.1.1.1"
-        fi
+    # Reset to the defaults first so a cleared list reverts on reload.
+    PING_T1="$DEF_T1"
+    PING_T2="$DEF_T2"
+    PING_T3="$DEF_T3"
+    PING_T4="$DEF_T4"
+    if [ -n "$_tl" ]; then
+        _i=0
+        while IFS= read -r _tv; do
+            _i=$((_i + 1))
+            [ "$_i" -le 4 ] || break
+            if _target_ok "$_tv"; then
+                case "$_i" in
+                    1) PING_T1="$_tv" ;;
+                    2) PING_T2="$_tv" ;;
+                    3) PING_T3="$_tv" ;;
+                    *) PING_T4="$_tv" ;;
+                esac
+            else
+                qlog_warn "target slot $_i rejected (empty, bad charset or length), using its default"
+            fi
+        done <<EOT
+$_tl
+EOT
     fi
-    if [ -n "$_t6" ]; then
-        if _target6_ok "$_t6"; then
-            PING_TARGET_IPV6="$_t6"
-        else
-            qlog_warn "target_ipv6 rejected (bad charset or length), using 2606:4700:4700::1111"
-        fi
-    fi
-    _set_alternates
 
     # interval_override: integer seconds 1-60, else unused (reset first so a
     # cleared/invalid value reverts to the profile interval on reload).
@@ -341,40 +373,70 @@ parse_rtt() {
     _RTT="$(( _pt / 10 )).$(( _pt % 10 ))"
 }
 
-# --- One leg ------------------------------------------------------------------
-# probe_leg <target> <4|6>: one echo request with a hard deadline; _RTT on success.
-probe_leg() {
-    _pl_out=""
-    if [ "$2" = "6" ]; then
-        [ -n "$PING6_CMD" ] || return 1
-        # $PING6_CMD is an internal fixed token ("ping -6" / "ping6"): intended split.
-        # shellcheck disable=SC2086
-        _pl_out=$($PING6_CMD -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
-    else
-        case "$1" in
-            *[!0-9.]*)
-                _pl_out=$(plat_timeout "$HOST_DEADLINE" ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
-                ;;
-            *)
-                _pl_out=$(ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
-                ;;
-        esac
-    fi
-    parse_rtt "$_pl_out"
+# --- Address family from a ping banner ----------------------------------------
+# _BF = ipv6 when the resolved address in "PING host (addr): 56 data bytes"
+# holds a colon, else ipv4 (also when the banner is missing or odd).
+_banner_family() {
+    _BF="ipv4"
+    case "$1" in
+        *"PING "*" ("*"): "*)
+            _bf="${1#*PING }"
+            _bf="${_bf#*\(}"
+            _bf="${_bf%%\)*}"
+            case "$_bf" in *:*) _BF="ipv6" ;; esac
+            ;;
+    esac
 }
 
-# Background body of one fan-out leg: writes the rtt (or nothing) to its file.
-leg_job() { # target family file
+# --- One leg ------------------------------------------------------------------
+# probe_leg <target>: one echo request with a hard deadline; on success _RTT is
+# the round trip and _FAM the family that answered (a literal's own family, a
+# hostname's from the ping banner).
+probe_leg() {
+    _pl_out=""
+    _RTT=""
+    _FAM="none"
+    _t_kind "$1"
+    case "$_TK" in
+        v6)
+            [ -n "$PING6_CMD" ] || return 1
+            # $PING6_CMD is an internal fixed token ("ping -6" / "ping6"): intended split.
+            # shellcheck disable=SC2086
+            _pl_out=$($PING6_CMD -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
+            parse_rtt "$_pl_out" || return 1
+            _FAM="ipv6"
+            ;;
+        host)
+            _pl_out=$(plat_timeout "$HOST_DEADLINE" ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
+            parse_rtt "$_pl_out" || return 1
+            _banner_family "$_pl_out"
+            _FAM="$_BF"
+            ;;
+        *)
+            _pl_out=$(ping -c 1 -W "$PROBE_WAIT" -w "$PROBE_DEADLINE" "$1" 2>/dev/null </dev/null)
+            parse_rtt "$_pl_out" || return 1
+            _FAM="ipv4"
+            ;;
+    esac
+    return 0
+}
+
+# Background body of one fan-out leg: leaves "ok <rtt> <family>" or "miss" in its
+# result file (tmp + mv, so the poller never reads a half-written one).
+leg_job() { # target file
     # Inherited traps would delete the daemon's PID file when this job exits.
     trap - EXIT INT TERM
-    if probe_leg "$1" "$2"; then
-        printf '%s\n' "$_RTT" > "$3"
+    if probe_leg "$1"; then
+        printf 'ok %s %s\n' "$_RTT" "$_FAM" > "$2.tmp"
+    else
+        printf 'miss\n' > "$2.tmp"
     fi
+    mv -f "$2.tmp" "$2"
     exit 0
 }
 
 # True when the kernel holds a usable IPv6 default route (::/0 not on lo).
-# Read with builtins only; this runs on the failure path.
+# Read with builtins only; this runs every cycle.
 _ipv6_default_route() {
     [ -r "$IPV6_ROUTE" ] || return 1
     {
@@ -388,94 +450,178 @@ _ipv6_default_route() {
     return 1
 }
 
+# Kill the fan-out legs AND their children. A leg is leg_job -> (function
+# subshell ->) timeout -> ping; signalling only the job leaves the probe running
+# to its own deadline, so the descendants are collected from /proc first (ppid is
+# field 4 of /proc/<pid>/stat; the comm of our own tree has no spaces) and
+# everything is signalled at once. Reaps the jobs it started.
 _fan_kill() {
-    [ -n "$_fan_pids" ] && kill $_fan_pids 2>/dev/null
+    [ -n "$_fan_pids" ] || return 0
+    _kt_all="$_fan_pids"
+    _kt_new="$_fan_pids"
+    while [ -n "$_kt_new" ]; do
+        _kt_next=""
+        for _kt_f in /proc/[0-9]*/stat; do
+            _kt_pp=""
+            { read -r _kt_pid _kt_comm _kt_st _kt_pp _kt_rest < "$_kt_f"; } 2>/dev/null || continue
+            case "$_kt_pp" in ''|*[!0-9]*) continue ;; esac
+            for _kt_p in $_kt_new; do
+                if [ "$_kt_pp" = "$_kt_p" ]; then
+                    _kt_next="$_kt_next $_kt_pid"
+                    break
+                fi
+            done
+        done
+        _kt_all="$_kt_all $_kt_next"
+        _kt_new="$_kt_next"
+    done
+    # shellcheck disable=SC2086
+    kill $_kt_all 2>/dev/null
+    # shellcheck disable=SC2086
+    wait $_fan_pids 2>/dev/null
     _fan_pids=""
 }
 
-# _fan_read <leg>: _FR = that leg's rtt, "" when it did not answer.
+# _fan_read <slot>: _FR_ST = ok | miss | "" (still running), _FR_RTT, _FR_FAM.
 _fan_read() {
-    _FR=""
-    { read -r _FR < "$FAN_DIR/$1"; } 2>/dev/null
-    case "$_FR" in ''|*[!0-9.]*) _FR="" ;; esac
+    _FR_ST=""
+    _FR_RTT=""
+    _FR_FAM=""
+    { read -r _FR_ST _FR_RTT _FR_FAM < "$FAN_DIR/r$1"; } 2>/dev/null
+    case "$_FR_ST" in
+        ok)
+            case "$_FR_RTT" in ''|*[!0-9.]*) _FR_ST="miss" ;; esac
+            case "$_FR_FAM" in ipv4|ipv6) ;; *) _FR_FAM="ipv4" ;; esac
+            ;;
+        miss) ;;
+        *) _FR_ST="" ;;
+    esac
 }
 
-# --- Probe one cycle ----------------------------------------------------------
-# Sets PROBE_RTT, last_family, last_target, last_leg; returns 0 when any leg
-# answered. Globals, not stdout: a $( ) subshell would lose them.
-PROBE_RTT=""
-probe_cycle() {
-    if probe_leg "$PING_TARGET_IPV4" 4; then
-        PROBE_RTT="$_RTT"
-        last_family="ipv4"
-        last_target="$PING_TARGET_IPV4"
-        last_leg="p4"
-        return 0
-    fi
+# --- Fan-out over the remaining usable slots ---------------------------------
+# _fan_run "<slots>": slots ascending. Sets _FW = the winning slot (0 = none)
+# with _FW_RTT / _FW_FAM, and records every slot's state. Polls the result files
+# every FAN_POLL s; the winner is the lowest-numbered slot that answered, decided
+# once every lower slot has finished; the rest are killed. Hard stop one second
+# past the hostname deadline, so a vanished leg cannot hang the cycle.
+_fan_run() {
+    _FW=0
+    _FW_RTT=""
+    _FW_FAM="none"
 
-    # Fan-out: S4 always, the IPv6 legs only with a v6 default route.
-    _pc_v6=0
-    [ -n "$PING6_CMD" ] && _ipv6_default_route && _pc_v6=1
     if [ ! -d "$FAN_DIR" ]; then
         _sc_dir_ok
         mkdir -m 0700 "$FAN_DIR" 2>/dev/null
     fi
-    _fan_pids=""
-    if [ -d "$FAN_DIR" ]; then
-        : > "$FAN_DIR/s4"
-        leg_job "$ALT_TARGET_IPV4" 4 "$FAN_DIR/s4" </dev/null >/dev/null 2>&1 &
-        _fan_pids="$!"
-        if [ "$_pc_v6" = "1" ]; then
-            : > "$FAN_DIR/p6"
-            leg_job "$PING_TARGET_IPV6" 6 "$FAN_DIR/p6" </dev/null >/dev/null 2>&1 &
-            _fan_pids="$_fan_pids $!"
-            : > "$FAN_DIR/s6"
-            leg_job "$ALT_TARGET_IPV6" 6 "$FAN_DIR/s6" </dev/null >/dev/null 2>&1 &
-            _fan_pids="$_fan_pids $!"
-        fi
-        # shellcheck disable=SC2086
-        wait $_fan_pids
-        _fan_pids=""
-
-        _fan_read s4
-        if [ -n "$_FR" ]; then
-            PROBE_RTT="$_FR"; last_family="ipv4"; last_target="$ALT_TARGET_IPV4"; last_leg="s4"
-            return 0
-        fi
-        if [ "$_pc_v6" = "1" ]; then
-            _fan_read p6
-            if [ -n "$_FR" ]; then
-                PROBE_RTT="$_FR"; last_family="ipv6"; last_target="$PING_TARGET_IPV6"; last_leg="p6"
+    if [ ! -d "$FAN_DIR" ]; then
+        # No scratch dir (should not happen): one after another, lowest first.
+        for _fs in $1; do
+            _slot_target "$_fs"
+            if probe_leg "$_ST"; then
+                _slot_set "$_fs" ok "$_RTT"
+                _FW="$_fs"; _FW_RTT="$_RTT"; _FW_FAM="$_FAM"
                 return 0
             fi
-            _fan_read s6
-            if [ -n "$_FR" ]; then
-                PROBE_RTT="$_FR"; last_family="ipv6"; last_target="$ALT_TARGET_IPV6"; last_leg="s6"
-                return 0
-            fi
-        fi
-    else
-        # No scratch dir (should not happen): the legs run one after another.
-        if probe_leg "$ALT_TARGET_IPV4" 4; then
-            PROBE_RTT="$_RTT"; last_family="ipv4"; last_target="$ALT_TARGET_IPV4"; last_leg="s4"
-            return 0
-        fi
-        if [ "$_pc_v6" = "1" ]; then
-            if probe_leg "$PING_TARGET_IPV6" 6; then
-                PROBE_RTT="$_RTT"; last_family="ipv6"; last_target="$PING_TARGET_IPV6"; last_leg="p6"
-                return 0
-            fi
-            if probe_leg "$ALT_TARGET_IPV6" 6; then
-                PROBE_RTT="$_RTT"; last_family="ipv6"; last_target="$ALT_TARGET_IPV6"; last_leg="s6"
-                return 0
-            fi
-        fi
+            _slot_set "$_fs" miss ""
+        done
+        return 0
     fi
+
+    rm -f "$FAN_DIR"/r? "$FAN_DIR"/r?.tmp 2>/dev/null
+    _fan_pids=""
+    for _fs in $1; do
+        _slot_target "$_fs"
+        leg_job "$_ST" "$FAN_DIR/r$_fs" </dev/null >/dev/null 2>&1 &
+        _fan_pids="$_fan_pids $!"
+    done
+
+    _clock
+    _fd=$(( _CS + (HOST_DEADLINE + 1) * 100 ))
+    while :; do
+        _fpend=0
+        for _fs in $1; do
+            _fan_read "$_fs"
+            case "$_FR_ST" in
+                ok) _FW="$_fs"; _FW_RTT="$_FR_RTT"; _FW_FAM="$_FR_FAM"; break ;;
+                miss) ;;
+                *) _fpend=1; break ;;
+            esac
+        done
+        [ "$_FW" -ne 0 ] && break
+        [ "$_fpend" -eq 0 ] && break
+        _clock
+        [ "$_CS" -ge "$_fd" ] && break
+        sleep "$FAN_POLL"
+    done
+    _fan_kill
+
+    # What each slot reported before it was cut off. A slot with no result was
+    # killed for a lower slot's win ("standby") or timed out with no winner ("miss").
+    for _fs in $1; do
+        _fan_read "$_fs"
+        case "$_FR_ST" in
+            ok) _slot_set "$_fs" ok "$_FR_RTT" ;;
+            miss) _slot_set "$_fs" miss "" ;;
+            *)
+                if [ "$_FW" -ne 0 ]; then _slot_set "$_fs" standby ""; else _slot_set "$_fs" miss ""; fi
+                ;;
+        esac
+    done
+    return 0
+}
+
+# --- Probe one cycle ----------------------------------------------------------
+# Sets PROBE_RTT, last_family, last_leg and the slot states; returns 0 when any
+# slot answered. Globals, not stdout: a $( ) subshell would lose them.
+PROBE_RTT=""
+probe_cycle() {
+    _slot_set 1 standby ""
+    _slot_set 2 standby ""
+    _slot_set 3 standby ""
+    _slot_set 4 standby ""
+
+    # Usable slots: an IPv6 literal needs a working ping -6 and a ::/0 route.
+    _pc_v6=""
+    _pc_use=""
+    for _pc_s in 1 2 3 4; do
+        _slot_target "$_pc_s"
+        _t_kind "$_ST"
+        if [ "$_TK" = "v6" ]; then
+            if [ -z "$_pc_v6" ]; then
+                _pc_v6=0
+                [ -n "$PING6_CMD" ] && _ipv6_default_route && _pc_v6=1
+            fi
+            if [ "$_pc_v6" = "0" ]; then
+                _slot_set "$_pc_s" skipped ""
+                continue
+            fi
+        fi
+        _pc_use="$_pc_use $_pc_s"
+    done
 
     PROBE_RTT=""
     last_family="none"
-    last_target=""
-    last_leg="-"
+    last_leg=0
+    # shellcheck disable=SC2086
+    set -- $_pc_use
+    [ "$#" -gt 0 ] || return 1
+    _pc_first="$1"
+    shift
+
+    _slot_target "$_pc_first"
+    if probe_leg "$_ST"; then
+        PROBE_RTT="$_RTT"; last_family="$_FAM"; last_leg="$_pc_first"
+        _slot_set "$_pc_first" ok "$_RTT"
+        return 0
+    fi
+    _slot_set "$_pc_first" miss ""
+    [ "$#" -gt 0 ] || return 1
+
+    _fan_run "$*"
+    if [ "$_FW" -ne 0 ]; then
+        PROBE_RTT="$_FW_RTT"; last_family="$_FW_FAM"; last_leg="$_FW"
+        return 0
+    fi
     return 1
 }
 
@@ -503,19 +649,17 @@ _json_str() {
 }
 
 # --- Write the JSON cache atomically -----------------------------------------
-# Keys: timestamp, mono, profile, targets, interval_sec, fail_secs, recover_secs,
-# last_rtt_ms, reachable, streak_success, streak_fail, during_recovery,
-# last_family, last_target, fail_elapsed_sec, cycle_ms. A failed write keeps the
-# previous file (readers would otherwise see an empty or partial one) and skips
-# the sidecar, which must never be newer than a JSON it does not match.
+# Keys (contract 2, this order): timestamp, mono, profile, targets[4],
+# interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success,
+# streak_fail, fail_elapsed_sec, during_recovery, last_family, last_leg,
+# cycle_ms. A failed write keeps the previous file (readers would otherwise see
+# an empty or partial one) and skips the sidecar and the slots file, which must
+# never be newer than a JSON they do not match.
 write_cache() {
     local rtt="$1"      # "34.2" or "null"
     local timestamp
     local during_recovery="false"
     local _jp
-    local _jt4
-    local _jt6
-    local _jlt
 
     timestamp=$(date +%s)
     case "$timestamp" in ''|*[!0-9]*) timestamp=0 ;; esac
@@ -524,20 +668,18 @@ write_cache() {
     case "$rtt" in ''|*[!0-9.]*) rtt="null" ;; esac
 
     _json_str "$PING_PROFILE"; _jp="$_JS"
-    _json_str "$PING_TARGET_IPV4"; _jt4="$_JS"
-    _json_str "$PING_TARGET_IPV6"; _jt6="$_JS"
-    _json_str "$last_target"; _jlt="$_JS"
 
-    if printf '{"timestamp":%s,"mono":%s,"profile":"%s","targets":["%s","%s"],"interval_sec":%s,"fail_secs":%s,"recover_secs":%s,"last_rtt_ms":%s,"reachable":%s,"streak_success":%s,"streak_fail":%s,"during_recovery":%s,"last_family":"%s","last_target":"%s","fail_elapsed_sec":%s,"cycle_ms":%s}\n' \
-            "$timestamp" "${_MONO:-0}" "$_jp" "$_jt4" "$_jt6" \
+    if printf '{"timestamp":%s,"mono":%s,"profile":"%s","targets":["%s","%s","%s","%s"],"interval_sec":%s,"fail_secs":%s,"recover_secs":%s,"last_rtt_ms":%s,"reachable":%s,"streak_success":%s,"streak_fail":%s,"fail_elapsed_sec":%s,"during_recovery":%s,"last_family":"%s","last_leg":%s,"cycle_ms":%s}\n' \
+            "$timestamp" "${_MONO:-0}" "$_jp" "$PING_T1" "$PING_T2" "$PING_T3" "$PING_T4" \
             "${PING_INTERVAL:-5}" "${PING_FAIL_SECS:-15}" "${PING_RECOVER_SECS:-10}" \
             "$rtt" "${reachable:-true}" "${streak_success:-0}" "${streak_fail:-0}" \
-            "$during_recovery" "${last_family:-none}" "$_jlt" \
-            "${fail_elapsed_sec:-0}" "${cycle_ms:-0}" > "$CACHE_TMP" 2>/dev/null \
+            "${fail_elapsed_sec:-0}" "$during_recovery" "${last_family:-none}" "${last_leg:-0}" \
+            "${cycle_ms:-0}" > "$CACHE_TMP" 2>/dev/null \
         && [ -s "$CACHE_TMP" ] \
         && mv -f "$CACHE_TMP" "$CACHE_FILE" 2>/dev/null; then
         _wc_warned=0
         write_ping_env "$timestamp" "${_MONO:-0}" "$rtt" "$during_recovery"
+        write_slots "${_MONO:-0}"
     else
         rm -f "$CACHE_TMP" 2>/dev/null
         if [ "${_wc_warned:-0}" = "0" ]; then
@@ -546,6 +688,19 @@ write_cache() {
         fi
     fi
     return 0
+}
+
+# write_slots <mono>: the per-slot outcome of the last cycle (contract 9A),
+# printf, tmp + mv. Best effort, like the sidecar.
+write_slots() {
+    if printf '{"mono":%s,"slots":[{"state":"%s","rtt_ms":%s},{"state":"%s","rtt_ms":%s},{"state":"%s","rtt_ms":%s},{"state":"%s","rtt_ms":%s}]}\n' \
+            "$1" "$SS1" "$SR1" "$SS2" "$SR2" "$SS3" "$SR3" "$SS4" "$SR4" > "$SLOTS_TMP" 2>/dev/null \
+        && [ -s "$SLOTS_TMP" ] \
+        && mv -f "$SLOTS_TMP" "$SLOTS_FILE" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$SLOTS_TMP" 2>/dev/null
+    return 1
 }
 
 # --- Sidecar helpers ---------------------------------------------------------
@@ -599,8 +754,8 @@ write_ping_env() {
         _sc_sq "$PING_RECOVER_SECS"; printf '_cq_rs=%s\n' "$_SCQ"
         _sc_sq "$PING_PROFILE";     printf '_cq_prof=%s\n' "$_SCQ"
         _sc_sq "$last_family";      printf '_cq_fam=%s\n' "$_SCQ"
-        _sc_sq "$PING_TARGET_IPV4"; printf '_cq_tgt=%s\n' "$_SCQ"
-        _sc_sq "$last_target";      printf '_cq_last_target=%s\n' "$_SCQ"
+        _sc_sq "$PING_T1";          printf '_cq_tgt=%s\n' "$_SCQ"
+        _sc_sq "${last_leg:-0}";    printf '_cq_leg=%s\n' "$_SCQ"
         _sc_sq "${cycle_ms:-0}";    printf '_cq_cyc=%s\n' "$_SCQ"
         printf "qm_sidecar_end='1'\n"
     } 2>/dev/null > "${SC_PING}.new" \
@@ -739,7 +894,7 @@ _cycle_sleep() { # cycle start (cs)
 
 _cleanup() {
     _fan_kill
-    rm -f "$PID_FILE" "$CACHE_TMP" "${SC_PING}.new" "$ATTACH_FLAG" 2>/dev/null
+    rm -f "$PID_FILE" "$CACHE_TMP" "$SLOTS_TMP" "${SC_PING}.new" "$ATTACH_FLAG" 2>/dev/null
     rm -rf "$FAN_DIR" 2>/dev/null
 }
 
@@ -782,12 +937,12 @@ main() {
     qlog_info "========================================"
     qlog_info "QManager Ping Daemon starting (PID $$)"
     qlog_info "Profile: ${PING_PROFILE}, interval ${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)}, fail ${PING_FAIL_SECS}s, recover ${PING_RECOVER_SECS}s"
-    qlog_info "Legs: p4=${PING_TARGET_IPV4} s4=${ALT_TARGET_IPV4} p6=${PING_TARGET_IPV6} s6=${ALT_TARGET_IPV6}"
+    qlog_info "Slots: 1=${PING_T1} 2=${PING_T2} 3=${PING_T3} 4=${PING_T4}"
     qlog_info "IPv6 probe: ${PING6_CMD:-unavailable}, history ${HISTORY_SIZE}, leg deadline ${PROBE_DEADLINE}s"
     qlog_info "========================================"
 
     # Clean up stale files from a previous run
-    rm -f "$CACHE_TMP" /tmp/qmanager_dns_out.* "${DNS_FILE}".?????? "${SC_PING}.new" "${SC_DNS}.new"
+    rm -f "$CACHE_TMP" "$SLOTS_TMP" /tmp/qmanager_dns_out.* "${DNS_FILE}".?????? "${SC_PING}.new" "${SC_DNS}.new"
     rm -rf "$FAN_DIR"
     _sc_dir_ok
     : > "$HISTORY_FILE"
@@ -803,7 +958,7 @@ main() {
             load_config
             detect_ping6
             rm -f "$RELOAD_FLAG"
-            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${PING_FAIL_SECS}s recover=${PING_RECOVER_SECS}s p4=${PING_TARGET_IPV4} s4=${ALT_TARGET_IPV4} p6=${PING_TARGET_IPV6} s6=${ALT_TARGET_IPV6} ping6=${PING6_CMD:-none}"
+            qlog_info "Reloaded config: profile=${PING_PROFILE} interval=${PING_INTERVAL}s${PING_INTERVAL_OVERRIDE:+ (override)} fail=${PING_FAIL_SECS}s recover=${PING_RECOVER_SECS}s slots=${PING_T1},${PING_T2},${PING_T3},${PING_T4} ping6=${PING6_CMD:-none}"
         fi
 
         _clock
@@ -833,7 +988,7 @@ main() {
             [ -z "$_ok_since" ] && _ok_since="$_cyc_start"
             _el=$(( _probe_end - _ok_since ))
 
-            qlog_debug "PING OK: leg=${last_leg} target=${last_target} rtt=${rtt}ms (streak_success=${streak_success})"
+            qlog_debug "PING OK: slot=${last_leg} family=${last_family} rtt=${rtt}ms (streak_success=${streak_success})"
 
             if [ "$reachable" = "false" ] && [ "$_el" -ge $(( PING_RECOVER_SECS * 100 )) ]; then
                 reachable="true"

@@ -544,6 +544,8 @@ remove_runtime_state() {
              /tmp/qmanager_ping.json \
              /tmp/qmanager_ping_history \
              /tmp/qmanager_ping_history.json \
+             /tmp/qmanager_ping_slots.json \
+             /tmp/qmanager_ping_slots.json.tmp \
              /tmp/qmanager_pci_state.json \
              /tmp/qmanager_ping_attaching \
              /tmp/qmanager_dns.json \

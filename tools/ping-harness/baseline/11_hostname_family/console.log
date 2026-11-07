@@ -1,0 +1,14 @@
+banner ipv6: rc=0 rtt=15.2 family=ipv6 leg=1
+  slots: 1=ok(15.2) 2=standby(null) 3=standby(null) 4=standby(null)
+  elapsed < 100 cs: yes
+  probed: dual.example.org
+  finished: dual.example.org
+  cut short:
+  orphans: 0
+banner ipv4: rc=0 rtt=16.8 family=ipv4 leg=1
+  slots: 1=ok(16.8) 2=standby(null) 3=standby(null) 4=standby(null)
+  elapsed < 100 cs: yes
+  probed: dual.example.org
+  finished: dual.example.org
+  cut short:
+  orphans: 0
