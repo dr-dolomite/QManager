@@ -140,7 +140,7 @@ STUB
         env -i PATH="$work/bin" \
             H_HARNESS="$HERE" H_ROOT="$root" H_STAGE="$stage" H_STATE="$work/h" \
             H_OUT="$out" H_CLOCK0=1790000000 H_UP0=5000 H_SCENARIO="$scfile" \
-            "$BB" timeout 300 "$BB" sh "$HERE/inner.sh"
+            "$BB" timeout $TMO "$BB" sh "$HERE/inner.sh"
     ) > "$out/console.raw" 2>&1
     echo "$?" > "$out/exit.code"
     # let a backgrounded "( sleep 1; sync; reboot ) &" finish writing calls.log
@@ -182,7 +182,9 @@ cmd_run() {
     done
     [ -f "$DAEMON" ] || die "daemon not found: $DAEMON"
     [ -d "$LIBDIR" ] || die "lib dir not found: $LIBDIR"
-    BB=$(command -v busybox) || die "busybox not found"
+    BB="${WDH_BB:-$(command -v busybox)}"; [ -x "$BB" ] || die "busybox not found"
+    # BusyBox < 1.30 timeout takes -t SECS
+    if "$BB" timeout 5 true 2>/dev/null; then TMO=300; else TMO="-t 300"; fi
     JQBIN=$(find_jq) || die "jq not found (set JQ=/path/to/jq)"
     mkdir -p "$OUTDIR" || die "cannot create $OUTDIR"
     if [ $# -gt 0 ]; then
