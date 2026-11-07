@@ -39,12 +39,12 @@
 [2026-09-21 14:17:14] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2
 
 === tmp/qmanager_events.json
-{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000098,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
-{"timestamp":1790000158,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000166,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
-{"timestamp":1790000226,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000234,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
+{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000098,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
+{"timestamp":1790000158,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000166,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
+{"timestamp":1790000226,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000234,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
 
 === tmp/qmanager_sim_failover
 {"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}

@@ -21,7 +21,7 @@
 [2026-09-21 14:15:14] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 
 === tmp/qmanager_events.json
-{"timestamp":1790000030,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning"}
+{"timestamp":1790000030,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
 
 === tmp/qmanager_force_tier2
 

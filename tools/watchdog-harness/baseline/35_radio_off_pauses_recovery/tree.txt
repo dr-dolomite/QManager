@@ -15,5 +15,5 @@
 [2026-09-21 14:15:20] INFO  [watchcat:PID] Radio is back on (AT+CFUN=1) — resuming monitoring
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
 

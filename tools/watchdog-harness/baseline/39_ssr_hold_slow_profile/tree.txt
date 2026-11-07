@@ -19,5 +19,5 @@
 [2026-09-21 14:14:50] INFO  [watchcat:PID] SSR-hold cleared: connectivity recovered naturally
 
 === tmp/qmanager_events.json
-{"timestamp":1790000060,"type":"watchcat_recovery","message":"Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal","severity":"info"}
+{"timestamp":1790000060,"type":"watchcat_recovery","message":"Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal","severity":"info","code":"wd_ssr_hold"}
 

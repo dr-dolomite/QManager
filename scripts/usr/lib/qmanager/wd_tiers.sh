@@ -26,7 +26,7 @@ last_recovery_tier="null"
 total_recoveries=0
 cooldown_remaining=0
 cooldown_stale_retries=0
-recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
+recovery_reason="outage"   # "outage" | "quality" — why current/last recovery fired
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
 holdoff_until=0                 # mono_now at which a new ladder may start; 0 = no pause (HOLDOFF_SECS after an exhausted ladder)
 holdoff_reason=""               # recovery_reason the pause was started under
@@ -64,7 +64,7 @@ wait_for_modem() {
 
 execute_tier1() {
     qlog_info "TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)"
-    append_event "watchcat_recovery" "Watchcat: re-registering on network (Tier 1)" "warning"
+    append_event "watchcat_recovery" "Watchcat: re-registering on network (Tier 1)" "warning" "wd_tier_start"
 
     touch "$RECOVERY_FLAG"
     qcmd 'AT+COPS=2' >/dev/null 2>&1
@@ -87,7 +87,7 @@ execute_tier2() {
     fi
 
     qlog_info "TIER 2: Toggling radio (AT+CFUN=0/1)"
-    append_event "watchcat_recovery" "Watchcat: toggling radio (Tier 2)" "warning"
+    append_event "watchcat_recovery" "Watchcat: toggling radio (Tier 2)" "warning" "wd_tier_start"
 
     touch "$RECOVERY_FLAG"
 
@@ -137,7 +137,7 @@ _wd_confirm_radio_on() {
 wd_enter_radio_off() {
     qlog_warn "Radio is off (AT+CFUN 0 or 4): holding recovery until it is back on"
     rm -f "$RECOVERY_FLAG"
-    append_event "watchcat_recovery" "Watchcat: radio is off, recovery paused until it is turned back on" "info"
+    append_event "watchcat_recovery" "Watchcat: radio is off, recovery paused until it is turned back on" "info" "wd_radio_paused"
     state="radio_off"
     current_tier=0
     failure_counter=0
@@ -182,7 +182,7 @@ execute_tier4() {
     fi
 
     qlog_error "TIER 4: System reboot (recovery ${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR})"
-    append_event "watchcat_recovery" "Watchcat: rebooting system (Tier 4)" "error"
+    append_event "watchcat_recovery" "Watchcat: rebooting system (Tier 4)" "error" "wd_tier4_reboot"
 
     # Log reboot to crash.log (persists across reboots)
     local ts
@@ -241,15 +241,15 @@ do_recovery() {
 
     # Emit a single reason-tagged recovery-start marker before the per-tier
     # action events. The per-tier execute_* functions log their own tier-specific
-    # detail; this one carries the TRIGGER REASON (unreachable vs quality) so the
+    # detail; this one carries the TRIGGER REASON (outage vs quality) so the
     # activity feed can distinguish a reachability recovery from a quality one.
     # Suppressed on the recursive skip-to-next-tier path (only fires at entry).
     if [ "$_recovery_marker_emitted" != "$current_tier-$recovery_reason" ]; then
         _recovery_marker_emitted="$current_tier-$recovery_reason"
         if [ "$recovery_reason" = "quality" ]; then
-            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning"
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning" "wd_tier_start"
         else
-            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning"
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning" "wd_tier_start"
         fi
     fi
 
@@ -316,7 +316,7 @@ _wd_start_holdoff() {
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
     holdoff_until=$((now + HOLDOFF_SECS))
     holdoff_reason="$recovery_reason"
-    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing 15 minutes" "error"
+    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing 15 minutes" "error" "wd_holdoff"
 }
 
 # Shared failure path for cooldown — fallback if Tier 3, then escalate.
@@ -365,7 +365,7 @@ _cooldown_handle_failure() {
             fi
         fi
         qlog_info "Escalating to Tier $current_tier (reason=$recovery_reason)"
-        append_event "watchcat_recovery" "Watchcat: recovery escalating to Tier $current_tier — previous tier did not restore the connection" "warning"
+        append_event "watchcat_recovery" "Watchcat: recovery escalating to Tier $current_tier — previous tier did not restore the connection" "warning" "wd_escalate"
         state="recovery"
         do_recovery
     else
@@ -467,7 +467,7 @@ finish_cooldown() {
             success)
                 cooldown_stale_retries=0
                 qlog_info "COOLDOWN(quality) complete: quality RESTORED after Tier $current_tier"
-                append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info"
+                append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info" "wd_succeeded"
                 # A quality-triggered Tier-3 swap finalizes exactly like reachability —
                 # otherwise the modem strands on backup with no failover state / revert
                 # path. No-op for non-Tier-3 quality recoveries.
@@ -493,12 +493,12 @@ finish_cooldown() {
         esac
     fi
 
-    # --- Reachability path (recovery_reason="unreachable") ---
+    # --- Reachability path (recovery_reason="outage") ---
     # Try to read fresh ping data
     local rok=0
     read_ping && rok=1
 
-    case "$(wd_cooldown_verdict unreachable "$rok" "$ping_reachable" 2 "$cooldown_stale_retries")" in
+    case "$(wd_cooldown_verdict outage "$rok" "$ping_reachable" 2 "$cooldown_stale_retries")" in
         extend)
             cooldown_stale_retries=$((cooldown_stale_retries + 1))
             qlog_warn "COOLDOWN: ping data stale (retry $cooldown_stale_retries/3) — extending by ${CFG_CHECK_INTERVAL}s"
@@ -509,7 +509,7 @@ finish_cooldown() {
         success)
             cooldown_stale_retries=0
             qlog_info "COOLDOWN complete: connectivity RESTORED after Tier $current_tier"
-            append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info"
+            append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info" "wd_succeeded"
 
             # If this was Tier 3 SIM failover, finalize the failover state (no-op
             # otherwise). Shared with the quality success arm.

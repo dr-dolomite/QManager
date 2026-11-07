@@ -26,8 +26,8 @@
 [2026-09-21 14:15:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 1) — connection quality restored
 
 === tmp/qmanager_events.json
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning"}
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning"}
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning"}
-{"timestamp":1790000102,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — connection quality restored","severity":"info"}
+{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000102,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — connection quality restored","severity":"info","code":"wd_succeeded"}
 

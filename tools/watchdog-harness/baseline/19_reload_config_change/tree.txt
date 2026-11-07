@@ -17,7 +17,7 @@
 [2026-09-21 14:14:00] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=5min
 [2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=5)
 [2026-09-21 14:14:40] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=6 >= 5
-[2026-09-21 14:14:40] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=unreachable)
+[2026-09-21 14:14:40] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
 [2026-09-21 14:14:40] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
 [2026-09-21 14:14:40] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 [2026-09-21 14:14:40] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
@@ -26,7 +26,7 @@
 [2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 1) — internet connectivity restored
 
 === tmp/qmanager_events.json
-{"timestamp":1790000080,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning"}
-{"timestamp":1790000080,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning"}
-{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — internet connectivity restored","severity":"info"}
+{"timestamp":1790000080,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000080,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — internet connectivity restored","severity":"info","code":"wd_succeeded"}
 

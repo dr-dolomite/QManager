@@ -53,10 +53,15 @@ _wd_write_state_file() {
     local v_orig
     local v_curr
     local v_reboots
-    local v_qbreach
-    local v_qenabled
     local v_ssr_hold
     local v_ssr_det
+    local v_ssr_started
+    local v_ssr_grace
+    local v_holdoff
+    local v_pr_enabled
+    local v_pr_interval
+    local v_pr_last
+    local v_pr_active
     local json
     stale="$1"
     ts=$(date +%s)
@@ -71,14 +76,26 @@ _wd_write_state_file() {
     _wd_num "$original_sim_slot" null;     v_orig="$_wdn"
     _wd_num "$current_sim_slot" null;      v_curr="$_wdn"
     _wd_num "$reboots_this_hour" 0;        v_reboots="$_wdn"
-    _wd_num "$quality_breach_counter" 0;   v_qbreach="$_wdn"
-    _wd_num "$CFG_QUALITY_ENABLED" 0;      v_qenabled="$_wdn"
     _wd_num "$last_ssr_detected" null;     v_ssr_det="$_wdn"
+    _wd_num "$ssr_hold_started" 0;         v_ssr_started="$_wdn"
+    _wd_num "$CFG_SSR_GRACE" 45;           v_ssr_grace="$_wdn"
+    _wd_num "$holdoff_until" 0;            v_holdoff="$_wdn"
+    _wd_num "$CFG_PRIMARY_RECHECK_ENABLED" 0;  v_pr_enabled="$_wdn"
+    _wd_num "$CFG_PRIMARY_RECHECK_INTERVAL" 30; v_pr_interval="$_wdn"
+    _wd_num "$last_recheck_time" 0;        v_pr_last="$_wdn"
     case "$ssr_hold" in
         true) v_ssr_hold=true ;;
         *) v_ssr_hold=false ;;
     esac
+    case "$primary_recheck_active" in
+        true) v_pr_active=true ;;
+        *) v_pr_active=false ;;
+    esac
 
+    # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
+    # has not landed yet carry their idle value: step_wait_until, failure_secs,
+    # reboot_budget_exhausted, reboot_rest_reason, quality_breach_secs,
+    # failback_failures, ping_stale.
     json=$(jq -n -c \
         --argjson ts "$ts" \
         --argjson mono "$v_mono" \
@@ -95,28 +112,45 @@ _wd_write_state_file() {
         --argjson sf_orig "$v_orig" \
         --argjson sf_curr "$v_curr" \
         --argjson reboots "$v_reboots" \
-        --argjson quality_breach "$v_qbreach" \
-        --argjson quality_enabled "$v_qenabled" \
         --arg recovery_reason "$recovery_reason" \
         --argjson ssr_hold "$v_ssr_hold" \
-        --argjson last_ssr_detected "$v_ssr_det" \
+        --argjson ssr_started "$v_ssr_started" \
+        --argjson ssr_grace "$v_ssr_grace" \
+        --argjson last_ssr_mono "$v_ssr_det" \
+        --argjson holdoff_until "$v_holdoff" \
+        --arg holdoff_reason "$holdoff_reason" \
+        --argjson pr_enabled "$v_pr_enabled" \
+        --argjson pr_interval "$v_pr_interval" \
+        --argjson pr_last "$v_pr_last" \
+        --argjson pr_active "$v_pr_active" \
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
-            failure_count: $failures,
+            recovery_reason: (if ($tier == 0 and ($state == "monitor" or $state == "locked" or $state == "radio_off" or $state == "disabled")) then null else $recovery_reason end),
             last_recovery_time: $last_time,
             last_recovery_tier: $last_tier,
+            last_recovery_reason: $recovery_reason,
             total_recoveries: $total,
+            failure_count: $failures,
+            failure_secs: 0,
             cooldown_remaining: $cooldown,
+            step_wait_until: null,
+            holdoff_until: (if $holdoff_until > $mono then $holdoff_until else null end),
+            holdoff_reason: (if $holdoff_until > $mono and $holdoff_reason != "" then $holdoff_reason else null end),
+            reboots_this_hour: $reboots,
+            reboot_budget_exhausted: false,
+            reboot_rest_reason: null,
+            ssr_hold: $ssr_hold,
+            ssr_hold_until: (if $ssr_hold then ($ssr_started + $ssr_grace) else null end),
+            last_ssr_mono: $last_ssr_mono,
+            quality_breach_secs: 0,
+            failback_active: $pr_active,
+            failback_failures: 0,
+            failback_next_at: (if ($pr_enabled == 1 and $sf_active == "true") then ($pr_last + $pr_interval * 60) else null end),
             sim_failover_active: ($sf_active == "true"),
             original_sim_slot: $sf_orig,
             current_sim_slot: $sf_curr,
-            reboots_this_hour: $reboots,
-            quality_breach_count: $quality_breach,
-            quality_enabled: ($quality_enabled == 1),
-            last_recovery_reason: $recovery_reason,
-            ssr_hold: $ssr_hold,
-            last_ssr_detected: $last_ssr_detected,
+            ping_stale: false,
             mono: $mono,
             stale_after: $stale_after
         }' 2>/dev/null)

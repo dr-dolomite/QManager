@@ -140,3 +140,20 @@ stub keeps `uci.db` as `key=value` lines for options and `key+=item` lines for l
 supports `get`, `show <key>` (`key='v'`, or `key='a' 'b'` for a list, embedded quotes as `'\''`),
 `set`, `add_list`, `delete` and `revert` (each logged to `calls.log` like `set` and `commit`).
 Existing baselines are unchanged.
+
+## R0a: frozen state-file and event contracts (step 1b)
+
+`baseline/` was re-recorded after the state file and the event rows were aligned with
+`docs/plans/2026-11-07-cq-watchdog-contracts.md` (sections 3 and 6). No decision changed; every
+difference to the previous baseline, in every scenario, is one of these:
+
+- `passes.txt`: the state JSON carries the contract key set (`recovery_reason`, `failure_secs`,
+  `step_wait_until`, `holdoff_until`, `holdoff_reason`, `reboot_budget_exhausted`,
+  `reboot_rest_reason`, `ssr_hold_until`, `last_ssr_mono`, `quality_breach_secs`,
+  `failback_active`, `failback_failures`, `failback_next_at`, `ping_stale`); the retired keys
+  `quality_breach_count`, `quality_enabled` and `last_ssr_detected` are gone, and the reason
+  vocabulary is `outage|quality` instead of `unreachable|quality`. Every other key keeps its value;
+- `tree.txt`: watchdog event rows gain `"code":"..."` after `severity`, and the log line
+  `RECOVERY: Executing Tier N (reason=...)` / `Entering primary-recheck settle ... (reason=...)`
+  prints `outage` instead of `unreachable`;
+- `at.log`, `calls.log`, `console.log`, `exit.code` are byte-identical in all scenarios.

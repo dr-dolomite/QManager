@@ -13,7 +13,7 @@
 [2026-09-21 14:14:50] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
 [2026-09-21 14:14:50] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
 [2026-09-21 14:14:54] INFO  [watchcat:PID] Modem responsive after 0s
-[2026-09-21 14:14:54] INFO  [watchcat:PID] Entering primary-recheck settle for 90s (reason=unreachable)
+[2026-09-21 14:14:54] INFO  [watchcat:PID] Entering primary-recheck settle for 90s (reason=outage)
 [2026-09-21 14:16:24] WARN  [watchcat:PID] PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot 2
 [2026-09-21 14:16:28] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:16:28] WARN  [watchcat:PID] SIM swap attempt 1/2 to slot 2 not verified (slot '1', CFUN '1')
@@ -24,8 +24,8 @@
 [2026-09-21 14:16:32] INFO  [watchcat:PID] Entering post-recheck settle for 90s
 
 === tmp/qmanager_events.json
-{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000192,"type":"sim_failover","message":"Watchcat: primary SIM kept — the modem stayed on slot 1","severity":"info"}
+{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000192,"type":"sim_failover","message":"Watchcat: primary SIM kept — the modem stayed on slot 1","severity":"info","code":"sim_failback"}
 
 === tmp/qmanager_force_tier2
 

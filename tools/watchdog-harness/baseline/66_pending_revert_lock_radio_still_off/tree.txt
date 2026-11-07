@@ -15,7 +15,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=unreachable)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 3: SIM failover from slot 1 to slot 2
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: switching to SIM slot 2 (Tier 3)
@@ -41,11 +41,11 @@
 [2026-09-21 14:19:38] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning"}
-{"timestamp":1790000144,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
-{"timestamp":1790000214,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
-{"timestamp":1790000284,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning","code":"sim_swap"}
+{"timestamp":1790000144,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
+{"timestamp":1790000214,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
+{"timestamp":1790000284,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
 
 === tmp/qmanager_force_tier2
 

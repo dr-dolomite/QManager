@@ -153,7 +153,7 @@ evaluate_quality() {
                     ;;
             esac
             qlog_warn "QUALITY → RECOVERY: ${CFG_QUALITY_CONSECUTIVE} consecutive breaches (avg ${q_avg_latency}ms / loss ${q_packet_loss}% vs ${CFG_LATENCY_THRESHOLD_MS}ms / ${CFG_LOSS_THRESHOLD_PCT}%)"
-            append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning"
+            append_event "watchcat_recovery" "Watchcat: connection quality degraded (latency ${q_avg_latency}ms / loss ${q_packet_loss}%) — starting recovery" "warning" "wd_tier_start"
             quality_breach_counter=0
             recovery_reason="quality"
 

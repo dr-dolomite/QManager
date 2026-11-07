@@ -17,5 +17,5 @@
 [2026-09-21 14:15:50] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
 
 === tmp/qmanager_events.json
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
+{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
 

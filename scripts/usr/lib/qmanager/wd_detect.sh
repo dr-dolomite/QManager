@@ -217,7 +217,7 @@ ssr_hold_gate() {
         ssr_hold_started="$now"
         last_ssr_detected="$now"   # monotonic seconds; UI surfaces "self-recovery"
         qlog_warn "Recoverable baseband SSR detected; holding recovery ladder up to ${CFG_SSR_GRACE}s for self-heal"
-        append_event "watchcat_recovery" "Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal" "info"
+        append_event "watchcat_recovery" "Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal" "info" "wd_ssr_hold"
         return 0
     fi
     return 1

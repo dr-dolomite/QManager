@@ -21,6 +21,6 @@
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SIM revert: modem already on the original slot, failover record cleared
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: reverting to original SIM slot 1 (user request)","severity":"info"}
-{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: reverting to original SIM slot 1 (user request)","severity":"info","code":"sim_revert"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
 

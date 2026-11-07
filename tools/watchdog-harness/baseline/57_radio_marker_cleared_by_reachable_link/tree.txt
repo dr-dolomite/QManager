@@ -11,7 +11,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=unreachable)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
@@ -31,8 +31,8 @@
 [2026-09-21 14:18:53] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: radio is off, recovery paused until it is turned back on
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning"}
-{"timestamp":1790000083,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error"}
-{"timestamp":1790000333,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000083,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000333,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
 

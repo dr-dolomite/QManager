@@ -436,7 +436,7 @@ main() {
                         else
                             qlog_info "SUSPECT → RECOVERY: streak_fail=$ping_streak_fail >= $CFG_FAIL_THRESHOLD"
                             state="recovery"
-                            recovery_reason="unreachable"
+                            recovery_reason="outage"
 
                             # Find first enabled tier
                             if [ "$current_tier" -eq 0 ]; then

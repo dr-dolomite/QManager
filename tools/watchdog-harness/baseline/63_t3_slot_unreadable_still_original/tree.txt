@@ -11,7 +11,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
 [2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=unreachable)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 3: SIM failover from slot 1 to slot 2
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: switching to SIM slot 2 (Tier 3)
@@ -28,10 +28,10 @@
 [2026-09-21 14:14:28] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=7 (threshold=3)
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning"}
-{"timestamp":1790000058,"type":"sim_failover","message":"Watchcat: SIM swap to slot 2 did not take effect — skipped","severity":"error"}
-{"timestamp":1790000058,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning","code":"sim_swap"}
+{"timestamp":1790000058,"type":"sim_failover","message":"Watchcat: SIM swap to slot 2 did not take effect — skipped","severity":"error","code":"sim_swap"}
+{"timestamp":1790000058,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
 
 === tmp/qmanager_force_tier2
 
