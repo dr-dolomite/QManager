@@ -1,0 +1,62 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=0 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:14:12] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:14:42] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 1
+[2026-09-21 14:14:42] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:14:42] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
+[2026-09-21 14:14:42] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:14:52] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=12 (act after 15s)
+[2026-09-21 14:15:42] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
+[2026-09-21 14:16:02] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:16:02] INFO  [watchcat:PID] QUALITY: breach 1/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:16:12] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:16:12] INFO  [watchcat:PID] QUALITY: breach 2/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:16:22] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:16:22] INFO  [watchcat:PID] QUALITY: breach 3/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:16:22] WARN  [watchcat:PID] QUALITY → RECOVERY: 3 consecutive breaches (avg 24.5ms / loss 50% vs 250ms / 30%)
+[2026-09-21 14:16:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
+[2026-09-21 14:16:22] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
+[2026-09-21 14:16:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
+[2026-09-21 14:16:22] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:16:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:16:24] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:16:54] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:16:54] WARN  [watchcat:PID] COOLDOWN(quality) complete: quality STILL degraded after Tier 1
+[2026-09-21 14:16:54] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:16:54] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
+[2026-09-21 14:16:54] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:17:04] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:17:04] INFO  [watchcat:PID] QUALITY: breach 1/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:17:14] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:17:14] INFO  [watchcat:PID] QUALITY: breach 2/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:17:24] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:17:24] INFO  [watchcat:PID] QUALITY: breach 3/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:17:34] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:17:34] INFO  [watchcat:PID] QUALITY: breach 1/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+[2026-09-21 14:17:44] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
+[2026-09-21 14:17:44] INFO  [watchcat:PID] QUALITY: breach 2/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000082,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000182,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000182,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000182,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000214,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+

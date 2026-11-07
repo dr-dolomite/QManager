@@ -6,10 +6,12 @@
 #
 # Owns: current_tier, last_recovery_time, last_recovery_tier, total_recoveries,
 #       cooldown_remaining, cooldown_stale_retries, recovery_reason,
-#       _recovery_marker_emitted, holdoff_until, holdoff_reason
+#       _recovery_marker_emitted, wd_hold_out_until, wd_hold_q_until,
+#       wd_hold_q_level, wd_hold_q_end, holdoff_until, holdoff_reason (derived)
 # Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
-#            wd_holdoff_clear, wd_retire_service, execute_tier4, find_next_tier, do_recovery,
+#            _wd_holdoff_sync, wd_holdoff_clear, wd_holdoff_reload, wd_holdoff_tick,
+#            wd_retire_service, execute_tier4, find_next_tier, do_recovery,
 #            _cooldown_handle_failure, wd_cooldown_verdict, finish_cooldown
 #
 # Tier 3 (execute_tier3) and every SIM-slot swap live in wd_sim.sh;
@@ -28,19 +30,84 @@ cooldown_remaining=0
 cooldown_stale_retries=0
 recovery_reason="outage"   # "outage" | "quality" — why current/last recovery fired
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
-holdoff_until=0                 # mono_now at which a new ladder may start; 0 = no pause (HOLDOFF_SECS after an exhausted ladder)
-holdoff_reason=""               # recovery_reason the pause was started under
+# Pauses after an exhausted ladder (spec section 5.5), one per recovery reason.
+# A pause blocks a new ladder of its own reason only (wd_start_gate <reason>).
+wd_hold_out_until=0             # mono end of the outage pause; 0 = none
+wd_hold_q_until=0               # mono end of the quality pause; 0 = none
+wd_hold_q_level=0               # 0-2: step of the last quality pause (15/30/60 min)
+wd_hold_q_end=0                 # mono the last quality pause ended; 0 = none within the reset hour
+# Derived by _wd_holdoff_sync for the state file: the pause that ends last
+# (outage wins a tie). Never written anywhere else.
+holdoff_until=0
+holdoff_reason=""
 
-# Ends the pause after an exhausted ladder. The only writer besides _wd_start_holdoff.
-# A pause that followed a quality ladder is not ended by a healthy-looking pass
-# (the link was reachable all along, so one lost probe would end it and the ladder
-# would restart every few minutes): only "force" (a cooldown success) clears it.
-wd_holdoff_clear() {
-    if [ "$1" != "force" ] && [ "$holdoff_reason" = "quality" ]; then
-        return 0
+_wd_holdoff_sync() {
+    if [ "$wd_hold_out_until" -ge "$wd_hold_q_until" ]; then
+        holdoff_until="$wd_hold_out_until"
+        holdoff_reason="outage"
+        [ "$wd_hold_out_until" -gt 0 ] || holdoff_reason=""
+    else
+        holdoff_until="$wd_hold_q_until"
+        holdoff_reason="quality"
     fi
-    holdoff_until=0
-    holdoff_reason=""
+}
+
+# wd_holdoff_clear <outage|quality>: ends that reason's pause early. Outage: a
+# fresh reachable=true read. Quality: a clean quality window or a quality
+# cooldown success; never reachability (the link is reachable during quality
+# trouble). The quality level is kept: it only resets after the quiet hour or a
+# settings reload (wd_holdoff_reload).
+wd_holdoff_clear() {
+    local now
+    if [ "$1" = "quality" ]; then
+        [ "$wd_hold_q_until" -gt 0 ] || return 0
+        now=$(mono_now)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        if [ "$wd_hold_q_until" -gt "$now" ]; then
+            wd_hold_q_end="$now"
+        else
+            wd_hold_q_end="$wd_hold_q_until"
+        fi
+        wd_hold_q_until=0
+    else
+        [ "$wd_hold_out_until" -gt 0 ] || return 0
+        wd_hold_out_until=0
+    fi
+    _wd_holdoff_sync
+}
+
+# Settings reload: ends the quality pause and resets its growth (contract 5.4).
+wd_holdoff_reload() {
+    if [ "$wd_hold_q_until" -gt 0 ] || [ "$wd_hold_q_level" -gt 0 ] || [ "$wd_hold_q_end" -gt 0 ]; then
+        qlog_info "Settings reload: quality pause and its growth reset"
+    fi
+    wd_hold_q_until=0
+    wd_hold_q_level=0
+    wd_hold_q_end=0
+    _wd_holdoff_sync
+}
+
+# Once per pass: a quality pause that ran out records its end, and an hour after
+# the last quality pause ended the level drops back to 0. No clock read while
+# there is nothing to age.
+wd_holdoff_tick() {
+    local now
+    [ "$wd_hold_q_until" -gt 0 ] || [ "$wd_hold_q_end" -gt 0 ] || return 0
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$wd_hold_q_until" -gt 0 ] && [ "$wd_hold_q_until" -le "$now" ]; then
+        wd_hold_q_end="$wd_hold_q_until"
+        wd_hold_q_until=0
+        _wd_holdoff_sync
+    fi
+    if [ "$wd_hold_q_until" -eq 0 ] && [ "$wd_hold_q_end" -gt 0 ] && [ $((now - wd_hold_q_end)) -ge "$HOLDOFF_QUALITY_RESET_SECS" ]; then
+        if [ "$wd_hold_q_level" -gt 0 ]; then
+            qlog_info "No quality pause for ${HOLDOFF_QUALITY_RESET_SECS}s: quality pause length back to 15 minutes"
+        fi
+        wd_hold_q_level=0
+        wd_hold_q_end=0
+    fi
+    return 0
 }
 
 # Wait for modem to respond to AT commands after recovery action
@@ -308,16 +375,34 @@ do_recovery() {
 # COOLDOWN COMPLETION
 # =============================================================================
 
-# Every enabled tier has been tried without restoring the connection: pause for
-# HOLDOFF_SECS before a new ladder may start (wd_start_gate returns "holdoff").
-# Natural recovery and any cooldown success reset it to 0.
+# Every enabled tier has been tried without restoring the connection: pause a
+# new ladder of the same reason (wd_start_gate <reason> returns "holdoff").
+# Outage: HOLDOFF_OUTAGE_SECS. Quality: 15/30/60 minutes; the level steps up when
+# the previous quality pause ended less than HOLDOFF_QUALITY_RESET_SECS ago.
 _wd_start_holdoff() {
     local now
+    local secs
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    holdoff_until=$((now + HOLDOFF_SECS))
-    holdoff_reason="$recovery_reason"
-    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing 15 minutes" "error" "wd_holdoff"
+    if [ "$recovery_reason" = "quality" ]; then
+        if [ "$wd_hold_q_end" -gt 0 ] && [ $((now - wd_hold_q_end)) -lt "$HOLDOFF_QUALITY_RESET_SECS" ]; then
+            [ "$wd_hold_q_level" -lt 2 ] && wd_hold_q_level=$((wd_hold_q_level + 1))
+        else
+            wd_hold_q_level=0
+        fi
+        case "$wd_hold_q_level" in
+            1) secs="$HOLDOFF_QUALITY_SECS_1" ;;
+            2) secs="$HOLDOFF_QUALITY_SECS_2" ;;
+            *) secs="$HOLDOFF_QUALITY_SECS_0" ;;
+        esac
+        wd_hold_q_until=$((now + secs))
+        wd_hold_q_end=0
+    else
+        secs="$HOLDOFF_OUTAGE_SECS"
+        wd_hold_out_until=$((now + secs))
+    fi
+    _wd_holdoff_sync
+    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing $((secs / 60)) minutes" "error" "wd_holdoff"
 }
 
 # Shared failure path for cooldown — fallback if Tier 3, then escalate.
@@ -334,9 +419,9 @@ _cooldown_handle_failure() {
         # The swap-back cycles the radio (AT+CFUN=0/1): never over a radio the
         # user turned off. Keep the modem on the backup as a recorded failover and
         # park in radio_off; wd_sim_on_radio_back swaps back once it is on again.
-        wd_radio_reconcile
+        wd_radio_reconcile "$recovery_reason"
         _ch_gated=1
-        if [ "$(wd_start_gate)" = "radio_off" ]; then
+        if [ "$(wd_start_gate "$recovery_reason")" = "radio_off" ]; then
             qlog_warn "COOLDOWN: radio is off, deferring the swap back to slot $original_sim_slot"
             wd_sim_defer_revert
             wd_enter_radio_off
@@ -361,8 +446,8 @@ _cooldown_handle_failure() {
     if find_next_tier $((current_tier + 1)); then
         # Tier 2 confirms its own radio-on, so AT+CFUN 0/4 here is the user's.
         if [ "$_ch_gated" -eq 0 ]; then
-            wd_radio_reconcile
-            if [ "$(wd_start_gate)" = "radio_off" ]; then
+            wd_radio_reconcile "$recovery_reason"
+            if [ "$(wd_start_gate "$recovery_reason")" = "radio_off" ]; then
                 wd_enter_radio_off
                 return
             fi
@@ -480,7 +565,7 @@ finish_cooldown() {
                 current_tier=0
                 failure_counter=0
                 quality_breach_counter=0
-                wd_holdoff_clear force
+                wd_holdoff_clear quality
                 _recovery_marker_emitted=""
                 return
                 ;;
@@ -524,7 +609,7 @@ finish_cooldown() {
             current_tier=0
             failure_counter=0
             quality_breach_counter=0
-            wd_holdoff_clear force
+            wd_holdoff_clear outage
             _recovery_marker_emitted=""
             return
             ;;

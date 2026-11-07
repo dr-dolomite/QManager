@@ -136,7 +136,8 @@ wd_outage_due() {
 # Pure start gate (no I/O, no globals), in this order:
 #   wd_decide_start <tiers_any 0|1> <cfun> <holdoff_left_secs>
 #   none       no tier is enabled: there is nothing to run, stay as we are
-#   holdoff    the ladder ran out recently: wait out the pause
+#   holdoff    a ladder of the same reason ran out recently: wait out its pause
+#              (holdoff_left_secs is the pause of the reason being started only)
 #   radio_off  AT+CFUN is 0 or 4: the radio was turned off on purpose
 #   go         start the ladder
 # cfun is the digit wd_cfun_now printed; empty (unreadable) counts as on, so a
@@ -160,16 +161,24 @@ wd_decide_start() {
     return 0
 }
 
-# Prints the seconds left of the pause after an exhausted ladder (0 = none).
+# wd_holdoff_left <outage|quality>: prints the seconds left of that reason's
+# pause after an exhausted ladder (0 = none). Anything but "quality" = outage.
 wd_holdoff_left() {
     local now
-    case "$holdoff_until" in
+    local until
+    if [ "$1" = "quality" ]; then
+        until="$wd_hold_q_until"
+    else
+        until="$wd_hold_out_until"
+    fi
+    case "$until" in
         ''|*[!0-9]*) printf '0'; return 0 ;;
     esac
+    [ "$until" -gt 0 ] || { printf '0'; return 0; }
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    if [ "$holdoff_until" -gt "$now" ]; then
-        printf '%s' $((holdoff_until - now))
+    if [ "$until" -gt "$now" ]; then
+        printf '%s' $((until - now))
     else
         printf '0'
     fi
@@ -183,10 +192,11 @@ wd_holdoff_left() {
 # inside its command substitution: a subshell cannot clear the marker). It reads
 # AT+CFUN? only while the marker is set and clears it when the radio reads 1; a
 # 0, a 4 or an unreadable reply keeps the marker (ours or the user's, undecidable).
-# Nothing is read while the gate is paused by the hold-off: it decides without CFUN.
+# Nothing is read while the gate for <reason> ($1) is paused by its hold-off: it
+# decides without CFUN.
 wd_radio_reconcile() {
     [ "$wd_radio_down" = "1" ] || return 0
-    [ "$(wd_holdoff_left)" = "0" ] || return 0
+    [ "$(wd_holdoff_left "$1")" = "0" ] || return 0
     if [ "$(wd_cfun_now)" = "1" ]; then
         qlog_info "Radio reads AT+CFUN=1: clearing the stale radio-down marker"
         wd_mark_radio_up
@@ -194,7 +204,8 @@ wd_radio_reconcile() {
     return 0
 }
 
-# Gathers the three inputs for wd_decide_start and prints its verdict. The one
+# wd_start_gate <outage|quality>: gathers the three inputs for wd_decide_start
+# (the hold-off left of that reason only) and prints its verdict. The one
 # AT read (AT+CFUN?) is skipped when an earlier gate already decides. While a
 # Tier 2 radio toggle is unresolved (wd_radio_down=1) a radio that is off is ours,
 # not the user's, so it is reported as on and the ladder keeps escalating.
@@ -208,7 +219,7 @@ wd_start_gate() {
     [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
     [ "$CFG_TIER4_ENABLED" = "1" ] && any=1
 
-    hl=$(wd_holdoff_left)
+    hl=$(wd_holdoff_left "$1")
 
     cf=""
     if [ "$any" = "1" ] && [ "$hl" -eq 0 ] && [ "$wd_radio_down" != "1" ]; then

@@ -194,3 +194,37 @@ New scenarios: 73 (radio off for 10 minutes, back on with the link down: Tier 1 
 resume), 74 (LOCKED exit after a 6-minute outage: Tier 1 30 s after the exit), 75 (attach flag
 present: outage age 0, trigger only after it disappears), 76 (the same SSR identity holds once:
 the second escalation inside the SSR window goes straight to Tier 1).
+
+## R2: per-reason hold-off (step 1b)
+
+An exhausted ladder now pauses only new ladders of its own reason. The outage pause
+(`wd_hold_out_until`, 15 minutes) ends on any fresh `reachable=true` read. The quality pause
+(`wd_hold_q_until`) lasts 15, 30, then 60 minutes on consecutive quality pauses
+(`wd_hold_q_level` 0/1/2, capped at 2); the level drops back to 0 an hour after the last
+quality pause ended (`wd_hold_q_end`), and a settings reload ends the pause and resets the
+level. A clean quality window ends the quality pause early; reachability never does. The
+start gate takes the reason (`wd_start_gate outage|quality`, `wd_holdoff_left <reason>`), so a
+quality pause never blocks an outage ladder and vice versa. The state file reports
+`state: holdoff` while idle in monitor under any pause, or in suspect under the outage pause;
+`holdoff_until` / `holdoff_reason` show the pause that ends last (outage wins a tie); new key
+`holdoff_quality_level`; `recovery_reason` is null outside `recovery`, `cooldown` and
+`ssr_hold`. The `wd_holdoff` event names the minutes. Every difference to the R1 baseline in
+an existing scenario is one of these (`at.log`, `calls.log`, `console.log` and `exit.code`
+are byte-identical everywhere):
+
+- every scenario: the state JSON gains `"holdoff_quality_level":0` after `holdoff_reason`
+  (also `state_before_term.json` in 28);
+- passes in `suspect` (and `monitor` with a tier left over) carry `recovery_reason: null`
+  instead of the last reason, since no episode is in progress;
+- 06, 34, 37, 38, 40, 50, 52, 53, 56, 57, 63, 71: passes under an active pause show
+  `state: holdoff` instead of `monitor` / `suspect`. In 56 the lost-probe pass (suspect under
+  a quality pause only) stays `suspect`, because the outage ladder is not paused.
+
+New scenarios: 77 (outage pause, state holdoff, ended by the first reachable read), 78
+(consecutive quality pauses 15 -> 30 -> 60 -> 60 minutes while the link stays reachable), 79
+(the quality level drops from 2 to 0 an hour after the last quality pause), 80 (a clean
+window ends the quality pause early; the next pause within the hour is 30 minutes), 81 (a
+settings reload ends a 30 minute quality pause and the next pause is 15 minutes), 82 (a link
+drop under a quality pause runs the outage ladder, which succeeds; the quality pause keeps
+running), 83 (an outage pause ends when the lossy link returns and the quality ladder runs at
+once).

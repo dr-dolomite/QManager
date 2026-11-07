@@ -137,12 +137,12 @@ evaluate_quality() {
         qlog_info "QUALITY: breach ${quality_breach_counter}/${CFG_QUALITY_CONSECUTIVE} (avg ${q_avg_latency}ms vs ${CFG_LATENCY_THRESHOLD_MS}ms, loss ${q_packet_loss}% vs ${CFG_LOSS_THRESHOLD_PCT}%)"
         if [ "$quality_breach_counter" -ge "$CFG_QUALITY_CONSECUTIVE" ]; then
             local gate
-            wd_radio_reconcile
-            gate=$(wd_start_gate)
+            wd_radio_reconcile quality
+            gate=$(wd_start_gate quality)
             case "$gate" in
                 none|holdoff)
-                    # Nothing to run, or paused after an exhausted ladder: no
-                    # recovery, no event; the breach count restarts.
+                    # Nothing to run, or paused after an exhausted quality
+                    # ladder: no recovery, no event; the breach count restarts.
                     qlog_debug "QUALITY: recovery not started ($gate)"
                     quality_breach_counter=0
                     return 1
@@ -175,6 +175,12 @@ evaluate_quality() {
         fi
     else
         quality_breach_counter=0
+        # A clean window (read_quality had enough samples) ends a quality pause
+        # early (spec section 5.5).
+        if [ "$wd_hold_q_until" -gt 0 ]; then
+            qlog_info "QUALITY: clean window, ending the quality pause"
+            wd_holdoff_clear quality
+        fi
     fi
     return 1
 }

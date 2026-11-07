@@ -233,6 +233,9 @@ main() {
         # Ping attach warm-up just ended: outage age restarts (wd_detect.sh).
         wd_attach_tick
 
+        # Quality pause expiry and the quiet-hour level reset (wd_tiers.sh).
+        wd_holdoff_tick
+
         # Check for config reload request. read_config re-resolves the SHARED
         # quality thresholds (connection_quality latency/loss) too, so a change
         # to the shared degraded thresholds reaches the watchdog when the CGI
@@ -244,6 +247,8 @@ main() {
             rm -f "$RELOAD_FLAG"
             qlog_info "Config reload requested"
             read_config
+            # A settings save ends the quality pause and resets its growth.
+            wd_holdoff_reload
             if [ "$CFG_ENABLED" != "1" ]; then
                 qlog_info "Watchcat disabled via config reload, exiting"
                 state="disabled"
@@ -373,13 +378,14 @@ main() {
         fi
         _prev_streak="$ping_streak_fail"
 
-        # The pause after an exhausted ladder ends once the link is healthy: the
-        # ladder left the state at monitor, so the suspect arm below never sees it.
-        # A pause that followed a quality ladder is kept (wd_holdoff_clear, wd_tiers.sh).
+        # The outage pause after an exhausted ladder ends on a fresh reachable
+        # read, in any state that gets here. A quality pause is never ended by
+        # reachability (wd_holdoff_clear, wd_tiers.sh).
+        [ "$ping_reachable" = "true" ] && wd_holdoff_clear outage
+
         # A reachable link also proves the radio is on (no AT cost), so a radio-down
         # marker that a lost AT+CFUN=1 left behind is cleared here.
         if [ "$state" = "monitor" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$ping_reachable" = "true" ]; then
-            wd_holdoff_clear
             if [ "$wd_radio_down" = "1" ]; then
                 qlog_info "Link is reachable: clearing the stale radio-down marker"
                 wd_mark_radio_up
@@ -405,7 +411,6 @@ main() {
                     quality_breach_counter=0
                     primary_recheck_active="false"
                     _recovery_marker_emitted=""
-                    wd_holdoff_clear
                     ssr_hold_clear
                 else
                     qlog_debug "SUSPECT: outage age ${wd_outage_age}s/${wd_act_after_eff}s"
@@ -418,8 +423,8 @@ main() {
                         # after an exhausted ladder leaves state, counters and
                         # events alone; a radio turned off on purpose parks in
                         # radio_off. Only "go" runs the ladder.
-                        wd_radio_reconcile
-                        _wd_gate=$(wd_start_gate)
+                        wd_radio_reconcile outage
+                        _wd_gate=$(wd_start_gate outage)
                         if [ "$_wd_gate" = "radio_off" ]; then
                             wd_enter_radio_off
                         elif [ "$_wd_gate" != "go" ]; then

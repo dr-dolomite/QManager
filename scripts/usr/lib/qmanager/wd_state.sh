@@ -60,6 +60,10 @@ _wd_write_state_file() {
     local v_ssr_started
     local v_ssr_grace
     local v_holdoff
+    local v_qlevel
+    local v_hold_out
+    local v_hold_q
+    local v_state
     local v_pr_enabled
     local v_pr_interval
     local v_pr_last
@@ -84,6 +88,22 @@ _wd_write_state_file() {
     _wd_num "$ssr_hold_started" 0;         v_ssr_started="$_wdn"
     _wd_num "$CFG_SSR_GRACE" 45;           v_ssr_grace="$_wdn"
     _wd_num "$holdoff_until" 0;            v_holdoff="$_wdn"
+    _wd_num "$wd_hold_q_level" 0;          v_qlevel="$_wdn"
+    _wd_num "$wd_hold_out_until" 0;        v_hold_out="$_wdn"
+    _wd_num "$wd_hold_q_until" 0;          v_hold_q="$_wdn"
+    # State holdoff (spec section 5.5): idle (monitor) under any active pause, or
+    # suspecting an outage that the outage pause blocks. Every other state wins.
+    v_state="$state"
+    case "$state" in
+        monitor)
+            if [ "$v_hold_out" -gt "$v_mono" ] || [ "$v_hold_q" -gt "$v_mono" ]; then
+                v_state="holdoff"
+            fi
+            ;;
+        suspect)
+            [ "$v_hold_out" -gt "$v_mono" ] && v_state="holdoff"
+            ;;
+    esac
     _wd_num "$CFG_PRIMARY_RECHECK_ENABLED" 0;  v_pr_enabled="$_wdn"
     _wd_num "$CFG_PRIMARY_RECHECK_INTERVAL" 30; v_pr_interval="$_wdn"
     _wd_num "$last_recheck_time" 0;        v_pr_last="$_wdn"
@@ -105,7 +125,7 @@ _wd_write_state_file() {
         --argjson mono "$v_mono" \
         --argjson stale_after "$stale" \
         --argjson enabled "$v_enabled" \
-        --arg state "$state" \
+        --arg state "$v_state" \
         --argjson tier "$v_tier" \
         --argjson failures "$v_failures"         --argjson fsecs "$v_fsecs"         --argjson offline "$v_offline" \
         --argjson last_time "$v_last_time" \
@@ -123,6 +143,7 @@ _wd_write_state_file() {
         --argjson last_ssr_mono "$v_ssr_det" \
         --argjson holdoff_until "$v_holdoff" \
         --arg holdoff_reason "$holdoff_reason" \
+        --argjson qlevel "$v_qlevel" \
         --argjson pr_enabled "$v_pr_enabled" \
         --argjson pr_interval "$v_pr_interval" \
         --argjson pr_last "$v_pr_last" \
@@ -130,7 +151,7 @@ _wd_write_state_file() {
         '{
             timestamp: $ts, enabled: ($enabled == 1),
             state: $state, current_tier: $tier,
-            recovery_reason: (if ($tier == 0 and ($state == "monitor" or $state == "locked" or $state == "radio_off" or $state == "disabled")) then null else $recovery_reason end),
+            recovery_reason: (if ($state == "recovery" or $state == "cooldown" or $state == "ssr_hold") then $recovery_reason else null end),
             last_recovery_time: $last_time,
             last_recovery_tier: $last_tier,
             last_recovery_reason: $recovery_reason,
@@ -142,6 +163,7 @@ _wd_write_state_file() {
             step_wait_until: null,
             holdoff_until: (if $holdoff_until > $mono then $holdoff_until else null end),
             holdoff_reason: (if $holdoff_until > $mono and $holdoff_reason != "" then $holdoff_reason else null end),
+            holdoff_quality_level: $qlevel,
             reboots_this_hour: $reboots,
             reboot_budget_exhausted: false,
             reboot_rest_reason: null,
