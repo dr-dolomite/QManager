@@ -287,3 +287,23 @@ keys},"expect":{"status_keys":…,"shape":{json path: type token},"equals":{json
 Type tokens: `int num str bool null array object` joined with `|`. A runner (step 3) feeds each
 request to the repo's CGI with the platform store seeded from `setup` and checks `shape` + `equals`
 with jq (no regex).
+
+## 9. Amendment 1 (approved by the owner 2026-11-07, from the approved UI design)
+
+A. **Per-slot live status.** `qmanager_ping` also writes `/tmp/qmanager_ping_slots.json` (printf, tmp + mv,
+   after ping.json): `{"mono":int,"slots":[{"state":str,"rtt_ms":num|null}, ×4]}`, `state` one of
+   `ok` (answered this cycle, `rtt_ms` set) `miss` (probed, no answer) `skipped` (no route for its
+   address family) `standby` (not probed this cycle because a lower slot answered). ping.json stays at
+   its 16 keys. `GET monitoring/connection_quality.sh` adds
+   `"live":{"reachable":bool|null,"last_leg":int,"slots":[…same objects…]}`; when the cache is stale or
+   missing: `reachable:null`, `last_leg:0`, every slot `{"state":"standby","rtt_ms":null}`.
+B. **Failback retry** (deviation from spec §5.7, approved). `POST monitoring/watchdog.sh
+   {"action":"retry_failback"}` raises a flag the daemon consumes on its next pass: `failback_failures`
+   resets to 0 and the next try is scheduled at once. → `{"success":true}` (also when no failover is
+   active; the daemon ignores the flag then).
+C. **Watchdog status additions** (contract §3 object and the CGI `status`): `offline_secs` (int, raw
+   `fail_elapsed_sec` of the last fresh read, 0 when reachable), `reboot_limit` (int, the configured
+   `max_reboots_per_hour`), `reboot_rest_until` (int|null, mono when Tier 4 may run again: the hourly
+   window end, or the long-outage guard's 24 h end), `holdoff_quality_level` (int 0-2, the step of the
+   15 → 30 → 60 min quality hold-off), `tiers_tried` (int array, tiers run in the current episode, in
+   order; `[]` when idle). Not republished in `status.json.watchcat`.
