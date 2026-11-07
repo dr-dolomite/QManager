@@ -307,3 +307,12 @@ C. **Watchdog status additions** (contract §3 object and the CGI `status`): `of
    window end, or the long-outage guard's 24 h end), `holdoff_quality_level` (int 0-2, the step of the
    15 → 30 → 60 min quality hold-off), `tiers_tried` (int array, tiers run in the current episode, in
    order; `[]` when idle). Not republished in `status.json.watchcat`.
+
+## 10. Amendment 2 (approved by the owner 2026-11-07, from the R4 validation)
+
+**Quality cooldown floor.** A quality verdict needs at least 10 samples, but the spec's step wait
+`max(step_wait_sec, recover_secs + 20)` plus 3 one-pass extensions gathers only 9 samples on `quiet`
+(10 s interval), so every quality recovery there ended inconclusive. Quality cooldowns therefore wait
+`max(step_wait_eff, 10 × interval_sec + 10)` seconds (110 s on `quiet`; unchanged on the other
+sensitivities with the default `step_wait_sec`). Outage cooldowns and the Tier 3 / SIM settle floor
+(90 s) are unchanged. `effective.step_wait_sec` in the watchdog GET stays the outage value.
