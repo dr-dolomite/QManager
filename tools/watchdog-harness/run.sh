@@ -29,7 +29,8 @@
 #   -d DAEMON  daemon file to test (default: scripts/usr/bin/qmanager_watchcat
 #              of this checkout; for the baseline pass the commit-0 monolith:
 #              git show 125b3ce6:scripts/usr/bin/qmanager_watchcat > FILE)
-#   -l LIBDIR  directory holding qlog/safe_tmp/events/sim_db/conn_state.sh and
+#   -l LIBDIR  directory holding qlog/safe_tmp/events/sim_db/conn_state.sh,
+#              qm_platform_cqwd.sh and
 #              any wd_*.sh (default: scripts/usr/lib/qmanager of this checkout)
 # Env: WDH_KEEP=1 keeps the work dirs; JQ=/path/to/jq overrides jq lookup.
 
@@ -116,7 +117,7 @@ run_one() { # scenario name
     }
 
     rewrite "$DAEMON" "$stage/qmanager_watchcat"
-    for lib in qlog safe_tmp events sim_db conn_state schedule_guard wd_config wd_state wd_detect wd_ledger wd_tiers wd_sim; do
+    for lib in qlog safe_tmp events sim_db qm_platform_cqwd conn_state schedule_guard wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; do
         [ -f "$LIBDIR/$lib.sh" ] && rewrite "$LIBDIR/$lib.sh" "$stage/lib/$lib.sh"
     done
 
