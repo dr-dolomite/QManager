@@ -1562,6 +1562,14 @@ install_backend() {
             rm -f "$CGI_DIR/system/at_engine.sh"
             info "  Removed retired CGI: system/at_engine.sh"
         fi
+
+        # Retired by monitoring/connection_quality.sh (unified CQ settings).
+        for _stale in ping_profile.sh quality_thresholds.sh; do
+            if [ -f "$CGI_DIR/system/$_stale" ]; then
+                rm -f "$CGI_DIR/system/$_stale"
+                info "  Removed retired CGI: system/$_stale"
+            fi
+        done
     fi
 
     # --- Init.d services (flat) ---
