@@ -28,6 +28,8 @@ _CFG_BACKUP_SECTIONS_LOADED=1
 # qm_api_token_generate (apply_metrics). Guarded: a missing lib only makes an
 # enable-with-no-token restore fail, never enable without a token.
 [ -f /usr/lib/qmanager/api_auth.sh ] && . /usr/lib/qmanager/api_auth.sh
+# IMEI over QMI and the pending-write marker (collect_imei, apply_imei).
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
 
 # --- Logging ---
 if [ -f /usr/lib/qmanager/qlog.sh ]; then
@@ -854,6 +856,9 @@ collect_imei() {
     if [ -f "$status_file" ]; then
         imei=$(jq -r '.device.imei // empty' "$status_file")
     fi
+    if [ -z "$imei" ] && command -v qm_qmi_imei >/dev/null 2>&1; then
+        imei=$(qm_qmi_imei)
+    fi
     if [ -z "$imei" ]; then
         local resp
         resp=$(qcmd 'AT+CGSN') || return 1
@@ -881,11 +886,18 @@ apply_imei() {
     [ "${#new_imei}" = "15" ] || { qlog_warn "apply_imei: wrong length"; return 1; }
 
     # Skip write if already matches live IMEI (avoids unnecessary NVM write)
-    current=$(jq -r '.device.imei // empty' /tmp/qmanager_status.json 2>/dev/null)
+    # Compare with the IMEI in effect after the next reboot (a write since boot
+    # wins over the stale poller cache; qmi_dms.sh), else the cache.
+    if command -v qm_imei_effective >/dev/null 2>&1; then
+        current=$(qm_imei_effective)
+    else
+        current=$(jq -r '.device.imei // empty' /tmp/qmanager_status.json 2>/dev/null)
+    fi
     if [ "$current" = "$new_imei" ]; then
         qlog_info "apply_imei: IMEI already matches, skipping"
     else
         qcmd "AT+EGMR=1,7,\"${new_imei}\"" >/dev/null || return 1
+        command -v qm_imei_mark_written >/dev/null 2>&1 && qm_imei_mark_written "$new_imei"
         # IMEI is written to NVM but does NOT take effect until the modem
         # reboots. We deliberately do NOT call AT+CFUN=1,1 here — QManager
         # runs on the modem itself, so the reboot would kill our CGI
