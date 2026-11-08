@@ -629,6 +629,129 @@ detect_data_connection_events() {
     esac
 }
 
+# ---------------------------------------------------------------------------
+# Thermal throttling: streak + latch, same shape as latency / packet loss
+# ---------------------------------------------------------------------------
+# Called by the poller after parse_thermal(), once per cycle. Only a fresh
+# sample (thermal_sampled=1) counts toward a streak, so the debounce is in
+# samples (~10 s each), not poll cycles. Enter after 2 throttled samples, exit
+# after 3 clear ones. A change in WHICH parts are throttled during an episode
+# updates ev_thermal_parts and emits nothing. The latch globals are read by the
+# alert engine: ev_thermal_active (0|1), ev_thermal_since_mono (same clock as
+# mono_now), ev_thermal_parts (space-separated, canonical order).
+ev_thermal_active=0
+ev_thermal_since_mono=0
+ev_thermal_parts=""
+ev_thermal_streak=0
+ev_thermal_clear_streak=0
+
+_EV_THERMAL_ENTER=2
+_EV_THERMAL_EXIT=3
+
+# "lte nr" -> "LTE, 5G" into _EV_THERMAL_NAMES
+_ev_thermal_names() {
+    local _p
+    local _n
+    _EV_THERMAL_NAMES=""
+    for _p in $1; do
+        case "$_p" in
+            lte)      _n="LTE" ;;
+            nr)       _n="5G" ;;
+            mmwave)   _n="mmWave" ;;
+            modem)    _n="modem" ;;
+            cpu)      _n="CPU" ;;
+            ethernet) _n="Ethernet" ;;
+            *)        continue ;;
+        esac
+        if [ -n "$_EV_THERMAL_NAMES" ]; then
+            _EV_THERMAL_NAMES="${_EV_THERMAL_NAMES}, ${_n}"
+        else
+            _EV_THERMAL_NAMES="$_n"
+        fi
+    done
+}
+
+# Union of two part lists, in canonical order, into _EV_THERMAL_UNION
+_ev_thermal_union() {
+    local _p
+    _EV_THERMAL_UNION=""
+    for _p in lte nr mmwave modem cpu ethernet; do
+        case " $1 $2 " in
+            *" $_p "*)
+                if [ -n "$_EV_THERMAL_UNION" ]; then
+                    _EV_THERMAL_UNION="${_EV_THERMAL_UNION} ${_p}"
+                else
+                    _EV_THERMAL_UNION="$_p"
+                fi ;;
+        esac
+    done
+}
+
+# Seconds -> "45s" / "6m" / "1h 5m" into _EV_DUR
+_ev_fmt_dur() {
+    local _s="$1"
+    local _h
+    local _m
+    case "$_s" in ''|*[!0-9]*) _s=0 ;; esac
+    if [ "$_s" -lt 60 ]; then
+        _EV_DUR="${_s}s"
+    elif [ "$_s" -lt 3600 ]; then
+        _EV_DUR="$((_s / 60))m"
+    else
+        _h=$((_s / 3600))
+        _m=$(((_s % 3600) / 60))
+        if [ "$_m" -gt 0 ]; then
+            _EV_DUR="${_h}h ${_m}m"
+        else
+            _EV_DUR="${_h}h"
+        fi
+    fi
+}
+
+detect_thermal_events() {
+    [ "$thermal_available" = "1" ] || return 0
+    [ "$thermal_sampled" = "1" ] || return 0
+
+    if [ "$thermal_throttling" = "1" ]; then
+        ev_thermal_clear_streak=0
+        if [ "$ev_thermal_active" = "1" ]; then
+            _ev_thermal_union "$ev_thermal_parts" "$thermal_parts"
+            ev_thermal_parts="$_EV_THERMAL_UNION"
+            return 0
+        fi
+        ev_thermal_streak=$((ev_thermal_streak + 1))
+        if [ "$ev_thermal_streak" -ge "$_EV_THERMAL_ENTER" ]; then
+            _ev_uptime
+            ev_thermal_since_mono="${_EV_UP:-0}"
+            _ev_thermal_union "" "$thermal_parts"
+            ev_thermal_parts="$_EV_THERMAL_UNION"
+            ev_thermal_active=1
+            ev_thermal_streak=0
+            _ev_thermal_names "$ev_thermal_parts"
+            if [ -n "$_EV_THERMAL_NAMES" ]; then
+                append_event "thermal_throttled" \
+                    "Thermal throttling started (${_EV_THERMAL_NAMES})" "warning"
+            else
+                append_event "thermal_throttled" "Thermal throttling started" "warning"
+            fi
+        fi
+    else
+        ev_thermal_streak=0
+        [ "$ev_thermal_active" = "1" ] || return 0
+        ev_thermal_clear_streak=$((ev_thermal_clear_streak + 1))
+        if [ "$ev_thermal_clear_streak" -ge "$_EV_THERMAL_EXIT" ]; then
+            _ev_uptime
+            _ev_fmt_dur $(( ${_EV_UP:-0} - ev_thermal_since_mono ))
+            append_event "thermal_recovered" \
+                "Thermal throttling ended after ${_EV_DUR}" "info"
+            ev_thermal_active=0
+            ev_thermal_since_mono=0
+            ev_thermal_parts=""
+            ev_thermal_clear_streak=0
+        fi
+    fi
+}
+
 # Compare current state vs previous and emit events for any changes
 detect_events() {
     # First cycle: populate previous state, don't generate events
