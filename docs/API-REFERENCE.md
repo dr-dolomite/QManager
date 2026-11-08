@@ -1238,87 +1238,116 @@ Merges both channels' NDJSON logs, tags each entry with `channel: "sms"|"email"`
 
 ### GET/POST `/monitoring/watchdog.sh`
 
-Connection Watchdog settings and live state. Authoritative contract, invariants and the daemon behind it: [`docs/features/connection-watchdog.md`](features/connection-watchdog.md#cgi-envelope).
+Connection Watchdog settings and live state (rewritten for the Connection Quality x Watchdog unification; contract: `docs/plans/2026-11-07-cq-watchdog-contracts.md` section 5.3 / 5.4 with Amendments 1-3). Daemon behaviour and invariants: [`docs/features/connection-watchdog.md`](features/connection-watchdog.md). Contract tests: `tools/cq-wd-contract/run.sh`.
 
 **GET Response:**
 ```json
 {
   "success": true,
   "settings": {
-    "enabled": true,
-    "fail_threshold": 5,
-    "check_interval": 10,
-    "cooldown": 60,
-    "tier1_enabled": true,
-    "tier2_enabled": true,
-    "tier3_enabled": false,
-    "tier4_enabled": true,
-    "backup_sim_slot": null,
-    "max_reboots_per_hour": 3,
-    "quality_enabled": false,
-    "quality_consecutive": 5,
-    "ssr_aware": true,
-    "ssr_grace": 45,
-    "primary_recheck_enabled": false,
-    "primary_recheck_interval": 30
+    "enabled": true, "act_after_sec": 30, "step_wait_sec": 60,
+    "tier1_enabled": true, "tier2_enabled": true, "tier3_enabled": false, "tier4_enabled": true,
+    "backup_sim_slot": null, "max_reboots_per_hour": 3,
+    "quality_enabled": false, "quality_after_sec": 120,
+    "carrier_enabled": false, "carrier_after_min": 15,
+    "ssr_aware": true, "ssr_grace_sec": 45,
+    "failback_enabled": false, "failback_every_min": 30
   },
-  "probe_profile": "relaxed",
-  "interval_override": null,
-  "effective_interval": 5,
-  "interval_sec": 5,
-  "fail_secs": 15,
-  "recover_secs": 10,
-  "quality_thresholds": { "latency_ms": 250, "loss_pct": 30, "latency_preset": "tolerant", "loss_preset": "tolerant" },
-  "status": {
-    "timestamp": 1737158400, "mono": 5230, "stale_after": 90,
-    "enabled": true, "state": "monitor", "current_tier": 0, "failure_count": 0,
-    "last_recovery_time": null, "last_recovery_tier": null, "total_recoveries": 0,
-    "cooldown_remaining": 0, "sim_failover_active": false,
-    "original_sim_slot": null, "current_sim_slot": null,
-    "reboots_this_hour": 1, "quality_breach_count": 0, "quality_enabled": false,
-    "last_recovery_reason": "unreachable", "ssr_hold": false, "last_ssr_detected": null
+  "effective": {
+    "act_after_sec": 30, "step_wait_sec": 60,
+    "quality_limits": { "latency_ms": 250, "loss_pct": 30 },
+    "carrier_enabled": false, "carrier_after_min": 15
   },
+  "status": { "timestamp": 1737158400, "state": "monitor", "recovery_reason": null, "total_recoveries": 0, "last_success_time": null, "carrier_cc": null, "mono": 5230, "stale_after": 60, "...": "..." },
   "sim_failover": { "active": false },
-  "sim_swap": { "detected": false },
-  "auto_disabled": false,
-  "recent_reboots": [1737158400, 1737150000]
+  "recent_reboots": [1737158400, 1737150000],
+  "sim_dual_capable": true,
+  "auto_disabled": false
 }
 ```
 
-- `status` is the raw daemon state file, `{}` when the daemon is not running (the file is removed when it exits). `status.mono` and `status.stale_after` are the heartbeat. The page reads the liveness verdict from the poller's `status.json` `.watchcat.age_sec` / `.stale_after`, not from this payload.
-- `recent_reboots`: epoch seconds of the watchdog's own Tier 4 reboots from `/etc/qmanager/crash.log` (`tier4_escalation` rows only), newest first, at most 5, `[]` on any problem or when the ledger is absent. Epochs from a clockless (1970) boot can appear; consumers ignore values at or below 1600000000.
-- `sim_failover` is the raw `/tmp/qmanager_sim_failover` record, `{ "active": false }` when absent. Besides `active`, `original_slot`, `current_slot`, `switched_at`, `reason`, `original_iccid` and `current_iccid` it can carry `confirmed: false` (written right after a Tier 3 swap, before the cooldown judged it) and `revert_pending: true` (a swap-back deferred because the radio was off).
-- Bad input degrades instead of failing: a state file that is 0 bytes, half-written or not an object yields `"status": {}`; a garbage failover or swap file yields their defaults; a non-numeric UCI value (for example `cooldown=abc`) falls back to its default. The GET still returns `success: true`.
+- `settings` uses the new key names (`act_after_sec`, `step_wait_sec`, `quality_after_sec`, `ssr_grace_sec`, `failback_*`); the retired `fail_threshold`, `check_interval`, `cooldown`, `probe_*` keys and the old top-level cadence/threshold mirrors are gone. Cadence and thresholds now live on `GET monitoring/connection_quality.sh`.
+- `effective.act_after_sec = max(act_after_sec, fail_secs)` and `effective.step_wait_sec = max(step_wait_sec, recover_secs + 20)`, with `fail_secs` / `recover_secs` from the stored sensitivity. `effective.quality_limits` are the Connection Quality limits raised to the watchdog floors (50 ms, 10 %).
+- `status` is the raw daemon state file (`{}` when absent or unreadable): see the contract section 3 for every key, including `recovery_reason` / `holdoff_reason` (`outage|quality|carrier`), the last-success fields (`last_success_*`, in memory since the daemon started) and the carrier fields (`carrier_single_secs`, `carrier_cc`, `holdoff_carrier_level`).
+- `sim_failover` is the raw `/tmp/qmanager_sim_failover` record (`{ "active": false }` when absent); `recent_reboots` are the watchdog's Tier 4 epochs (newest first, at most 5); `auto_disabled` is true only while a pre-upgrade auto-disable flag file is present.
+- GET never writes config.
 
-**GET while the daemon is silent** (enabled, but it stopped writing, or was killed and left a stale file): `status` keeps the last write, so `status.mono` stops advancing. Liveness is judged from the poller (`watchcat.age_sec > watchcat.stale_after`), and the Watchdog page shows "Not reporting":
-```json
-{
-  "success": true,
-  "settings": { "enabled": true, "...": "..." },
-  "status": { "timestamp": 1737150000, "mono": 4100, "stale_after": 90, "enabled": true, "state": "monitor", "...": "..." },
-  "sim_failover": { "active": false },
-  "auto_disabled": false,
-  "recent_reboots": []
-}
-```
+**POST** `{ "action": "save_settings" | "revert_sim" | "retry_failback" | "dismiss_sim_swap", ... }`.
 
-**POST** `{ "action": "save_settings" | "dismiss_sim_swap" | "revert_sim", ... }`.
-
-`save_settings` writes only the keys present in the body (an absent key, `backup_sim_slot` included, is left untouched) and accepts `probe_interval` (int 1-60, written to `ping_profile.interval_override` only when it changed; ledger U4.6). The key set is `enabled`, `fail_threshold`, `check_interval`, `cooldown`, `tier1_enabled`..`tier4_enabled`, `backup_sim_slot`, `max_reboots_per_hour`, `quality_enabled`, `quality_consecutive`, `ssr_aware`, `ssr_grace`, `primary_recheck_enabled`, `primary_recheck_interval`, `probe_profile`, `interval_override`, `probe_interval`. A save commits UCI, touches the daemon's reload flag and starts the daemon only if it is not already running. **It no longer restarts a running daemon**: the daemon reloads the settings within one `check_interval`.
+`save_settings` accepts any subset of the `settings` keys (an absent key is untouched; `backup_sim_slot: null` clears it). Validation is two-pass: every key is checked first, then everything is staged and committed once. Ranges: `act_after_sec` 15-600, `step_wait_sec` 10-300, `max_reboots_per_hour` 1-10, `quality_after_sec` 30-1800, `carrier_after_min` 5-240, `ssr_grace_sec` 10-120, `failback_every_min` 5-1440, `backup_sim_slot` 1, 2 or null; booleans must be JSON booleans and integers JSON integers (a string or fraction is rejected). Cross-field: `tier3_enabled: true` needs a backup slot (`field: "tier3_enabled"`); the slot cannot be cleared while Tier 3 stays on (`field: "backup_sim_slot"`); turning Tier 3 off during an active failover is allowed. An unknown key (including the retired ones) is `invalid_field` with that key.
 
 ```json
 { "success": true }
 ```
 
-`dismiss_sim_swap` and `revert_sim` also return `{ "success": true }` (`revert_sim` adds a `message`). `revert_sim` queues the user's request; the daemon acts on it when it is idle (not mid-recovery, locked, radio off or holding for an SSR).
+A save raises the watchdog reload flag (the running daemon reloads; it is never restarted from here), also `/tmp/qmanager_poller_reload` when `carrier_enabled` is in the body, and starts/stops the service only when `enabled` is in the body. `revert_sim` and `retry_failback` raise root-owned flags the daemon consumes on its next pass (`retry_failback` also succeeds when no failover is active); `dismiss_sim_swap` marks the SIM-swap banner dismissed.
 
-A rejected value returns HTTP 200 with the `invalid_field` envelope (`reason`, not `detail`) and discards everything the request had staged in UCI:
+A rejected request returns HTTP 200 with the shared envelope (`detail` is English text for logs; the UI maps `error` through `resolveErrorMessage`):
 
 ```json
-{ "success": false, "error": "invalid_field", "field": "fail_threshold", "reason": "must be integer 1-20" }
+{ "success": false, "error": "invalid_field", "field": "act_after_sec", "detail": "must be an integer 15-600" }
 ```
 
-Ranges: `fail_threshold` 1-20, `check_interval` 5-60, `cooldown` 10-300, `max_reboots_per_hour` 1-10, `backup_sim_slot` 1 or 2 (JSON `null` clears), `quality_consecutive` 1-60, `ssr_grace` 10-120, `primary_recheck_interval` 5-1440 minutes, `probe_interval` 1-60, `interval_override` 1-60 (`null` clears), `probe_profile` one of `sensitive`/`regular`/`relaxed`/`quiet`. Other errors use the standard `cgi_error` envelope (`missing_action`, `unknown_action`, `method_not_allowed`).
+**Error codes:** `invalid_field`, `invalid_json`, `missing_action`, `unknown_action`, `method_not_allowed`, `save_failed`, `internal_error`.
+
+---
+
+### GET/POST `/monitoring/connection_quality.sh`
+
+Connection Quality settings in one endpoint; replaces the removed `/system/ping_profile.sh` and `/system/quality_thresholds.sh` (not shimmed). Contract: `docs/plans/2026-11-07-cq-watchdog-contracts.md` section 5.1 / 5.2 with Amendment 1 (`live`) and Amendment 3 (`last_outage`). The probe mechanics and apply pipeline are in [`docs/features/connection-quality.md`](features/connection-quality.md). Contract tests: `tools/cq-wd-contract/run.sh`.
+
+**GET Response:**
+```json
+{
+  "success": true,
+  "settings": {
+    "sensitivity": "relaxed",
+    "targets": ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111", "cloudflare.com"],
+    "latency": { "preset": "tolerant", "custom_ms": null },
+    "loss": { "preset": "tolerant", "custom_pct": null }
+  },
+  "cadence": { "interval_sec": 5, "fail_secs": 20, "recover_secs": 10, "window_sec": 300 },
+  "tables": {
+    "sensitivity": { "sensitive": { "interval_sec": 1, "fail_secs": 8, "recover_secs": 3, "window_sec": 300, "quality_debounce_sec": 12, "quality_debounce_vt_sec": 8 }, "...": "regular, relaxed, quiet" },
+    "presets": {
+      "latency": { "standard": 150, "tolerant": 250, "very-tolerant": 500 },
+      "loss": { "standard": 15, "tolerant": 30, "very-tolerant": 50 },
+      "custom_range": { "latency_ms": [1, 10000], "loss_pct": [1, 100] }
+    }
+  },
+  "live": {
+    "reachable": true, "last_leg": 1,
+    "slots": [ { "state": "ok", "rtt_ms": 12.5 }, { "state": "standby", "rtt_ms": null }, { "state": "standby", "rtt_ms": null }, { "state": "standby", "rtt_ms": null } ]
+  },
+  "last_outage": { "duration_s": 42, "ended_ago_s": 600, "wan_changed": true },
+  "is_default": false
+}
+```
+
+- `settings.sensitivity` is one of `sensitive`, `regular`, `relaxed`, `quiet` (unknown or absent reads `relaxed`); `cadence` comes from the stored sensitivity, so it is right while the probe daemon is down; `tables` is generated by `conn_state.sh` (the one copy of the cadence table).
+- `custom_ms` / `custom_pct` are the stored custom value even while another preset is selected, else `null`; a stored custom value outside its range reads as the tolerant default. `is_default` is true while neither threshold preset has ever been saved.
+- `live` (probe cache fresh only): `reachable` (`true`/`false`, `null` when the cache is stale or missing), `last_leg` (answering slot 1-4, 0 = none) and four slots with `state` `ok` | `miss` | `skipped` | `standby`. A stale cache gives `reachable: null`, `last_leg: 0` and four `standby` slots.
+- `last_outage` is the most recently cleared outage of this boot, `null` until one clears: `duration_s`, `ended_ago_s` (monotonic) and `wan_changed` (`true`/`false`/`null`). Durations are measured between the debounced edges, so the UI says "about".
+- GET never writes config.
+
+**POST** `{ "action": "save_probe" | "save_thresholds", ... }`.
+
+```json
+{ "action": "save_probe", "sensitivity": "quiet", "targets": ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111", "cloudflare.com"] }
+{ "action": "save_thresholds", "latency": { "preset": "custom", "custom_ms": 400 }, "loss": { "preset": "tolerant" } }
+```
+
+`save_probe` needs both keys; `targets` is exactly 4 strings, each an IPv4 literal, IPv6 literal or hostname of 1-128 characters from `[0-9A-Za-z.:%-]`, not starting with `-`. It raises the ping reload flag. `save_thresholds` presets are `standard`, `tolerant`, `very-tolerant`, `custom`; `custom_ms` (1-10000) / `custom_pct` (1-100) are required, as JSON integers, only for a `custom` preset and ignored (the stored value is kept) otherwise. It raises the poller (quality) and watchdog reload flags. Both return:
+
+```json
+{ "success": true }
+```
+
+A rejected request returns HTTP 200: `{ "success": false, "error": "invalid_field", "field": "targets[2]", "detail": "..." }` with `field` one of `sensitivity`, `targets`, `targets[0]` to `targets[3]`, `latency.preset`, `latency.custom_ms`, `loss.preset`, `loss.custom_pct`.
+
+**Error codes:** `invalid_field`, `invalid_json`, `missing_action`, `unknown_action`, `method_not_allowed`, `save_failed`, `internal_error`.
+
+---
 
 ### GET/POST `/monitoring/sites.sh`
 
@@ -1431,111 +1460,6 @@ Resets the set to contain only the currently-inserted SIM (read live via `AT+QCC
 ```json
 { "success": false, "error": "invalid_action", "detail": "Action must be: list or clear" }
 ```
-
-### GET/POST `/system/ping_profile.sh`
-
-Read or write the ping-daemon sensitivity profile and ICMP probe targets. See [`docs/features/connection-quality.md`](../features/connection-quality.md) for the full apply pipeline, probe mechanics, and reload semantics.
-
-**GET Response:**
-
-```json
-{
-  "success": true,
-  "profile": "relaxed",
-  "target_ipv4": "1.1.1.1",
-  "target_ipv6": "2606:4700:4700::1111",
-  "interval_override": null,
-  "effective_interval": 5,
-  "interval_sec": 5,
-  "fail_secs": 15,
-  "recover_secs": 10
-}
-```
-
-`profile` is one of: `sensitive`, `regular`, `relaxed`, `quiet`. Both GET and POST use the same `target_ipv4`/`target_ipv6` keys — there is no GET/POST asymmetry in this endpoint. `interval_override` is `null` when not set (sole writer: Connection Watchdog). `effective_interval` is the resolved probe interval in seconds. `interval_sec` carries the same value; `fail_secs` and `recover_secs` are the profile's time-to-fail / time-to-recover in seconds. All three are resolved from UCI (`conn_state_cadence`), so they are correct while the ping daemon is stopped.
-
-**POST Request (`action: "save"`):**
-
-```json
-{
-  "action": "save",
-  "profile": "sensitive",
-  "target_ipv4": "1.1.1.1",
-  "target_ipv6": "2606:4700:4700::1111"
-}
-```
-
-Targets are bare IPv4/IPv6 literals or hostnames — no URL scheme. The POST does NOT write `interval_override`; that key is owned exclusively by the Connection Watchdog.
-
-**POST Success:**
-```json
-{ "success": true }
-```
-
-Drops `/tmp/qmanager_ping_reload`; the ping daemon re-reads UCI and re-detects IPv6 capability within one probe cycle (≤10 s on `quiet`, ≤1 s on `sensitive`). No reboot.
-
-**Error codes:** `invalid_profile`, `invalid_target`, `missing_action`, `unknown_action`
-
-`invalid_target` is returned when `target_ipv4` or `target_ipv6` fails per-family host validation: empty, >128 chars, interior whitespace, shell/HTML metacharacters, or characters outside the family charset (`[0-9A-Za-z.-]` for IPv4; `[0-9A-Fa-f:.%]` for IPv6).
-
----
-
-### GET/POST `/system/quality_thresholds.sh`
-
-Read or write the latency and packet-loss event-threshold presets. These control when QManager fires `high_latency` / `high_packet_loss` events into Recent Activities. See [`docs/features/connection-quality.md`](../features/connection-quality.md) for the preset→numeric mapping and the `isDefault` semantics.
-
-**GET Response (section present — user has saved at least once):**
-
-```json
-{
-  "success": true,
-  "thresholds": {
-    "latency": { "preset": "tolerant" },
-    "loss": { "preset": "tolerant" }
-  },
-  "alert_after_min": 5,
-  "isDefault": false
-}
-```
-
-**GET Response (no preset stored — factory / never saved):**
-
-```json
-{
-  "success": true,
-  "thresholds": {
-    "latency": { "preset": "tolerant" },
-    "loss": { "preset": "tolerant" }
-  },
-  "alert_after_min": 5,
-  "isDefault": true
-}
-```
-
-`isDefault: true` means neither `latency_preset` nor `loss_preset` is stored; the tolerant/tolerant values are the hardcoded fallback, not a stored setting. The UCI section may still exist holding only `alert_after_min`. `alert_after_min` is always present: the single outage wait (minutes) every alert channel uses.
-
-**POST Request (`action: "save"`):**
-
-```json
-{
-  "action": "save",
-  "latency_preset": "standard",
-  "loss_preset": "tolerant"
-}
-```
-
-Each preset is one of: `standard`, `tolerant`, `very-tolerant`. Optional `alert_after_min` (integer 1-60, minutes) sets the single alert wait; absent leaves it unchanged.
-
-**POST Success:**
-```json
-{ "success": true }
-```
-
-Creates the `quality_thresholds` UCI section on first save, then drops `/tmp/qmanager_quality_reload`; the poller re-maps presets to numeric thresholds within one poll cycle. No reboot.
-
-**Error codes:** `invalid_preset`, `invalid_threshold` (bad `alert_after_min`), `missing_action`, `unknown_action`
-
----
 
 ### GET/POST `/system/adaptive_polling.sh`
 
