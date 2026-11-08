@@ -646,4 +646,6 @@ success; a stale `ca.env` is unknown after 90 s), 156 (an outage mid-run wins, a
 re-arms), 159 (off: `plat_cc_count` never called; on after a reload, armed by two carriers), 160
 (`carrier_after_min` clamps), 161 (unknown verdict: 3 extensions, inconclusive, Tier 1 kept, next
 run resumes at Tier 2), 162 (link down at the verdict: handover to the outage ladder), 163 (two
-carriers end the pause early; the next pause within the hour is 30 min).
+carriers end the pause early; the next pause within the hour is 30 min); 164 (the carrier trigger comes due inside the SSR window: `ssr_hold` for one pass, then monitor
+with the run reset by two carriers, no tier executed), 165 (Tier 1 and 2 off, Tier 3 and 4 on: gate
+`none`, no AT, no QUIMSLOT, no reboot, no event, the run keeps growing).
