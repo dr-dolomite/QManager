@@ -257,6 +257,41 @@ sc_base() {
     _QMI_READ_MONO=0
     _QMI_STATE=""
     _QMI_SSR=0
+    # Thermal (parse_thermal): sampled, idle, live-like headroom.
+    thermal_available=1
+    thermal_throttling=0
+    thermal_parts=""
+    thermal_cold=0
+    thermal_active_json="[]"
+    thermal_headroom_c=67
+    thermal_trip_c=110
+    thermal_trip_part=cpu
+}
+
+# Thermal scenarios: no cooling devices / before the first sample (null),
+# throttling with two parts and two devices, headroom unknown.
+sc_thermal_none() {
+    sc_base
+    thermal_available=0
+    thermal_headroom_c=""; thermal_trip_c=""; thermal_trip_part=""
+}
+sc_thermal_unsampled() {
+    sc_base
+    thermal_available=""
+}
+sc_thermal_throttle() {
+    sc_base
+    thermal_throttling=1
+    thermal_parts="lte nr"
+    thermal_cold=1
+    thermal_active_json='[{"device":"modem_nr_dsc","part":"nr","level":40,"max":255},{"device":"modem_lte_dsc","part":"lte","level":3,"max":255}]'
+    thermal_headroom_c=-2
+    thermal_trip_c=111
+    thermal_trip_part=lte
+}
+sc_thermal_unknown() {
+    sc_base
+    thermal_headroom_c=""; thermal_trip_c=""; thermal_trip_part=""
 }
 
 # Fixture families (the corpus the parser gate uses): each starts from sc_base.
@@ -391,11 +426,38 @@ sc_empties() {
 
 run_named() {
     local _s
-    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties; do
+    local _k
+    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties sc_thermal_none sc_thermal_unsampled sc_thermal_throttle sc_thermal_unknown; do
         "$_s"
         write_cache_jq "$PH_TMP/a.json" 2>/dev/null
         _wc_compose_pf "$PH_TMP/b.json"
         _pair "$_s" "$PH_TMP/a.json" "$PH_TMP/b.json"
+    done
+    # Thermal block shape in both composers (the contract the dashboard, the
+    # health check and the alert engine read).
+    for _s in "sc_thermal_none|.thermal == null" \
+        "sc_thermal_unsampled|.thermal == null" \
+        "sc_base|.thermal == {\"throttling\":false,\"parts\":[],\"active\":[],\"cold_protection\":false,\"headroom_c\":67,\"trip_c\":110,\"trip_part\":\"cpu\"}" \
+        "sc_thermal_throttle|(.thermal.throttling == true) and (.thermal.parts == [\"lte\",\"nr\"]) and (.thermal.active | length == 2) and (.thermal.active[0] == {\"device\":\"modem_nr_dsc\",\"part\":\"nr\",\"level\":40,\"max\":255}) and (.thermal.cold_protection == true) and (.thermal.headroom_c == -2) and (.thermal.trip_c == 111) and (.thermal.trip_part == \"lte\")" \
+        "sc_thermal_unknown|(.thermal.throttling == false) and (.thermal.headroom_c == null) and (.thermal.trip_c == null) and (.thermal.trip_part == null)"; do
+        "${_s%%|*}"
+        write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+        _wc_compose_pf "$PH_TMP/b.json"
+        for _k in a b; do
+            if jq -e "${_s#*|}" "$PH_TMP/$_k.json" >/dev/null 2>&1; then
+                PH_PASS=$((PH_PASS + 1))
+            else
+                PH_FAIL=$((PH_FAIL + 1))
+                [ -z "$PH_FIRST" ] && PH_FIRST="${_s%%|*}: thermal shape wrong in $_k.json: $(jq -c .thermal "$PH_TMP/$_k.json" 2>/dev/null)"
+            fi
+        done
+        # Key order is part of the contract too (jq -S hides it in _pair).
+        if [ "$(jq -c '.thermal | if . == null then null else keys_unsorted end' "$PH_TMP/a.json")" != "$(jq -c '.thermal | if . == null then null else keys_unsorted end' "$PH_TMP/b.json")" ]; then
+            PH_FAIL=$((PH_FAIL + 1))
+            [ -z "$PH_FIRST" ] && PH_FIRST="${_s%%|*}: thermal key order differs between composers"
+        else
+            PH_PASS=$((PH_PASS + 1))
+        fi
     done
     # The QMI Phase 2 keys exist in both composers with the scenario values.
     sc_qmi
@@ -499,16 +561,16 @@ _pick_num() {
     esac
 }
 
-PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE"
+PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_profile conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE thermal_trip_part"
 # Numeric fields that have a default in BOTH composers (empty is allowed).
-PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
+PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR thermal_headroom_c thermal_trip_c"
 
 run_random() {
     local _i=0
     local _cnt="$1"
     local _v
     local _k
-    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_deepstate sc_qmi"
+    local _bases="sc_base sc_lte sc_sa sc_noservice sc_connunknown sc_deepstate sc_qmi sc_thermal_throttle"
     local _b
     local _nstr
     local _nnum
@@ -517,7 +579,7 @@ run_random() {
     set -- $PH_NUM_VARS
     _nnum=$#
     while [ "$_i" -lt "$_cnt" ]; do
-        _rand 7
+        _rand 8
         _k=0
         for _b in $_bases; do
             [ "$_k" -eq "$_R" ] && break
@@ -571,13 +633,13 @@ run_badnums() {
     local _f
     for _bad in "abc" "0123" "12abc" "1e5" "-" "." "1.2.3" "0x1F" " 5" "5 " "+5" "--5" "5-" ".5" "5." "NaN" "Infinity" "\$(id)"; do
         sc_base
-        for _f in lte_rsrp nr_pci t1_temperature conn_latency cpu_usage wc_current_tier t1_cfun _QMI_READ_MONO _QMI_SSR; do
+        for _f in lte_rsrp nr_pci t1_temperature conn_latency cpu_usage wc_current_tier t1_cfun _QMI_READ_MONO _QMI_SSR thermal_headroom_c thermal_trip_c; do
             eval "$_f=\$_bad"
         done
         _wc_compose_pf "$PH_TMP/b.json"
         if jq empty "$PH_TMP/b.json" >/dev/null 2>&1; then
             # Every poisoned numeric field must be a number or null, never text.
-            if jq -e '[.lte.rsrp,.nr.pci,.device.temperature,.connectivity.latency_ms,.device.cpu_usage,.watchcat.current_tier,.network.cfun,.device.qmi_read_mono,.device.qmi_ssr_count] | all(. == null or type == "number")' "$PH_TMP/b.json" >/dev/null 2>&1; then
+            if jq -e '[.lte.rsrp,.nr.pci,.device.temperature,.connectivity.latency_ms,.device.cpu_usage,.watchcat.current_tier,.network.cfun,.device.qmi_read_mono,.device.qmi_ssr_count,.thermal.headroom_c,.thermal.trip_c] | all(. == null or type == "number")' "$PH_TMP/b.json" >/dev/null 2>&1; then
                 PH_PASS=$((PH_PASS + 1))
             else
                 PH_FAIL=$((PH_FAIL + 1))
@@ -664,7 +726,7 @@ line' ;;
             cmp -s "$PH_TMP/exp" "$PH_TMP/got" || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: errors[0] did not round-trip"; continue; }
         fi
         # No injected key: the document keeps exactly the top-level keys it had.
-        if [ "$(jq -c 'keys' "$PH_TMP/b.json")" != '["connectivity","device","errors","last_successful_poll","lte","modem_reachable","mono","network","nr","signal_per_antenna","sim","sim_failover","sim_swap","system_state","timestamp","watchcat"]' ]; then
+        if [ "$(jq -c 'keys' "$PH_TMP/b.json")" != '["connectivity","device","errors","last_successful_poll","lte","modem_reachable","mono","network","nr","signal_per_antenna","sim","sim_failover","sim_swap","system_state","thermal","timestamp","watchcat"]' ]; then
             PH_FAIL=$((PH_FAIL + 1))
             [ -z "$PH_FIRST" ] && PH_FIRST="hostile#$_n: top-level keys changed"
             continue

@@ -19,6 +19,7 @@ there. Nothing here is installed by the product.
 | `tap_replay.sh` | implementation of `--tap` |
 | `shim.sh` | qlog stubs + the poller's call shapes (`qcmd_exec` strip, `poll_*` guards) + sentinel / default initialisers |
 | `sinr_expect.sh <parse_at>` | table test for `_lte_sinr_db_g` (QENG LTE raw `<SINR>` X to `2X-20` dB, 0..25 only, else empty); the Rust port that carried the same table was removed 2026-10-25 |
+| `thermal_expect.sh <parse_at> [fixture_dir]` | value gate for `parse_thermal`: every `thermal__*.txt` tree spec must print exactly its `.txt.expect` (see Thermal below) |
 | `measure.sh [seconds]` | on-device poller cost sampler (one summary line) |
 | `gen_fixtures.sh [dir]` | regenerates the whole fixture corpus byte for byte (device or Git Bash) |
 | `status_parity.sh` | Phase C gate for the status.json composers: printf composer vs the jq composer (`write_cache_jq`) over synthetic scenarios, seeded random values, hostile text and the write_cache safety net; and the live 200-pair capture from the deployed poller (`arm` / `compare` / `live`) |
@@ -55,7 +56,7 @@ sourced after the sentinels, used to pin `network_type` / `lte_state` /
 
 Fixture name = `<parser>__<case>.txt`; parser is one of `serving_cell qrsrp
 qrsrq qsinr signal ca_info carrier sim_slot sim_status tier2 temperature
-helpers`. Pre-processing is the poller's: `serving_cell` and `ca_info` go
+thermal helpers`. Pre-processing is the poller's: `serving_cell` and `ca_info` go
 through the `qcmd_exec` strip (`grep -v '^AT'|'^OK$'|'^$'`, which leaves
 `OK<CR>` and `<CR>` lines in place on CRLF data) plus its rc rules (empty /
 `ERROR`); `ca_info` falls back to the reset block unless rc==0 and non-empty;
@@ -101,6 +102,37 @@ runs live: `temperature__live.txt` (content ignored) makes `parity.sh` run
 old, new, old back-to-back and PASS if new equals either old reading, retrying up to 5 times (sysfs
 jitter between calls is tolerated).
 
+## Thermal
+
+`parse_thermal` honours `QM_THERMAL_ROOT` (default `/sys/class/thermal`), so
+it runs on fixtures. A `thermal__<case>.txt` is a tree spec, one item per line:
+
+```
+dev  <n> <type> <max_state> <cur_state>               cooling_device<n>
+zone <n> <type> <temp>                                thermal_zone<n>
+bind <zone> <m> <dev> <trip_k> <trip_temp> <trip_type>   cdev<m> -> ../cooling_device<dev>
+```
+
+(`<empty>` = an empty file.) `dump_globals.sh <lib> thermal <fixture>` builds
+the tree in a private dir and prints the nine `thermal_*` globals as plain
+`name=value` lines (shell independent). `thermal_expect.sh` compares them with
+`<fixture>.txt.expect`; `parity.sh` compares old vs new and skips the thermal
+fixtures when either library predates `parse_thermal`. Cases: `none` (no
+cooling devices), `idle` (the RM551E layout probed 2026-11-08, cold zone,
+dead sensor and a critical-only trip excluded), `throttle_two` (LTE + NR,
+temperature above the trip, floor to -2), `unknown_headroom` (every watched
+sensor disconnected), `cold_and_junk` (cold protection alone, leading zeros,
+negative / text cur_state, a hostile type, a text max_state).
+
+`status_parity.sh` covers the `thermal` block of status.json: `sc_base` is
+idle, plus `sc_thermal_none` / `sc_thermal_unsampled` (null),
+`sc_thermal_throttle` and `sc_thermal_unknown`; each also checks the exact
+shape and the key order in both composers, and `thermal_headroom_c` /
+`thermal_trip_c` / `thermal_trip_part` are in the random and bad-number sets.
+
+On the device, `tools/thermal-sim/make_fake_tree.sh` copies the real tree to
+`/tmp/qm_thermal_fake` for an end-to-end run of the poller (usage at its top).
+
 ## Tap replay (`--tap`)
 
 Records are written by `_tap_at` / `_tap_end` in `qmanager_poller` while
@@ -145,4 +177,5 @@ Prints one line, e.g.
 - signal (about 30): live capture, 4RX, 2RX with -32768 on ports 3/4, NR only, NSA both lines, NR ports 3/4 inactive, all inactive, missing QRSRQ or QSINR, trailing / empty fields, fewer than four values, RAT-only lines, no RAT suffix, no space after colon, extra spaces, non-numeric / hostile values, duplicate lines, both RATs on one line, other RAT tags, more than four values, CR inside, LF-only, bare-CR, no final EOL, empty / OK-only / ERROR / CME ERROR; plus single-parser `qrsrp` / `qrsrq` / `qsinr` fixtures.
 - tier2 + carrier / sim_slot / sim_status (about 40): live capture (phone redacted), COPS shapes (no commas, one / two commas, deregistered, empty name, comma in name, numeric format, spaces, no space after colon, two lines, hostile, UTF-8, trailing fields), QUIMSLOT shapes (1, 2, 3, `1 2`, empty, missing, hostile, trailing space), CPIN shapes (READY, SIM PIN / PUK / PIN2, NOT READY, NOT INSERTED, ERROR, unknown, lowercase, two lines), SIM absent (`+CME ERROR: 10` last / first), empty / OK-only / ERROR.
 - temperature: live only.
+- thermal (5): see Thermal above.
 - helpers: `_sig_val`, `_antenna_to_json_array`, `_antenna_line_to_json`, `_hex_to_dec`, `_compute_cell_parts` (lte and `nr`), `map_scs_to_khz`, `_lte_rb_to_mhz`, `_nr_bw_to_mhz` (about 190 calls including CR, empty, overflow and non-numeric arguments).

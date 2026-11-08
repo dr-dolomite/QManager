@@ -9,7 +9,7 @@
 # touched them would show; parse_at.sh sets none of them.
 #
 # parser: serving_cell qrsrp qrsrq qsinr signal ca_info carrier sim_slot
-#         sim_status tier2 temperature helpers
+#         sim_status tier2 temperature thermal helpers
 #
 # Every name the poller initialises is pre-set to the sentinel SENT_<name>
 # first, so "parser left the value unchanged" is visible. A sidecar file
@@ -20,6 +20,16 @@
 # in parse_at.sh, so it cannot be redirected without editing the library). It
 # therefore only means something LIVE on the device; parity.sh runs old/new
 # back-to-back for it.
+#
+# thermal: the fixture is a fake sysfs tree spec, one item per line:
+#   dev <n> <type> <max_state> <cur_state>          cooling_device<n>
+#   zone <n> <type> <temp>                          thermal_zone<n>
+#   bind <zone> <m> <dev> <trip_k> <trip_temp> <trip_type>
+#                                                   thermal_zone<zone>/cdev<m> -> ../cooling_device<dev>
+# Value token <empty> = an empty file. The tree is built in a private dir,
+# QM_THERMAL_ROOT points parse_thermal at it, and only the thermal_* globals are
+# printed (name=value, unquoted, fixed order) so the output is shell
+# independent; thermal_expect.sh compares it with <fixture>.expect.
 #
 # helpers: fixture lines are "helper arg1 arg2..." (split on TABs if the line
 # contains one, else on spaces). Tokens: <empty> = empty argument, <CR> = a
@@ -41,7 +51,7 @@ PP_HERE=${0%/*}
 [ "$PP_HERE" = "$0" ] && PP_HERE=.
 . "$PP_HERE/shim.sh"
 
-trap 'rm -f /tmp/ppx_$$_*.tmp "${TMPDIR:-/tmp}/ppx_lib_$$.sh"' EXIT
+trap 'rm -f /tmp/ppx_$$_*.tmp "${TMPDIR:-/tmp}/ppx_lib_$$.sh"; rm -rf "${TMPDIR:-/tmp}/ppth_$$"' EXIT
 
 pp_init_sentinels
 [ -f "$PP_FIX.env" ] && . "$PP_FIX.env"
@@ -86,6 +96,42 @@ case "$PP_PARSER" in
     sim_status)   pp_call_sim_status "$PP_RAW" ;;
     tier2)        pp_call_tier2 "$PP_RAW" ;;
     temperature)  parse_temperature ;;
+    thermal)
+        PP_TR="${TMPDIR:-/tmp}/ppth_$$"
+        rm -rf "$PP_TR"
+        mkdir -p "$PP_TR" || exit 2
+        pp_tv() { [ "$1" = "<empty>" ] && return 0; printf '%s\n' "$1"; }
+        set -f
+        while read -r PP_K PP_1 PP_2 PP_3 PP_4 PP_5 PP_6 || [ -n "$PP_K" ]; do
+            case "$PP_K" in
+                dev)
+                    mkdir -p "$PP_TR/cooling_device$PP_1"
+                    pp_tv "$PP_2" > "$PP_TR/cooling_device$PP_1/type"
+                    pp_tv "$PP_3" > "$PP_TR/cooling_device$PP_1/max_state"
+                    pp_tv "$PP_4" > "$PP_TR/cooling_device$PP_1/cur_state"
+                    ;;
+                zone)
+                    mkdir -p "$PP_TR/thermal_zone$PP_1"
+                    pp_tv "$PP_2" > "$PP_TR/thermal_zone$PP_1/type"
+                    pp_tv "$PP_3" > "$PP_TR/thermal_zone$PP_1/temp"
+                    ;;
+                bind)
+                    ln -s "../cooling_device$PP_3" "$PP_TR/thermal_zone$PP_1/cdev$PP_2"
+                    pp_tv "$PP_4" > "$PP_TR/thermal_zone$PP_1/cdev${PP_2}_trip_point"
+                    pp_tv "$PP_5" > "$PP_TR/thermal_zone$PP_1/trip_point_${PP_4}_temp"
+                    pp_tv "$PP_6" > "$PP_TR/thermal_zone$PP_1/trip_point_${PP_4}_type"
+                    ;;
+            esac
+        done < "$PP_FIX"
+        set +f
+        QM_THERMAL_ROOT="$PP_TR"
+        parse_thermal
+        for PP_V in thermal_sampled thermal_available thermal_throttling thermal_parts thermal_cold thermal_active_json thermal_headroom_c thermal_trip_c thermal_trip_part; do
+            eval "PP_X=\${$PP_V}"
+            printf '%s=%s\n' "$PP_V" "$PP_X"
+        done
+        exit 0
+        ;;
     helpers)
         PP_CR=$(printf '\r')
         PP_TAB=$(printf '\t')
