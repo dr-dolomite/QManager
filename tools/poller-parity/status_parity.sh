@@ -562,7 +562,7 @@ run_watchcat_read() {
     sed -n '/^read_watchcat_state() {/,/^}/p' "$PH_POLLER" > "$PH_TMP/wcread.sh"
     [ -s "$PH_TMP/wcread.sh" ] || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="no read_watchcat_state in $PH_POLLER"; return 0; }
     _state_reload() { return 0; }
-    _US=$(printf '')
+    _US=$(printf '\037')
     STATE_FORCE_EVERY=30
     _wc_rd_n=30
     WC_STAMP="$PH_TMP/wc.stamp"
