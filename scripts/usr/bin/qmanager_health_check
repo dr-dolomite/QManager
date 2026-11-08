@@ -268,6 +268,7 @@ svc.tower_failover|services|Tower failover daemon|t_svc_tower_failover
 svc.dpi|services|Traffic Engine (nfqws)|t_svc_dpi
 svc.sms_forward|services|SMS forwarding daemon|t_svc_sms_forward
 svc.tailscale|services|Tailscale (optional)|t_svc_tailscale
+svc.thermal|services|Thermal throttling|t_svc_thermal
 net.wan_ip|network|Mobile data interface has IPv4|t_net_wan_ip
 net.ping|network|Ping reaches ${PING_TARGET}|t_net_ping
 net.dns|network|DNS resolves|t_net_dns
@@ -730,6 +731,49 @@ t_svc_tailscale() {
         return
     fi
     _svc_check tailscale instance1
+}
+
+# Reads the poller's thermal block; never touches the modem. Cooling-device
+# state is appended as evidence only.
+t_svc_thermal() {
+    local f=/tmp/qmanager_status.json
+    local age
+    local thr
+    local parts
+    local hr
+    local d
+    local ty
+    local cur
+    local mx
+    if [ ! -f "$f" ]; then echo "$f missing" >> "$OUT"; echo "skip|poller cache missing"; return; fi
+    age=$(_cache_age "$f")
+    case "$age" in ''|*[!0-9]*) age=0 ;; esac
+    echo "age=${age}s" >> "$OUT"
+    if [ "$age" -ge 30 ]; then echo "skip|poller cache stale (${age}s)"; return; fi
+    jq -c '.thermal' "$f" >> "$OUT" 2>&1
+    for d in /sys/class/thermal/cooling_device*; do
+        [ -d "$d" ] || continue
+        ty=""; cur=""; mx=""
+        { read -r ty < "$d/type"; } 2>/dev/null
+        { read -r cur < "$d/cur_state"; } 2>/dev/null
+        { read -r mx < "$d/max_state"; } 2>/dev/null
+        echo "${d##*/} type=$ty cur_state=$cur max_state=$mx" >> "$OUT"
+    done
+    thr=$(jq -r '.thermal | if . == null then "none" else (.throttling | tostring) end' "$f" 2>/dev/null)
+    case "$thr" in
+        true)
+            parts=$(jq -r '{"lte":"LTE","nr":"5G","mmwave":"mmWave","modem":"modem","cpu":"CPU","ethernet":"Ethernet"} as $n
+                | [.thermal.parts[]? | ($n[.] // .)] | join(", ")' "$f" 2>/dev/null)
+            if [ -n "$parts" ]; then echo "warn|Throttling now ($parts)"
+            else echo "warn|Throttling now"; fi ;;
+        false)
+            hr=$(jq -r '.thermal.headroom_c | if type == "number" then floor | tostring else "" end' "$f" 2>/dev/null)
+            case "$hr" in
+                ''|*[!0-9]*) echo "pass|No throttling" ;;
+                *)           echo "pass|No throttling; ${hr} °C below the throttling point" ;;
+            esac ;;
+        *) echo "skip|No thermal data from the poller" ;;
+    esac
 }
 
 t_net_wan_ip() {
