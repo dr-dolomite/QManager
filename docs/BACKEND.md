@@ -303,11 +303,11 @@ SMS channel transport library (sourced by poller; downtime detection now lives i
 
 ### conn_state.sh
 
-The one reader of `/tmp/qmanager_ping.json` and the one ping-profile/cadence resolver (ledger B2.1). Sourced by `qmanager_ping`, `qmanager_poller`, `qmanager_watchcat`, `system/ping_profile.sh` and `monitoring/watchdog.sh`; consumers guard the source (`[ -f ... ] && .`) and stub a fail-closed fallback.
+The one reader of `/tmp/qmanager_ping.json` and the one ping-profile/cadence resolver (ledger B2.1). It loads the platform adapter `qm_platform_cqwd.sh` (config store, paths, `cq_alert_after_min`). Sourced by `qmanager_ping`, `qmanager_poller`, `qmanager_watchcat`, `monitoring/connection_quality.sh` and `monitoring/watchdog.sh`; consumers guard the source (`[ -f ... ] && .`) and stub a fail-closed fallback.
 
 - `conn_state_read` — one `jq` read into `CQ_*` vars; stale when `age > max(3 * interval_sec, 15)` s (monotonic `mono` vs `/proc/uptime`); stale or missing leaves `CQ_REACHABLE="null"`.
-- `conn_state_resolve <profile> [override]` / `conn_state_cadence` — the single profile table (interval/fail/recover seconds); the override changes cadence only.
-- `cq_alert_after_min` — resolves the single alert wait (minutes) into `CQ_ALERT_AFTER_MIN`: UCI `quecmanager.quality_thresholds.alert_after_min` (1-1440), else `threshold_minutes` from `sms_alerts.json`, then `email_alerts.json`, else 5. Used by `alert_engine.sh`, the poller (on `/tmp/qmanager_quality_reload`), `monitoring/alerts.sh` and `system/quality_thresholds.sh`; the CGIs stub a default of 5 if the lib is missing.
+- `conn_state_resolve <sensitivity>` / `conn_state_cadence` — the single Sensitivity table (interval, `fail_secs`, `recover_secs`, window, quality debounce); there is no interval override, and an unknown name reads `relaxed`.
+- `cq_alert_after_min` — resolves the single alert wait (minutes) into `CQ_ALERT_AFTER_MIN`: UCI `quecmanager.quality_thresholds.alert_after_min` (1-1440), else `threshold_minutes` from `sms_alerts.json`, then `email_alerts.json`, else 5. Defined in the adapter; used by `alert_engine.sh`, the poller (on `/tmp/qmanager_quality_reload`) and `monitoring/alerts.sh`; the CGIs stub a default of 5 if the lib is missing.
 
 Full contract: [`docs/features/connection-quality.md`](features/connection-quality.md#shared-ping-cache-reader-conn_statesh).
 
@@ -380,37 +380,43 @@ Tier 2 no longer carries CA, MIMO, APN, or the data-plane/L1 group. CA is in Tie
 
 ### qmanager_ping (Ping Daemon)
 
-ICMP probe daemon that monitors internet reachability and latency (BusyBox `ping`). Each cycle probes the primary IPv4 target alone, then on failure the other provider's IPv4 and both IPv6 targets in parallel; debounce is wall-clock on `/proc/uptime` and the loop is fixed-rate. Details: [`docs/features/connection-quality.md`](features/connection-quality.md#probe-mechanics).
+ICMP probe daemon that monitors internet reachability and latency (BusyBox `ping`). Each cycle probes target slot 1 alone, then on failure slots 2-4 in parallel; debounce is wall-clock on `/proc/uptime` and the loop is fixed-rate. Details: [`docs/features/connection-quality.md`](features/connection-quality.md#probe-mechanics).
 
 **Location:** `scripts/usr/bin/qmanager_ping`
 **Output:** `/tmp/qmanager_ping.json`
-**History:** `/tmp/qmanager_ping_history` (ring of `<rtt|null> <leg>` lines; read as `$1` by the poller and the watchdog)
+**History:** `/tmp/qmanager_ping_history` (ring of `<rtt|null> <slot>` lines; read as `$1` by the poller and the watchdog)
 **Dependency:** BusyBox `ping` (with `-w`), `ping -6` or `ping6` for the IPv6 legs, `timeout` (hostname targets and the DNS job)
 
 Also runs a detached DNS lookup job (every 60 s, plus on a reachable true to false edge) that writes `/tmp/qmanager_dns.json` (`{ms, ok, resolver, name, mono, ts}`); the poller publishes it as `connectivity.dns_lookup_ms` / `dns_resolver`. See the DNS Lookup Time section of [`docs/features/connection-quality.md`](features/connection-quality.md).
 
-Writes slim JSON: `{ timestamp, mono, profile, targets, interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success, streak_fail, during_recovery, last_family, last_target, fail_elapsed_sec, cycle_ms }` (printf, keep-last-good). The poller handles all statistical analysis (avg/min/max/jitter/loss) in a single awk pass over the raw history file.
+Writes slim JSON: `{ timestamp, mono, sensitivity, targets, interval_sec, fail_secs, recover_secs, last_rtt_ms, reachable, streak_success, streak_fail, fail_elapsed_sec, during_recovery, last_family, last_leg, cycle_ms }` (printf, keep-last-good). The poller handles all statistical analysis (avg/min/max/jitter/loss) in a single awk pass over the raw history file.
 
-The active probe sensitivity is set by the **ping profile** (`sensitive` / `regular` / `relaxed` / `quiet`). The profile→interval/fail/recover table lives in `conn_state.sh` (the daemon resolves through it); UCI stores only the profile name and the optional `interval_override`. A saved profile change drops `/tmp/qmanager_ping_reload`; the daemon re-reads UCI within one probe cycle without a restart. See [`docs/features/connection-quality.md`](features/connection-quality.md) for the full profile table and reload pipeline.
+The probe cadence is set by **Sensitivity** alone (`sensitive` / `regular` / `relaxed` / `quiet`); the table lives in `conn_state.sh` and UCI stores only the name (`ping_profile.sensitivity`) and the four target slots (`ping_profile.targets`). A saved change drops `/tmp/qmanager_ping_reload`; the daemon re-reads UCI within one probe cycle without a restart. See [`docs/features/connection-quality.md`](features/connection-quality.md) for the full table and reload pipeline.
 
 ### qmanager_watchcat (Connection Watchdog)
 
-4-tier connection health recovery daemon.
+Connection health recovery daemon: the acting half of the unified Connection Quality x Watchdog design (Connection Quality senses, the Watchdog acts). A thin main script plus eight sourced libraries (`wd_{config,state,detect,quality,carrier,ledger,tiers,sim}.sh`) behind the platform adapter `qm_platform_cqwd.sh`; the neutral files are byte-identical with the RM520N repo (`tools/cq-wd-parity/`).
 
 **Location:** `scripts/usr/bin/qmanager_watchcat`
-**State:** `/tmp/qmanager_watchcat.json`
-**Config:** UCI `quecmanager.watchcat.*`
+**State:** `/tmp/qmanager_watchcat.json` (heartbeat; removed on exit)
+**Config:** UCI `quecmanager.watchcat.*` (17 keys, read through the adapter as logical section `watchdog`)
 
-State machine: `MONITOR → SUSPECT → RECOVERY → COOLDOWN → LOCKED`
+Three triggers feed one ladder, in priority outage > quality > carrier: the outage trigger (always on; recovery starts after `act_after_sec` of outage, a time in seconds, not a probe count), the opt-in quality trigger (`quality_after_sec`, judged on the raw ping history against the shared Connection Quality limits) and the opt-in carrier trigger (`carrier_after_min` on a single component carrier).
+
+State machine: `MONITOR → SUSPECT → RECOVERY → COOLDOWN (step wait)`, plus `LOCKED`, `RADIO_OFF`, `SSR_HOLD`, `DISABLED`, and the derived `holdoff` state shown after an exhausted ladder.
 
 | Tier | Action | Notes |
 |------|--------|-------|
-| 1 | `ifup wan` | Restart WAN interface |
-| 2 | CFUN toggle | Reset modem radio (**skipped if tower lock active**) |
-| 3 | SIM failover | Switch SIM slot (Golden Rule sequence) |
-| 4 | Full reboot | Max 3/hour via token bucket, auto-disables |
+| 1 | `AT+COPS=2` → `AT+COPS=0` | Network re-registration |
+| 2 | `AT+CFUN=0` → `AT+CFUN=1` | Reset modem radio (**skipped if an LTE or NR-SA tower lock is active**) |
+| 3 | SIM failover | Verified slot swap (Golden Rule sequence); outage reason only |
+| 4 | Full reboot | Outage reason only; hourly budget `max_reboots_per_hour` plus a 24 h long-run guard. At the cap Tier 4 **rests**; the daemon never auto-disables |
 
-> ℹ️ NOTE: `/etc/qmanager/crash.log` is now a **shared reboot ledger** — the centralized Alerts feature's `record_planned_reboot` (`qlog.sh`) writes `user`/`unplanned` rows into the same file the watchdog's tier-4 writer uses for `tier4_escalation` rows. `count_recent_reboots()` (which feeds this token bucket and `reboots_this_hour`) was tightened to count `awk ... $3 == "tier4_escalation"` only, so the watchdog's own reboot rate is unaffected by the new rows. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts) for the reboot-alert side of this shared-file contract.
+Quality and carrier ladders stop at Tier 2. Every "off" exit retires the service (`wd_retire_service`) because procd respawns any exit.
+
+> ℹ️ NOTE: `/etc/qmanager/crash.log` is a **shared reboot ledger** — the centralized Alerts feature's `record_planned_reboot` (`qlog.sh`) writes `user`/`unplanned` rows into the same file the watchdog's Tier-4 writer uses for `tier4_escalation` rows. `count_recent_reboots()` (which feeds the hourly budget and `reboots_this_hour`) counts `awk ... $3 == "tier4_escalation"` only, so the watchdog's own reboot rate is unaffected by the other rows. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts) for the reboot-alert side of this shared-file contract.
+
+Full contract: [`docs/features/connection-watchdog.md`](features/connection-watchdog.md).
 
 ### qmanager_cell_scanner / qmanager_neighbour_scanner
 
@@ -689,7 +695,8 @@ All auth endpoints set `_SKIP_AUTH=1`.
 | Script | Method | Description |
 |--------|--------|-------------|
 | `alerts.sh` | GET/POST | Centralized SMS + email + reboot connection alerts: settings, routing matrix (incl. `reboot`), capability matrix, `reboots` history array, test send, merged activity log |
-| `watchdog.sh` | GET/POST | Watchdog settings and status |
+| `connection_quality.sh` | GET/POST | Connection Quality: Sensitivity, four probe targets, latency/loss limits (`save_probe`, `save_thresholds`); replaces `system/ping_profile.sh` and `system/quality_thresholds.sh` |
+| `watchdog.sh` | GET/POST | Watchdog settings (17 keys), effective values and status (`save_settings`, `revert_sim`, `retry_failback`, `dismiss_sim_swap`) |
 
 #### Device (`device/`)
 
@@ -721,7 +728,7 @@ The tree also ships these CGI scripts under `scripts/www/cgi-bin/quecmanager/`. 
 - `metrics/`, `monitoring/`: `prometheus.sh` (metrics scrape), `sites.sh` (sites monitor)
 - `network/`: `data_used.sh`, `dns.sh`, `lan_config.sh`, `lan_devices.sh`
 - `public/`: `hostname.sh`, `overview.sh`, `units.sh` (unauthenticated read-only data for the public overview)
-- `system/`: `adaptive_polling.sh`, `config-backup/` (`collect.sh`, `apply.sh`, `apply_status.sh`, `apply_cancel.sh`), `diagnostics.sh`, `health-check/` (`run.sh`, `status.sh`, `download.sh`, `clear.sh`), `host_at_ports.sh`, `ipa_offload.sh`, `known_sims.sh`, `language-packs/` (`list.sh`, `install.sh`, `install_status.sh`, `install_cancel.sh`, `remove.sh`), `pending_reboot.sh`, `ping_profile.sh`, `quality_thresholds.sh`, `ssh_password.sh`, `storage.sh`, `update.sh`, `web_port.sh`
+- `system/`: `adaptive_polling.sh`, `config-backup/` (`collect.sh`, `apply.sh`, `apply_status.sh`, `apply_cancel.sh`), `diagnostics.sh`, `health-check/` (`run.sh`, `status.sh`, `download.sh`, `clear.sh`), `host_at_ports.sh`, `ipa_offload.sh`, `known_sims.sh`, `language-packs/` (`list.sh`, `install.sh`, `install_status.sh`, `install_cancel.sh`, `remove.sh`), `pending_reboot.sh`, `ssh_password.sh`, `storage.sh`, `update.sh`, `web_port.sh`
 
 ---
 
@@ -736,6 +743,7 @@ The tree also ships these CGI scripts under `scripts/www/cgi-bin/quecmanager/`. 
 | `qmanager_ping_history.json` | poller | Ping history NDJSON |
 | `qmanager_events.json` | poller | Network events NDJSON |
 | `qmanager_ping.json` | ping daemon | Current ping result |
+| `qmanager_ping_history` / `qmanager_ping_slots.json` | ping daemon | Raw probe ring (`<rtt|null> <slot>` per line, read by the poller statistics and the Watchdog's quality window) / live state of the four target slots |
 | `qmanager_dns.json` | ping daemon (detached job) | Last DNS lookup time `{ms, ok, resolver, name, mono, ts}` |
 | `qmanager_sites.json` / `qmanager_sites_raw.ndjson` / `qmanager_sites_live.json` | sites daemon | Latest sweep, 24 h raw samples, live "Now" samples |
 | `qmanager_sites_now` / `qmanager_sites_live` | CGI (`monitoring/sites.sh`) | Check-now flag; live lease (epoch), read-only for the daemon |
