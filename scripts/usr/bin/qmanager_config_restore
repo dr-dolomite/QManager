@@ -122,7 +122,7 @@ section_label() {
         sms_alerts)       echo "SMS Alerts" ;;
         alert_routing)    echo "Alert Routing" ;;
         sms_storage)      echo "SMS Storage" ;;
-        quality_thresholds) echo "Connection Quality" ;;
+        connection_quality) echo "Connection Quality" ;;
         sites)            echo "Sites Monitor" ;;
         watchdog)         echo "Watchdog/Watchcat" ;;
         metrics)          echo "Prometheus Metrics" ;;

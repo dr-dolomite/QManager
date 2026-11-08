@@ -1,33 +1,28 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:10] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] QUALITY: breach 1/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:14:20] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
-[2026-09-21 14:14:20] INFO  [watchcat:PID] QUALITY: breach 2/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:14:30] WARN  [watchcat:PID] QUALITY breach: loss 50% >= 30% (shared)
-[2026-09-21 14:14:30] INFO  [watchcat:PID] QUALITY: breach 3/3 (avg 24.5ms vs 250ms, loss 50% vs 30%)
-[2026-09-21 14:14:30] WARN  [watchcat:PID] QUALITY → RECOVERY: 3 consecutive breaches (avg 24.5ms / loss 50% vs 250ms / 30%)
-[2026-09-21 14:14:30] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
-[2026-09-21 14:14:30] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
-[2026-09-21 14:14:30] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
-[2026-09-21 14:14:30] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
-[2026-09-21 14:14:30] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
-[2026-09-21 14:14:32] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
-[2026-09-21 14:15:02] INFO  [watchcat:PID] COOLDOWN(quality) complete: quality RESTORED after Tier 1
-[2026-09-21 14:15:02] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 1) — connection quality restored
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg 24.5ms vs 250ms, loss 50% vs 30%), recovery after 30s
+[2026-09-21 14:15:10] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 30s (avg 24.5ms / loss 50% vs 250ms / 30%)
+[2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery
+[2026-09-21 14:15:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=quality)
+[2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — connection quality degraded
+[2026-09-21 14:15:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:15:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:15:12] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
+[2026-09-21 14:16:12] INFO  [watchcat:PID] COOLDOWN(quality) complete: quality RESTORED after Tier 1
+[2026-09-21 14:16:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 1) — connection quality restored
 
 === tmp/qmanager_events.json
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning"}
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning"}
-{"timestamp":1790000070,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning"}
-{"timestamp":1790000102,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — connection quality restored","severity":"info"}
+{"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — connection quality degraded","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000110,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000172,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — connection quality restored","severity":"info","code":"wd_succeeded"}
 

@@ -1,17 +1,17 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=1 T3=0 T4=0 backup_sim=none
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=unreachable)
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
@@ -23,16 +23,16 @@
 [2026-09-21 14:14:43] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 2
 [2026-09-21 14:14:43] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:14:43] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
-[2026-09-21 14:14:53] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=12 (threshold=3)
+[2026-09-21 14:14:53] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=12 (act after 15s)
 [2026-09-21 14:16:03] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
 [2026-09-21 14:16:13] INFO  [watchcat:PID] Link is reachable: clearing the stale radio-down marker
-[2026-09-21 14:18:43] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
+[2026-09-21 14:18:43] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
 [2026-09-21 14:18:53] WARN  [watchcat:PID] Radio is off (AT+CFUN 0 or 4): holding recovery until it is back on
 [2026-09-21 14:18:53] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: radio is off, recovery paused until it is turned back on
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning"}
-{"timestamp":1790000083,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error"}
-{"timestamp":1790000333,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000083,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000333,"type":"watchcat_recovery","message":"Watchcat: radio is off, recovery paused until it is turned back on","severity":"info","code":"wd_radio_paused"}
 

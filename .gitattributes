@@ -18,3 +18,6 @@ native/qmanager_atd/tests/parity/expected.txt -text
 dependencies/qmanager_atd binary
 # ipk tooling: build_ipk.py must stay byte-identical with the feed repo copy
 scripts-dev/ipk/* text eol=lf
+
+# cq x watchdog neutral-file hash manifest: hashed and diffed byte-exact
+tools/cq-wd-parity/manifest.sha256 text eol=lf

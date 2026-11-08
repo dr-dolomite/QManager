@@ -90,7 +90,7 @@
       "imei": "IMEI",
       "profiles": "自定义 SIM 配置",
       "watchdog": "连接看门狗",
-      "quality_thresholds": "连接质量阈值",
+      "connection_quality": "连接质量",
       "sites": "延迟监控站点",
       "sms_alerts": "短信提醒",
       "alert_routing": "提醒路由",

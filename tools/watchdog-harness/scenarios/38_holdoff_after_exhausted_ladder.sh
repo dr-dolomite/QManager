@@ -5,8 +5,8 @@
 # Tier 1 restores the link on its second COPS=0.
 # Check interval 30 keeps the run short.
 SC_PASSES=40
+sc_post_source() { CFG_CHECK_INTERVAL=30; }
 sc_setup() {
-    uci_set quecmanager.watchcat.check_interval 30
     uci_set quecmanager.watchcat.tier2_enabled 0
     uci_set quecmanager.watchcat.tier4_enabled 0
 }

@@ -1,15 +1,34 @@
 #!/bin/sh
 . /usr/lib/qmanager/cgi_base.sh
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
+# Cadence tables and the platform adapter (config store, flag paths, services)
+# come from conn_state.sh. Guarded: a `.` on a missing file kills a BusyBox
+# script; the check below answers internal_error instead.
+[ -f /usr/lib/qmanager/conn_state.sh ] && . /usr/lib/qmanager/conn_state.sh
+# Recent watchdog reboots (Tier-4 ledger rows). Guarded; the stub reports none.
+[ -f /usr/lib/qmanager/wd_ledger.sh ] && . /usr/lib/qmanager/wd_ledger.sh
+if ! command -v wd_ledger_recent_json >/dev/null 2>&1; then
+    wd_ledger_recent_json() { echo '[]'; }
+fi
 # =============================================================================
-# watchdog.sh — CGI Endpoint: Watchdog Settings & Status (GET + POST)
+# watchdog.sh - CGI Endpoint: Watchdog settings and status (GET + POST)
 # =============================================================================
-# GET:  Returns current watchdog configuration (UCI) + live status.
-# POST: Saves settings, dismisses SIM swap, or requests SIM revert. A save
-#       may carry only one card's fields: absent keys are left untouched.
+# GET:  settings (new key names), effective values (act_after_sec, step_wait_sec
+#       with the probe cadence applied, quality limits with the watchdog floors),
+#       the daemon's state file as `status`, the SIM failover record, recent
+#       watchdog reboots, dual-SIM capability and the pre-upgrade auto-disable
+#       flag. Never writes config.
+# POST: save_settings     any subset of the settings keys; validate everything,
+#                         then stage + commit once; unknown keys are rejected
+#       revert_sim        flag the daemon consumes on its next pass
+#       retry_failback    flag the daemon consumes on its next pass (Amendment 1 B)
+#       dismiss_sim_swap  mark the SIM-swap banner dismissed (RM551E only)
 #
-# Config: UCI quecmanager.watchcat.*
-# State:  /tmp/qmanager_watchcat.json (read-only, written by daemon)
+# Config: platform adapter, watchdog <key> -> quecmanager.watchcat.<key>.
+# State:  /tmp/qmanager_watchcat.json (read-only, written by the daemon)
+#
+# Contract: docs/plans/2026-11-07-cq-watchdog-contracts.md section 5.3 / 5.4,
+# Amendments 1-3. Reboots never happen here; the daemon owns every action.
 #
 # Endpoint: GET/POST /cgi-bin/quecmanager/monitoring/watchdog.sh
 # Install location: /www/cgi-bin/quecmanager/monitoring/watchdog.sh
@@ -21,91 +40,95 @@ cgi_handle_options
 
 WATCHCAT_STATE="/tmp/qmanager_watchcat.json"
 SIM_SWAP_FLAG="/tmp/qmanager_sim_swap_detected"
-SIM_FAILOVER_FILE="/tmp/qmanager_sim_failover"
-RELOAD_FLAG="/tmp/qmanager_watchcat_reload"
-PING_RELOAD_FLAG="/tmp/qmanager_ping_reload"
 REVERT_FLAG="/tmp/qmanager_watchcat_revert_sim"
 DISABLED_FLAG="/tmp/qmanager_watchcat_disabled"
+WD_SERVICE="qmanager_watchcat"
 
-# Ensure UCI section exists with defaults.
-# Two responsibilities, both idempotent:
-#   1. Seed the section on first run with the current (Pass A) schema.
-#   2. Defensively migrate a legacy `max_failures` value into `fail_threshold`
-#      if a device hits this CGI before the installer migration ran.
-ensure_watchcat_config() {
-    if uci -q get quecmanager.watchcat >/dev/null 2>&1; then
-        # Section exists — run the defensive legacy migration only.
-        migrate_fail_threshold
-        return
+if ! command -v cfg_get >/dev/null 2>&1 || ! command -v conn_state_cadence >/dev/null 2>&1 \
+    || ! command -v plat_flag_raise >/dev/null 2>&1 || ! command -v svc_enable >/dev/null 2>&1; then
+    jq -n '{success:false, error:"internal_error", detail:"platform library unavailable"}'
+    exit 0
+fi
+
+# --- Helpers ------------------------------------------------------------------
+
+# invalid_field <field> <detail>: the validation reply. Everything is validated
+# before anything is staged, so there is nothing to revert.
+invalid_field() {
+    jq -n --arg field "$1" --arg detail "$2" \
+        '{success:false, error:"invalid_field", field:$field, detail:$detail}'
+    exit 0
+}
+
+save_failed() {
+    cfg_revert >/dev/null 2>&1
+    jq -n '{success:false, error:"save_failed", detail:"The settings could not be saved"}'
+    exit 0
+}
+
+# wd_int_in <lo> <hi> <val>: prints val without leading zeros when it is plain
+# decimal digits within lo..hi (rc 0), else rc 1.
+wd_int_in() {
+    local v
+    v="$3"
+    case "$v" in ''|*[!0-9]*) return 1 ;; esac
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do
+        v="${v#0}"
+    done
+    [ "${#v}" -le "${#2}" ] || return 1
+    [ "$v" -ge "$1" ] && [ "$v" -le "$2" ] || return 1
+    printf '%s' "$v"
+}
+
+# wd_body_ok: rc 0 when CONTENT_LENGTH is unset/empty (cgi_read_post then answers
+# no_body) or a plain number up to 8192; rc 1 for a longer or non-numeric length.
+# Checked before the body is read so a large POST never reaches dd.
+wd_body_ok() {
+    local n
+    n="$CONTENT_LENGTH"
+    [ -n "$n" ] || return 0
+    case "$n" in *[!0-9]*) return 1 ;; esac
+    while [ "${#n}" -gt 1 ] && [ "${n#0}" != "$n" ]; do
+        n="${n#0}"
+    done
+    [ "${#n}" -le 4 ] && [ "$n" -le 8192 ]
+}
+
+# wd_stored_int <key> <default> <lo> <hi>: the stored value clamped into lo..hi
+# like the daemon reads it; the default when absent or not a number.
+wd_stored_int() {
+    local raw
+    local v
+    raw=$(cfg_get watchdog "$1")
+    case "$raw" in ''|*[!0-9]*) printf '%s' "$2"; return 0 ;; esac
+    v="$raw"
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do
+        v="${v#0}"
+    done
+    if [ "${#v}" -gt "${#4}" ]; then
+        printf '%s' "$4"
+        return 0
     fi
-    uci set quecmanager.watchcat=watchcat
-    uci set quecmanager.watchcat.enabled=0
-    uci set quecmanager.watchcat.fail_threshold=5
-    uci set quecmanager.watchcat.check_interval=10
-    uci set quecmanager.watchcat.cooldown=60
-    uci set quecmanager.watchcat.tier1_enabled=1
-    uci set quecmanager.watchcat.tier2_enabled=1
-    uci set quecmanager.watchcat.tier3_enabled=0
-    uci set quecmanager.watchcat.tier4_enabled=1
-    uci set quecmanager.watchcat.backup_sim_slot=
-    uci set quecmanager.watchcat.max_reboots_per_hour=3
-    uci set quecmanager.watchcat.quality_enabled=0
-    uci set quecmanager.watchcat.quality_consecutive=5
-    uci set quecmanager.watchcat.ssr_aware=1
-    uci set quecmanager.watchcat.ssr_grace=45
-    uci set quecmanager.watchcat.primary_recheck_enabled=0
-    uci set quecmanager.watchcat.primary_recheck_interval=30
-    uci commit quecmanager
+    [ "$v" -lt "$3" ] && v="$3"
+    [ "$v" -gt "$4" ] && v="$4"
+    printf '%s' "$v"
 }
 
-# Defensive migration: if a legacy max_failures exists and fail_threshold is
-# absent, copy the value across and delete the old key (mirrors the installer).
-# Idempotent: a no-op once fail_threshold is present.
-migrate_fail_threshold() {
-    local legacy
-    local current
-    current=$(uci -q get quecmanager.watchcat.fail_threshold 2>/dev/null)
-    [ -n "$current" ] && return
-    legacy=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null)
-    if [ -n "$legacy" ]; then
-        uci set quecmanager.watchcat.fail_threshold="$legacy"
-        uci -q delete quecmanager.watchcat.max_failures 2>/dev/null
-        uci commit quecmanager
-    fi
-}
-
-# Read a UCI value with fallback
-uci_get() {
-    local val
-    val=$(uci -q get "quecmanager.watchcat.$1" 2>/dev/null)
-    if [ -z "$val" ]; then
-        echo "$2"
-    else
-        echo "$val"
-    fi
-}
-
-# Coerce a value that is later passed to jq --argjson. A bad UCI value or a
-# half-written state file must degrade to the default, never kill the GET.
-# coerce_int: plain decimal digits (no leading zero), else the default.
-coerce_int() {
-    case "$1" in
-        ''|*[!0-9]*|0[0-9]*) echo "$2" ;;
-        *) echo "$1" ;;
-    esac
-}
-
-# coerce_bool: 0 or 1, else the default.
-coerce_bool() {
-    case "$1" in
-        0|1) echo "$1" ;;
-        *) echo "$2" ;;
+# wd_stored_bool <key> <default true|false>: true/false from a stored 1/0 (the only
+# values the daemon honours); the default otherwise.
+wd_stored_bool() {
+    local raw
+    raw=$(cfg_get watchdog "$1")
+    case "$raw" in
+        1) printf 'true' ;;
+        0) printf 'false' ;;
+        *) printf '%s' "$2" ;;
     esac
 }
 
 # json_or_default <type> <raw> <default>: <raw> re-emitted as one compact JSON
 # document when it is exactly one value of <type> (object/array), else the
-# default. An empty or garbage file lands on the default.
+# default. An empty or half-written file lands on the default, never a 500.
 json_or_default() {
     local out
     out=$(printf '%s' "$2" | jq -c -s -e --arg t "$1" \
@@ -117,500 +140,326 @@ json_or_default() {
     fi
 }
 
-# Recent watchdog reboots (Tier-4 ledger rows) come from wd_ledger.sh. Guarded:
-# a missing lib must not abort the CGI; the stub reports no reboots.
-[ -f /usr/lib/qmanager/wd_ledger.sh ] && . /usr/lib/qmanager/wd_ledger.sh
-if ! command -v wd_ledger_recent_json >/dev/null 2>&1; then
-    wd_ledger_recent_json() { echo '[]'; }
-fi
-
-# Probe cadence comes from conn_state_cadence (the same table qmanager_ping
-# runs). Guarded: a missing lib must not abort the CGI; fall back to relaxed.
-[ -f /usr/lib/qmanager/conn_state.sh ] && . /usr/lib/qmanager/conn_state.sh
-if ! command -v conn_state_cadence >/dev/null 2>&1; then
-    conn_state_cadence() {
-        CQ_CFG_PROFILE="relaxed"
-        CQ_CFG_PROFILE_INTERVAL_SEC=5
-        CQ_CFG_INTERVAL_SEC=5
-        CQ_CFG_FAIL_SECS=15
-        CQ_CFG_RECOVER_SECS=10
-    }
-fi
-
-# Resolve a quality preset (latency) to a numeric ms threshold. custom uses the
-# stored custom value; unknown/empty falls back to tolerant. Mirrors the poller
-# resolve_quality_thresholds() mapping (see docs/features/connection-quality.md).
-resolve_latency_ms() {
-    local preset="$1"
-    local custom="$2"
-    case "$preset" in
-        standard)      echo 150 ;;
-        tolerant)      echo 250 ;;
-        very-tolerant) echo 500 ;;
+# wd_quality_limits: WD_Q_LAT / WD_Q_LOSS, the connection_quality limits the
+# watchdog acts on (contracts section 1): preset value (custom must be in range,
+# else tolerant), raised to the floors max(latency, 50) ms and max(loss, 10) %.
+wd_quality_limits() {
+    local lp
+    local lc
+    local sp
+    local sc
+    lp=$(cfg_get connection_quality latency_preset)
+    sp=$(cfg_get connection_quality loss_preset)
+    case "$lp" in
+        standard) WD_Q_LAT=150 ;;
+        very-tolerant) WD_Q_LAT=500 ;;
         custom)
-            case "$custom" in
-                ''|*[!0-9]*) echo 250 ;;
-                *) echo "$custom" ;;
-            esac
+            lc=$(cfg_get connection_quality latency_custom_ms)
+            WD_Q_LAT=$(wd_int_in 1 10000 "$lc") || WD_Q_LAT=250
             ;;
-        *) echo 250 ;;
+        *) WD_Q_LAT=250 ;;
     esac
-}
-
-# Resolve a quality preset (loss) to a numeric pct threshold.
-resolve_loss_pct() {
-    local preset="$1"
-    local custom="$2"
-    case "$preset" in
-        standard)      echo 15 ;;
-        tolerant)      echo 30 ;;
-        very-tolerant) echo 50 ;;
+    case "$sp" in
+        standard) WD_Q_LOSS=15 ;;
+        very-tolerant) WD_Q_LOSS=50 ;;
         custom)
-            case "$custom" in
-                ''|*[!0-9]*) echo 30 ;;
-                *) echo "$custom" ;;
-            esac
+            sc=$(cfg_get connection_quality loss_custom_pct)
+            WD_Q_LOSS=$(wd_int_in 1 100 "$sc") || WD_Q_LOSS=30
             ;;
-        *) echo 30 ;;
+        *) WD_Q_LOSS=30 ;;
     esac
-}
-
-# Validate numeric field: returns 0 if valid int in [min,max], else 1
-validate_int() {
-    local val="$1"
-    local min="$2"
-    local max="$3"
-    case "$val" in
-        ''|*[!0-9]*) return 1 ;;
-    esac
-    [ "$val" -ge "$min" ] 2>/dev/null && [ "$val" -le "$max" ] 2>/dev/null
-}
-
-# Reject the request with a structured error and exit.
-# Frontend checks .success === false; HTTP status remains 200 (headers
-# already emitted by cgi_headers at file top — project convention).
-reject_field() {
-    local field="$1"
-    local reason="$2"
-    # Drop everything this request staged so a rejected save cannot be
-    # committed later by an unrelated uci commit.
-    uci -q revert quecmanager 2>/dev/null
-    jq -n --arg field "$field" --arg reason "$reason" \
-        '{success:false, error:"invalid_field", field:$field, reason:$reason}'
-    exit 0
+    [ "$WD_Q_LAT" -lt 50 ] && WD_Q_LAT=50
+    [ "$WD_Q_LOSS" -lt 10 ] && WD_Q_LOSS=10
+    return 0
 }
 
 # =============================================================================
-# GET — Fetch settings + live status
+# GET
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
     qlog_info "Fetching watchdog settings"
-    ensure_watchcat_config
 
-    enabled="" fail_threshold="" check_interval="" cooldown=""
-    tier1="" tier2="" tier3="" tier4="" backup_sim="" max_reboots=""
-    quality_enabled="" quality_consecutive=""
-    ssr_aware="" ssr_grace=""
-    primary_recheck_enabled="" primary_recheck_interval=""
+    enabled=$(wd_stored_bool enabled false)
+    act_after=$(wd_stored_int act_after_sec 30 15 600)
+    step_wait=$(wd_stored_int step_wait_sec 60 10 300)
+    tier1=$(wd_stored_bool tier1_enabled true)
+    tier2=$(wd_stored_bool tier2_enabled true)
+    tier3=$(wd_stored_bool tier3_enabled false)
+    tier4=$(wd_stored_bool tier4_enabled true)
+    max_reboots=$(wd_stored_int max_reboots_per_hour 3 1 10)
+    quality_enabled=$(wd_stored_bool quality_enabled false)
+    quality_after=$(wd_stored_int quality_after_sec 120 30 1800)
+    carrier_enabled=$(wd_stored_bool carrier_enabled false)
+    carrier_after=$(wd_stored_int carrier_after_min 15 5 240)
+    ssr_aware=$(wd_stored_bool ssr_aware true)
+    ssr_grace=$(wd_stored_int ssr_grace_sec 45 10 120)
+    failback_enabled=$(wd_stored_bool failback_enabled false)
+    failback_every=$(wd_stored_int failback_every_min 30 5 1440)
 
-    enabled=$(uci_get enabled 0)
-    fail_threshold=$(uci_get fail_threshold 5)
-    check_interval=$(uci_get check_interval 10)
-    cooldown=$(uci_get cooldown 60)
-    tier1=$(uci_get tier1_enabled 1)
-    tier2=$(uci_get tier2_enabled 1)
-    tier3=$(uci_get tier3_enabled 0)
-    tier4=$(uci_get tier4_enabled 1)
-    backup_sim=$(uci_get backup_sim_slot "")
-    max_reboots=$(uci_get max_reboots_per_hour 3)
-    quality_enabled=$(uci_get quality_enabled 0)
-    quality_consecutive=$(uci_get quality_consecutive 5)
-    ssr_aware=$(uci_get ssr_aware 1)
-    ssr_grace=$(uci_get ssr_grace 45)
-    primary_recheck_enabled=$(uci_get primary_recheck_enabled 0)
-    primary_recheck_interval=$(uci_get primary_recheck_interval 30)
+    backup_slot=$(cfg_get watchdog backup_sim_slot)
+    case "$backup_slot" in 1|2) ;; *) backup_slot="null" ;; esac
 
-    # Every value below goes through jq --argjson: coerce to the default.
-    enabled=$(coerce_bool "$enabled" 0)
-    fail_threshold=$(coerce_int "$fail_threshold" 5)
-    check_interval=$(coerce_int "$check_interval" 10)
-    cooldown=$(coerce_int "$cooldown" 60)
-    tier1=$(coerce_bool "$tier1" 1)
-    tier2=$(coerce_bool "$tier2" 1)
-    tier3=$(coerce_bool "$tier3" 0)
-    tier4=$(coerce_bool "$tier4" 1)
-    max_reboots=$(coerce_int "$max_reboots" 3)
-    quality_enabled=$(coerce_bool "$quality_enabled" 0)
-    quality_consecutive=$(coerce_int "$quality_consecutive" 5)
-    ssr_aware=$(coerce_bool "$ssr_aware" 1)
-    ssr_grace=$(coerce_int "$ssr_grace" 45)
-    primary_recheck_enabled=$(coerce_bool "$primary_recheck_enabled" 0)
-    primary_recheck_interval=$(coerce_int "$primary_recheck_interval" 30)
-    case "$backup_sim" in
-        1|2) ;;
-        *) backup_sim="" ;;
-    esac
-
-    # --- Probe interval reflection (ping_profile section, read-only mirror) ---
-    probe_profile=""
-    interval_override=""
-    effective_interval=""
-    probe_profile=$(uci -q get quecmanager.ping_profile.profile 2>/dev/null)
-    [ -z "$probe_profile" ] && probe_profile="relaxed"
-    interval_override=$(uci -q get quecmanager.ping_profile.interval_override 2>/dev/null)
-    # Effective cadence from UCI (right even while the daemon is down).
+    # Effective values: the probe cadence of the stored sensitivity raises the
+    # floors (act >= fail_secs, step wait >= recover_secs + 20).
     conn_state_cadence
-    effective_interval="$CQ_CFG_INTERVAL_SEC"
+    eff_act="$act_after"
+    [ "$CQ_CFG_FAIL_SECS" -gt "$eff_act" ] && eff_act="$CQ_CFG_FAIL_SECS"
+    eff_step="$step_wait"
+    [ $((CQ_CFG_RECOVER_SECS + 20)) -gt "$eff_step" ] && eff_step=$((CQ_CFG_RECOVER_SECS + 20))
+    wd_quality_limits
 
-    # --- Shared quality thresholds (read-only mirror of quality_thresholds) ---
-    qt_latency_preset=""
-    qt_loss_preset=""
-    qt_latency_custom=""
-    qt_loss_custom=""
-    if uci -q get quecmanager.quality_thresholds >/dev/null 2>&1; then
-        qt_latency_preset=$(uci -q get quecmanager.quality_thresholds.latency_preset 2>/dev/null)
-        qt_loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
-        qt_latency_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
-        qt_loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
-    fi
-    [ -z "$qt_latency_preset" ] && qt_latency_preset="tolerant"
-    [ -z "$qt_loss_preset" ] && qt_loss_preset="tolerant"
-    qt_latency_ms=$(resolve_latency_ms "$qt_latency_preset" "$qt_latency_custom")
-    qt_loss_pct=$(resolve_loss_pct "$qt_loss_preset" "$qt_loss_custom")
-
-    # Read live status from watchcat daemon state file
-    # (a 0-byte or half-written file falls back to the default, never a 500)
     status_json='{}'
     if [ -f "$WATCHCAT_STATE" ]; then
         status_json=$(json_or_default object "$(cat "$WATCHCAT_STATE" 2>/dev/null)" '{}')
     fi
 
-    # Read SIM failover state
     sim_failover_json='{"active":false}'
-    if [ -f "$SIM_FAILOVER_FILE" ]; then
-        sim_failover_json=$(json_or_default object "$(cat "$SIM_FAILOVER_FILE" 2>/dev/null)" '{"active":false}')
+    if [ -f "$PF_FAILOVER_MIRROR" ]; then
+        sim_failover_json=$(json_or_default object "$(cat "$PF_FAILOVER_MIRROR" 2>/dev/null)" '{"active":false}')
     fi
 
-    # Read SIM swap detection
-    sim_swap_json='{"detected":false}'
-    if [ -f "$SIM_SWAP_FLAG" ]; then
-        sim_swap_json=$(json_or_default object "$(cat "$SIM_SWAP_FLAG" 2>/dev/null)" '{"detected":false}')
-    fi
-
-    # Recent watchdog reboots: epoch ints, newest first, at most 5.
     recent_reboots_json=$(json_or_default array "$(wd_ledger_recent_json 5 2>/dev/null)" '[]')
 
-    # Check if watchcat was auto-disabled
+    dual_capable="false"
+    plat_dual_sim && dual_capable="true"
+
     auto_disabled="false"
     [ -f "$DISABLED_FLAG" ] && auto_disabled="true"
 
-    # interval_override: emit JSON null when unset/non-numeric, else the int.
-    interval_override_json=$(coerce_int "$interval_override" null)
-    effective_interval=$(coerce_int "$effective_interval" 5)
-    CQ_CFG_INTERVAL_SEC=$(coerce_int "$CQ_CFG_INTERVAL_SEC" 5)
-    CQ_CFG_FAIL_SECS=$(coerce_int "$CQ_CFG_FAIL_SECS" 15)
-    CQ_CFG_RECOVER_SECS=$(coerce_int "$CQ_CFG_RECOVER_SECS" 10)
-    qt_latency_ms=$(coerce_int "$qt_latency_ms" 250)
-    qt_loss_pct=$(coerce_int "$qt_loss_pct" 30)
-
     jq -n \
         --argjson enabled "$enabled" \
-        --argjson fail_threshold "$fail_threshold" \
-        --argjson check_interval "$check_interval" \
-        --argjson cooldown "$cooldown" \
+        --argjson act_after "$act_after" \
+        --argjson step_wait "$step_wait" \
         --argjson tier1 "$tier1" \
         --argjson tier2 "$tier2" \
         --argjson tier3 "$tier3" \
         --argjson tier4 "$tier4" \
-        --arg backup_sim "$backup_sim" \
+        --argjson backup_slot "$backup_slot" \
         --argjson max_reboots "$max_reboots" \
         --argjson quality_enabled "$quality_enabled" \
-        --argjson quality_consecutive "$quality_consecutive" \
+        --argjson quality_after "$quality_after" \
+        --argjson carrier_enabled "$carrier_enabled" \
+        --argjson carrier_after "$carrier_after" \
         --argjson ssr_aware "$ssr_aware" \
         --argjson ssr_grace "$ssr_grace" \
-        --argjson primary_recheck_enabled "$primary_recheck_enabled" \
-        --argjson primary_recheck_interval "$primary_recheck_interval" \
-        --arg probe_profile "$probe_profile" \
-        --argjson interval_override "$interval_override_json" \
-        --argjson effective_interval "$effective_interval" \
-        --argjson interval_sec "$CQ_CFG_INTERVAL_SEC" \
-        --argjson fail_secs "$CQ_CFG_FAIL_SECS" \
-        --argjson recover_secs "$CQ_CFG_RECOVER_SECS" \
-        --argjson qt_latency_ms "$qt_latency_ms" \
-        --argjson qt_loss_pct "$qt_loss_pct" \
-        --arg qt_latency_preset "$qt_latency_preset" \
-        --arg qt_loss_preset "$qt_loss_preset" \
+        --argjson failback_enabled "$failback_enabled" \
+        --argjson failback_every "$failback_every" \
+        --argjson eff_act "$eff_act" \
+        --argjson eff_step "$eff_step" \
+        --argjson q_lat "$WD_Q_LAT" \
+        --argjson q_loss "$WD_Q_LOSS" \
         --argjson status "$status_json" \
         --argjson sim_failover "$sim_failover_json" \
-        --argjson sim_swap "$sim_swap_json" \
-        --argjson auto_disabled "$auto_disabled" \
         --argjson recent_reboots "$recent_reboots_json" \
+        --argjson dual_capable "$dual_capable" \
+        --argjson auto_disabled "$auto_disabled" \
         '{
             success: true,
             settings: {
-                enabled: ($enabled == 1),
-                fail_threshold: $fail_threshold,
-                check_interval: $check_interval,
-                cooldown: $cooldown,
-                tier1_enabled: ($tier1 == 1),
-                tier2_enabled: ($tier2 == 1),
-                tier3_enabled: ($tier3 == 1),
-                tier4_enabled: ($tier4 == 1),
-                backup_sim_slot: (if $backup_sim == "" then null else ($backup_sim | tonumber) end),
+                enabled: $enabled,
+                act_after_sec: $act_after,
+                step_wait_sec: $step_wait,
+                tier1_enabled: $tier1,
+                tier2_enabled: $tier2,
+                tier3_enabled: $tier3,
+                tier4_enabled: $tier4,
+                backup_sim_slot: $backup_slot,
                 max_reboots_per_hour: $max_reboots,
-                quality_enabled: ($quality_enabled == 1),
-                quality_consecutive: $quality_consecutive,
-                ssr_aware: ($ssr_aware == 1),
-                ssr_grace: $ssr_grace,
-                primary_recheck_enabled: ($primary_recheck_enabled == 1),
-                primary_recheck_interval: $primary_recheck_interval
+                quality_enabled: $quality_enabled,
+                quality_after_sec: $quality_after,
+                carrier_enabled: $carrier_enabled,
+                carrier_after_min: $carrier_after,
+                ssr_aware: $ssr_aware,
+                ssr_grace_sec: $ssr_grace,
+                failback_enabled: $failback_enabled,
+                failback_every_min: $failback_every
             },
-            probe_profile: $probe_profile,
-            interval_override: $interval_override,
-            effective_interval: $effective_interval,
-            interval_sec: $interval_sec,
-            fail_secs: $fail_secs,
-            recover_secs: $recover_secs,
-            quality_thresholds: {
-                latency_ms: $qt_latency_ms,
-                loss_pct: $qt_loss_pct,
-                latency_preset: $qt_latency_preset,
-                loss_preset: $qt_loss_preset
+            effective: {
+                act_after_sec: $eff_act,
+                step_wait_sec: $eff_step,
+                quality_limits: {latency_ms: $q_lat, loss_pct: $q_loss},
+                carrier_enabled: $carrier_enabled,
+                carrier_after_min: $carrier_after
             },
             status: $status,
             sim_failover: $sim_failover,
-            sim_swap: $sim_swap,
-            auto_disabled: $auto_disabled,
-            recent_reboots: $recent_reboots
+            recent_reboots: $recent_reboots,
+            sim_dual_capable: $dual_capable,
+            auto_disabled: $auto_disabled
         }'
     exit 0
 fi
 
 # =============================================================================
-# POST — Save settings / dismiss SIM swap / revert SIM
+# POST
 # =============================================================================
 if [ "$REQUEST_METHOD" = "POST" ]; then
-
+    wd_body_ok || {
+        cgi_error "payload_too_large" "Request body is larger than 8192 bytes"
+        exit 0
+    }
     cgi_read_post
 
-    ACTION=$(printf '%s' "$POST_DATA" | jq -r '.action // empty')
+    if ! printf '%s' "$POST_DATA" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        cgi_error "invalid_json" "Request body is not a JSON object"
+        exit 0
+    fi
 
+    ACTION=$(printf '%s' "$POST_DATA" | jq -r '.action | if type == "string" then . else "" end')
     if [ -z "$ACTION" ]; then
         cgi_error "missing_action" "action field is required"
         exit 0
     fi
 
     # -------------------------------------------------------------------------
-    # action: save_settings
+    # save_settings
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "save_settings" ]; then
         qlog_info "Saving watchdog settings"
-        ensure_watchcat_config
 
-        # Extract fields from POST body
-        val=""
+        # One row per body key: k<key> <kind> <value>. The "k" prefix keeps an
+        # empty key from collapsing the tab split. Kinds: int (integer-valued
+        # number), num (fractional), str, bool, null, other. @tsv escapes tab,
+        # newline and backslash, so a hostile key cannot add rows.
+        rows=$(printf '%s' "$POST_DATA" | jq -r '
+            to_entries[] | select(.key != "action")
+            | ["k" + .key,
+               (.value | if type == "number" then (if . == floor then "int" else "num" end)
+                         elif type == "string" then "str"
+                         elif type == "boolean" then "bool"
+                         elif type == "null" then "null"
+                         else "other" end),
+               (.value | if type == "number" then (if . == floor then (floor | tostring) else tostring end)
+                         elif type == "boolean" then tostring
+                         elif type == "string" then . else "" end)]
+            | @tsv')
 
-        val=$(printf '%s' "$POST_DATA" | jq -r '.enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in
-                true) uci set quecmanager.watchcat.enabled=1 ;;
-                false) uci set quecmanager.watchcat.enabled=0 ;;
-            esac
-        fi
+        tab=$(printf '\t')
+        stage_list=""
+        slot_present=0
+        slot_new=""
+        tier3_new=""
+        has_enabled=0
+        enabled_new=""
+        has_carrier=0
 
-        val=$(printf '%s' "$POST_DATA" | jq -r '.fail_threshold | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 1 20 || reject_field "fail_threshold" "must be integer 1-20"
-            uci set quecmanager.watchcat.fail_threshold="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.check_interval | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 5 60 || reject_field "check_interval" "must be integer 5-60"
-            uci set quecmanager.watchcat.check_interval="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.cooldown | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 10 300 || reject_field "cooldown" "must be integer 10-300"
-            uci set quecmanager.watchcat.cooldown="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.tier1_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.tier1_enabled=1 ;; false) uci set quecmanager.watchcat.tier1_enabled=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.tier2_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.tier2_enabled=1 ;; false) uci set quecmanager.watchcat.tier2_enabled=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.tier3_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.tier3_enabled=1 ;; false) uci set quecmanager.watchcat.tier3_enabled=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.tier4_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.tier4_enabled=1 ;; false) uci set quecmanager.watchcat.tier4_enabled=0 ;; esac
-        fi
-
-        # backup_sim_slot: present + 1/2 => set; present + null/empty => clear;
-        # absent => untouched, so a save from one card never wipes the slot.
-        has_slot=$(printf '%s' "$POST_DATA" | jq -r 'has("backup_sim_slot")')
-        if [ "$has_slot" = "true" ]; then
-            val=$(printf '%s' "$POST_DATA" | jq -r '.backup_sim_slot | if . == null then empty else tostring end')
-            case "$val" in
-                '') uci set quecmanager.watchcat.backup_sim_slot="" ;;
-                1|2) uci set quecmanager.watchcat.backup_sim_slot="$val" ;;
-                *) reject_field "backup_sim_slot" "must be 1 or 2" ;;
-            esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.max_reboots_per_hour | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 1 10 || reject_field "max_reboots_per_hour" "must be integer 1-10"
-            uci set quecmanager.watchcat.max_reboots_per_hour="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.quality_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.quality_enabled=1 ;; false) uci set quecmanager.watchcat.quality_enabled=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.quality_consecutive | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 1 60 || reject_field "quality_consecutive" "must be integer 1-60"
-            uci set quecmanager.watchcat.quality_consecutive="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.ssr_grace | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 10 120 || reject_field "ssr_grace" "must be integer 10-120"
-            uci set quecmanager.watchcat.ssr_grace="$val"
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.ssr_aware | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.ssr_aware=1 ;; false) uci set quecmanager.watchcat.ssr_aware=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.primary_recheck_enabled | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            case "$val" in true) uci set quecmanager.watchcat.primary_recheck_enabled=1 ;; false) uci set quecmanager.watchcat.primary_recheck_enabled=0 ;; esac
-        fi
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.primary_recheck_interval | if . == null then empty else tostring end')
-        if [ -n "$val" ]; then
-            validate_int "$val" 5 1440 || reject_field "primary_recheck_interval" "must be integer 5-1440"
-            uci set quecmanager.watchcat.primary_recheck_interval="$val"
-        fi
-
-        # ---------------------------------------------------------------------
-        # Probe interval (ping_profile section). The Watchdog page is the single
-        # writer for the Custom interval override; the Sensitivity page only
-        # reflects it (one owner avoids a two-writer race). These writes target
-        # quecmanager.ping_profile.*, NOT watchcat.*.
-        # ---------------------------------------------------------------------
-        ping_profile_changed=0
-
-        val=$(printf '%s' "$POST_DATA" | jq -r '.probe_profile // empty')
-        if [ -n "$val" ]; then
-            case "$val" in
-                sensitive|regular|relaxed|quiet)
-                    # Ensure the section exists before writing into it.
-                    uci -q get quecmanager.ping_profile >/dev/null 2>&1 || \
-                        uci set quecmanager.ping_profile=ping_profile
-                    uci set quecmanager.ping_profile.profile="$val"
-                    ping_profile_changed=1
+        # Pass 1: validate every key, stage nothing. The first failing key in
+        # request order is reported.
+        while IFS="$tab" read -r wk wt wv; do
+            [ -n "$wk" ] || continue
+            wk="${wk#k}"
+            case "$wk" in
+                enabled|tier1_enabled|tier2_enabled|tier3_enabled|tier4_enabled|quality_enabled|ssr_aware|failback_enabled|carrier_enabled)
+                    [ "$wt" = "bool" ] || invalid_field "$wk" "must be true or false"
+                    if [ "$wv" = "true" ]; then bv=1; else bv=0; fi
+                    stage_list="$stage_list$wk=$bv
+"
+                    case "$wk" in
+                        enabled) has_enabled=1; enabled_new="$bv" ;;
+                        tier3_enabled) tier3_new="$bv" ;;
+                        carrier_enabled) has_carrier=1 ;;
+                    esac
                     ;;
-                *) reject_field "probe_profile" "must be one of: sensitive, regular, relaxed, quiet" ;;
+                act_after_sec|step_wait_sec|max_reboots_per_hour|quality_after_sec|carrier_after_min|ssr_grace_sec|failback_every_min)
+                    case "$wk" in
+                        act_after_sec) lo=15; hi=600 ;;
+                        step_wait_sec) lo=10; hi=300 ;;
+                        max_reboots_per_hour) lo=1; hi=10 ;;
+                        quality_after_sec) lo=30; hi=1800 ;;
+                        carrier_after_min) lo=5; hi=240 ;;
+                        ssr_grace_sec) lo=10; hi=120 ;;
+                        failback_every_min) lo=5; hi=1440 ;;
+                    esac
+                    [ "$wt" = "int" ] && iv=$(wd_int_in "$lo" "$hi" "$wv") \
+                        || invalid_field "$wk" "must be an integer $lo-$hi"
+                    stage_list="$stage_list$wk=$iv
+"
+                    ;;
+                backup_sim_slot)
+                    case "$wt:$wv" in
+                        null:) slot_present=1; slot_new="" ;;
+                        int:1|int:2) slot_present=1; slot_new="$wv" ;;
+                        *) invalid_field "backup_sim_slot" "must be 1, 2 or null" ;;
+                    esac
+                    ;;
+                *)
+                    invalid_field "$wk" "unknown setting"
+                    ;;
             esac
-        fi
+        done <<EOF
+$rows
+EOF
 
-        # interval_override: present + null/empty => clear; present + int => set
-        # (range 1-60); absent => leave untouched. We distinguish "key absent"
-        # from "key present but null" so the page can explicitly clear.
-        has_override=$(printf '%s' "$POST_DATA" | jq -r 'has("interval_override")')
-        if [ "$has_override" = "true" ]; then
-            val=$(printf '%s' "$POST_DATA" | jq -r '.interval_override | if . == null then empty else tostring end')
-            uci -q get quecmanager.ping_profile >/dev/null 2>&1 || \
-                uci set quecmanager.ping_profile=ping_profile
-            if [ -z "$val" ]; then
-                # Explicit clear (null or empty string).
-                uci -q delete quecmanager.ping_profile.interval_override 2>/dev/null
-            else
-                validate_int "$val" 1 60 || reject_field "interval_override" "must be integer 1-60"
-                uci set quecmanager.ping_profile.interval_override="$val"
-            fi
-            ping_profile_changed=1
-        fi
-
-        # probe_interval: the effective ping cadence in seconds (Detection card).
-        # Ignored when interval_override is also sent. An unchanged value writes
-        # nothing, so a Ladder-card save never touches cadence; a changed value
-        # sets the override, or clears it when it equals the profile's own interval.
-        val=$(printf '%s' "$POST_DATA" | jq -r '.probe_interval | if . == null then empty else tostring end')
-        if [ -n "$val" ] && [ "$has_override" != "true" ]; then
-            validate_int "$val" 1 60 || reject_field "probe_interval" "must be integer 1-60"
-            conn_state_cadence
-            if [ "$val" != "$CQ_CFG_INTERVAL_SEC" ]; then
-                uci -q get quecmanager.ping_profile >/dev/null 2>&1 ||                     uci set quecmanager.ping_profile=ping_profile
-                if [ "$val" = "$CQ_CFG_PROFILE_INTERVAL_SEC" ]; then
-                    uci -q delete quecmanager.ping_profile.interval_override 2>/dev/null
-                else
-                    uci set quecmanager.ping_profile.interval_override="$val"
-                fi
-                ping_profile_changed=1
-            fi
-        fi
-
-        uci commit quecmanager
-
-        # Signal running watchcat daemon to reload config (if it's already running)
-        touch "$RELOAD_FLAG"
-
-        # If any ping_profile field changed, signal the ping daemon too.
-        if [ "$ping_profile_changed" = "1" ]; then
-            touch "$PING_RELOAD_FLAG"
-        fi
-
-        # Clear auto-disabled flag if user is re-enabling
-        new_enabled=""
-        new_enabled=$(uci -q get quecmanager.watchcat.enabled 2>/dev/null)
-        if [ "$new_enabled" = "1" ]; then
-            rm -f "$DISABLED_FLAG"
-            # Enable on boot. A running daemon picks the change up from the
-            # reload flag touched above, so only start it when it is down
-            # (a restart would drop the live recovery state mid-save).
-            /etc/init.d/qmanager_watchcat enable 2>/dev/null
-            if /etc/init.d/qmanager_watchcat running >/dev/null 2>&1; then
-                qlog_info "Watchdog settings saved, running watchcat will reload"
-            else
-                ( /etc/init.d/qmanager_watchcat start >/dev/null 2>&1 & )
-                qlog_info "Watchdog settings saved, watchcat enabled and started"
-            fi
+        # Cross-field rules against the merged result (stored + request).
+        if [ -n "$tier3_new" ]; then
+            merged_t3="$tier3_new"
         else
-            # Stop and disable the watchcat init script
-            /etc/init.d/qmanager_watchcat stop >/dev/null 2>&1
-            /etc/init.d/qmanager_watchcat disable 2>/dev/null
-            qlog_info "Watchdog settings saved, watchcat stopped and disabled"
+            merged_t3=0
+            [ "$(wd_stored_bool tier3_enabled false)" = "true" ] && merged_t3=1
+        fi
+        if [ "$slot_present" = "1" ]; then
+            merged_slot="$slot_new"
+        else
+            merged_slot=$(cfg_get watchdog backup_sim_slot)
+            case "$merged_slot" in 1|2) ;; *) merged_slot="" ;; esac
+        fi
+        if [ "$tier3_new" = "1" ] && [ -z "$merged_slot" ]; then
+            invalid_field "tier3_enabled" "Tier 3 needs a backup SIM slot"
+        fi
+        if [ "$slot_present" = "1" ] && [ -z "$slot_new" ] && [ "$merged_t3" = "1" ]; then
+            invalid_field "backup_sim_slot" "the backup SIM slot cannot be cleared while Tier 3 is on"
+        fi
+
+        # Pass 2: stage everything, commit once.
+        while IFS='=' read -r sk sv; do
+            [ -n "$sk" ] || continue
+            cfg_set watchdog "$sk" "$sv" || save_failed
+        done <<EOF
+$stage_list
+EOF
+        if [ "$slot_present" = "1" ]; then
+            if [ -n "$slot_new" ]; then
+                cfg_set watchdog backup_sim_slot "$slot_new" || save_failed
+            else
+                cfg_del watchdog backup_sim_slot || save_failed
+            fi
+        fi
+        cfg_commit || save_failed
+
+        # The running daemon re-reads on the reload flag; it is never restarted
+        # from here (that would drop a live recovery).
+        plat_flag_raise "$PF_WD_RELOAD"
+        # The poller gates its SA carrier read on the carrier toggle.
+        [ "$has_carrier" = "1" ] && plat_flag_raise "$PF_POLLER_RELOAD"
+
+        if [ "$has_enabled" = "1" ]; then
+            if [ "$enabled_new" = "1" ]; then
+                rm -f "$DISABLED_FLAG"
+                svc_enable "$WD_SERVICE" >/dev/null 2>&1
+                if ! svc_running "$WD_SERVICE"; then
+                    ( svc_start "$WD_SERVICE" </dev/null >/dev/null 2>&1 & )
+                fi
+                qlog_info "Watchdog settings saved, watchcat enabled"
+            else
+                svc_stop "$WD_SERVICE" >/dev/null 2>&1
+                svc_disable "$WD_SERVICE" >/dev/null 2>&1
+                qlog_info "Watchdog settings saved, watchcat stopped and disabled"
+            fi
         fi
         echo '{"success":true}'
         exit 0
     fi
 
     # -------------------------------------------------------------------------
-    # action: dismiss_sim_swap
+    # dismiss_sim_swap (RM551E only)
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "dismiss_sim_swap" ]; then
         qlog_info "Dismissing SIM swap notification"
         if [ -f "$SIM_SWAP_FLAG" ]; then
             tmp_json=$(jq -c '.dismissed = true' "$SIM_SWAP_FLAG" 2>/dev/null)
             if [ -n "$tmp_json" ]; then
-                # B4.1: root-owned rewrite, not write-through of a planted file
-                printf '%s\n' "$tmp_json" | qm_atomic_write "$SIM_SWAP_FLAG"
+                # Root-owned rewrite, not a write-through of a planted file
+                printf '%s\n' "$tmp_json" | qm_atomic_write "$SIM_SWAP_FLAG" || save_failed
             fi
         fi
         echo '{"success":true}'
@@ -618,20 +467,28 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     # -------------------------------------------------------------------------
-    # action: revert_sim
+    # revert_sim: the daemon defers it while busy and honours only a root-owned flag
     # -------------------------------------------------------------------------
     if [ "$ACTION" = "revert_sim" ]; then
         qlog_info "User requesting SIM revert"
-        # B4.1: root-owned flag (the daemon ignores any other)
-        : | qm_atomic_write "$REVERT_FLAG"
-        echo '{"success":true,"message":"SIM revert requested. The watchcat will process this shortly."}'
+        : | qm_atomic_write "$REVERT_FLAG" || save_failed
+        echo '{"success":true}'
         exit 0
     fi
 
-    # Unknown action
+    # -------------------------------------------------------------------------
+    # retry_failback: reset the give-up and try the primary SIM at once. Also ok
+    # when no failover is active (the daemon removes the flag and ignores it).
+    # -------------------------------------------------------------------------
+    if [ "$ACTION" = "retry_failback" ]; then
+        qlog_info "User requesting a failback retry"
+        : | qm_atomic_write "$PF_FAILBACK_RETRY_FLAG" || save_failed
+        echo '{"success":true}'
+        exit 0
+    fi
+
     cgi_error "unknown_action" "Unknown action: $ACTION"
     exit 0
 fi
 
-# Method not allowed
 cgi_error "method_not_allowed" "Only GET and POST are supported"

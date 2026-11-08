@@ -1,0 +1,9 @@
+fan dir present while legs run: yes
+pid file present while running: yes
+fan dir after TERM: gone
+pid file after TERM: gone
+daemon after TERM: gone
+  probed: 1.1.1.1 2606:4700:4700::1111 8.8.8.8 cloudflare.com
+  finished: 1.1.1.1
+  cut short: 2606:4700:4700::1111 8.8.8.8 cloudflare.com
+  orphans: 0

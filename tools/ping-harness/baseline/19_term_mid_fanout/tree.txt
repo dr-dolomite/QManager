@@ -1,0 +1,12 @@
+=== etc/config/quecmanager
+
+=== tmp/qmanager.log
+[TS] INFO  [ping:PID] ========================================
+[TS] INFO  [ping:PID] QManager Ping Daemon starting (PID N)
+[TS] INFO  [ping:PID] Sensitivity: sensitive, interval 1s, fail 8s, recover 3s
+[TS] INFO  [ping:PID] Slots: 1=1.1.1.1 2=8.8.8.8 3=2606:4700:4700::1111 4=cloudflare.com
+[TS] INFO  [ping:PID] IPv6 probe: ping -6, history 300, leg deadline 3s
+[TS] INFO  [ping:PID] ========================================
+
+=== tmp/qmanager_ping_history
+

@@ -1,7 +1,7 @@
 # Item 6: 25% scattered packet loss (every 4th sample null) on a reachable link
-# breaches the 15% "standard" ceiling in the windowed read. Three consecutive
-# breaches start a quality-triggered Tier 1; its COPS=0 clears the loss and the
-# quality cooldown succeeds.
+# breaches the 15% "standard" ceiling in the windowed read. A breach that lasts
+# quality_after_sec (30 s) starts a quality-triggered Tier 1; its COPS=0 clears
+# the loss and the quality cooldown succeeds.
 SC_PASSES=18
 sc_setup() {
     uci_set quecmanager.watchcat.quality_enabled 1
@@ -16,7 +16,7 @@ sc_qcmd() {
     return 100
 }
 sc_snap_extra() {
-    echo "quality_since=$quality_since breach=$quality_breach_counter"
+    echo "quality_since=$quality_since breach=$quality_breach_since"
     if read_quality; then
         echo "window: loss=$q_packet_loss avg=$q_avg_latency"
     else

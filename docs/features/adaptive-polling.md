@@ -22,8 +22,8 @@ Adaptive Polling makes the QManager AT poller ease off modem interrogation when 
 | Thermal block | `.thermal` (object or `null`), sampled every 5th cycle (~10 s) in every tier; Invariant 15, [`thermal-throttling.md`](thermal-throttling.md) |
 | AT read cap | `QC_WAIT_MS=2500`, passed per call as `QCMD_WAIT_MS` (Invariant 8); per-cycle busy latch `_AT_LATCH` / `_AT_BUSY`, rc 3 = not run |
 | status.json composer | `_wc_compose_pf` (printf, compact one line); `write_cache_jq` is the safety net (Invariant 9) |
-| Sidecars | `/var/run/qmanager/{ping,dns,ondemand}.env` (Invariant 10) |
-| Parity gate (dev-only) | `tools/poller-parity/` (`parity.sh`, `status_parity.sh`, `sidecar_parity.sh`, `measure.sh`) |
+| Sidecars | `/var/run/qmanager/{ping,dns,ondemand}.env` (Invariant 10); `/var/run/qmanager/ca.env` written by the poller for the watchdog (Invariant 7) |
+| Parity gate (dev-only) | `tools/poller-parity/` (`parity.sh`, `status_parity.sh`, `sidecar_parity.sh`, `ca_env_parity.sh`, `measure.sh`) |
 | Reboot required | No |
 
 ---
@@ -129,7 +129,7 @@ These are non-obvious constraints verified on-device. Violating any of them prod
 
 ### 1. `write_cache` and `read_ping_data` run every base cycle regardless of tier
 
-The connection watchdog (`qmanager_watchcat`) keys its freshness check on the root `.timestamp` field in `status.json` and reads `.connectivity.*` for quality-trigger decisions. Both fields are populated by `write_cache` and `read_ping_data` respectively. If the poller were to skip `write_cache` on idle/deep cycles, `status.json` would go stale, and the watchdog's quality trigger would silently stop working.
+The connection watchdog (`qmanager_watchcat`) no longer reads `status.json`: it reads `/tmp/qmanager_ping.json` through `conn_state_read` and the raw `/tmp/qmanager_ping_history` itself, so a stalled `write_cache` cannot change a recovery decision. What depends on this invariant is the UI: `connectivity.*` comes from `read_ping_data`, and the `watchcat` block, its `age_sec` heartbeat figure and the root `.mono` come from `write_cache`. If the poller skipped `write_cache` on idle/deep cycles, `status.json` would go stale and the Watchdog page would show "Not reporting" while the daemon is healthy.
 
 **Why:** AT backoff applies only to the AT-port read block. The local-only work — `write_cache`, `read_ping_data`, proc metrics — always runs at the 2 s base cadence. The two concerns are deliberately decoupled in the poller loop.
 
@@ -152,7 +152,7 @@ Both are one-shot: each flag forces exactly one Active cycle, then the poller re
 
 ### 4. Lifecycle cleanup is the init.d `stop_service()` responsibility
 
-`/etc/init.d/qmanager`'s `stop_service()` removes `/tmp/qmanager_ui_active` (and any leftover `/tmp/qmanager_ui_active.*` temp files from an interrupted heartbeat write), `/tmp/qmanager_poller_reload`, `/var/run/qmanager/ondemand.stamp`, and the dev tap flag and ring (`/var/run/qmanager/poller_tap`, `/var/run/qmanager/tap/`), the `ping.env` / `dns.env` / `ondemand.env` sidecars (and their `.new` temp files), the watchcat / SIM read stamps and the dev status-parity hook (`wc_parity`, `wcp/`). This prevents stale epoch values from causing a misleading Active state the next time the poller starts before `main()` can re-seed. The CGI is auto-deployed via the `install_tree` cgi-bin copy at install/upgrade time — no UCI seed step and no manual file placement needed.
+`/etc/init.d/qmanager`'s `stop_service()` removes `/tmp/qmanager_ui_active` (and any leftover `/tmp/qmanager_ui_active.*` temp files from an interrupted heartbeat write), `/tmp/qmanager_poller_reload`, `/var/run/qmanager/ondemand.stamp`, and the dev tap flag and ring (`/var/run/qmanager/poller_tap`, `/var/run/qmanager/tap/`), the `ping.env` / `dns.env` / `ondemand.env` sidecars (and their `.new` temp files) and `ca.env`, the watchcat / SIM read stamps and the dev status-parity hook (`wc_parity`, `wcp/`). This prevents stale epoch values from causing a misleading Active state the next time the poller starts before `main()` can re-seed. The CGI is auto-deployed via the `install_tree` cgi-bin copy at install/upgrade time — no UCI seed step and no manual file placement needed.
 
 ### 5. Non-baseline `POLL_INTERVAL` collapses idle/active distinction
 
@@ -200,6 +200,10 @@ This invariant has two layers, applied across two releases:
 **Why QCAINFO/CFUN?/per-antenna are dropped in deep:** the per-antenna `QRSRP`/`QRSRQ`/`QSINR` read populates the `sig_*` array fields in `status.json`, which `qmanager_tower_failover` does NOT read — only the scalar `.lte.rsrp`/`.nr.rsrp` from QENG. QCAINFO and CFUN? similarly have no consumer that requires sub-minute freshness when no browser is open.
 
 **CA fields hold last-known, never zero in deep:** the QCAINFO else-branch that zeroes `t2_ca_active`, `t2_ca_count`, `t2_nr_ca_active`, `t2_nr_ca_count`, `t2_total_bandwidth_mhz`, `t2_bandwidth_details`, and `t2_carrier_components` is entirely inside the `if [ "$ap_tier" != "deep" ]; then ... fi` guard. Deep-tier touches leave the CA global vars unchanged; `write_cache` then emits last-known values. Verified on-device: CA fields held `total_bandwidth_mhz:95` across multiple deep-tier cycles.
+
+**Gated exception: the watchdog carrier read (`ca_deep_read`).** While `quecmanager.watchcat.carrier_enabled` is `1` (read in `resolve_poller_config`, so a reload or restart picks it up) and this cycle's serving-cell parse says `5G-SA` (QMI cannot count NR carriers; the NR-DC master is SA too), the deep tier also runs `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` (one exchange, never left on) at most once per 60 s (one 2 s cycle of grain), through the normal `qcmd_exec_g` busy latch and behind the scan / SIM-switch / long-running early return. Cost: about one AT command per minute, only while the carrier trigger is on and the radio is on SA. A good reply goes through `parse_ca_info` like the idle read, so `status.json`'s CA fields and `.device.ca_read_mono` refresh with it; a failed, busy or `+QCAINFO:`-less reply changes nothing (the last-known rule above still holds) and the next attempt is still spaced 60 s from this one. With the toggle off the deep tier is QENG-only, byte for byte as before. Every completed carrier read in any tier (AT, or the QMI build) also publishes `/var/run/qmanager/ca.env` (below), but only while the toggle is on.
+
+**`ca.env`** (`qm_atomic_write`, mode 0644, run dir): `ca_mono` (uptime s of the read), `ca_source` (`at`\|`qmi`), `ca_rat` (`lte`\|`nsa`\|`sa`\|`nrdc`\|`unknown`, from `network_type` of the same cycle; the poller does not tell NR-DC from SA, so it emits `sa` for both and `nrdc` is reserved), `ca_lte_cc` and `ca_nr_cc` (rows of the carrier list, PCC included; `ca_nr_cc` is empty for `qmi`, whose list is LTE-only), then `qm_sidecar_end='1'`. Values unchanged since the last write are rewritten at most every 10 s (an active tier would otherwise fork four times per 2 s cycle); a changed count or RAT is written at once; a list that is empty or did not parse writes nothing, so a stale file ages on its `ca_mono`. Consumer: the watchdog's `plat_cc_count` (parsed, never sourced; contract in `docs/plans/2026-11-08-cq-watchdog-amendment-3.md` A3.3). Check: `tools/poller-parity/ca_env_parity.sh`.
 
 > ⚠️ WARNING: Do not add any of the removed data-plane/L1 commands (`CGCONTRDP`, `QMAP="WWAN"`, `*_time_advance`, `*_mimo_layers`) back to `poll_tier2()` or the boot block. Doing so reintroduces the exact pattern associated with RM551E baseband restarts. Also do not remove the `[ "$ap_tier" = "active" ] || return 0` guard from `poll_tier2()` — the identity reads it protects are still Active-only. Additionally, do not move the QCAINFO else-branch (CA-field zeroing) outside the `[ "$ap_tier" != "deep" ]` guard — doing so would cause deep-tier cycles to publish zeroed CA data instead of last-known values.
 
@@ -364,9 +368,21 @@ The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"dee
 
 Ping-cache staleness in the poller is not a poller constant: `read_ping_data` calls `conn_state_read` ([connection-quality.md](connection-quality.md#shared-ping-cache-reader-conn_statesh)), which marks `/tmp/qmanager_ping.json` stale when `age > max(3 * interval_sec, 15)` seconds on the monotonic clock. This replaced a fixed 10 s window that expired every cycle under the `quiet` profile (30 s window now). A stale or missing cache sets `connectivity` to unknown (`internet_available: null`, `status: "unknown"`); this runs at the 2 s base cadence in every tier. Connectivity field names and types are unchanged.
 
-The poller also writes a root-level **`mono`** integer field on every `write_cache` call. Its value is the output of `mono_now()` (from `qlog.sh`) — the integer seconds since boot read from `/proc/uptime`. This is the kernel monotonic counter and is unaffected by NTP or NITZ wall-clock steps. The watchdog's `read_quality` function reads `.mono` from `status.json` to compute staleness via `age_mono = mono_now() − .mono`, falling back to the wall-clock `timestamp` field when `.mono` is absent, zero, or non-numeric. Staleness threshold for `status.json` is `STATUS_STALE_THRESHOLD=30` seconds (monotonic).
+The poller also writes a root-level **`mono`** integer field on every `write_cache` call. Its value is the output of `mono_now()` (from `qlog.sh`) — the integer seconds since boot read from `/proc/uptime`. This is the kernel monotonic counter and is unaffected by NTP or NITZ wall-clock steps. Consumers compute staleness as `age_mono = mono_now() − .mono`, falling back to the wall-clock `timestamp` field when `.mono` is absent, zero, or non-numeric. The poller's own `watchcat.age_sec` is the same delta between the poller's `mono` and the watchdog state file's `mono`. The watchdog itself does not read `status.json`; its quality window comes from the ping history ([connection-watchdog.md](connection-watchdog.md#quality-trigger)).
 
 `qmanager_ping` writes the same `mono` field into `/tmp/qmanager_ping.json` on every probe cycle. Both cache files therefore carry both a wall-clock `timestamp` (epoch seconds, `date +%s`) and a monotonic `mono` (uptime seconds) as companion fields.
+
+**`watchcat` block.** `read_watchcat_state` (Tier 1.5, behind an mtime re-read gate with a forced re-read every `STATE_FORCE_EVERY=30` calls) parses `/tmp/qmanager_watchcat.json`; when the file is absent it resets every `wc_*` variable to its default, so a stopped daemon reads as `state: "disabled"`, not as a frozen last state. Both composers (`_wc_compose_pf` and `write_cache_jq`) publish `enabled`, `state`, `current_tier`, `failure_count`, `last_recovery_time`, `last_recovery_tier`, `total_recoveries`, `cooldown_remaining`, `reboots_this_hour`, the derived `age_sec` and `stale_after`, and nine keys added by the CQ x Watchdog design:
+
+| Key | Type | Null / default |
+|---|---|---|
+| `recovery_reason` | string | `null` when empty (`outage`, `quality`, `carrier` while recovering) |
+| `step_wait_until`, `holdoff_until`, `ssr_hold_until`, `failback_next_at` | int | `null` |
+| `holdoff_reason` | string | `null` when empty |
+| `reboot_budget_exhausted`, `ping_stale` | bool | `false` |
+| `mono` | int | `0` (the **daemon's** uptime second at its last write) |
+
+The `*_until` values and `failback_next_at` are on the daemon's monotonic clock: interpolate them against `watchcat.mono`, never against the browser clock or the poller's root `mono` (the two drift apart by the heartbeat age). `last_recovery_reason` is not republished (it is in the watchdog CGI's `status`). Keep the two composers in parity: `tools/poller-parity/status_parity.sh` covers the `watchcat` block. Field semantics: [connection-watchdog.md](connection-watchdog.md#state-file-and-statusjsonwatchcat).
 
 ---
 

@@ -12,7 +12,7 @@ export const BACKUP_SECTIONS: BackupSectionMeta[] = [
   { key: "profiles", group: "connection", overlapGroup: "profile-parent", defaultChecked: false },
   // Monitoring and alerts: how QManager watches the link and who it tells.
   { key: "watchdog", group: "monitoring", overlapGroup: null, defaultChecked: false },
-  { key: "quality_thresholds", group: "monitoring", overlapGroup: null, defaultChecked: false },
+  { key: "connection_quality", group: "monitoring", overlapGroup: null, defaultChecked: false },
   { key: "sites", group: "monitoring", overlapGroup: null, defaultChecked: false },
   { key: "metrics", group: "monitoring", overlapGroup: null, defaultChecked: false },
   { key: "sms_alerts", group: "monitoring", overlapGroup: null, defaultChecked: false },

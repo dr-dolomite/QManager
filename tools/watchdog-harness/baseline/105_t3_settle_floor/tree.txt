@@ -1,0 +1,56 @@
+=== etc/qmanager/known_iccids
+89000000000000000002
+
+=== etc/qmanager/sim_failover.json
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000206,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=60s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=0 T3=1 T4=0 backup_sim=2
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:14:12] INFO  [watchcat:PID] Entering COOLDOWN for 60s (after Tier 1)
+[2026-09-21 14:15:12] WARN  [watchcat:PID] COOLDOWN complete: connectivity NOT restored after Tier 1
+[2026-09-21 14:15:12] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
+[2026-09-21 14:15:12] INFO  [watchcat:PID] Escalating to Tier 3 (reason=outage)
+[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 3 — previous tier did not restore the connection
+[2026-09-21 14:15:12] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
+[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
+[2026-09-21 14:15:12] INFO  [watchcat:PID] TIER 3: SIM failover from slot 1 to slot 2
+[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: switching to SIM slot 2 (Tier 3)
+[2026-09-21 14:15:16] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:15:16] INFO  [watchcat:PID] TIER 3: Switched to slot 2 (ICCID: ...0002)
+[2026-09-21 14:15:16] INFO  [watchcat:PID] Entering COOLDOWN for 90s (after Tier 3)
+[2026-09-21 14:16:46] INFO  [watchcat:PID] COOLDOWN complete: connectivity RESTORED after Tier 3
+[2026-09-21 14:16:46] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 3) — internet connectivity restored
+[2026-09-21 14:16:46] INFO  [watchcat:PID] SIM failover state saved: slot 1 → 2 (reason=connectivity_failure)
+[2026-09-21 14:16:46] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: SIM failover confirmed — running on slot 2
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 3 — previous tier did not restore the connection","severity":"warning","code":"wd_escalate"}
+{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000112,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning","code":"sim_swap"}
+{"timestamp":1790000206,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 3) — internet connectivity restored","severity":"info","code":"wd_succeeded"}
+{"timestamp":1790000206,"type":"sim_failover","message":"Watchcat: SIM failover confirmed — running on slot 2","severity":"info","code":"sim_swap"}
+
+=== tmp/qmanager_force_tier2
+
+=== tmp/qmanager_refresh_policy_band
+
+=== tmp/qmanager_sim_failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000206,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+

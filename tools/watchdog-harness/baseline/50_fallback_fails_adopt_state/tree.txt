@@ -3,19 +3,19 @@
 89000000000000000001
 
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=1 T4=0 backup_sim=2
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=unreachable)
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 3: SIM failover from slot 1 to slot 2
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: switching to SIM slot 2 (Tier 3)
@@ -35,23 +35,23 @@
 [2026-09-21 14:15:52] WARN  [watchcat:PID] SIM failover: revert not confirmed, modem is on slot 2 - failover kept active (original slot 1)
 [2026-09-21 14:15:52] ERROR [watchcat:PID] All recovery tiers exhausted — returning to monitor
 [2026-09-21 14:15:52] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
-[2026-09-21 14:16:02] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=26 (threshold=3)
+[2026-09-21 14:16:02] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=26 (act after 15s)
 [2026-09-21 14:17:12] INFO  [watchcat:PID] User requested SIM revert to slot 1
 [2026-09-21 14:17:12] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: reverting to original SIM slot 1 (user request)
 [2026-09-21 14:17:12] WARN  [watchcat:PID] SIM failover fallback: reverting to slot 1
 [2026-09-21 14:17:12] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: backup SIM failed, reverting to slot 1
 [2026-09-21 14:17:16] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:17:16] INFO  [watchcat:PID] Entering post-revert SIM settle for 90s
-[2026-09-21 14:18:36] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
+[2026-09-21 14:18:46] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning"}
-{"timestamp":1790000144,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning"}
-{"timestamp":1790000152,"type":"sim_failover","message":"Watchcat: could not revert to SIM slot 1 — manual check needed","severity":"error"}
-{"timestamp":1790000152,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error"}
-{"timestamp":1790000232,"type":"sim_failover","message":"Watchcat: reverting to original SIM slot 1 (user request)","severity":"info"}
-{"timestamp":1790000232,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"sim_failover","message":"Watchcat: switching to SIM slot 2 (Tier 3)","severity":"warning","code":"sim_swap"}
+{"timestamp":1790000144,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
+{"timestamp":1790000152,"type":"sim_failover","message":"Watchcat: could not revert to SIM slot 1 — manual check needed","severity":"error","code":"sim_revert"}
+{"timestamp":1790000152,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+{"timestamp":1790000232,"type":"sim_failover","message":"Watchcat: reverting to original SIM slot 1 (user request)","severity":"info","code":"sim_revert"}
+{"timestamp":1790000232,"type":"sim_failover","message":"Watchcat: backup SIM failed, reverting to slot 1","severity":"warning","code":"sim_revert"}
 
 === tmp/qmanager_force_tier2
 

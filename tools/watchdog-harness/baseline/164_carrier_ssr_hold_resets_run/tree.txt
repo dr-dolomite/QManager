@@ -1,0 +1,31 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Carrier: enabled=1 after=5min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=10s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] CARRIER: 2 carriers seen, the single-carrier trigger is armed
+[2026-09-21 14:14:00] WARN  [watchcat:PID] CARRIER: one component carrier, recovery after 5 min
+[2026-09-21 14:19:00] WARN  [watchcat:PID] CARRIER → RECOVERY: one carrier for 300s
+[2026-09-21 14:19:00] WARN  [watchcat:PID] Recoverable baseband SSR detected; holding recovery ladder up to 10s for self-heal
+[2026-09-21 14:19:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal
+[2026-09-21 14:19:10] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
+[2026-09-21 14:19:10] INFO  [watchcat:PID] SSR-hold cleared: connectivity recovered naturally
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000340,"type":"watchcat_recovery","message":"Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal","severity":"info","code":"wd_ssr_hold"}
+
+=== var/run/qmanager/qmi.env
+qmi_mono='5380'
+qmi_state='up'
+qmi_ssr_count='0'
+qmi_registered='1'
+qmi_ca_count='2'
+qm_sidecar_end='1'
+

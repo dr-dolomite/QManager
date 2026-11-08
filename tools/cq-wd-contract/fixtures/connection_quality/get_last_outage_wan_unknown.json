@@ -1,0 +1,29 @@
+{
+  "name": "connection_quality/get_last_outage_wan_unknown",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null,
+      "last_outage": "7 1 - - -"
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".last_outage": "object",
+      ".last_outage.duration_s": "int",
+      ".last_outage.ended_ago_s": "int",
+      ".last_outage.wan_changed": "null"
+    },
+    "equals": {
+      ".success": true,
+      ".last_outage.duration_s": 7,
+      ".last_outage.wan_changed": null
+    }
+  }
+}

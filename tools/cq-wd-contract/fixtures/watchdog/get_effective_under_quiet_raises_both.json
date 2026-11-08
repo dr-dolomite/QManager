@@ -1,0 +1,73 @@
+{
+  "name": "watchdog/get_effective_under_quiet_raises_both",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {
+      "sensitivity": "quiet"
+    },
+    "watchdog": {
+      "act_after_sec": 15,
+      "step_wait_sec": 10
+    },
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".settings": "object",
+      ".effective": "object",
+      ".effective.act_after_sec": "int",
+      ".effective.step_wait_sec": "int",
+      ".effective.quality_limits": "object",
+      ".effective.quality_limits.latency_ms": "int",
+      ".effective.quality_limits.loss_pct": "int",
+      ".status": "object",
+      ".sim_failover": "object",
+      ".recent_reboots": "array",
+      ".sim_dual_capable": "bool",
+      ".auto_disabled": "bool",
+      ".settings.enabled": "bool",
+      ".settings.act_after_sec": "int",
+      ".settings.step_wait_sec": "int",
+      ".settings.tier1_enabled": "bool",
+      ".settings.tier2_enabled": "bool",
+      ".settings.tier3_enabled": "bool",
+      ".settings.tier4_enabled": "bool",
+      ".settings.backup_sim_slot": "int|null",
+      ".settings.max_reboots_per_hour": "int",
+      ".settings.quality_enabled": "bool",
+      ".settings.quality_after_sec": "int",
+      ".settings.ssr_aware": "bool",
+      ".settings.ssr_grace_sec": "int",
+      ".settings.failback_enabled": "bool",
+      ".settings.failback_every_min": "int"
+    },
+    "equals": {
+      ".success": true,
+      ".settings.enabled": false,
+      ".settings.act_after_sec": 15,
+      ".settings.step_wait_sec": 10,
+      ".settings.tier1_enabled": true,
+      ".settings.tier2_enabled": true,
+      ".settings.tier3_enabled": false,
+      ".settings.tier4_enabled": true,
+      ".settings.backup_sim_slot": null,
+      ".settings.max_reboots_per_hour": 3,
+      ".settings.quality_enabled": false,
+      ".settings.quality_after_sec": 120,
+      ".settings.ssr_aware": true,
+      ".settings.ssr_grace_sec": 45,
+      ".settings.failback_enabled": false,
+      ".settings.failback_every_min": 30,
+      ".effective.act_after_sec": 40,
+      ".effective.step_wait_sec": 40,
+      ".effective.quality_limits.latency_ms": 250,
+      ".effective.quality_limits.loss_pct": 30
+    }
+  }
+}

@@ -544,6 +544,8 @@ remove_runtime_state() {
              /tmp/qmanager_ping.json \
              /tmp/qmanager_ping_history \
              /tmp/qmanager_ping_history.json \
+             /tmp/qmanager_ping_slots.json \
+             /tmp/qmanager_ping_slots.json.tmp \
              /tmp/qmanager_pci_state.json \
              /tmp/qmanager_ping_attaching \
              /tmp/qmanager_dns.json \
@@ -587,7 +589,9 @@ remove_runtime_state() {
           /tmp/qmanager_sms_forward_failures.json.tmp \
           /tmp/qmanager_ping_reload \
           /tmp/qmanager_quality_reload \
+          /tmp/qmanager_poller_reload \
           /tmp/qmanager_imei_check_done \
+          /tmp/qmanager_imei_pending \
           /tmp/qmanager_refresh_policy_band \
           /tmp/qmanager_supported_bands.env \
           /tmp/qmanager_long_running \
@@ -603,6 +607,7 @@ remove_runtime_state() {
           /tmp/qmanager_watchcat_reload \
           /tmp/qmanager_watchcat_disabled \
           /tmp/qmanager_watchcat_revert_sim \
+          /tmp/qmanager_watchcat_retry_failback \
           /tmp/qmanager_sim_failover \
           /tmp/qmanager_sim_swap_detected \
           /tmp/qmanager_pending_reboot_verizon \

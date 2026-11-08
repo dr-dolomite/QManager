@@ -1,0 +1,11 @@
+relaxed ring 60, 0 lines: min=null avg=null max=null jit=null loss=null points=0 every=5s head=[] tail=
+relaxed ring 60, 9 lines: min=11.0 avg=14.8 max=19.0 jit=null loss=null points=9 every=5s head=[11.0,12.0,13.0 tail=null,18.0,19.0]
+relaxed ring 60, 10 lines: min=11.0 avg=15.3 max=20.0 jit=1.1 loss=10 points=10 every=5s head=[11.0,12.0,13.0 tail=18.0,19.0,20.0]
+relaxed ring 60, 60 lines: min=10.0 avg=30.7 max=58.0 jit=2.1 loss=13 points=60 every=5s head=[11.0,12.0,13.0 tail=18.0,19.0,20.0]
+relaxed ring 60, 61 lines: min=10.0 avg=30.9 max=58.0 jit=2.1 loss=13 points=60 every=5s head=[12.0,13.0,14.0 tail=19.0,20.0,21.0]
+sensitive ring 300, 300 lines: min=10.0 avg=34.3 max=59.0 jit=2.3 loss=14 points=60 every=5s head=[15.0,20.0,25.0 tail=50.0,55.0,59.0]
+sensitive ring 300, 600 lines: min=10.0 avg=34.5 max=59.0 jit=2.3 loss=14 points=60 every=5s head=[15.0,20.0,24.0 tail=50.0,54.0,59.0]
+quiet window ring 600, 600 lines: min=10.0 avg=34.4 max=59.0 jit=2.3 loss=14 points=60 every=10s head=[20.0,30.0,40.0 tail=40.0,50.0,59.0]
+regular ring 150, 150 lines: min=10.0 avg=34.1 max=59.0 jit=2.3 loss=14 points=50 every=6s head=[13.0,16.0,19.0 tail=54.0,56.0,59.0]
+regular ring 150, newest bucket lost: min=10.0 avg=33.1 max=59.0 jit=1.9 loss=19 points=50 every=6s head=[13.0,16.0,19.0 tail=null,null,null]
+relaxed, every sample lost: min=null avg=null max=null jit=null loss=100 points=12 every=5s head=[null,null,null tail=null,null,null]

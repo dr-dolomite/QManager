@@ -1,0 +1,31 @@
+{
+  "name": "watchdog/save_settings_unknown_key_beside_valid_keys",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "act_after_sec": 45,
+    "check_interval": 10
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "check_interval"
+    }
+  }
+}

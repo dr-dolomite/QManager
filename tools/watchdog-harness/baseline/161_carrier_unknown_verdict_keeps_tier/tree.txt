@@ -1,0 +1,52 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Carrier: enabled=1 after=5min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] CARRIER: 2 carriers seen, the single-carrier trigger is armed
+[2026-09-21 14:14:00] WARN  [watchcat:PID] CARRIER: one component carrier, recovery after 5 min
+[2026-09-21 14:19:00] WARN  [watchcat:PID] CARRIER → RECOVERY: one carrier for 300s
+[2026-09-21 14:19:00] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=carrier)
+[2026-09-21 14:19:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — stuck on one carrier for 5 min
+[2026-09-21 14:19:00] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:19:00] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:19:02] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:19:32] WARN  [watchcat:PID] COOLDOWN(carrier): carrier count not known (retry 1/3) — extending by 10s
+[2026-09-21 14:19:42] WARN  [watchcat:PID] COOLDOWN(carrier): carrier count not known (retry 2/3) — extending by 10s
+[2026-09-21 14:19:52] WARN  [watchcat:PID] COOLDOWN(carrier): carrier count not known (retry 3/3) — extending by 10s
+[2026-09-21 14:20:02] ERROR [watchcat:PID] COOLDOWN(carrier): no carrier verdict after 3 retries
+[2026-09-21 14:20:02] WARN  [watchcat:PID] COOLDOWN: no verdict for Tier 1 after 3 extensions — keeping it, the next trigger resumes at the next tier
+[2026-09-21 14:20:22] WARN  [watchcat:PID] CARRIER: one component carrier, recovery after 5 min
+[2026-09-21 14:25:22] INFO  [watchcat:PID] Resuming the ladder after the kept Tier 1 (reason=carrier)
+[2026-09-21 14:25:22] WARN  [watchcat:PID] CARRIER → RECOVERY: one carrier for 300s
+[2026-09-21 14:25:22] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=carrier)
+[2026-09-21 14:25:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — stuck on one carrier for 5 min
+[2026-09-21 14:25:22] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
+[2026-09-21 14:25:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
+[2026-09-21 14:25:25] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:25:25] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
+[2026-09-21 14:25:55] INFO  [watchcat:PID] COOLDOWN(carrier) complete: 2 carriers after Tier 2
+[2026-09-21 14:25:55] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 2) — carrier aggregation restored
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000340,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — stuck on one carrier for 5 min","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000340,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000722,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — stuck on one carrier for 5 min","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000722,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000755,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 2) — carrier aggregation restored","severity":"info","code":"wd_succeeded"}
+
+=== var/run/qmanager/qmi.env
+qmi_mono='5775'
+qmi_state='up'
+qmi_ssr_count='0'
+qmi_registered='1'
+qmi_ca_count='2'
+qm_sidecar_end='1'
+

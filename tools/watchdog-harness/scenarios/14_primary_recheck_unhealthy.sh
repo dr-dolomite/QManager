@@ -5,8 +5,8 @@
 # post-recheck settle; a second recheck comes due later.
 SC_PASSES=37
 sc_setup() {
-    uci_set quecmanager.watchcat.primary_recheck_enabled 1
-    uci_set quecmanager.watchcat.primary_recheck_interval 1
+    uci_set quecmanager.watchcat.failback_enabled 1
+    uci_set quecmanager.watchcat.failback_every_min 1
     mset slot 2
     mset link_slot_1 false
     failover_write true 1 2

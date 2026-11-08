@@ -16,9 +16,9 @@
 --- pass 16 ---
 --- pass 17 ---
 --- pass 18 ---
+--- pass 19 ---
 auto_apply_profile 89000000000000000001 watchdog_failback
 tower_failover start
---- pass 19 ---
 --- pass 20 ---
 --- pass 21 ---
 --- pass 22 ---

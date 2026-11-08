@@ -107,7 +107,13 @@ const RestoreConfigBackupCard = () => {
   const progress = state.progress;
 
   const planned: BackupSectionKey[] = state.payload
-    ? PICKER_ORDER.filter((k) => k in state.payload!.sections)
+    ? PICKER_ORDER.filter(
+        (k) =>
+          k in state.payload!.sections ||
+          // Older backups name this section quality_thresholds; the restore
+          // CGI folds it into connection_quality.
+          (k === "connection_quality" && "quality_thresholds" in state.payload!.sections),
+      )
     : [];
 
   const phase: PipelinePhase =

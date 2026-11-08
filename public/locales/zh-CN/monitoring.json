@@ -237,88 +237,187 @@
       "unreadable": "调制解调器没有响应。",
       "retry": "重试"
     },
-    "band": {
-      "checks": "失败检测",
-      "recoveries": "恢复",
-      "reboots": "重启",
-      "absent": "未上报",
-      "checksCaption": "开始恢复前",
-      "cooldownCaption": "{{seconds}} 秒后重新检测",
-      "recoveriesLast": "第 {{tier}} 步，{{ago}}",
-      "recoveriesNone": "尚无记录",
-      "rebootsCaption": "最近一小时",
-      "rebootsOff": "重启步骤已关闭",
-      "aria": "看门狗状态",
-      "cooldownStep": "第 {{tier}} 步已执行，{{seconds}} 秒后重新检测。"
+    "duration": {
+      "seconds": "{{s}} 秒",
+      "minutes": "{{m}} 分钟",
+      "minutesSeconds": "{{m}} 分 {{s}} 秒",
+      "hours": "{{h}} 小时",
+      "hoursMinutes": "{{h}} 小时 {{m}} 分钟"
     },
     "phase": {
+      "action": {
+        "1": "正在重新注册到网络",
+        "2": "正在重启无线电",
+        "3": "正在切换到备用 SIM 卡",
+        "4": "正在重启调制解调器"
+      },
       "off": {
-        "label": "已关闭",
+        "title": "已关闭",
         "blurb": "看门狗未监控连接。"
       },
       "unknown": {
-        "label": "未知",
+        "title": "未知",
         "blurb": "调制解调器没有响应，因此无法确定看门狗目前的状态。"
       },
       "starting": {
-        "label": "启动中",
-        "blurb": "服务刚刚启用，尚未上报状态。"
+        "title": "启动中",
+        "blurb": "刚刚开启，正在等待首次上报。"
       },
       "not_running": {
-        "label": "未上报",
-        "blurb": "已启用，但看门狗已停止上报。"
+        "title": "未上报",
+        "blurb": "已开启，但看门狗已停止上报。"
       },
       "auto_disabled": {
-        "label": "已自动关闭",
-        "blurb": "已达到重启次数上限。待链路稳定后再重新开启。"
+        "title": "已自动关闭",
+        "blurb": "旧版本在达到重启上限时将其关闭。待链路稳定后再重新开启。"
       },
       "monitor": {
-        "label": "监控中",
-        "blurb": "连接状况良好，正在监控是否发生断网。"
+        "title": "监控中",
+        "blurb": "链路正常。离线 {{time}} 后开始恢复。"
       },
       "suspect": {
-        "label": "检测中",
-        "blurb": "刚刚有一次连接检测失败，正在确认后再采取行动。"
+        "title": "检测中",
+        "blurb": "已 {{time}} 无响应。若持续，将开始恢复。",
+        "blurbNow": "刚刚有一次检测失败，正在确认后再采取行动。"
       },
       "recovery": {
-        "label": "恢复中",
-        "blurb": "正在依次执行恢复步骤，以恢复连接。"
+        "title": "第 {{tier}} 步：{{action}}",
+        "titleGeneric": "恢复中",
+        "blurb": {
+          "outage": "已离线 {{time}}，正在依次执行恢复步骤。",
+          "quality": "质量已差 {{time}}，正在依次执行恢复步骤。",
+          "carrier": "已 {{time}} 仅使用一个载波，正在尝试恢复其他载波。"
+        },
+        "blurbNow": "正在依次执行恢复步骤。"
       },
       "cooldown": {
-        "label": "冷却中",
-        "blurb": "正在等待上一步恢复操作生效，然后再重新检测。"
+        "title": "第 {{tier}} 步已执行，{{time}}后检测",
+        "titleChecking": "第 {{tier}} 步已执行，正在检测",
+        "titleGeneric": "正在检测结果",
+        "next": {
+          "outage": "若链路仍未恢复，下一步是第 {{tier}} 步。",
+          "quality": "若质量仍然很差，下一步是第 {{tier}} 步。",
+          "carrier": "若仍只有一个载波，下一步是第 {{tier}} 步。"
+        },
+        "last": {
+          "outage": "这是最后一步。若链路仍未恢复，看门狗将暂停处理。",
+          "quality": "这是处理质量差的最后一步。若问题持续，看门狗将暂停处理。",
+          "carrier": "这是处理单载波的最后一步。若问题持续，看门狗将暂停处理。"
+        }
       },
-      "locked": {
-        "label": "已暂停",
-        "blurb": "有维护操作正在进行，看门狗暂时不会采取行动。"
+      "holdoff": {
+        "outage": {
+          "title": "暂停处理 {{time}}",
+          "titleNow": "暂停处理",
+          "blurb": "所有步骤均已执行，链路仍未恢复。将于 {{time}} 重新开始。",
+          "blurbNow": "所有步骤均已执行，链路仍未恢复。即将重新开始。"
+        },
+        "quality": {
+          "title": "暂停处理 {{time}}",
+          "blurb": "所有步骤执行后质量仍然很差。将于 {{time}} 再次尝试。",
+          "blurbNow": "所有步骤执行后质量仍然很差。即将再次尝试。"
+        },
+        "carrier": {
+          "title": "暂停处理 {{time}}",
+          "blurb": "执行各步骤后仍只有一个载波。将于 {{time}} 再次尝试。",
+          "blurbNow": "执行各步骤后仍只有一个载波。即将再次尝试。"
+        }
       },
       "radio_off": {
-        "blurb": "无线电已关闭，看门狗暂时不会采取行动。"
-      },
-      "disabled": {
-        "label": "已禁用",
-        "blurb": "服务正在运行，但功能已关闭。"
+        "title": "无线电已关闭",
+        "blurb": "无线电关闭时无需恢复。重新开启后将继续监控。"
       },
       "ssr_hold": {
-        "label": "等待中",
-        "blurb": "基带正在自行重启，恢复操作会等待其恢复。"
+        "title": "等待调制解调器重启（{{time}}）",
+        "titleNow": "等待调制解调器重启",
+        "blurb": "无线电已自行重启。恢复操作会等它回来后再执行。"
+      },
+      "ping_stale": {
+        "title": "连接检测无响应",
+        "blurb": "连接检测已有一段时间没有上报，因此看门狗不会据此采取行动。"
+      },
+      "locked": {
+        "title": "已暂停",
+        "blurb": "有维护操作正在进行，看门狗暂时不会采取行动。"
+      },
+      "disabled": {
+        "title": "已关闭",
+        "blurb": "服务正在运行，但功能已关闭。"
+      }
+    },
+    "hero": {
+      "aria": "看门狗状态",
+      "absent": "未上报",
+      "none": "无",
+      "noReading": "无读数",
+      "linkUp": "链路正常",
+      "offline": {
+        "eyebrow": "已离线",
+        "caption": "自 {{time}} 起"
+      },
+      "quality": {
+        "eyebrow": "质量差已持续",
+        "caption": "超过 {{ms}} ms 或 {{pct}}% 视为差"
+      },
+      "carrier": {
+        "eyebrow": "仅使用一个载波已持续",
+        "caption": "{{time}}后采取行动"
+      },
+      "recoveries": {
+        "eyebrow": "恢复次数",
+        "caption": "自上次重启起"
+      },
+      "lastFix": {
+        "eyebrow": "最近一次修复",
+        "none": "尚无修复",
+        "caption": "第 {{tier}} 步",
+        "captionTook": "第 {{tier}} 步，用时 {{time}}",
+        "captionReason": "第 {{tier}} 步（{{reason}}）",
+        "captionReasonTook": "第 {{tier}} 步（{{reason}}），用时 {{time}}",
+        "reason": {
+          "quality": "质量差",
+          "carrier": "单载波"
+        }
+      },
+      "reboots": {
+        "eyebrow": "重启",
+        "value": "{{used}} / {{limit}}",
+        "caption": "本小时",
+        "off": "重启步骤已关闭",
+        "resting": "暂停至 {{time}}",
+        "restingNow": "暂时停用",
+        "restingLong": "长时间断网后暂停"
       }
     },
     "master": {
-      "aria": "启用连接看门狗"
+      "label": "自动恢复"
     },
     "ladder": {
       "title": "恢复阶梯",
       "description": "按顺序尝试，从最温和的方式开始。",
-      "aria": "恢复阶梯",
-      "status": {
-        "blocked": "需要插槽",
-        "done": "已尝试",
-        "running": "正在运行"
+      "aria": "恢复步骤",
+      "steps": "步骤",
+      "advanced": "高级",
+      "tierAria": "启用此恢复步骤：{{name}}",
+      "state": {
+        "needsSecondSim": "需要第二张 SIM 卡",
+        "unused": {
+          "quality": "不用于质量差",
+          "carrier": "不用于单载波"
+        },
+        "resting": "暂停至 {{time}}（已用 {{used}} / {{limit}}）",
+        "restingNow": "暂停中（本小时已用 {{used}} / {{limit}}）",
+        "restingLong": "长时间断网后暂停",
+        "checking": "{{time}}后检测",
+        "checkingNow": "正在检测",
+        "running": "正在运行",
+        "triedAt": "{{time}} 已尝试",
+        "tried": "已尝试",
+        "onBackup": "正在使用插槽 {{slot}}"
       },
       "tier1": {
         "name": "重新注册到网络",
-        "consequence": "链路会中断几秒钟。"
+        "consequence": "链路会中断几秒钟。WAN IP 可能会变化。"
       },
       "tier2": {
         "name": "重启无线电",
@@ -326,72 +425,125 @@
       },
       "tier3": {
         "name": "切换到备用 SIM 卡",
-        "consequence": "将使用备用卡运行，直到您切回。",
+        "consequence": "将一直使用备用卡，直到您切回。",
+        "consequenceFailback": "会自动切回主 SIM 卡。",
         "slotLabel": "备用 SIM 卡插槽",
         "slot": "插槽 {{slot}}"
       },
       "tier4": {
-        "name": "重启设备",
+        "name": "重启调制解调器",
         "consequence": "离线约一分钟。",
         "capLabel": "每小时最大重启次数",
         "capLead": "最多",
-        "capUnit": "次/小时"
+        "capUnit": "次/小时",
+        "hintLabel": "关于重启上限",
+        "hint": "达到上限后，看门狗不再重启，并暂停到这一小时结束。其他步骤仍会继续执行。"
       },
-      "tierAria": "启用此恢复步骤：{{name}}",
       "failback": {
         "name": "切回主 SIM 卡",
-        "consequence": "定期重试主卡，每次尝试都会短暂断网。",
-        "lead": "每",
+        "consequence": "重试主 SIM 卡。每次尝试链路都会短暂中断。",
+        "everyLabel": "主 SIM 卡复查间隔",
         "unit": "分钟",
-        "intervalLabel": "主 SIM 卡复查间隔"
+        "summary": "每 {{n}} 分钟",
+        "summaryOff": "关闭",
+        "gaveUp": "尝试 3 次后放弃",
+        "trying": "正在尝试主 SIM 卡",
+        "next": "{{time}}后再次尝试",
+        "nextFailed": "{{time}}后再次尝试（已失败 {{n}} 次）",
+        "retry": "立即重试",
+        "retryOk": "正在检查主 SIM 卡",
+        "retryFail": "无法开始重试"
       }
     },
     "detection": {
       "title": "检测",
-      "description": "静默链路多久后会被判定为断网。",
-      "probe": {
-        "label": "探测间隔",
-        "short": "{{seconds}}秒"
+      "description": "恢复何时开始，由什么触发。",
+      "advanced": "高级",
+      "custom": "自定义",
+      "unit": {
+        "seconds": "秒",
+        "minutes": "分钟",
+        "ms": "毫秒"
       },
-      "threshold": {
-        "label": "断网判定",
-        "unit": "次探测失败"
+      "sensitivityLink": "灵敏度",
+      "sensitivity": {
+        "sensitive": "灵敏",
+        "regular": "常规",
+        "relaxed": "宽松",
+        "quiet": "安静"
       },
-      "cooldown": {
-        "label": "步骤间隔",
-        "unit": "秒"
+      "down": {
+        "named": "约 {{time}} 后判定断网（{{name}}）",
+        "plain": "约 {{time}} 后判定断网",
+        "unknown": "连接检测失败后判定断网"
       },
-      "timeline": {
-        "eyebrow": "链路中断时",
-        "declaredStep": "判定断网，执行第 {{tier}} 步",
-        "declaredReboot": "判定断网，执行第 4 步：重启",
-        "step": "第 {{tier}} 步",
-        "reboot": "第 4 步：重启",
-        "about": "约 {{time}}",
-        "seconds": "{{s}} 秒",
-        "minutes": "{{m}} 分钟",
-        "minutesSeconds": "{{m}} 分 {{s}} 秒",
-        "off": "看门狗已关闭，不会执行任何步骤。",
-        "none": "没有启用任何步骤，不会执行任何操作。",
-        "invalid": "输入有效的检测数值即可预览时间线。",
-        "stopped": "第 3 步没有插槽，恢复流程将止步于此。"
+      "act": {
+        "label": "开始恢复前等待",
+        "effective": "→ {{time}}",
+        "hintLabel": "关于开始时间",
+        "hint": "链路被判定为断网之前不会开始恢复。使用{{name}}时约需 {{time}}，因此较小的数值会被提高到该值。",
+        "hintFallback": "当前灵敏度",
+        "note": "离线 {{time}} 后将开始恢复。"
       },
       "quality": {
-        "label": "质量触发",
-        "unit": "次",
-        "caption": "延迟超过 {{ms}} ms 或丢包超过 {{pct}}%",
-        "link": "阈值"
+        "label": "从质量差中恢复",
+        "hintLabel": "关于质量差",
+        "hint": "回复慢于 {{ms}} ms 或丢包超过 {{pct}}% 时计入。仅执行第 1、2 步。",
+        "afterLabel": "质量差已持续",
+        "caption": "超过 {{lat}} 或 {{loss}} 视为差"
+      },
+      "carrier": {
+        "label": "从单载波中恢复",
+        "hintLabel": "关于单载波",
+        "hint": "仅在调制解调器启动后用过载波聚合时才计入。仅执行第 1、2 步。",
+        "afterLabel": "仅使用一个载波已持续",
+        "consequence": "第 1 步会使链路中断几秒钟，WAN IP 可能会变化。",
+        "rightNow": "当前",
+        "unknown": "未知",
+        "singleFor": "单载波已持续 {{time}}",
+        "count_one": "{{count}} 个载波",
+        "count_other": "{{count}} 个载波"
+      },
+      "stepWait": {
+        "label": "步骤间隔",
+        "summary": "步骤间隔 {{time}}",
+        "hintLabel": "关于等待时间",
+        "hint": "每一步在检测链路并开始下一步之前的执行时间。不会短于链路恢复为正常所需的时间。"
       },
       "ssr": {
-        "label": "基带重启等待",
-        "unit": "秒",
-        "caption": "先等待模块自行重启完成"
+        "label": "调制解调器无线电重启时等待",
+        "hintLabel": "关于无线电重启",
+        "hint": "调制解调器重启自身无线电时，恢复操作会等待，而不是叠加处理。",
+        "graceLabel": "等待时长"
+      },
+      "timeline": {
+        "title": "链路中断时",
+        "quiet": "链路无响应",
+        "markedDown": "判定断网",
+        "markedDownNamed": "判定断网（{{name}}）",
+        "step": {
+          "1": "第 1 步：重新注册",
+          "2": "第 2 步：重启无线电",
+          "3": "第 3 步：切换 SIM 卡",
+          "4": "第 4 步：重启"
+        },
+        "reboot": "第 4 步：重启",
+        "rebootResting": "第 4 步：重启（暂停中）",
+        "holdoff": "暂停处理 15 分钟后重新开始",
+        "now": "现在",
+        "off": "看门狗已关闭，不会执行任何步骤。",
+        "none": "没有启用任何步骤，不会执行任何操作。",
+        "summary": {
+          "reboot": "{{time}}时重启",
+          "last": "{{time}}时执行最后一步",
+          "now": "已离线 {{time}}"
+        }
       }
     },
     "activity": {
       "title": "恢复活动",
       "description": "看门狗执行过的操作，最新优先。",
-      "tier4Reboot": "看门狗重启了调制解调器",
+      "allEvents": "全部事件",
       "type": {
         "recovery": "恢复",
         "failover": "SIM 卡故障转移"
@@ -417,32 +569,91 @@
         "title": "无法加载恢复活动",
         "retry": "重试"
       },
-      "allEvents": "全部事件"
+      "sr": {
+        "success": "成功",
+        "warning": "警告",
+        "destructive": "问题",
+        "info": "信息",
+        "muted": "常规"
+      },
+      "row": {
+        "reason": {
+          "outage": "链路曾中断",
+          "quality": "质量差",
+          "carrier": "单载波",
+          "carrierFor": "单载波已持续 {{min}} 分钟"
+        },
+        "tierStart": {
+          "1": "正在重新注册到网络",
+          "2": "正在重启无线电",
+          "3": "正在切换到备用 SIM 卡",
+          "4": "正在重启调制解调器"
+        },
+        "recoveryStart": "开始恢复",
+        "succeeded": {
+          "outage": "第 {{tier}} 步后已恢复上线",
+          "quality": "第 {{tier}} 步后质量已恢复",
+          "carrier": "第 {{tier}} 步后载波已恢复"
+        },
+        "succeededNoTier": {
+          "outage": "已恢复上线",
+          "quality": "质量已恢复",
+          "carrier": "载波已恢复"
+        },
+        "escalate": "转入第 {{tier}} 步",
+        "escalateNext": "转入下一步",
+        "escalateDetail": "上一步未能解决问题",
+        "holdoff": "暂停处理 {{min}} 分钟",
+        "holdoffNow": "暂停处理",
+        "holdoffDetail": "所有步骤均已执行，仍未解决",
+        "ssrHold": "等待调制解调器重启",
+        "ssrHoldDetail": "无线电已自行重启",
+        "radioPaused": "已暂停：无线电已关闭",
+        "radioPausedDetail": "重新开启之前无需恢复",
+        "budgetSpent": "已达重启上限",
+        "budgetSpentHourly": "每小时 {{n}} 次，暂停到这一小时结束",
+        "budgetSpentLong": "长时间断网后暂停",
+        "pingStale": "连接检测无响应",
+        "pingStaleDetail": "不依据过期读数采取行动",
+        "tier4Reboot": "看门狗重启了调制解调器",
+        "swapFailed": "SIM 卡切换失败",
+        "swapStart": "正在切换到备用 SIM 卡",
+        "swapDone": "已切换到备用 SIM 卡",
+        "slot": "插槽 {{slot}}",
+        "revertFailed": "SIM 卡恢复失败",
+        "revertBackupFailed": "无法恢复，仍使用备用卡",
+        "revertRequested": "正在恢复原始 SIM 卡",
+        "revertByUser": "由您发起",
+        "failbackFailed": "切回失败",
+        "failbackDone": "已切回主 SIM 卡",
+        "failbackTry": "正在检查主 SIM 卡",
+        "failbackStay": "继续使用备用 SIM 卡",
+        "giveup": "已放弃切回",
+        "giveupDetail": "准备好后请手动恢复"
+      }
     },
     "save": {
       "discard": "放弃",
-      "action": "保存",
-      "clean": "所有更改已保存",
+      "ladder": "保存恢复阶梯",
+      "detection": "保存检测设置",
+      "ladderOk": "恢复阶梯已保存",
+      "detectionOk": "检测设置已保存",
+      "ladderFail": "无法保存恢复阶梯",
+      "detectionFail": "无法保存检测设置",
       "blockedIn": "保存前请检查 {{fields}}",
-      "toastOk": "看门狗设置已保存",
-      "toastFail": "无法保存看门狗设置",
       "confirmReboot": {
         "title": "允许看门狗重启调制解调器？",
         "body": "保存后，当所有更温和的步骤都失败时，看门狗可以自行重启调制解调器。此页面会消失约一分钟，等待调制解调器恢复。",
-        "cap": "每小时最多重启 {{cap}} 次。达到上限后，看门狗会自行关闭，直到您重新开启。",
+        "cap": "每小时最多重启 {{cap}} 次。达到上限后，看门狗会暂停，不再重启。",
         "cancel": "取消",
         "action": "允许重启"
       }
     },
     "errors": {
-      "failThreshold": "必须介于 1 到 20 之间",
-      "probeInterval": "必须介于 1 到 60 秒之间",
-      "cooldown": "必须介于 10 到 300 秒之间",
-      "maxReboots": "必须介于 1 到 10 之间",
-      "backupSim": "选择备用 SIM 卡插槽以启用故障转移",
-      "qualityConsecutive": "必须在 1 到 60 之间",
-      "ssrGrace": "必须在 10 到 120 秒之间",
-      "recheckInterval": "必须在 5 到 1440 分钟之间"
+      "seconds": "请输入 {{min}} 到 {{max}} 秒",
+      "minutes": "请输入 {{min}} 到 {{max}} 分钟",
+      "count": "请输入 {{min}} 到 {{max}}",
+      "backupSlot": "选择一个插槽以启用此步骤"
     },
     "failover": {
       "title": "正在使用备用 SIM 卡",
@@ -622,64 +833,93 @@
   "connection_quality": {
     "page": {
       "title": "连接质量",
-      "description": "调制解调器 ping 的目标，以及把慢速连接记为事件的阈值。"
+      "description": "调制解调器如何检测互联网连接。"
     },
     "targets": {
       "title": "探测目标",
-      "description": "按顺序 ping，直到有目标响应，用来判断互联网是否连通。",
-      "restore": "恢复默认值",
-      "save": "保存探测目标",
-      "leg": {
-        "ipv4": "IPv4 目标",
-        "ipv6": "IPv6 备用目标"
+      "description": "调制解调器用来检测互联网的 ping 目标。",
+      "group": {
+        "primary": "主要",
+        "fallbacks": "备用"
+      },
+      "fallbacks_hint_label": "关于备用目标",
+      "fallbacks_hint": "插槽 1 无响应时一并 ping，取有响应的最小插槽。没有对应地址类型路由的插槽会被跳过，不算作无响应。",
+      "slot": {
+        "label": "插槽 {{n}} 目标",
+        "ok": "{{ms}} 毫秒",
+        "answering": "响应中",
+        "miss": "无回复",
+        "standby": "待命",
+        "skipped": "无路由",
+        "skipped_ipv4": "无 IPv4 路由",
+        "skipped_ipv6": "无 IPv6 路由",
+        "unknown": "无实时读数"
+      },
+      "verdict": {
+        "answering": "插槽 {{n}} 在响应",
+        "answering_any": "响应中",
+        "none": "所有插槽均无响应",
+        "unknown": "未上报"
+      },
+      "validation": {
+        "empty": "请输入一个目标。",
+        "too_long": "最多 {{max}} 个字符。",
+        "spaces": "不允许包含空格。",
+        "disallowed": "仅可使用字母、数字和 . : % -",
+        "leading_dash": "目标不能以短横线开头。"
       },
       "error": {
         "title": "无法读取探测目标",
         "body": "已保存的目标仍在使用。",
         "retry": "重试"
       },
+      "failed": "保存失败",
+      "discard": "放弃",
+      "save": "保存",
       "toast": {
         "saved": "探测目标已保存。",
         "failed": "无法保存探测目标。"
-      },
-      "validation": {
-        "empty": "请输入一个目标。",
-        "too_long": "最多 {{max}} 个字符。",
-        "spaces": "不允许包含空格。",
-        "disallowed": "包含不允许使用的字符。",
-        "ipv4_invalid": "请输入 IPv4 地址或主机名。",
-        "ipv6_invalid": "不是有效的 IPv6 地址。",
-        "ipv6_colon": "IPv6 地址应包含冒号。"
-      },
-      "verdict": {
-        "ipv4": "IPv4 在响应",
-        "ipv6": "IPv6 在响应",
-        "none": "无响应",
-        "unknown": "未上报"
-      },
-      "group": {
-        "sensitivity": "灵敏度",
-        "ipv4": "IPv4",
-        "ipv6": "IPv6 备用"
-      },
-      "fallback_hint": "仅当 IPv4 目标无响应时才会 ping，因此纯 IPv6 连接不会被误判为断网。",
-      "fallback_hint_label": "关于 IPv6 备用",
-      "interval": {
-        "label": "探测间隔",
-        "value": "每 {{seconds}} 秒",
-        "override": "每 {{seconds}} 秒（由看门狗设定）"
-      },
-      "failed": "保存失败",
-      "profile": {
+      }
+    },
+    "last_outage": {
+      "label": "最近一次断网",
+      "hint_label": "关于最近一次断网",
+      "hint": "自上次重启起计。时长按链路检测间隔测得，因此为近似值。",
+      "none": "自上次重启起无断网",
+      "down_now": "当前已断网",
+      "about": "约 {{value}}",
+      "ended": "{{ago}}前结束",
+      "ended_now": "刚刚结束",
+      "ended_with_wan": "{{ended}}（{{wan}}）",
+      "wan_changed": "WAN IP 已变化",
+      "wan_same": "WAN IP 未变",
+      "unit": {
+        "s": "{{n}} 秒",
+        "min": "{{n}} 分钟",
+        "h": "{{n}} 小时",
+        "d": "{{n}} 天"
+      }
+    },
+    "quality": {
+      "title": "灵敏度与质量",
+      "description": "链路何时算断网，何时算质量差。",
+      "sensitivity": {
+        "label": "灵敏度",
         "sensitive": "灵敏",
         "regular": "常规",
         "relaxed": "宽松",
         "quiet": "安静"
-      }
-    },
-    "thresholds": {
-      "title": "质量阈值",
-      "description": "何时把缓慢或丢包的连接记录为网络事件。",
+      },
+      "grid": {
+        "caption": "各灵敏度的链路检测方式",
+        "every": "检测间隔",
+        "down": "断网判定",
+        "up": "恢复判定",
+        "every_value": "{{n}} 秒",
+        "down_value": "约 {{n}} 秒",
+        "up_value": "{{n}} 秒"
+      },
+      "consequence": "约 {{to}} 秒后判定断网，原为 {{from}} 秒。",
       "latency": {
         "title": "时延"
       },
@@ -692,44 +932,39 @@
         "very_tolerant": "非常宽松",
         "custom": "自定义"
       },
-      "save": "保存阈值",
-      "error": {
-        "title": "无法读取质量阈值",
-        "body": "已保存的阈值仍在使用。",
-        "retry": "重试"
+      "value": {
+        "latency": "{{n}} 毫秒",
+        "loss": "{{n}}%"
       },
-      "toast": {
-        "saved": "质量阈值已保存。",
-        "failed": "无法保存质量阈值。"
-      },
-      "row": {
-        "flags": "触发条件",
-        "now": "当前",
-        "limit": "阈值"
-      },
-      "flags": {
-        "latency_one": "{{count}} 个样本超过 {{ms}} 毫秒",
-        "latency_other": "{{count}} 个样本超过 {{ms}} 毫秒",
-        "loss_one": "{{count}} 个样本达到 {{pct}}% 或以上",
-        "loss_other": "{{count}} 个样本达到 {{pct}}% 或以上",
-        "pending": "请输入阈值"
-      },
-      "now": {
-        "latency": "{{ms}} 毫秒",
-        "loss": "{{pct}}%",
-        "no_reply": "无回复",
-        "collecting": "正在收集",
-        "over_latency": "超出 {{ms}} 毫秒阈值",
-        "over_loss": "超出 {{pct}}% 阈值"
-      },
-      "default_chip": "内置默认值",
-      "failed": "保存失败",
       "unit": {
         "latency": "毫秒",
         "loss": "%"
       },
+      "custom": {
+        "aria": "{{metric}}阈值，{{min}} 到 {{max}}"
+      },
       "validation": {
         "range": "请输入 {{min}} 到 {{max}} 之间的整数。"
+      },
+      "now": {
+        "label": "当前",
+        "no_reply": "无回复",
+        "collecting": "正在收集",
+        "over_latency": "超出 {{n}} 毫秒阈值",
+        "over_loss": "达到或超出 {{n}}% 阈值"
+      },
+      "default_chip": "内置默认值",
+      "error": {
+        "title": "无法读取设置",
+        "body": "仍在使用已保存的设置。",
+        "retry": "重试"
+      },
+      "failed": "保存失败",
+      "discard": "放弃",
+      "save": "保存",
+      "toast": {
+        "saved": "设置已保存。",
+        "failed": "无法保存设置。"
       }
     }
   },

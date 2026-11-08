@@ -1,0 +1,600 @@
+=== pass 1 (t+30) ===
+-- state
+{"timestamp":1790000030,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5030,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 2 (t+40) ===
+-- state
+{"timestamp":1790000040,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5040,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 3 (t+50) ===
+-- state
+{"timestamp":1790000050,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5050,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 4 (t+60) ===
+-- state
+{"timestamp":1790000060,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5060,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 5 (t+70) ===
+-- state
+{"timestamp":1790000070,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5070,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 6 (t+80) ===
+-- state
+{"timestamp":1790000080,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5080,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 7 (t+90) ===
+-- state
+{"timestamp":1790000090,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5090,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 8 (t+100) ===
+-- state
+{"timestamp":1790000100,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5100,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 9 (t+110) ===
+-- state
+{"timestamp":1790000110,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5110,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 10 (t+120) ===
+-- state
+{"timestamp":1790000120,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5120,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 11 (t+130) ===
+-- state
+{"timestamp":1790000130,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5130,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 12 (t+140) ===
+-- state
+{"timestamp":1790000140,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5140,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 13 (t+150) ===
+-- state
+{"timestamp":1790000150,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5150,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 14 (t+160) ===
+-- state
+{"timestamp":1790000160,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5160,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 15 (t+170) ===
+-- state
+{"timestamp":1790000170,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5170,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 16 (t+180) ===
+-- state
+{"timestamp":1790000180,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5180,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 17 (t+190) ===
+-- state
+{"timestamp":1790000190,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5190,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 18 (t+200) ===
+-- state
+{"timestamp":1790000200,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5200,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 19 (t+210) ===
+-- state
+{"timestamp":1790000210,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5210,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 20 (t+220) ===
+-- state
+{"timestamp":1790000220,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5220,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 21 (t+230) ===
+-- state
+{"timestamp":1790000230,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5230,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 22 (t+240) ===
+-- state
+{"timestamp":1790000240,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5240,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 23 (t+250) ===
+-- state
+{"timestamp":1790000250,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5250,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 24 (t+260) ===
+-- state
+{"timestamp":1790000260,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5260,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 25 (t+270) ===
+-- state
+{"timestamp":1790000270,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5270,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 26 (t+280) ===
+-- state
+{"timestamp":1790000280,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5280,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 27 (t+290) ===
+-- state
+{"timestamp":1790000290,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5290,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 28 (t+300) ===
+-- state
+{"timestamp":1790000300,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5300,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 29 (t+310) ===
+-- state
+{"timestamp":1790000310,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5310,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 30 (t+320) ===
+-- state
+{"timestamp":1790000320,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5320,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 31 (t+330) ===
+-- state
+{"timestamp":1790000330,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5330,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 32 (t+340) ===
+-- state
+{"timestamp":1790000340,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5340,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 33 (t+350) ===
+-- state
+{"timestamp":1790000350,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5350,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 34 (t+360) ===
+-- state
+{"timestamp":1790000360,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5360,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 35 (t+370) ===
+-- state
+{"timestamp":1790000370,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5370,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 36 (t+380) ===
+-- state
+{"timestamp":1790000380,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5380,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 37 (t+390) ===
+-- state
+{"timestamp":1790000390,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5390,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 38 (t+400) ===
+-- state
+{"timestamp":1790000400,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5400,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 39 (t+410) ===
+-- state
+{"timestamp":1790000410,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5410,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0
+=== pass 40 (t+420) ===
+-- state
+{"timestamp":1790000420,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":null,"total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":1,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5420,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+cc=1 armed=0 since=0 tier=0

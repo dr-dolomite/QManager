@@ -237,88 +237,187 @@
       "unreadable": "Modem tidak menjawab.",
       "retry": "Coba lagi"
     },
-    "band": {
-      "checks": "Pemeriksaan Gagal",
-      "recoveries": "Pemulihan",
-      "reboots": "Reboot",
-      "absent": "Tidak dilaporkan",
-      "checksCaption": "Sebelum pemulihan dimulai",
-      "cooldownCaption": "Memeriksa ulang dalam {{seconds}} detik",
-      "recoveriesLast": "Langkah {{tier}}, {{ago}}",
-      "recoveriesNone": "Belum pernah",
-      "rebootsCaption": "Dalam satu jam terakhir",
-      "rebootsOff": "Langkah reboot nonaktif",
-      "aria": "Status watchdog",
-      "cooldownStep": "Langkah {{tier}} dijalankan. Memeriksa ulang dalam {{seconds}} detik."
+    "duration": {
+      "seconds": "{{s}} dtk",
+      "minutes": "{{m}} mnt",
+      "minutesSeconds": "{{m}} mnt {{s}} dtk",
+      "hours": "{{h}} j",
+      "hoursMinutes": "{{h}} j {{m}} mnt"
     },
     "phase": {
+      "action": {
+        "1": "Mendaftar ulang ke jaringan",
+        "2": "Memulai ulang radio",
+        "3": "Beralih ke SIM cadangan",
+        "4": "Me-reboot modem"
+      },
       "off": {
-        "label": "Mati",
+        "title": "Mati",
         "blurb": "Watchdog tidak memantau koneksi."
       },
       "unknown": {
-        "label": "Tidak diketahui",
+        "title": "Tidak diketahui",
         "blurb": "Modem tidak merespons, sehingga status watchdog tidak dapat diketahui."
       },
       "starting": {
-        "label": "Memulai",
-        "blurb": "Layanan baru saja diaktifkan dan belum melaporkan apa pun."
+        "title": "Memulai",
+        "blurb": "Baru dinyalakan. Menunggu laporan pertama."
       },
       "not_running": {
-        "label": "Tidak dilaporkan",
-        "blurb": "Diaktifkan, tetapi watchdog berhenti melapor."
+        "title": "Tidak melapor",
+        "blurb": "Dinyalakan, tetapi watchdog berhenti melapor."
       },
       "auto_disabled": {
-        "label": "Mati otomatis",
-        "blurb": "Batas reboot tercapai. Nyalakan lagi setelah koneksi stabil."
+        "title": "Mematikan diri",
+        "blurb": "Versi sebelumnya mematikannya saat batas reboot tercapai. Nyalakan lagi setelah koneksi stabil."
       },
       "monitor": {
-        "label": "Memantau",
-        "blurb": "Koneksi dalam kondisi baik. Memantau kemungkinan gangguan."
+        "title": "Memantau",
+        "blurb": "Koneksi dalam kondisi baik. Pemulihan dimulai setelah offline {{time}}."
       },
       "suspect": {
-        "label": "Memeriksa",
-        "blurb": "Pemeriksaan konektivitas baru saja gagal. Memastikan sebelum bertindak."
+        "title": "Memeriksa",
+        "blurb": "Tidak ada balasan selama {{time}}. Pemulihan dimulai jika berlanjut.",
+        "blurbNow": "Pemeriksaan baru saja gagal. Memastikan sebelum bertindak."
       },
       "recovery": {
-        "label": "Memulihkan",
-        "blurb": "Menjalankan urutan pemulihan untuk memulihkan koneksi."
+        "title": "Langkah {{tier}}: {{action}}",
+        "titleGeneric": "Memulihkan",
+        "blurb": {
+          "outage": "Offline selama {{time}}. Menjalankan langkah-langkah pemulihan.",
+          "quality": "Kualitas buruk selama {{time}}. Menjalankan langkah-langkah pemulihan.",
+          "carrier": "Hanya satu carrier selama {{time}}. Mencoba memulihkan carrier lainnya."
+        },
+        "blurbNow": "Menjalankan langkah-langkah pemulihan."
       },
       "cooldown": {
-        "label": "Cooldown",
-        "blurb": "Menunggu langkah pemulihan terakhir stabil sebelum memeriksa ulang."
+        "title": "Langkah {{tier}} dijalankan. Memeriksa dalam {{time}}",
+        "titleChecking": "Langkah {{tier}} dijalankan. Memeriksa sekarang",
+        "titleGeneric": "Memeriksa hasilnya",
+        "next": {
+          "outage": "Jika koneksi masih terputus, langkah {{tier}} berikutnya.",
+          "quality": "Jika kualitas masih buruk, langkah {{tier}} berikutnya.",
+          "carrier": "Jika masih satu carrier, langkah {{tier}} berikutnya."
+        },
+        "last": {
+          "outage": "Itu langkah terakhir. Jika koneksi masih terputus, watchdog menahan diri.",
+          "quality": "Itu langkah terakhir untuk kualitas buruk. Jika berlanjut, watchdog menahan diri.",
+          "carrier": "Itu langkah terakhir untuk satu carrier. Jika berlanjut, watchdog menahan diri."
+        }
       },
-      "locked": {
-        "label": "Dijeda",
-        "blurb": "Pemeliharaan sedang berlangsung, sehingga watchdog menahan diri sementara."
+      "holdoff": {
+        "outage": {
+          "title": "Menahan diri selama {{time}}",
+          "titleNow": "Menahan diri",
+          "blurb": "Semua langkah sudah dijalankan dan koneksi masih terputus. Mulai lagi pukul {{time}}.",
+          "blurbNow": "Semua langkah sudah dijalankan dan koneksi masih terputus. Segera mulai lagi."
+        },
+        "quality": {
+          "title": "Menahan diri selama {{time}}",
+          "blurb": "Kualitas masih buruk setelah semua langkah. Mencoba lagi pukul {{time}}.",
+          "blurbNow": "Kualitas masih buruk setelah semua langkah. Segera mencoba lagi."
+        },
+        "carrier": {
+          "title": "Menahan diri selama {{time}}",
+          "blurb": "Masih satu carrier setelah semua langkah. Mencoba lagi pukul {{time}}.",
+          "blurbNow": "Masih satu carrier setelah semua langkah. Segera mencoba lagi."
+        }
       },
       "radio_off": {
-        "blurb": "Radio sedang mati, sehingga watchdog menahan diri sementara."
-      },
-      "disabled": {
-        "label": "Nonaktif",
-        "blurb": "Layanan berjalan, tetapi dimatikan."
+        "title": "Radio mati",
+        "blurb": "Tidak ada yang perlu dipulihkan selama radio mati. Pemantauan berlanjut saat radio menyala lagi."
       },
       "ssr_hold": {
-        "label": "Menahan",
-        "blurb": "Baseband sedang memulai ulang sendiri. Pemulihan menunggu hingga kembali."
+        "title": "Menunggu modem selesai restart ({{time}})",
+        "titleNow": "Menunggu modem selesai restart",
+        "blurb": "Radio memulai ulang sendiri. Pemulihan menunggu radio kembali sebelum bertindak."
+      },
+      "ping_stale": {
+        "title": "Pemeriksaan koneksi diam",
+        "blurb": "Pemeriksaan koneksi sudah lama tidak melapor, jadi watchdog tidak bertindak berdasarkan itu."
+      },
+      "locked": {
+        "title": "Dijeda",
+        "blurb": "Pemeliharaan sedang berlangsung, sehingga watchdog menahan diri sementara."
+      },
+      "disabled": {
+        "title": "Dimatikan",
+        "blurb": "Layanan berjalan, tetapi dimatikan."
+      }
+    },
+    "hero": {
+      "aria": "Status watchdog",
+      "absent": "Tidak dilaporkan",
+      "none": "Tidak ada",
+      "noReading": "Tidak ada pembacaan",
+      "linkUp": "Koneksi aktif",
+      "offline": {
+        "eyebrow": "Offline selama",
+        "caption": "Sejak {{time}}"
+      },
+      "quality": {
+        "eyebrow": "Kualitas buruk selama",
+        "caption": "Buruk jika melebihi {{ms}} ms atau {{pct}}%"
+      },
+      "carrier": {
+        "eyebrow": "Hanya satu carrier selama",
+        "caption": "Bertindak setelah {{time}}"
+      },
+      "recoveries": {
+        "eyebrow": "Pemulihan",
+        "caption": "Sejak restart terakhir"
+      },
+      "lastFix": {
+        "eyebrow": "Perbaikan terakhir",
+        "none": "Belum ada perbaikan",
+        "caption": "Langkah {{tier}}",
+        "captionTook": "Langkah {{tier}}, memakan {{time}}",
+        "captionReason": "Langkah {{tier}} untuk {{reason}}",
+        "captionReasonTook": "Langkah {{tier}} untuk {{reason}}, memakan {{time}}",
+        "reason": {
+          "quality": "kualitas buruk",
+          "carrier": "satu carrier"
+        }
+      },
+      "reboots": {
+        "eyebrow": "Reboot",
+        "value": "{{used}} dari {{limit}}",
+        "caption": "Jam ini",
+        "off": "Langkah reboot nonaktif",
+        "resting": "Istirahat sampai {{time}}",
+        "restingNow": "Istirahat untuk sementara",
+        "restingLong": "Istirahat setelah gangguan panjang"
       }
     },
     "master": {
-      "aria": "Aktifkan watchdog koneksi"
+      "label": "Pulihkan otomatis"
     },
     "ladder": {
       "title": "Urutan pemulihan",
       "description": "Dicoba berurutan, mulai dari yang paling ringan.",
-      "aria": "Urutan pemulihan",
-      "status": {
-        "blocked": "Perlu slot",
-        "done": "Sudah dicoba",
-        "running": "Sedang berjalan"
+      "aria": "Langkah pemulihan",
+      "steps": "Langkah",
+      "advanced": "Lanjutan",
+      "tierAria": "Aktifkan langkah pemulihan ini: {{name}}",
+      "state": {
+        "needsSecondSim": "Perlu SIM kedua",
+        "unused": {
+          "quality": "Tidak dipakai untuk kualitas buruk",
+          "carrier": "Tidak dipakai untuk satu carrier"
+        },
+        "resting": "Istirahat sampai {{time}} ({{used}} dari {{limit}} terpakai)",
+        "restingNow": "Istirahat ({{used}} dari {{limit}} terpakai jam ini)",
+        "restingLong": "Istirahat setelah gangguan panjang",
+        "checking": "Memeriksa dalam {{time}}",
+        "checkingNow": "Memeriksa sekarang",
+        "running": "Sedang berjalan",
+        "triedAt": "Dicoba pukul {{time}}",
+        "tried": "Sudah dicoba",
+        "onBackup": "Berjalan di slot {{slot}}"
       },
       "tier1": {
         "name": "Daftar ulang ke jaringan",
-        "consequence": "Koneksi terputus selama beberapa detik."
+        "consequence": "Koneksi terputus selama beberapa detik. IP WAN mungkin berubah."
       },
       "tier2": {
         "name": "Mulai ulang radio",
@@ -327,71 +426,124 @@
       "tier3": {
         "name": "Beralih ke SIM cadangan",
         "consequence": "Tetap memakai SIM cadangan sampai Anda mengembalikannya.",
+        "consequenceFailback": "Beralih kembali ke SIM utama dengan sendirinya.",
         "slotLabel": "Slot SIM cadangan",
         "slot": "Slot {{slot}}"
       },
       "tier4": {
-        "name": "Reboot Perangkat",
+        "name": "Reboot modem",
         "consequence": "Offline sekitar satu menit.",
         "capLabel": "Maksimum reboot per jam",
         "capLead": "Hingga",
-        "capUnit": "per jam"
+        "capUnit": "per jam",
+        "hintLabel": "Tentang batas reboot",
+        "hint": "Saat batas tercapai, watchdog berhenti me-reboot dan beristirahat sampai jam ini berakhir. Langkah lainnya tetap berjalan."
       },
-      "tierAria": "Aktifkan langkah pemulihan ini: {{name}}",
       "failback": {
         "name": "Kembali ke SIM utama",
-        "consequence": "Mencoba ulang SIM utama; koneksi terputus sebentar tiap percobaan.",
-        "lead": "Setiap",
+        "consequence": "Mencoba ulang SIM utama. Koneksi terputus sebentar tiap percobaan.",
+        "everyLabel": "Cek ulang SIM utama setiap",
         "unit": "mnt",
-        "intervalLabel": "Interval cek ulang SIM utama"
+        "summary": "Setiap {{n}} mnt",
+        "summaryOff": "Mati",
+        "gaveUp": "Menyerah setelah 3 percobaan",
+        "trying": "Mencoba SIM utama sekarang",
+        "next": "Percobaan berikutnya dalam {{time}}",
+        "nextFailed": "Percobaan berikutnya dalam {{time}} ({{n}} gagal)",
+        "retry": "Coba lagi sekarang",
+        "retryOk": "Memeriksa SIM utama sekarang",
+        "retryFail": "Tidak dapat memulai percobaan ulang"
       }
     },
     "detection": {
       "title": "Deteksi",
-      "description": "Seberapa cepat koneksi yang diam dianggap sebagai gangguan.",
-      "probe": {
-        "label": "Periksa setiap",
-        "short": "{{seconds}} dtk"
+      "description": "Kapan pemulihan dimulai dan apa pemicunya.",
+      "advanced": "Lanjutan",
+      "custom": "Kustom",
+      "unit": {
+        "seconds": "dtk",
+        "minutes": "mnt",
+        "ms": "ms"
       },
-      "threshold": {
-        "label": "Terputus setelah",
-        "unit": "pemeriksaan gagal"
+      "sensitivityLink": "Sensitivitas",
+      "sensitivity": {
+        "sensitive": "Sensitif",
+        "regular": "Reguler",
+        "relaxed": "Santai",
+        "quiet": "Senyap"
       },
-      "cooldown": {
-        "label": "Jeda antarlangkah",
-        "unit": "dtk"
+      "down": {
+        "named": "Terputus setelah sekitar {{time}} ({{name}})",
+        "plain": "Terputus setelah sekitar {{time}}",
+        "unknown": "Terputus setelah pemeriksaan koneksi gagal"
       },
-      "timeline": {
-        "eyebrow": "Jika koneksi terputus",
-        "declaredStep": "Gangguan dinyatakan, langkah {{tier}}",
-        "declaredReboot": "Gangguan dinyatakan, langkah 4, reboot",
-        "step": "Langkah {{tier}}",
-        "reboot": "Langkah 4, reboot",
-        "about": "sekitar {{time}}",
-        "seconds": "{{s}} dtk",
-        "minutes": "{{m}} mnt",
-        "minutesSeconds": "{{m}} mnt {{s}} dtk",
-        "off": "Watchdog mati, jadi tidak ada yang berjalan.",
-        "none": "Tidak ada langkah yang aktif, jadi tidak ada yang berjalan.",
-        "invalid": "Masukkan nilai deteksi yang valid untuk melihat pratinjau urutan waktu.",
-        "stopped": "Langkah 3 tidak punya slot, jadi urutan berhenti di sana."
+      "act": {
+        "label": "Mulai pemulihan setelah",
+        "effective": "→ {{time}}",
+        "hintLabel": "Tentang waktu mulai",
+        "hint": "Pemulihan tidak pernah dimulai sebelum koneksi dianggap terputus. Dengan {{name}} itu memakan sekitar {{time}}, jadi angka yang lebih kecil dinaikkan ke nilai itu.",
+        "hintFallback": "sensitivitas saat ini",
+        "note": "Pemulihan akan dimulai setelah offline {{time}}."
       },
       "quality": {
-        "label": "Pemicu kualitas",
-        "unit": "cek",
-        "caption": "Lebih dari {{ms}} ms atau kehilangan {{pct}}%",
-        "link": "Ambang batas"
+        "label": "Pulihkan dari kualitas buruk",
+        "hintLabel": "Tentang kualitas buruk",
+        "hint": "Dihitung saat balasan lebih lambat dari {{ms}} ms atau lebih dari {{pct}}% hilang. Hanya menjalankan langkah 1 dan 2.",
+        "afterLabel": "Buruk selama",
+        "caption": "Buruk jika melebihi {{lat}} atau {{loss}}"
+      },
+      "carrier": {
+        "label": "Pulihkan dari satu carrier",
+        "hintLabel": "Tentang satu carrier",
+        "hint": "Dihitung hanya jika modem pernah memakai carrier aggregation sejak menyala. Hanya menjalankan langkah 1 dan 2.",
+        "afterLabel": "Hanya satu carrier selama",
+        "consequence": "Langkah 1 memutus koneksi selama beberapa detik; IP WAN mungkin berubah.",
+        "rightNow": "Saat ini",
+        "unknown": "Tidak diketahui",
+        "singleFor": "Satu carrier selama {{time}}",
+        "count_one": "{{count}} carrier",
+        "count_other": "{{count}} carrier"
+      },
+      "stepWait": {
+        "label": "Jeda antarlangkah",
+        "summary": "{{time}} antarlangkah",
+        "hintLabel": "Tentang jeda",
+        "hint": "Berapa lama sebuah langkah diberi waktu bekerja sebelum koneksi diperiksa dan langkah berikutnya dimulai. Tidak pernah lebih singkat dari waktu yang dibutuhkan koneksi untuk terbaca aktif lagi."
       },
       "ssr": {
-        "label": "Tahan saat baseband restart",
-        "unit": "dtk",
-        "caption": "Biarkan modem selesai memulai ulang sendiri dulu"
+        "label": "Tahan saat radio modem restart",
+        "hintLabel": "Tentang restart radio",
+        "hint": "Saat modem me-restart radionya sendiri, pemulihan menunggu dan tidak menumpuk tindakan.",
+        "graceLabel": "Waktu tahan"
+      },
+      "timeline": {
+        "title": "Jika koneksi terputus",
+        "quiet": "Koneksi menjadi diam",
+        "markedDown": "Koneksi dianggap terputus",
+        "markedDownNamed": "Koneksi dianggap terputus ({{name}})",
+        "step": {
+          "1": "Langkah 1: daftar ulang",
+          "2": "Langkah 2: mulai ulang radio",
+          "3": "Langkah 3: ganti SIM",
+          "4": "Langkah 4: reboot"
+        },
+        "reboot": "Langkah 4: reboot",
+        "rebootResting": "Langkah 4: reboot (istirahat)",
+        "holdoff": "Menahan diri 15 mnt, lalu mulai dari awal",
+        "now": "Sekarang",
+        "off": "Watchdog mati, jadi tidak ada yang berjalan.",
+        "none": "Tidak ada langkah yang aktif, jadi tidak ada yang berjalan.",
+        "summary": {
+          "reboot": "Reboot pukul {{time}}",
+          "last": "Langkah terakhir pukul {{time}}",
+          "now": "Offline selama {{time}}"
+        }
       }
     },
     "activity": {
       "title": "Aktivitas pemulihan",
       "description": "Tindakan yang telah dilakukan watchdog, terbaru dulu.",
-      "tier4Reboot": "Watchdog me-restart modem",
+      "allEvents": "Semua peristiwa",
       "type": {
         "recovery": "Pemulihan",
         "failover": "Failover SIM"
@@ -417,32 +569,91 @@
         "title": "Tidak dapat memuat aktivitas pemulihan",
         "retry": "Coba lagi"
       },
-      "allEvents": "Semua peristiwa"
+      "sr": {
+        "success": "Berhasil",
+        "warning": "Peringatan",
+        "destructive": "Masalah",
+        "info": "Informasi",
+        "muted": "Rutin"
+      },
+      "row": {
+        "reason": {
+          "outage": "Koneksi terputus",
+          "quality": "Kualitas buruk",
+          "carrier": "Hanya satu carrier",
+          "carrierFor": "Hanya satu carrier selama {{min}} mnt"
+        },
+        "tierStart": {
+          "1": "Mendaftar ulang ke jaringan",
+          "2": "Memulai ulang radio",
+          "3": "Beralih ke SIM cadangan",
+          "4": "Me-reboot modem"
+        },
+        "recoveryStart": "Memulai pemulihan",
+        "succeeded": {
+          "outage": "Kembali online setelah langkah {{tier}}",
+          "quality": "Kualitas pulih setelah langkah {{tier}}",
+          "carrier": "Carrier pulih setelah langkah {{tier}}"
+        },
+        "succeededNoTier": {
+          "outage": "Kembali online",
+          "quality": "Kualitas pulih",
+          "carrier": "Carrier pulih"
+        },
+        "escalate": "Lanjut ke langkah {{tier}}",
+        "escalateNext": "Lanjut ke langkah berikutnya",
+        "escalateDetail": "Langkah terakhir tidak menyelesaikan masalah",
+        "holdoff": "Menahan diri selama {{min}} mnt",
+        "holdoffNow": "Menahan diri",
+        "holdoffDetail": "Semua langkah dijalankan tanpa hasil",
+        "ssrHold": "Menunggu modem selesai restart",
+        "ssrHoldDetail": "Radio memulai ulang sendiri",
+        "radioPaused": "Dijeda: radio mati",
+        "radioPausedDetail": "Tidak ada yang perlu dipulihkan sampai radio menyala lagi",
+        "budgetSpent": "Batas reboot tercapai",
+        "budgetSpentHourly": "{{n}} per jam, istirahat sampai jam ini berakhir",
+        "budgetSpentLong": "Istirahat setelah gangguan panjang",
+        "pingStale": "Pemeriksaan koneksi menjadi diam",
+        "pingStaleDetail": "Tidak bertindak berdasarkan pembacaan usang",
+        "tier4Reboot": "Watchdog me-reboot modem",
+        "swapFailed": "Pergantian SIM gagal",
+        "swapStart": "Beralih ke SIM cadangan",
+        "swapDone": "Beralih ke SIM cadangan",
+        "slot": "Slot {{slot}}",
+        "revertFailed": "Pemulihan SIM gagal",
+        "revertBackupFailed": "Tidak dapat memulihkan, tetap di SIM cadangan",
+        "revertRequested": "Memulihkan SIM asli",
+        "revertByUser": "Diminta oleh Anda",
+        "failbackFailed": "Gagal beralih kembali",
+        "failbackDone": "Kembali ke SIM utama",
+        "failbackTry": "Memeriksa SIM utama",
+        "failbackStay": "Tetap di SIM cadangan",
+        "giveup": "Menyerah beralih kembali",
+        "giveupDetail": "Pulihkan secara manual saat Anda siap"
+      }
     },
     "save": {
       "discard": "Buang",
-      "action": "Simpan",
-      "clean": "Semua perubahan tersimpan",
+      "ladder": "Simpan urutan",
+      "detection": "Simpan deteksi",
+      "ladderOk": "Urutan pemulihan tersimpan",
+      "detectionOk": "Deteksi tersimpan",
+      "ladderFail": "Tidak dapat menyimpan urutan pemulihan",
+      "detectionFail": "Tidak dapat menyimpan deteksi",
       "blockedIn": "Periksa {{fields}} sebelum menyimpan",
-      "toastOk": "Pengaturan watchdog tersimpan",
-      "toastFail": "Tidak dapat menyimpan pengaturan watchdog",
       "confirmReboot": {
         "title": "Izinkan watchdog me-reboot modem?",
-        "body": "Setelah disimpan, watchdog dapat memulai ulang modem sendiri ketika semua langkah yang lebih ringan telah gagal. Halaman ini akan hilang sekitar satu menit selama modem kembali aktif.",
-        "cap": "Reboot dibatasi {{cap}} kali per jam. Saat batas itu tercapai, watchdog mematikan dirinya sampai Anda menyalakannya lagi.",
+        "body": "Dengan menyimpan ini, watchdog dapat me-reboot modem sendiri saat semua langkah yang lebih ringan gagal. Halaman ini hilang sekitar satu menit sementara modem kembali.",
+        "cap": "Reboot dibatasi {{cap}} per jam. Saat batas tercapai, watchdog beristirahat dan tidak me-reboot lagi.",
         "cancel": "Batal",
         "action": "Izinkan reboot"
       }
     },
     "errors": {
-      "failThreshold": "Harus antara 1 dan 20",
-      "probeInterval": "Harus antara 1 dan 60 detik",
-      "cooldown": "Harus antara 10 dan 300 detik",
-      "maxReboots": "Harus antara 1 dan 10",
-      "backupSim": "Pilih slot SIM cadangan untuk mengaktifkan failover",
-      "qualityConsecutive": "Harus antara 1 dan 60",
-      "ssrGrace": "Harus antara 10 dan 120 detik",
-      "recheckInterval": "Harus antara 5 dan 1440 menit"
+      "seconds": "Masukkan {{min}} sampai {{max}} detik",
+      "minutes": "Masukkan {{min}} sampai {{max}} menit",
+      "count": "Masukkan {{min}} sampai {{max}}",
+      "backupSlot": "Pilih slot untuk mengaktifkan langkah ini"
     },
     "failover": {
       "title": "Berjalan menggunakan SIM cadangan",
@@ -622,64 +833,93 @@
   "connection_quality": {
     "page": {
       "title": "Kualitas Koneksi",
-      "description": "Endpoint yang di-ping modem dan batas yang menjadikan koneksi lambat sebagai peristiwa."
+      "description": "Cara modem memeriksa koneksi internet."
     },
     "targets": {
       "title": "Target Probe",
-      "description": "Di-ping berurutan sampai ada yang menjawab, untuk mengetahui apakah internet tersambung.",
-      "restore": "Pulihkan bawaan",
-      "save": "Simpan Target Probe",
-      "leg": {
-        "ipv4": "Target IPv4",
-        "ipv6": "Target cadangan IPv6"
+      "description": "Target yang di-ping modem untuk memeriksa internet.",
+      "group": {
+        "primary": "Utama",
+        "fallbacks": "Cadangan"
+      },
+      "fallbacks_hint_label": "Tentang target cadangan",
+      "fallbacks_hint": "Di-ping bersamaan saat slot 1 tidak menjawab; slot terendah yang menjawab yang dihitung. Slot tanpa rute untuk jenis alamatnya dilewati, tidak pernah dihitung sebagai gagal.",
+      "slot": {
+        "label": "Target slot {{n}}",
+        "ok": "{{ms}} ms",
+        "answering": "Menjawab",
+        "miss": "Tidak ada balasan",
+        "standby": "Siaga",
+        "skipped": "Tanpa rute",
+        "skipped_ipv4": "Tanpa rute IPv4",
+        "skipped_ipv6": "Tanpa rute IPv6",
+        "unknown": "Tidak ada pembacaan langsung"
+      },
+      "verdict": {
+        "answering": "Slot {{n}} menjawab",
+        "answering_any": "Menjawab",
+        "none": "Tidak ada jawaban dari slot mana pun",
+        "unknown": "Tidak melapor"
+      },
+      "validation": {
+        "empty": "Masukkan sebuah target.",
+        "too_long": "Gunakan maksimal {{max}} karakter.",
+        "spaces": "Spasi tidak diperbolehkan.",
+        "disallowed": "Gunakan hanya huruf, angka, dan . : % -",
+        "leading_dash": "Target tidak boleh diawali tanda hubung."
       },
       "error": {
         "title": "Tidak dapat membaca target probe",
         "body": "Target yang tersimpan tetap digunakan.",
         "retry": "Coba lagi"
       },
+      "failed": "Gagal menyimpan",
+      "discard": "Buang",
+      "save": "Simpan",
       "toast": {
         "saved": "Target probe tersimpan.",
         "failed": "Gagal menyimpan target probe."
-      },
-      "validation": {
-        "empty": "Masukkan sebuah target.",
-        "too_long": "Gunakan maksimal {{max}} karakter.",
-        "spaces": "Spasi tidak diperbolehkan.",
-        "disallowed": "Mengandung karakter yang tidak diperbolehkan.",
-        "ipv4_invalid": "Masukkan alamat IPv4 atau nama host.",
-        "ipv6_invalid": "Bukan alamat IPv6 yang valid.",
-        "ipv6_colon": "Alamat IPv6 mengandung titik dua."
-      },
-      "verdict": {
-        "ipv4": "IPv4 menjawab",
-        "ipv6": "IPv6 menjawab",
-        "none": "Tidak ada jawaban",
-        "unknown": "Tidak melapor"
-      },
-      "group": {
-        "sensitivity": "Sensitivitas",
-        "ipv4": "IPv4",
-        "ipv6": "Cadangan IPv6"
-      },
-      "fallback_hint": "Di-ping hanya saat target IPv4 tidak menjawab, jadi koneksi khusus IPv6 tidak dianggap sebagai pemadaman.",
-      "fallback_hint_label": "Tentang cadangan IPv6",
-      "interval": {
-        "label": "Interval probe",
-        "value": "Setiap {{seconds}} detik",
-        "override": "Setiap {{seconds}} detik (diatur oleh Watchdog)"
-      },
-      "failed": "Gagal menyimpan",
-      "profile": {
+      }
+    },
+    "last_outage": {
+      "label": "Gangguan terakhir",
+      "hint_label": "Tentang gangguan terakhir",
+      "hint": "Sejak restart terakhir. Durasi diukur di antara pemeriksaan koneksi, jadi hanya perkiraan.",
+      "none": "Tidak ada sejak restart terakhir",
+      "down_now": "Terputus sekarang",
+      "about": "Sekitar {{value}}",
+      "ended": "Berakhir {{ago}} lalu",
+      "ended_now": "Baru saja berakhir",
+      "ended_with_wan": "{{ended}} ({{wan}})",
+      "wan_changed": "IP WAN berubah",
+      "wan_same": "IP WAN sama",
+      "unit": {
+        "s": "{{n}} dtk",
+        "min": "{{n}} mnt",
+        "h": "{{n}} j",
+        "d": "{{n}} h"
+      }
+    },
+    "quality": {
+      "title": "Sensitivitas dan Kualitas",
+      "description": "Kapan koneksi dianggap terputus, dan kapan dianggap buruk.",
+      "sensitivity": {
+        "label": "Sensitivitas",
         "sensitive": "Sensitif",
         "regular": "Reguler",
         "relaxed": "Santai",
         "quiet": "Senyap"
-      }
-    },
-    "thresholds": {
-      "title": "Ambang Kualitas",
-      "description": "Kapan koneksi yang lambat atau kehilangan paket dicatat sebagai peristiwa jaringan.",
+      },
+      "grid": {
+        "caption": "Cara tiap sensitivitas memeriksa koneksi",
+        "every": "Setiap",
+        "down": "Terputus setelah",
+        "up": "Pulih setelah",
+        "every_value": "{{n}} dtk",
+        "down_value": "sekitar {{n}} dtk",
+        "up_value": "{{n}} dtk"
+      },
+      "consequence": "Terputus setelah sekitar {{to}} dtk, bukan {{from}} dtk.",
       "latency": {
         "title": "Latensi"
       },
@@ -692,44 +932,39 @@
         "very_tolerant": "Sangat toleran",
         "custom": "Kustom"
       },
-      "save": "Simpan Ambang",
-      "error": {
-        "title": "Tidak dapat membaca ambang kualitas",
-        "body": "Batas yang tersimpan tetap digunakan.",
-        "retry": "Coba lagi"
+      "value": {
+        "latency": "{{n}} ms",
+        "loss": "{{n}}%"
       },
-      "toast": {
-        "saved": "Ambang kualitas tersimpan.",
-        "failed": "Gagal menyimpan ambang kualitas."
-      },
-      "row": {
-        "flags": "Ditandai setelah",
-        "now": "Saat ini",
-        "limit": "Batas"
-      },
-      "flags": {
-        "latency_one": "{{count}} sampel di atas {{ms}} ms",
-        "latency_other": "{{count}} sampel di atas {{ms}} ms",
-        "loss_one": "{{count}} sampel pada {{pct}}% atau lebih",
-        "loss_other": "{{count}} sampel pada {{pct}}% atau lebih",
-        "pending": "Masukkan batas"
-      },
-      "now": {
-        "latency": "{{ms}} ms",
-        "loss": "{{pct}}%",
-        "no_reply": "Tidak ada balasan",
-        "collecting": "Mengumpulkan",
-        "over_latency": "Melebihi batas {{ms}} ms",
-        "over_loss": "Melebihi batas {{pct}}%"
-      },
-      "default_chip": "Nilai bawaan",
-      "failed": "Gagal menyimpan",
       "unit": {
         "latency": "ms",
         "loss": "%"
       },
+      "custom": {
+        "aria": "Batas {{metric}}, {{min}} sampai {{max}}"
+      },
       "validation": {
         "range": "Masukkan bilangan bulat dari {{min}} sampai {{max}}."
+      },
+      "now": {
+        "label": "Saat ini",
+        "no_reply": "Tidak ada balasan",
+        "collecting": "Mengumpulkan",
+        "over_latency": "Melebihi batas {{n}} ms",
+        "over_loss": "Mencapai atau melebihi batas {{n}}%"
+      },
+      "default_chip": "Nilai bawaan",
+      "error": {
+        "title": "Tidak dapat membaca pengaturan",
+        "body": "Pengaturan yang tersimpan tetap digunakan.",
+        "retry": "Coba lagi"
+      },
+      "failed": "Gagal menyimpan",
+      "discard": "Buang",
+      "save": "Simpan",
+      "toast": {
+        "saved": "Pengaturan tersimpan.",
+        "failed": "Gagal menyimpan pengaturan."
       }
     }
   },

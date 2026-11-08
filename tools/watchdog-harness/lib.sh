@@ -31,7 +31,12 @@ h_clock_adv() { # seconds
     _h_c=$(cat "$H_STATE/clock")
     _h_c=$(( _h_c + $1 ))
     printf '%s' "$_h_c" > "$H_STATE/clock"
-    printf '%s.00 0.00\n' "$(( H_UP0 + _h_c - H_CLOCK0 ))" > "$H_ROOT/proc_uptime"
+    # model key uptime_bad=1: /proc/uptime unreadable (mono_now prints 0)
+    if [ "$(mget uptime_bad 0)" = "1" ]; then
+        printf 'garbage\n' > "$H_ROOT/proc_uptime"
+    else
+        printf '%s.00 0.00\n' "$(( H_UP0 + _h_c - H_CLOCK0 ))" > "$H_ROOT/proc_uptime"
+    fi
 }
 
 # --- command stubs -----------------------------------------------------------
@@ -49,16 +54,27 @@ reboot() { echo "reboot" >> "$H_OUT/calls.log"; }
 
 dmesg() { cat "$H_STATE/dmesg.txt" 2>/dev/null; }
 
-uci_set() { # key value
+# uci.db holds one "key=value" line per option and one "key+=item" line per
+# list item (in order). uci_del drops both forms of a key.
+uci_del() { # key
     : > "$H_STATE/uci.new"
     while IFS= read -r _h_l; do
         case "$_h_l" in
-            "$1="*) ;;
+            "$1="*|"$1+="*) ;;
             *) printf '%s\n' "$_h_l" >> "$H_STATE/uci.new" ;;
         esac
     done < "$H_STATE/uci.db"
-    printf '%s=%s\n' "$1" "$2" >> "$H_STATE/uci.new"
     mv "$H_STATE/uci.new" "$H_STATE/uci.db"
+}
+
+uci_set() { # key value
+    uci_del "$1"
+    printf '%s=%s\n' "$1" "$2" >> "$H_STATE/uci.db"
+}
+
+# uci_quote VALUE: 'VALUE' with an embedded ' written as '\'' (uci show style)
+uci_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
 uci() {
@@ -72,9 +88,37 @@ uci() {
             done < "$H_STATE/uci.db"
             return 1
             ;;
+        show)
+            _h_out=""
+            while IFS= read -r _h_l; do
+                case "$_h_l" in
+                    "$2="*)
+                        printf "%s=%s\n" "$2" "$(uci_quote "${_h_l#*=}")"
+                        return 0
+                        ;;
+                    "$2+="*)
+                        _h_out="${_h_out:+$_h_out }$(uci_quote "${_h_l#*+=}")"
+                        ;;
+                esac
+            done < "$H_STATE/uci.db"
+            [ -n "$_h_out" ] || return 1
+            printf '%s=%s\n' "$2" "$_h_out"
+            return 0
+            ;;
         set)
             echo "uci set $2" >> "$H_OUT/calls.log"
             uci_set "${2%%=*}" "${2#*=}"
+            ;;
+        add_list)
+            echo "uci add_list $2" >> "$H_OUT/calls.log"
+            printf '%s+=%s\n' "${2%%=*}" "${2#*=}" >> "$H_STATE/uci.db"
+            ;;
+        delete)
+            echo "uci delete $2" >> "$H_OUT/calls.log"
+            uci_del "$2"
+            ;;
+        revert)
+            echo "uci revert $2" >> "$H_OUT/calls.log"
             ;;
         commit)
             echo "uci commit $2" >> "$H_OUT/calls.log"
@@ -132,7 +176,8 @@ h_qcmd_default() {
 # Unreachable -> null; otherwise q_latency, with q_loss percent of the samples
 # null (evenly spread: sample k is null when floor((k+1)*P/100) > floor(k*P/100)).
 h_hist_append() { # dt reachable
-    _h_ns=$(( $1 / 5 ))
+    # one sample per ping interval (model key ping_interval, default 5)
+    _h_ns=$(( $1 / $(mget ping_interval 5) ))
     _h_hf="$H_ROOT/tmp/qmanager_ping_history"
     [ -f "$_h_hf" ] || : > "$_h_hf"
     _h_k=$(mget hist_cnt 0)
@@ -154,7 +199,10 @@ h_hist_append() { # dt reachable
 # Rewrites ping.json and status.json from the model at the current fake time.
 # Called after every clock advance, so cached data is always as fresh as the
 # newest sleep. Model keys: reachable, link_slot_<n> (overrides reachable by SIM
-# slot), slot, ping_stale=1 / status_stale=1 (stop refreshing), q_latency, q_loss.
+# slot), slot, ping_stale=1 / status_stale=1 (stop refreshing), q_latency, q_loss,
+# attaching=1 (creates tmp/qmanager_ping_attaching, 0 removes it), streak_fail=N
+# (fixed ping streak_fail; empty = derived from the outage), streak_success=N
+# (fixed ping streak_success; empty = 10 while reachable, 0 while down).
 h_refresh() {
     _h_now=$(cat "$H_STATE/clock")
     _h_up=$(( H_UP0 + _h_now - H_CLOCK0 ))
@@ -175,17 +223,70 @@ h_refresh() {
         _h_sf=0
         _h_ss=10
     fi
+    # streak_fail=N: a fixed failure streak while the debounced verdict stays as
+    # modelled (a few lost probes on a reachable link; R4 scenario 99).
+    _h_sfo=$(mget streak_fail "")
+    [ -n "$_h_sfo" ] && _h_sf="$_h_sfo"
+    # streak_success=N: a fixed success streak (0 = a reachable verdict with no
+    # answer yet, as the ping daemon reports right after it starts; scenario 167).
+    _h_sso=$(mget streak_success "")
+    [ -n "$_h_sso" ] && _h_ss="$_h_sso"
+    if [ "$(mget attaching 0)" = "1" ]; then
+        : > "$H_ROOT/tmp/qmanager_ping_attaching"
+    else
+        rm -f "$H_ROOT/tmp/qmanager_ping_attaching"
+    fi
     if [ "$(mget ping_stale 0)" != "1" ]; then
         _h_dr=false
         [ -f "$H_ROOT/tmp/qmanager_recovery_active" ] && _h_dr=true
-        printf '{"timestamp":%s,"mono":%s,"reachable":%s,"last_rtt_ms":24.5,"streak_success":%s,"streak_fail":%s,"during_recovery":%s,"interval_sec":%s,"fail_secs":15,"recover_secs":10,"profile":"relaxed","last_family":"v4","targets":["192.0.2.1"]}\n' \
-            "$_h_now" "$_h_up" "$_h_reach" "$_h_ss" "$_h_sf" "$_h_dr" "$(mget ping_interval 5)" > "$H_ROOT/tmp/qmanager_ping.json"
+        # Contract ping.json (docs/plans cq-watchdog-contracts section 2): the
+        # scenario sets the debounced verdict (reachable) directly; fail_elapsed_sec
+        # is the modelled outage age (down_secs, 0 while reachable).
+        if [ "$_h_reach" = "false" ]; then
+            _h_fe="$_h_down"; _h_fam=none; _h_leg=0
+        else
+            _h_fe=0; _h_fam=ipv4; _h_leg=1
+        fi
+        printf '{"timestamp":%s,"mono":%s,"sensitivity":"relaxed","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":%s,"fail_secs":15,"recover_secs":10,"last_rtt_ms":24.5,"reachable":%s,"streak_success":%s,"streak_fail":%s,"fail_elapsed_sec":%s,"during_recovery":%s,"last_family":"%s","last_leg":%s,"cycle_ms":0}\n' \
+            "$_h_now" "$_h_up" "$(mget ping_interval 5)" "$_h_reach" "$_h_ss" "$_h_sf" "$_h_fe" "$_h_dr" "$_h_fam" "$_h_leg" > "$H_ROOT/tmp/qmanager_ping.json"
         h_hist_append "$_h_dt" "$_h_reach"
     fi
     if [ "$(mget status_stale 0)" != "1" ]; then
         printf '{"timestamp":%s,"mono":%s,"connectivity":{"avg_latency_ms":%s,"packet_loss_pct":%s}}\n' \
             "$_h_now" "$_h_up" "$(mget q_latency 24.5)" "$(mget q_loss 0)" > "$H_ROOT/tmp/qmanager_status.json"
     fi
+    # Carrier-count sidecars (R11b), only while the scenario sets cc_src, so
+    # every other scenario leaves var/run/qmanager as it was.
+    _h_csrc=$(mget cc_src "")
+    if [ -n "$_h_csrc" ] && [ "$(mget cc_stale 0)" != "1" ]; then
+        h_cc_write "$_h_csrc" "$_h_up"
+    fi
+}
+
+# h_cc_write SRC UPTIME: the broker's qmi.env and the poller's ca.env as the
+# watchdog adapter reads them. Model keys: cc (count; empty = the field is
+# empty), cc_src qmi (LTE / NSA: qmi.env registered, qmi_ca_count=cc) | sa
+# (ca.env ca_rat=sa, ca_nr_cc=cc; qmi.env not registered) | none (both files
+# removed), cc_stale=1 (stop rewriting: the files age out), qmi_state (default
+# up). Switching sa -> qmi leaves the old ca.env to age out, like the poller.
+h_cc_write() {
+    _h_qd="$H_ROOT/var/run/qmanager"
+    _h_cc=$(mget cc "")
+    case "$1" in
+        qmi)
+            printf "qmi_mono='%s'\nqmi_state='%s'\nqmi_ssr_count='0'\nqmi_registered='1'\nqmi_ca_count='%s'\nqm_sidecar_end='1'\n" \
+                "$2" "$(mget qmi_state up)" "$_h_cc" > "$_h_qd/qmi.env"
+            ;;
+        sa)
+            printf "qmi_mono='%s'\nqmi_state='%s'\nqmi_ssr_count='0'\nqmi_registered='0'\nqmi_ca_count=''\nqm_sidecar_end='1'\n" \
+                "$2" "$(mget qmi_state up)" > "$_h_qd/qmi.env"
+            printf "ca_mono='%s'\nca_source='at'\nca_rat='sa'\nca_lte_cc=''\nca_nr_cc='%s'\nqm_sidecar_end='1'\n" \
+                "$2" "$_h_cc" > "$_h_qd/ca.env"
+            ;;
+        none)
+            rm -f "$_h_qd/qmi.env" "$_h_qd/ca.env"
+            ;;
+    esac
 }
 
 # --- scenario helpers ----------------------------------------------------------

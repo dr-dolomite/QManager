@@ -1,0 +1,82 @@
+{
+  "name": "watchdog/get_status_amendment1_fields_passthrough",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": {
+        "timestamp": 1731000000,
+        "state": "monitor",
+        "enabled": true,
+        "current_tier": 0,
+        "recovery_reason": null,
+        "last_recovery_time": 1730999000,
+        "last_recovery_tier": 2,
+        "last_recovery_reason": "carrier",
+        "total_recoveries": 3,
+        "last_success_time": 1730999100,
+        "last_success_tier": 2,
+        "last_success_reason": "carrier",
+        "last_success_took_s": 95,
+        "failure_count": 0,
+        "failure_secs": 0,
+        "cooldown_remaining": 0,
+        "step_wait_until": null,
+        "holdoff_until": 6100,
+        "holdoff_reason": "carrier",
+        "holdoff_carrier_level": 1,
+        "reboots_this_hour": 0,
+        "reboot_budget_exhausted": false,
+        "reboot_rest_reason": null,
+        "ssr_hold": false,
+        "ssr_hold_until": null,
+        "last_ssr_mono": null,
+        "quality_breach_secs": 0,
+        "carrier_single_secs": 0,
+        "carrier_cc": 3,
+        "failback_active": false,
+        "failback_failures": 0,
+        "failback_next_at": null,
+        "sim_failover_active": false,
+        "original_sim_slot": null,
+        "current_sim_slot": null,
+        "ping_stale": false,
+        "mono": 5200,
+        "stale_after": 60,
+        "offline_secs": 75,
+        "reboot_limit": 3,
+        "reboot_rest_until": 7000,
+        "holdoff_quality_level": 2,
+        "tiers_tried": [
+          1,
+          2
+        ]
+      },
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".status.offline_secs": "int",
+      ".status.reboot_limit": "int",
+      ".status.reboot_rest_until": "int|null",
+      ".status.holdoff_quality_level": "int",
+      ".status.tiers_tried": "array"
+    },
+    "equals": {
+      ".success": true,
+      ".status.offline_secs": 75,
+      ".status.reboot_limit": 3,
+      ".status.reboot_rest_until": 7000,
+      ".status.holdoff_quality_level": 2,
+      ".status.tiers_tried": [
+        1,
+        2
+      ]
+    }
+  }
+}

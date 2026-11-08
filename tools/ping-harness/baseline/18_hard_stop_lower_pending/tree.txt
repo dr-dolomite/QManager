@@ -1,0 +1,8 @@
+=== etc/config/quecmanager
+
+=== var/run/qmanager/ping_fan/r3
+ok 30.0 ipv6
+
+=== var/run/qmanager/ping_fan/r4
+ok 40.0 ipv4
+

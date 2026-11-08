@@ -1,0 +1,52 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:14:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:14:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:14:30] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:14:40] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:14:50] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:30] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:40] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:15:50] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:30] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:40] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:16:50] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:30] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:40] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:17:50] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:30] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:40] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:18:50] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:19:00] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:19:10] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:19:10] WARN  [watchcat:PID] Ping data stale for over 300s: the connection probe is not reporting
+[2026-09-21 14:19:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection probe not reporting, restarting it
+[2026-09-21 14:19:10] WARN  [watchcat:PID] Starting the connection probe service (qmanager)
+[2026-09-21 14:19:20] WARN  [watchcat:PID] Ping cache missing
+[2026-09-21 14:19:30] WARN  [watchcat:PID] Ping cache missing
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000350,"type":"watchcat_recovery","message":"Watchcat: connection probe not reporting, restarting it","severity":"warning","code":"wd_ping_stale"}
+

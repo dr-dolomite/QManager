@@ -90,7 +90,7 @@
       "imei": "IMEI",
       "profiles": "Profil SIM kustom",
       "watchdog": "Watchdog koneksi",
-      "quality_thresholds": "Ambang kualitas koneksi",
+      "connection_quality": "Kualitas koneksi",
       "sites": "Situs monitor latensi",
       "sms_alerts": "Peringatan SMS",
       "alert_routing": "Perutean peringatan",

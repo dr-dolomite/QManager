@@ -53,7 +53,7 @@
 
 ### Keandalan & Pemantauan
 
-- **Connection Watchdog** — Auto-recovery 4 tingkat: ifup → toggle CFUN → SIM failover → reboot penuh (dengan pembatasan laju token bucket)
+- **Connection Watchdog** — Auto-recovery bertingkat (daftar ulang → toggle radio → SIM failover → reboot) yang dipicu oleh gangguan koneksi, dan opsional oleh kualitas koneksi buruk atau carrier tunggal yang macet; reboot dibatasi anggaran dan tidak pernah mematikan watchdog
 - **Notifikasi Email** — Pemberitahuan gangguan via Gmail SMTP (msmtp), dikirim saat pemulihan dengan detail durasi
 - **Notifikasi SMS** — Pemberitahuan gangguan via SMS, dikirim selama pemadaman aktif setelah ambang batas terlampaui
 - **WAN Interface Guard** — Menonaktifkan otomatis profil WAN bayangan untuk mencegah loop retry netifd yang memboroskan CPU
@@ -288,7 +288,7 @@ QManager menjalankan 14 layanan init.d di perangkat:
 | Layanan | Fungsi |
 |---------|--------|
 | `qmanager` | Daemon poller utama — polling AT bertingkat, cache JSON, deteksi event |
-| `qmanager_watchcat` | Watchdog koneksi — mesin status auto-recovery 4 tingkat |
+| `qmanager_watchcat` | Watchdog koneksi — mesin status auto-recovery bertingkat |
 | `qmanager_dpi` | Layanan DPI — nfqws dalam mode video optimizer atau traffic masquerade |
 | `qmanager_tower_failover` | Failover tower — memulihkan kunci setelah kehilangan sel |
 | `qmanager_eth_link` | Kecepatan link Ethernet — menerapkan pengaturan kecepatan/duplex yang tersimpan |

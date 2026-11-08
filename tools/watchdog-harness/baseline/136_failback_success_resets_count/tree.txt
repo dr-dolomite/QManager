@@ -1,0 +1,55 @@
+=== etc/qmanager/known_iccids
+89000000000000000002
+89000000000000000001
+
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=1 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:13:50] INFO  [watchcat:PID] Resumed SIM failover state: slot 1 → 2 (verified)
+[2026-09-21 14:14:50] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
+[2026-09-21 14:14:50] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
+[2026-09-21 14:14:54] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:14:54] INFO  [watchcat:PID] Entering primary-recheck settle for 90s (reason=outage)
+[2026-09-21 14:16:24] WARN  [watchcat:PID] PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot 2
+[2026-09-21 14:16:28] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:16:28] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM still unhealthy — staying on backup slot 2
+[2026-09-21 14:16:28] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 1 of 3
+[2026-09-21 14:16:28] INFO  [watchcat:PID] Entering post-recheck backup settle for 90s
+[2026-09-21 14:17:58] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
+[2026-09-21 14:18:08] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
+[2026-09-21 14:18:08] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
+[2026-09-21 14:18:12] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:18:12] INFO  [watchcat:PID] Entering primary-recheck settle for 90s (reason=outage)
+[2026-09-21 14:19:42] WARN  [watchcat:PID] PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot 2
+[2026-09-21 14:19:46] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:19:46] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM still unhealthy — staying on backup slot 2
+[2026-09-21 14:19:46] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 2 of 3
+[2026-09-21 14:19:46] INFO  [watchcat:PID] Entering post-recheck backup settle for 90s
+[2026-09-21 14:21:16] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
+[2026-09-21 14:21:26] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
+[2026-09-21 14:21:26] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
+[2026-09-21 14:21:30] INFO  [watchcat:PID] Modem responsive after 0s
+[2026-09-21 14:21:30] INFO  [watchcat:PID] Entering primary-recheck settle for 90s (reason=outage)
+[2026-09-21 14:23:00] INFO  [watchcat:PID] PRIMARY RECHECK: primary SIM healthy — failing back to slot 1
+[2026-09-21 14:23:00] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM healthy again — failed back to slot 1
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000188,"type":"sim_failover","message":"Watchcat: primary SIM still unhealthy — staying on backup slot 2","severity":"info","code":"sim_failback"}
+{"timestamp":1790000288,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000386,"type":"sim_failover","message":"Watchcat: primary SIM still unhealthy — staying on backup slot 2","severity":"info","code":"sim_failback"}
+{"timestamp":1790000486,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000580,"type":"sim_failover","message":"Watchcat: primary SIM healthy again — failed back to slot 1","severity":"info","code":"sim_failback"}
+
+=== tmp/qmanager_force_tier2
+
+=== tmp/qmanager_refresh_policy_band
+

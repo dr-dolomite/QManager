@@ -163,11 +163,18 @@ prev_ev_nr_ca_count=""
 prev_ev_service_status=""
 prev_ev_carrier_components=""
 
-# Data connection quality event debounce state
+# Data connection quality event debounce state: new-sample counts plus the
+# uptime second each run started (events.sh _ev_qdeb_due); ev_q_ts is the ping
+# timestamp last counted.
 ev_high_lat_streak=0
 ev_high_loss_streak=0
 ev_lat_clear_streak=0
 ev_loss_clear_streak=0
+ev_high_lat_since=""
+ev_high_loss_since=""
+ev_lat_clear_since=""
+ev_loss_clear_since=""
+ev_q_ts=""
 ev_lat_alerted=false
 ev_loss_alerted=false
 
@@ -278,25 +285,33 @@ conn_jitter="null"
 conn_packet_loss=0
 conn_ping_target=""
 conn_history="[]"
-conn_history_interval=5
-conn_history_size=60
+conn_history_interval=5  # seconds between latency_history points (cq_ring_stats)
+conn_history_size=60     # number of latency_history points (cq_ring_stats)
 conn_during_recovery="false"
-conn_profile=""          # active ping profile name from ping.json (.profile)
+conn_sensitivity=""      # active sensitivity name from ping.json (.sensitivity)
 conn_last_family=""      # address family of the last successful probe (.last_family)
-_last_ping_ts=0          # tracks last processed ping.json timestamp (awk gate)
-
-# History size constant (must match ping daemon)
-CONN_HISTORY_SIZE=60
+conn_last_leg=0          # answering target slot of the last cycle, 0 = none (.last_leg)
+conn_fail_secs=""        # time-to-fail the daemon runs (.fail_secs)
+conn_recover_secs=""     # time-to-recover the daemon runs (.recover_secs)
+conn_ring_size=60        # ring lines the stats window reads (conn_state_resolve)
+conn_window_sec=300      # stats window in seconds (conn_state_resolve)
+conn_qdeb_sec=15         # quality-event debounce, seconds of new samples
+conn_qdeb_vt_sec=10      # ... when the metric's preset is very-tolerant
+_conn_sens_applied=""    # sensitivity the four values above were resolved for
+_conn_sens_resolved=0    # 1 once resolved, so an absent name ("") resolves only once
+_last_ping_ts=0          # tracks last processed ping.json timestamp (stats gate)
 
 # Connection-quality event thresholds (consumed by events.sh
 # detect_data_connection_events). Resolved from UCI presets by
 # resolve_quality_thresholds(); the table lives here, UCI stores only the
 # preset names. Defaults mirror the "tolerant" preset (used when the
-# quecmanager.quality_thresholds section is absent).
+# quecmanager.quality_thresholds section is absent). The debounce is in seconds
+# of new samples and comes from the sensitivity table (conn_qdeb_sec, or
+# conn_qdeb_vt_sec when the metric's preset is very-tolerant: *_VT=1).
 QUALITY_LAT_THRESHOLD=250    # ms
-QUALITY_LAT_DEBOUNCE=3       # consecutive readings
+QUALITY_LAT_VT=0
 QUALITY_LOSS_THRESHOLD=30    # percent
-QUALITY_LOSS_DEBOUNCE=3      # consecutive readings
+QUALITY_LOSS_VT=0
 QUALITY_RELOAD_FLAG="/tmp/qmanager_quality_reload"
 
 # Connection uptime tracking
@@ -1455,8 +1470,26 @@ PING_HISTORY_RAW="/tmp/qmanager_ping_history"   # flat-file ring buffer from pin
 # Window-maturity floor: packet_loss_pct = int(lost*100/n) is meaningless on a
 # tiny history (e.g. just after a reboot truncates it) — 2 transient boot-attach
 # nulls in a 4-sample window reads as 50% loss and can falsely trip the watchdog
-# quality trigger. Suppress loss% to 0 until at least this many samples exist.
+# quality trigger. Loss% and jitter read null until at least this many samples
+# exist (cq_ring_stats).
 PING_MIN_SAMPLES=10
+
+# _qt_custom_or <lo> <hi> <default> <raw>: raw without leading zeros when it is
+# plain decimal digits within lo..hi, else the default (the CQ CGI and the
+# watchdog read a stored custom limit by the same rule).
+_qt_custom_or() {
+    local v
+    v="$4"
+    case "$v" in ''|*[!0-9]*) printf '%s' "$3"; return 0 ;; esac
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do
+        v="${v#0}"
+    done
+    if [ "${#v}" -gt "${#2}" ] || [ "$v" -lt "$1" ] || [ "$v" -gt "$2" ]; then
+        printf '%s' "$3"
+        return 0
+    fi
+    printf '%s' "$v"
+}
 
 # =============================================================================
 # CONNECTION-QUALITY THRESHOLDS (UCI presets -> event thresholds)
@@ -1465,8 +1498,8 @@ PING_MIN_SAMPLES=10
 # QUALITY_* globals that events.sh reads. The section's ABSENCE means "default"
 # -> both presets fall back to "tolerant". Unknown values also fall back to
 # tolerant so a hand-edited UCI never leaves an empty/invalid threshold.
-#   Latency: standard{150,3} · tolerant{250,3} · very-tolerant{500,2}
-#   Loss:    standard{15,3}  · tolerant{30,3}  · very-tolerant{50,2}
+#   Latency: standard 150 · tolerant 250 · very-tolerant 500 (VT debounce)
+#   Loss:    standard 15  · tolerant 30  · very-tolerant 50  (VT debounce)
 resolve_quality_thresholds() {
     local _lat_preset
     local _loss_preset
@@ -1477,34 +1510,29 @@ resolve_quality_thresholds() {
     _loss_preset=$(uci -q get quecmanager.quality_thresholds.loss_preset 2>/dev/null)
 
     case "$_lat_preset" in
-        standard)      QUALITY_LAT_THRESHOLD=150; QUALITY_LAT_DEBOUNCE=3 ;;
-        very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_DEBOUNCE=2 ;;
+        standard)      QUALITY_LAT_THRESHOLD=150; QUALITY_LAT_VT=0 ;;
+        very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_VT=1 ;;
         custom)
             # latency_custom_ms drives the threshold; debounce mirrors tolerant.
-            # Non-numeric/empty custom value falls back to the tolerant default
-            # so a half-written UCI never yields an empty comparison value.
+            # Non-numeric, empty or out-of-range (1-10000) custom value falls back
+            # to the tolerant default so a half-written UCI never yields an empty
+            # or always-breaching comparison value.
             _lat_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
-            case "$_lat_custom" in
-                ''|*[!0-9]*) QUALITY_LAT_THRESHOLD=250 ;;
-                *)           QUALITY_LAT_THRESHOLD="$_lat_custom" ;;
-            esac
-            QUALITY_LAT_DEBOUNCE=3
+            QUALITY_LAT_THRESHOLD=$(_qt_custom_or 1 10000 250 "$_lat_custom")
+            QUALITY_LAT_VT=0
             ;;
-        tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_DEBOUNCE=3 ;;
+        tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_VT=0 ;;
     esac
 
     case "$_loss_preset" in
-        standard)      QUALITY_LOSS_THRESHOLD=15; QUALITY_LOSS_DEBOUNCE=3 ;;
-        very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_DEBOUNCE=2 ;;
+        standard)      QUALITY_LOSS_THRESHOLD=15; QUALITY_LOSS_VT=0 ;;
+        very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_VT=1 ;;
         custom)
             _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
-            case "$_loss_custom" in
-                ''|*[!0-9]*) QUALITY_LOSS_THRESHOLD=30 ;;
-                *)           QUALITY_LOSS_THRESHOLD="$_loss_custom" ;;
-            esac
-            QUALITY_LOSS_DEBOUNCE=3
+            QUALITY_LOSS_THRESHOLD=$(_qt_custom_or 1 100 30 "$_loss_custom")
+            QUALITY_LOSS_VT=0
             ;;
-        tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_DEBOUNCE=3 ;;
+        tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_VT=0 ;;
     esac
 }
 
@@ -1524,6 +1552,16 @@ resolve_poller_config() {
     local _ap_idle
     local _ap_threshold
     local _ap_deep
+    local _ca_en
+
+    _ca_en=$(uci -q get quecmanager.watchcat.carrier_enabled 2>/dev/null)
+    # Only a literal 1 turns the carrier sidecar on; absent or garbage is off.
+    case "$_ca_en" in
+        1) CA_ENV_ENABLED=1 ;;
+        *) CA_ENV_ENABLED=0 ;;
+    esac
+    _CA_ENV_MONO=0
+    _CA_ENV_SIG=""
 
     _ap_enabled=$(uci -q get quecmanager.poller.enabled 2>/dev/null)
     _ap_grace=$(uci -q get quecmanager.poller.active_grace 2>/dev/null)
@@ -1545,6 +1583,128 @@ resolve_poller_config() {
     # Clamp the AT-read cadences to never drop below the base cycle interval.
     [ "$AP_IDLE_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_IDLE_INTERVAL="$POLL_INTERVAL"
     [ "$AP_DEEP_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_DEEP_INTERVAL="$POLL_INTERVAL"
+}
+
+# =============================================================================
+# CARRIER SIDECAR ca.env (watchdog "stuck on one carrier" trigger)
+# =============================================================================
+# The watchdog counts component carriers while the UI is idle, so the poller
+# publishes the count of its last completed carrier read. LTE / NSA come from
+# the broker's qmi.env on the watchdog side; this file exists for 5G SA, where
+# QMI shows no carriers. Written only while quecmanager.watchcat.carrier_enabled
+# is 1 (read in resolve_poller_config), so with the toggle off nothing here
+# runs and the deep tier stays QENG-only (Adaptive Polling Invariant 7).
+CA_ENV="${CA_ENV:-/var/run/qmanager/ca.env}"
+CA_ENV_ENABLED=0
+CA_GATED_MIN_SEC=60      # spacing between gated deep-tier QCAINFO reads
+CA_ENV_REWRITE_SEC=10    # unchanged values are republished at most this often
+_CA_GATED_MONO=0
+_CA_ENV_MONO=0
+_CA_ENV_SIG=""
+_CA_N=0
+
+# _ca_count <text> <needle>: occurrences of needle in text -> _CA_N (builtins).
+_ca_count() {
+    local _cac_s
+    _cac_s="$1"
+    _CA_N=0
+    while :; do
+        case "$_cac_s" in
+            *"$2"*) _cac_s="${_cac_s#*"$2"}"; _CA_N=$((_CA_N + 1)) ;;
+            *) break ;;
+        esac
+    done
+}
+
+# ca_env_publish <at|qmi>: write ca.env from the carrier list a read just left
+# in t2_carrier_components. Counts are rows of the list, so PCC and NR legs are
+# included; QMI carries LTE only, so ca_nr_cc stays empty for it. A read whose
+# list is empty or unparsed writes nothing (the previous file keeps ageing).
+ca_env_publish() {
+    local _src
+    local _rat
+    local _lte
+    local _nr
+    local _sig
+    local _rmono
+    _src="$1"
+    [ "$CA_ENV_ENABLED" = "1" ] || return 0
+    command -v qm_atomic_write >/dev/null 2>&1 || return 0
+    case "${_MONO_TOP:-0}" in ''|*[!0-9]*|0|0?*) return 0 ;; esac
+    case "$t2_carrier_components" in '[{'*) ;; *) return 0 ;; esac
+
+    _rat="unknown"
+    if [ "${_QENG_PARSED:-0}" = "1" ]; then
+        case "$network_type" in
+            LTE)    _rat="lte" ;;
+            5G-NSA) _rat="nsa" ;;
+            5G-SA)  _rat="sa" ;;
+        esac
+    fi
+    _ca_count "$t2_carrier_components" '"technology":"LTE"'
+    _lte="$_CA_N"
+    _nr=""
+    if [ "$_src" = "at" ]; then
+        _ca_count "$t2_carrier_components" '"technology":"NR"'
+        _nr="$_CA_N"
+    fi
+
+    _sig="$_src $_rat $_lte $_nr"
+    if [ "$_sig" = "$_CA_ENV_SIG" ] && [ "$_MONO_TOP" -ge "$_CA_ENV_MONO" ] \
+       && [ $((_MONO_TOP - _CA_ENV_MONO)) -lt "$CA_ENV_REWRITE_SEC" ]; then
+        return 0
+    fi
+
+    _rmono="${_CA_READ_MONO:-0}"
+    case "$_rmono" in ''|*[!0-9]*|0|0?*) _rmono="$_MONO_TOP" ;; esac
+    # Throttle on the attempt, so a failing write does not fork four times a cycle.
+    _CA_ENV_MONO="$_MONO_TOP"
+    if printf "ca_mono='%s'\nca_source='%s'\nca_rat='%s'\nca_lte_cc='%s'\nca_nr_cc='%s'\nqm_sidecar_end='1'\n" \
+        "$_rmono" "$_src" "$_rat" "$_lte" "$_nr" | qm_atomic_write "$CA_ENV"; then
+        _CA_ENV_SIG="$_sig"
+    fi
+    return 0
+}
+
+# ca_deep_read: the one carrier read the deep tier may make. Runs only while the
+# watchdog carrier trigger is on, the serving cell is 5G SA (QMI cannot count
+# NR carriers; the NR-DC master is SA too) and 60 s have passed since the last
+# one. Same exchange as the active tier (=1 only inside it, never left set:
+# R01A04 drops the connection otherwise). A good reply goes through parse_ca_info
+# exactly like the active/idle read, so status.json's CA fields and
+# .device.ca_read_mono refresh with the sidecar instead of the two disagreeing;
+# a bad or empty reply changes nothing (deep keeps last-known values).
+ca_deep_read() {
+    local _cdr_rc
+    [ "$ap_tier" = "deep" ] || return 0
+    [ "$CA_ENV_ENABLED" = "1" ] || return 0
+    [ "${_QENG_PARSED:-0}" = "1" ] || return 0
+    [ "$network_type" = "5G-SA" ] || return 0
+    case "${_MONO_TOP:-0}" in ''|*[!0-9]*|0|0?*) return 0 ;; esac
+    # Scan / SIM switch return before the AT block; re-checked here because this
+    # function is an AT path of its own.
+    qm_trusted_file "$LONG_FLAG" && return 0
+    [ -f "$SIM_SWITCH_FLAG" ] && return 0
+    [ "$system_state" = "scan_in_progress" ] && return 0
+    # One cycle of grain: deep AT is itself due every deep_idle_interval, and a
+    # strict 60 s test would skip a cycle that lands at 59 s and read every 120 s.
+    [ $((_MONO_TOP - _CA_GATED_MONO + POLL_INTERVAL)) -ge "$CA_GATED_MIN_SEC" ] || return 0
+
+    # Space the next attempt from this one even if the read fails.
+    _CA_GATED_MONO="$_MONO_TOP"
+    qcmd_exec_g 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0'
+    _cdr_rc=$?
+    [ "$_cdr_rc" -eq 0 ] || return 0
+    case "$_QR" in
+        *'+QCAINFO:'*) ;;
+        *) return 0 ;;
+    esac
+    parse_ca_info "$_QR"
+    _CA_READ_MONO="$_MONO_TOP"
+    ca_source="at"
+    qmi_ca_cache_update "$t2_carrier_components"
+    ca_env_publish at
+    return 0
 }
 
 # DNS lookup time from qmanager_ping's detached job. A number only when the last
@@ -1683,10 +1843,13 @@ read_ping_data() {
         conn_during_recovery="false"
         # Force a stats pass on the first fresh read after a gap.
         _last_ping_ts=0
+        conn_last_leg=0
         if [ "$CQ_STALE_REASON" = "missing" ]; then
             conn_ping_target=""
-            conn_profile=""
+            conn_sensitivity=""
             conn_last_family=""
+            conn_fail_secs=""
+            conn_recover_secs=""
         else
             qlog_warn "Ping data stale ($(conn_state_why)), marking unknown"
         fi
@@ -1698,68 +1861,42 @@ read_ping_data() {
     conn_internet_available="$CQ_REACHABLE"
     conn_latency="$CQ_RTT_MS"
     conn_during_recovery="$CQ_DURING_RECOVERY"
-    conn_history_interval="$CQ_INTERVAL_SEC"
     conn_ping_target="$CQ_TARGET"
-    conn_profile="$CQ_PROFILE"
+    conn_sensitivity="$CQ_SENSITIVITY"
     conn_last_family="$CQ_LAST_FAMILY"
+    conn_last_leg="$CQ_LAST_LEG"
+    conn_fail_secs="$CQ_FAIL_SECS"
+    conn_recover_secs="$CQ_RECOVER_SECS"
+
+    # The table owns ring size, window and quality debounce; resolve once per
+    # sensitivity change. An absent name (older daemon) reads as relaxed.
+    if [ "$conn_sensitivity" != "$_conn_sens_applied" ] || [ "$_conn_sens_resolved" != "1" ]; then
+        conn_state_resolve "${conn_sensitivity:-relaxed}"
+        conn_ring_size="$CQ_CFG_RING_SIZE"
+        conn_window_sec="$CQ_CFG_WINDOW_SEC"
+        conn_qdeb_sec="$CQ_CFG_QDEB_SEC"
+        conn_qdeb_vt_sec="$CQ_CFG_QDEB_VT_SEC"
+        _conn_sens_applied="$conn_sensitivity"
+        _conn_sens_resolved=1
+        _last_ping_ts=0
+    fi
 
     # Step B: Single awk pass — only when ping timestamp changed (saves awk fork every 2s)
     # With ping daemon at 5s, awk runs ~every 5s instead of every cycle.
     if [ "$ping_ts" != "$_last_ping_ts" ]; then
         _last_ping_ts="$ping_ts"
 
-        local _ha=""
-        if [ -s "$PING_HISTORY_RAW" ]; then
-            # Ring lines are "<rtt|null> <leg>" (leg p4|s4|p6|s6|-; an older
-            # one-column file has no leg). Jitter only pairs consecutive answers
-            # from the same leg, so a switch to the second provider is not jitter.
-            _ha=$(awk -v min_samples="$PING_MIN_SAMPLES" '
-            BEGIN { n=0; lost=0; nv=0; have=0; sum=0; jsum=0; nj=0 }
-            NF > 0 {
-                n++; arr[n]=$1
-                if ($1=="null") { lost++ }
-                else {
-                    val=$1+0; sum+=val; nv++
-                    if (!have||val<min) min=val
-                    if (!have||val>max) max=val
-                    have=1
-                    if (nv>1 && $2==pleg) { d=val-prev; if(d<0)d=-d; jsum+=d; nj++ }
-                    prev=val; pleg=$2
-                }
-            }
-            END {
-                # Maturity guard: only trust loss% once the window has filled to
-                # min_samples. Below that, a couple of transient nulls dominate a
-                # tiny denominator and read as huge loss. Genuine sustained outages
-                # are still caught by the reachability/streak_fail path (independent
-                # of this stat), so suppressing immature loss% loses no real signal.
-                mloss = (n >= min_samples) ? int(lost*100/n) : 0
-                if (nv>0)
-                    printf "%.1f|%.1f|%.1f|%.1f|%d|", min,sum/nv,max,(nj>0?jsum/nj:0),mloss
-                else
-                    printf "null|null|null|null|%d|", (n>0 && n>=min_samples ? 100 : 0)
-                printf "["
-                for(i=1;i<=n;i++) { if(i>1) printf ","; printf "%s",arr[i] }
-                printf "]\n"
-            }' "$PING_HISTORY_RAW")
-        fi
-
-        if [ -n "$_ha" ]; then
-            local _rest="$_ha"
-            conn_min_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_avg_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_max_latency="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_jitter="${_rest%%|*}";       _rest="${_rest#*|}"
-            conn_packet_loss="${_rest%%|*}";  _rest="${_rest#*|}"
-            conn_history="${_rest}"           # remaining is "[json_array]"
-        else
-            conn_min_latency="null"
-            conn_avg_latency="null"
-            conn_max_latency="null"
-            conn_jitter="null"
-            conn_packet_loss=0
-            conn_history="[]"
-        fi
+        # Stats and the <=60 latency_history points come from the one reducer in
+        # conn_state.sh (last conn_ring_size ring lines).
+        cq_ring_stats "$PING_HISTORY_RAW" "$CQ_INTERVAL_SEC" "$conn_ring_size" "$PING_MIN_SAMPLES"
+        conn_min_latency="$CQ_RS_MIN"
+        conn_avg_latency="$CQ_RS_AVG"
+        conn_max_latency="$CQ_RS_MAX"
+        conn_jitter="$CQ_RS_JITTER"
+        conn_packet_loss="$CQ_RS_LOSS"
+        conn_history="$CQ_RS_HISTORY"
+        conn_history_interval="$CQ_RS_HIST_INTERVAL_SEC"
+        conn_history_size="$CQ_RS_HIST_SIZE"
     fi
     # (if ts unchanged: cached conn_* stats remain valid)
 
@@ -1770,6 +1907,7 @@ read_ping_data() {
         # Degraded = loss at or above the configured Connection Quality cut
         # (was a hard-coded 10 %). Latency alone never makes the link degraded.
         local loss="${conn_packet_loss:-0}"
+        [ "$loss" = "null" ] && loss=0
         if [ "$loss" -ge "${QUALITY_LOSS_THRESHOLD:-30}" ] 2>/dev/null; then
             conn_status="degraded"
         else
@@ -1783,6 +1921,7 @@ read_ping_data() {
 
     # Sanitize: ensure numeric fields are valid
     case "$conn_packet_loss" in
+        null) ;;
         *[!0-9]*|'') conn_packet_loss=0 ;;
     esac
     case "$conn_history_interval" in
@@ -1806,6 +1945,14 @@ wc_cooldown_remaining=0
 wc_reboots_this_hour=0
 wc_mono=0
 wc_stale_after=0
+wc_recovery_reason=""
+wc_step_wait_until="null"
+wc_holdoff_until="null"
+wc_holdoff_reason=""
+wc_reboot_budget_exhausted="false"
+wc_ssr_hold_until="null"
+wc_failback_next_at="null"
+wc_ping_stale="false"
 WATCHCAT_CACHE="/tmp/qmanager_watchcat.json"
 
 # SIM failover state variables
@@ -1860,6 +2007,10 @@ read_watchcat_state() {
         wc_last_recovery_time="null"; wc_last_recovery_tier="null"
         wc_total_recoveries=0; wc_cooldown_remaining=0
         wc_reboots_this_hour=0; wc_mono=0; wc_stale_after=0
+        wc_recovery_reason=""; wc_step_wait_until="null"
+        wc_holdoff_until="null"; wc_holdoff_reason=""
+        wc_reboot_budget_exhausted="false"; wc_ssr_hold_until="null"
+        wc_failback_next_at="null"; wc_ping_stale="false"
         _wc_rd_n="$STATE_FORCE_EVERY"
         return
     fi
@@ -1881,7 +2032,15 @@ read_watchcat_state() {
         ((.cooldown_remaining) | if . == null then "0" else tostring end),
         ((.reboots_this_hour) | if . == null then "0" else tostring end),
         ((.mono) | if . == null then "0" else tostring end),
-        ((.stale_after) | if . == null then "0" else tostring end)
+        ((.stale_after) | if . == null then "0" else tostring end),
+        ((.recovery_reason) | if . == "outage" or . == "quality" or . == "carrier" then . else "" end),
+        ((.step_wait_until) | if . == null then "null" else tostring end),
+        ((.holdoff_until) | if . == null then "null" else tostring end),
+        ((.holdoff_reason) | if . == "outage" or . == "quality" or . == "carrier" then . else "" end),
+        ((.reboot_budget_exhausted) | if . == null then "false" else tostring end),
+        ((.ssr_hold_until) | if . == null then "null" else tostring end),
+        ((.failback_next_at) | if . == null then "null" else tostring end),
+        ((.ping_stale) | if . == null then "false" else tostring end)
     ] | join("\u001f")' "$WATCHCAT_CACHE" 2>/dev/null)
 
     if [ -z "$_wdata" ]; then
@@ -1891,7 +2050,10 @@ read_watchcat_state() {
 
     IFS="$_US" read -r wc_enabled wc_state wc_current_tier wc_failure_count \
         wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries \
-        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after <<EOF
+        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after \
+        wc_recovery_reason wc_step_wait_until wc_holdoff_until wc_holdoff_reason \
+        wc_reboot_budget_exhausted wc_ssr_hold_until wc_failback_next_at \
+        wc_ping_stale <<EOF
 $_wdata
 EOF
 }
@@ -2229,10 +2391,10 @@ _wc_compose_pf() {
         _JC_CH_JSON="$_JV"
     fi
     _kR latency_history "$_JC_CH_JSON"
-    _kN history_interval_sec "$conn_history_interval" 2
-    _kN history_size "${CONN_HISTORY_SIZE:-}" 60
+    _kN history_interval_sec "$conn_history_interval" 5
+    _kN history_size "$conn_history_size" 60
     _kB during_recovery "$conn_during_recovery" false
-    _kS profile "$conn_profile"
+    _kS profile "$conn_sensitivity"
     _kO thresholds
     _kN latency_ms "$QUALITY_LAT_THRESHOLD" 250
     _kN loss_pct "$QUALITY_LOSS_THRESHOLD" 30
@@ -2244,6 +2406,10 @@ _wc_compose_pf() {
     _kN last_outage_ago_s "$_WC_LO_AGO" null
     _kSN last_outage_wan_ip "$_WC_LO_IP"
     _kB last_outage_wan_changed "$_WC_LO_CHG" null
+    _kS sensitivity "$conn_sensitivity"
+    _kN last_leg "$conn_last_leg" 0
+    _kN fail_secs "$conn_fail_secs" null
+    _kN recover_secs "$conn_recover_secs" null
     _kE
     _kO watchcat
     _kB enabled "$wc_enabled" false
@@ -2257,6 +2423,15 @@ _wc_compose_pf() {
     _kN reboots_this_hour "$wc_reboots_this_hour" 0
     _kN age_sec "$_WC_HB_AGE" null
     _kN stale_after "$_WC_HB_STALE" null
+    _kSN recovery_reason "$wc_recovery_reason"
+    _kN step_wait_until "$wc_step_wait_until" null
+    _kN holdoff_until "$wc_holdoff_until" null
+    _kSN holdoff_reason "$wc_holdoff_reason"
+    _kB reboot_budget_exhausted "$wc_reboot_budget_exhausted" false
+    _kN ssr_hold_until "$wc_ssr_hold_until" null
+    _kN failback_next_at "$wc_failback_next_at" null
+    _kB ping_stale "$wc_ping_stale" false
+    _kN mono "$wc_mono" 0
     _kE
     _kO sim_failover
     _kB active "$sim_fo_active" false
@@ -2395,7 +2570,11 @@ write_cache_jq() {
         --argjson sc_read_mono "${_SERVING_READ_MONO:-0}" \
         --argjson ca_read_mono "${_CA_READ_MONO:-0}" \
         --arg ca_src "${ca_source:-at}" \
-        --arg ap_tier "${ap_tier:-active}"         --arg lte_src "${lte_source:-at}"         --argjson qmi_rmono "${_QMI_READ_MONO:-0}"         --arg qmi_st "$_QMI_STATE"         --argjson qmi_ssr "${_QMI_SSR:-0}" \
+        --arg ap_tier "${ap_tier:-active}" \
+        --arg lte_src "${lte_source:-at}" \
+        --argjson qmi_rmono "${_QMI_READ_MONO:-0}" \
+        --arg qmi_st "$_QMI_STATE" \
+        --argjson qmi_ssr "${_QMI_SSR:-0}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
         --argjson lat "${conn_latency:-null}" \
@@ -2405,7 +2584,10 @@ write_cache_jq() {
         --argjson jit "${conn_jitter:-null}" \
         --argjson pkt_loss "${conn_packet_loss:-0}" \
         --arg ping_tgt "$conn_ping_target" \
-        --arg conn_profile "$conn_profile" \
+        --arg conn_sens "$conn_sensitivity" \
+        --argjson conn_leg "${conn_last_leg:-0}" \
+        --argjson conn_fail_secs "${conn_fail_secs:-null}" \
+        --argjson conn_rec_secs "${conn_recover_secs:-null}" \
         --arg conn_last_family "$conn_last_family" \
         --argjson dns_ms "${dns_lookup_ms:-null}" \
         --arg dns_res "$dns_resolver" \
@@ -2414,8 +2596,8 @@ write_cache_jq() {
         --arg lo_ip "$_WC_LO_IP" \
         --argjson lo_chg "${_WC_LO_CHG:-null}" \
         --argjson lat_hist "${conn_history:-[]}" \
-        --argjson hist_int "${conn_history_interval:-2}" \
-        --argjson hist_size "${CONN_HISTORY_SIZE:-60}" \
+        --argjson hist_int "${conn_history_interval:-5}" \
+        --argjson hist_size "${conn_history_size:-60}" \
         --argjson during_rec "${conn_during_recovery:-false}" \
         --argjson thr_lat "${QUALITY_LAT_THRESHOLD:-250}" \
         --argjson thr_loss "${QUALITY_LOSS_THRESHOLD:-30}" \
@@ -2430,6 +2612,15 @@ write_cache_jq() {
         --argjson wc_reboots "${wc_reboots_this_hour:-0}" \
         --argjson wc_age "${_WC_HB_AGE:-null}" \
         --argjson wc_stale "${_WC_HB_STALE:-null}" \
+        --arg wc_rec_reason "$wc_recovery_reason" \
+        --argjson wc_swu "${wc_step_wait_until:-null}" \
+        --argjson wc_hold_until "${wc_holdoff_until:-null}" \
+        --arg wc_hold_reason "$wc_holdoff_reason" \
+        --argjson wc_rb_spent "${wc_reboot_budget_exhausted:-false}" \
+        --argjson wc_ssr_until "${wc_ssr_hold_until:-null}" \
+        --argjson wc_fb_next "${wc_failback_next_at:-null}" \
+        --argjson wc_ping_stale "${wc_ping_stale:-false}" \
+        --argjson wc_mono "${wc_mono:-0}" \
         --argjson sf_active "${sim_fo_active:-false}" \
         --argjson sf_orig "${sim_fo_original_slot:-null}" \
         --argjson sf_curr "${sim_fo_current_slot:-null}" \
@@ -2533,14 +2724,16 @@ write_cache_jq() {
                 jitter_ms: $jit, packet_loss_pct: $pkt_loss,
                 ping_target: $ping_tgt, latency_history: $lat_hist,
                 history_interval_sec: $hist_int, history_size: $hist_size,
-                during_recovery: $during_rec, profile: $conn_profile,
+                during_recovery: $during_rec, profile: $conn_sens,
                 thresholds: {latency_ms: $thr_lat, loss_pct: $thr_loss},
                 dns_lookup_ms: $dns_ms,
                 dns_resolver: (if $dns_res == "" then null else $dns_res end),
                 last_family: $conn_last_family,
                 last_outage_s: $lo_s, last_outage_ago_s: $lo_ago,
                 last_outage_wan_ip: (if $lo_ip == "" then null else $lo_ip end),
-                last_outage_wan_changed: $lo_chg
+                last_outage_wan_changed: $lo_chg,
+                sensitivity: $conn_sens, last_leg: $conn_leg,
+                fail_secs: $conn_fail_secs, recover_secs: $conn_rec_secs
             },
             watchcat: {
                 enabled: $wc_enabled, state: $wc_state,
@@ -2550,7 +2743,16 @@ write_cache_jq() {
                 total_recoveries: $wc_total,
                 cooldown_remaining: $wc_cooldown,
                 reboots_this_hour: $wc_reboots,
-                age_sec: $wc_age, stale_after: $wc_stale
+                age_sec: $wc_age, stale_after: $wc_stale,
+                recovery_reason: (if $wc_rec_reason == "" then null else $wc_rec_reason end),
+                step_wait_until: $wc_swu,
+                holdoff_until: $wc_hold_until,
+                holdoff_reason: (if $wc_hold_reason == "" then null else $wc_hold_reason end),
+                reboot_budget_exhausted: $wc_rb_spent,
+                ssr_hold_until: $wc_ssr_until,
+                failback_next_at: $wc_fb_next,
+                ping_stale: $wc_ping_stale,
+                mono: $wc_mono
             },
             sim_failover: {
                 active: $sf_active,
@@ -2830,7 +3032,7 @@ poll_cycle() {
         rm -f "$QUALITY_RELOAD_FLAG"
         # The single alert wait lives in the same UCI section.
         command -v cq_alert_after_min >/dev/null 2>&1 && cq_alert_after_min
-        qlog_info "Reloaded quality thresholds: lat=${QUALITY_LAT_THRESHOLD}ms/${QUALITY_LAT_DEBOUNCE} loss=${QUALITY_LOSS_THRESHOLD}%/${QUALITY_LOSS_DEBOUNCE} wait=${CQ_ALERT_AFTER_MIN:-5}m"
+        qlog_info "Reloaded quality thresholds: lat=${QUALITY_LAT_THRESHOLD}ms/vt=${QUALITY_LAT_VT} loss=${QUALITY_LOSS_THRESHOLD}%/vt=${QUALITY_LOSS_VT} wait=${CQ_ALERT_AFTER_MIN:-5}m"
     fi
 
     # Live reload of adaptive-backoff config when adaptive_polling.sh drops it.
@@ -3024,7 +3226,8 @@ poll_cycle() {
         # tower-lock failover). QCAINFO / CFUN / per-antenna are active/idle-only
         # to minimize AT load while the device is long-unattended. In deep we
         # must NOT run the QCAINFO else-branch — the CA fields keep their
-        # last-known values so write_cache emits them unchanged.
+        # last-known values so write_cache emits them unchanged. The only
+        # exception is ca_deep_read (watchdog carrier trigger on, 5G SA).
         if [ "$ap_tier" != "deep" ]; then
             # Carrier Aggregation — enable, query and disable in one exchange
             # (as QuecManager does): =1 adds the extended NR fields, and leaving
@@ -3043,6 +3246,7 @@ poll_cycle() {
                     _CA_READ_MONO="${_MONO_TOP:-0}"
                     ca_source="at"
                     qmi_ca_cache_update "$t2_carrier_components"
+                    ca_env_publish at
                 elif [ $ca_rc -ne 3 ]; then
                     # Busy (rc 3) keeps the last CA values, like the deep tier.
                     ca_source="at"
@@ -3055,6 +3259,8 @@ poll_cycle() {
                     t2_bandwidth_details=""
                     t2_carrier_components="[]"
                 fi
+            else
+                ca_env_publish qmi
             fi
 
             # CFUN — standalone query (compound commands timeout in CFUN=0).
@@ -3087,6 +3293,9 @@ poll_cycle() {
 
             # Tier 1 (per-antenna signal)
             poll_per_antenna_signal
+        else
+            # Gated exception to "deep = serving cell only": see ca_deep_read.
+            ca_deep_read
         fi
 
         # Tier 1.5 (SoC temperature via sysfs — every 10s in Active; on every

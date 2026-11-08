@@ -90,7 +90,7 @@
       "imei": "IMEI",
       "profiles": "Profili SIM personalizzati",
       "watchdog": "Watchdog di connessione",
-      "quality_thresholds": "Soglie di qualità della connessione",
+      "connection_quality": "Qualità della connessione",
       "sites": "Siti del monitor della latenza",
       "sms_alerts": "Avvisi SMS",
       "alert_routing": "Instradamento degli avvisi",

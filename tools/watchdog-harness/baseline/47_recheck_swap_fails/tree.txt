@@ -2,11 +2,11 @@
 {"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
 
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=1 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=1 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
@@ -21,6 +21,7 @@
 [2026-09-21 14:14:58] WARN  [watchcat:PID] SIM swap attempt 2/2 to slot 1 not verified (slot '2', CFUN '1')
 [2026-09-21 14:14:58] ERROR [watchcat:PID] PRIMARY RECHECK: swap to slot 1 not verified, staying on backup
 [2026-09-21 14:14:58] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2
+[2026-09-21 14:14:58] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 1 of 3
 [2026-09-21 14:15:58] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
 [2026-09-21 14:15:58] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
 [2026-09-21 14:16:02] INFO  [watchcat:PID] Modem responsive after 0s
@@ -29,6 +30,7 @@
 [2026-09-21 14:16:06] WARN  [watchcat:PID] SIM swap attempt 2/2 to slot 1 not verified (slot '2', CFUN '1')
 [2026-09-21 14:16:06] ERROR [watchcat:PID] PRIMARY RECHECK: swap to slot 1 not verified, staying on backup
 [2026-09-21 14:16:06] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2
+[2026-09-21 14:16:06] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 2 of 3
 [2026-09-21 14:17:06] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
 [2026-09-21 14:17:06] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: rechecking primary SIM (slot 1) — temporary swap-back
 [2026-09-21 14:17:10] INFO  [watchcat:PID] Modem responsive after 0s
@@ -37,14 +39,17 @@
 [2026-09-21 14:17:14] WARN  [watchcat:PID] SIM swap attempt 2/2 to slot 1 not verified (slot '2', CFUN '1')
 [2026-09-21 14:17:14] ERROR [watchcat:PID] PRIMARY RECHECK: swap to slot 1 not verified, staying on backup
 [2026-09-21 14:17:14] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2
+[2026-09-21 14:17:14] WARN  [watchcat:PID] PRIMARY RECHECK: 3 failed tries in a row, no more tries until a settings reload or restart
+[2026-09-21 14:17:14] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM rechecks stopped after 3 failed tries
 
 === tmp/qmanager_events.json
-{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000098,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
-{"timestamp":1790000158,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000166,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
-{"timestamp":1790000226,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info"}
-{"timestamp":1790000234,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error"}
+{"timestamp":1790000090,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000098,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
+{"timestamp":1790000158,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000166,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
+{"timestamp":1790000226,"type":"sim_failover","message":"Watchcat: rechecking primary SIM (slot 1) — temporary swap-back","severity":"info","code":"sim_failback"}
+{"timestamp":1790000234,"type":"sim_failover","message":"Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot 2","severity":"error","code":"sim_failback"}
+{"timestamp":1790000234,"type":"sim_failover","message":"Watchcat: primary SIM rechecks stopped after 3 failed tries","severity":"warning","code":"sim_failback_giveup"}
 
 === tmp/qmanager_sim_failover
 {"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}

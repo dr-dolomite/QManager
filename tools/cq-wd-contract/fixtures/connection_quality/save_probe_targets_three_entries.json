@@ -1,0 +1,35 @@
+{
+  "name": "connection_quality/save_probe_targets_three_entries",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_probe",
+    "sensitivity": "relaxed",
+    "targets": [
+      "1.1.1.1",
+      "8.8.8.8",
+      "2606:4700:4700::1111"
+    ]
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "targets"
+    }
+  }
+}

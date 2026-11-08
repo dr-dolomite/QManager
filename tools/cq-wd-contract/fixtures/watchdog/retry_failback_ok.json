@@ -1,0 +1,24 @@
+{
+  "name": "watchdog/retry_failback_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "retry_failback"
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

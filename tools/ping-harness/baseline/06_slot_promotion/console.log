@@ -1,0 +1,8 @@
+slots: 2606:4700:4700::1111 8.8.8.8 1.1.1.1 cloudflare.com
+promoted: rc=0 rtt=21.5 family=ipv4 leg=2
+  slots: 1=skipped(null) 2=ok(21.5) 3=standby(null) 4=standby(null)
+  elapsed < 100 cs: yes
+  probed: 8.8.8.8
+  finished: 8.8.8.8
+  cut short:
+  orphans: 0

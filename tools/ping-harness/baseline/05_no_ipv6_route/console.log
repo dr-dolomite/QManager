@@ -1,0 +1,7 @@
+no v6 route: rc=0 rtt=40.0 family=ipv4 leg=4
+  slots: 1=miss(null) 2=miss(null) 3=skipped(null) 4=ok(40.0)
+  elapsed < 200 cs: yes
+  probed: 1.1.1.1 8.8.8.8 cloudflare.com
+  finished: 1.1.1.1 8.8.8.8 cloudflare.com
+  cut short:
+  orphans: 0

@@ -1,0 +1,5 @@
+=== etc/config/quecmanager
+
+=== var/run/qmanager/ping_fan/r2
+ok 20.0 ipv4
+

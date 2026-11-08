@@ -82,7 +82,7 @@ ONDEMAND_STAMP="$T/run/ondemand.stamp"
 _lift() { # file name
     sed -n "/^$2() {/,/^}/p" "$1"
 }
-for _f in write_cache _json_str _sc_sq _sc_dir_ok write_ping_env write_dns_env; do
+for _f in write_cache write_slots _json_str _sc_sq _sc_dir_ok write_ping_env write_dns_env; do
     _lift "$PING" "$_f" > "$T/f.sh"
     [ -s "$T/f.sh" ] || { echo "cannot lift $_f from $PING"; exit 2; }
     . "$T/f.sh"
@@ -103,6 +103,8 @@ mono_now_set() {
 }
 CACHE_FILE="$T/ping.json"; CACHE_TMP="$T/ping.json.tmp"; SC_DIR="$T/run"
 SC_PING="$T/run/ping.env"; SC_DNS="$T/run/dns.env"; RECOVERY_FLAG="$T/recovery"
+SLOTS_FILE="$T/slots.json"; SLOTS_TMP="$T/slots.json.tmp"
+SS1=ok; SS2=standby; SS3=skipped; SS4=standby; SR1=12.3; SR2=null; SR3=null; SR4=null
 
 for _f in read_dns_data read_ping_data _state_reload read_watchcat_state read_sim_state; do
     _lift "$POLLER" "$_f" > "$T/f.sh"
@@ -126,9 +128,9 @@ dump_cq() {
     _dq_reason="$CQ_STALE_REASON"
     case "$_dq_reason" in "age "*) _dq_reason="age" ;; esac
     printf '%s|' "$CQ_STALE" "$_dq_reason" "$CQ_STALE_THRESHOLD" "$CQ_TIMESTAMP" "$CQ_MONO" \
-        "$CQ_REACHABLE" "$CQ_RTT_MS" "$CQ_STREAK_SUCCESS" "$CQ_STREAK_FAIL" "$CQ_DURING_RECOVERY" \
-        "$CQ_INTERVAL_SEC" "$CQ_PROFILE" "$CQ_LAST_FAMILY" "$CQ_TARGET" "$CQ_FAIL_SECS" "$CQ_RECOVER_SECS" \
-        "$CQ_LAST_TARGET" "$CQ_CYCLE_MS"
+        "$CQ_REACHABLE" "$CQ_RTT_MS" "$CQ_STREAK_SUCCESS" "$CQ_STREAK_FAIL" "$CQ_FAIL_ELAPSED" "$CQ_DURING_RECOVERY" \
+        "$CQ_INTERVAL_SEC" "$CQ_SENSITIVITY" "$CQ_LAST_FAMILY" "$CQ_TARGET" "$CQ_FAIL_SECS" "$CQ_RECOVER_SECS" \
+        "$CQ_LAST_LEG" "$CQ_CYCLE_MS"
 }
 
 # ---------------------------------------------------------------------------
@@ -139,6 +141,7 @@ ping_case() { # name
     local _rc
     write_cache "$RTT"
     check "$1: ping.env written" "yes" "$([ -f "$SC_PING" ] && echo yes || echo no)"
+    check "$1: slots.json shape" "4" "$(command jq -r '.slots | length' "$SLOTS_FILE" 2>/dev/null)"
     conn_state_read; _rc=$?
     _a="rc=$_rc|$(dump_cq)"
     conn_state_read_env; _rc=$?
@@ -146,35 +149,35 @@ ping_case() { # name
     check "$1: env == json" "$_a" "$_b"
 }
 reachable=true; streak_success=5; streak_fail=0; last_family=ipv4
-PING_PROFILE=relaxed; PING_TARGET_IPV4=1.1.1.1; PING_TARGET_IPV6=2606:4700:4700::1111
-PING_INTERVAL=5; PING_FAIL_SECS=15; PING_RECOVER_SECS=10
-last_target=1.1.1.1; cycle_ms=5010; fail_elapsed_sec=0
+PING_SENS=relaxed; PING_T1=1.1.1.1; PING_T2=8.8.8.8; PING_T3=2606:4700:4700::1111; PING_T4=cloudflare.com
+PING_INTERVAL=5; PING_FAIL_SECS=20; PING_RECOVER_SECS=10
+last_leg=1; cycle_ms=5010; fail_elapsed_sec=0
 RTT="34.2"
 ping_case "fresh ipv4"
 
 reachable=false; streak_success=0; streak_fail=4; last_family=none; RTT="null"
-last_target=""; cycle_ms=4200; fail_elapsed_sec=16
+last_leg=0; cycle_ms=4200; fail_elapsed_sec=16
 : > "$RECOVERY_FLAG"
 ping_case "down + recovery"
 rm -f "$RECOVERY_FLAG"
 
 reachable=true; streak_success=1; streak_fail=0; last_family=ipv4; RTT="61.0"
-last_target=8.8.8.8; cycle_ms=2110; fail_elapsed_sec=0
+last_leg=2; cycle_ms=2110; fail_elapsed_sec=0
 ping_case "second provider won"
 
 reachable=true; streak_success=1; streak_fail=0; last_family=ipv6; RTT="120.5"
-last_target=2606:4700:4700::1111; cycle_ms=1000
-PING_PROFILE="o'brien \"x\""; PING_INTERVAL=1; PING_FAIL_SECS=6; PING_RECOVER_SECS=3
-PING_TARGET_IPV4="1.2.3.4"
-ping_case "quote in profile"
+last_leg=3; cycle_ms=1000
+PING_SENS="o'brien \"x\""; PING_INTERVAL=1; PING_FAIL_SECS=8; PING_RECOVER_SECS=3
+PING_T1="1.2.3.4"
+ping_case "quote in sensitivity"
 
-PING_PROFILE=quiet; PING_INTERVAL=10; PING_TARGET_IPV4=""
+PING_SENS=quiet; PING_INTERVAL=10; PING_T1=""
 ping_case "empty target"
-PING_TARGET_IPV4=1.1.1.1
+PING_T1=1.1.1.1
 
 # stale: mono 100 s behind uptime
 MONO_SKEW=100
-PING_INTERVAL=5; PING_FAIL_SECS=15; PING_RECOVER_SECS=10; PING_PROFILE=relaxed
+PING_INTERVAL=5; PING_FAIL_SECS=20; PING_RECOVER_SECS=10; PING_SENS=relaxed
 ping_case "stale mono"
 MONO_SKEW=0
 
@@ -200,14 +203,14 @@ conn_state_read_env; check "missing json -> 2" "2" "$?"
 # read_ping_data end to end: sidecar vs json produce the same conn_* globals
 RTT="41.5"; write_cache "$RTT"
 read_ping_data
-A="$conn_internet_available|$conn_status|$conn_latency|$conn_ping_target|$conn_profile|$conn_last_family|$conn_history_interval|$conn_during_recovery"
+A="$conn_internet_available|$conn_status|$conn_latency|$conn_ping_target|$conn_sensitivity|$conn_last_family|$conn_history_interval|$conn_during_recovery"
 cp "$SC_PING" "$T/ping.env.good"; rm -f "$SC_PING"
 read_ping_data
-B="$conn_internet_available|$conn_status|$conn_latency|$conn_ping_target|$conn_profile|$conn_last_family|$conn_history_interval|$conn_during_recovery"
+B="$conn_internet_available|$conn_status|$conn_latency|$conn_ping_target|$conn_sensitivity|$conn_last_family|$conn_history_interval|$conn_during_recovery"
 check "read_ping_data env == json path" "$B" "$A"
 cp "$T/ping.env.good" "$SC_PING"
 
-# two-column ring: jitter pairs only same-leg neighbours, loss keeps every null
+# two-column ring: jitter pairs only same-slot neighbours, loss keeps every null
 hist_case() { # name expected(min|avg|max|jit|loss|history) lines...
     local _n="$1"
     local _e="$2"
@@ -218,10 +221,27 @@ hist_case() { # name expected(min|avg|max|jit|loss|history) lines...
     read_ping_data
     check "history: $_n" "$_e" "$conn_min_latency|$conn_avg_latency|$conn_max_latency|$conn_jitter|$conn_packet_loss|$conn_history"
 }
-hist_case "one leg" "10.0|20.0|30.0|10.0|0|[10.0,30.0,20.0,20.0]" "10.0 p4" "30.0 p4" "20.0 p4" "20.0 p4"
-hist_case "leg switch is not jitter" "10.0|35.0|60.0|0.0|0|[10.0,10.0,60.0,60.0]" "10.0 p4" "10.0 p4" "60.0 s4" "60.0 s4"
-hist_case "nulls count as loss" "10.0|12.0|14.0|4.0|50|[10.0,null,null,14.0]" "10.0 p4" "null -" "null -" "14.0 p4"
+hist_case "one slot" "10.0|20.0|30.0|10.0|0|[10.0,30.0,20.0,20.0]" "10.0 1" "30.0 1" "20.0 1" "20.0 1"
+hist_case "slot switch is not jitter" "10.0|35.0|60.0|0.0|0|[10.0,10.0,60.0,60.0]" "10.0 1" "10.0 1" "60.0 2" "60.0 2"
+hist_case "nulls count as loss" "10.0|12.0|14.0|4.0|50|[10.0,null,null,14.0]" "10.0 1" "null -" "null -" "14.0 1"
 hist_case "old one-column ring" "10.0|20.0|30.0|10.0|0|[10.0,30.0,20.0,20.0]" "10.0" "30.0" "20.0" "20.0"
+hist_case "immature window: loss and jitter null" "10.0|20.0|30.0|null|null|[10.0,30.0,20.0]" "10.0 1" "30.0 1" "20.0 1"
+hist_case "all lost" "null|null|null|null|100|[null,null,null,null]" "null -" "null -" "null -" "null -"
+# cq_ring_stats downsampling: 150-line ring (regular) -> 50 points of 3 samples,
+# bucket max, null only for a fully lost bucket; newest-aligned.
+: > "$T/hist150"
+_i=0
+while [ "$_i" -lt 150 ]; do
+    if [ "$_i" -ge 141 ]; then echo "null -"; else echo "$(( _i % 7 + 1 )).0 1"; fi
+    _i=$((_i + 1))
+done >> "$T/hist150"
+cq_ring_stats "$T/hist150" 2 150 10
+check "downsample: 50 points of 6 s" "50|6" "$CQ_RS_HIST_SIZE|$CQ_RS_HIST_INTERVAL_SEC"
+case "$CQ_RS_HISTORY" in *,null,null,null]) _ds=yes ;; *) _ds=no ;; esac
+check "downsample: a fully lost bucket is null" "yes" "$_ds"
+{ i=0; while [ "$i" -lt 10 ]; do echo "999.0 1"; i=$((i + 1)); done; cat "$T/hist150"; } > "$T/hist160"
+cq_ring_stats "$T/hist160" 2 150 10
+check "downsample: only the last ring_size lines count" "7.0" "$CQ_RS_MAX"
 PING_HISTORY_RAW="$T/no_history"; PING_MIN_SAMPLES=10
 : > "$FORKS"
 _i=0

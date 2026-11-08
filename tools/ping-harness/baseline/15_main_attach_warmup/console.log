@@ -1,0 +1,6 @@
+attach flag: up
+ring lines: 0
+--- slots.json
+{"mono":M,"slots":[{"state":"miss","rtt_ms":null},{"state":"miss","rtt_ms":null},{"state":"miss","rtt_ms":null},{"state":"miss","rtt_ms":null}]}
+attach flag after stop: absent
+  orphans: 0

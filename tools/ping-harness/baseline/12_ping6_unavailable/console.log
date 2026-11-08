@@ -1,0 +1,8 @@
+ping6=none
+no ping6: rc=0 rtt=20.0 family=ipv4 leg=2
+  slots: 1=miss(null) 2=ok(20.0) 3=skipped(null) 4=miss(null)
+  elapsed < 200 cs: yes
+  probed: 1.1.1.1 8.8.8.8 cloudflare.com
+  finished: 1.1.1.1 8.8.8.8 cloudflare.com
+  cut short:
+  orphans: 0

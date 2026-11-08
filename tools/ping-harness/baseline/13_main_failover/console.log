@@ -1,0 +1,27 @@
+--- ping.json
+{"timestamp":T,"mono":M,"sensitivity":"sensitive","targets":["1.1.1.1","8.8.8.8","2606:4700:4700::1111","cloudflare.com"],"interval_sec":1,"fail_secs":8,"recover_secs":3,"last_rtt_ms":20.0,"reachable":true,"streak_success":3,"streak_fail":0,"fail_elapsed_sec":F,"during_recovery":false,"last_family":"ipv4","last_leg":2,"cycle_ms":C}
+--- ping.env
+_cq_ts='T'
+_cq_mono='M'
+_cq_reach='true'
+_cq_rtt='20.0'
+_cq_ss='3'
+_cq_sf='0'
+_cq_fe='F'
+_cq_dr='false'
+_cq_iv='1'
+_cq_fs='8'
+_cq_rs='3'
+_cq_sens='sensitive'
+_cq_fam='ipv4'
+_cq_tgt='1.1.1.1'
+_cq_leg='2'
+_cq_cyc='C'
+qm_sidecar_end='1'
+--- slots.json
+{"mono":M,"slots":[{"state":"miss","rtt_ms":null},{"state":"ok","rtt_ms":20.0},{"state":"standby","rtt_ms":null},{"state":"standby","rtt_ms":null}]}
+--- ring
+20.0 2
+20.0 2
+20.0 2
+  orphans: 0

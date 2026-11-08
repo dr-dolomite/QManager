@@ -1,0 +1,38 @@
+{
+  "name": "watchdog/save_settings_tier3_off_during_active_failover_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_settings",
+    "tier3_enabled": false
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {
+      "tier3_enabled": true,
+      "backup_sim_slot": 2
+    },
+    "files": {
+      "status": null,
+      "failover": {
+        "active": true,
+        "original_slot": 1,
+        "current_slot": 2,
+        "switched_at": 1730999100,
+        "reason": "outage",
+        "original_iccid": "8901260000000000001",
+        "current_iccid": "8901260000000000002",
+        "confirmed": true,
+        "revert_pending": false
+      }
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

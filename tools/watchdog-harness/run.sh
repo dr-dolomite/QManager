@@ -14,7 +14,9 @@
 #      paths with sed so nothing outside the sandbox is touched. The SAME
 #      rewrite is applied to the monolith and to the split files:
 #        /usr/lib/qmanager/ -> <stage>/lib/     /etc/init.d/ -> <stage>/initd/
-#        /etc/qmanager/ -> <root>/etc/qmanager/ /tmp/ -> <root>/tmp/
+#        /etc/qmanager/ -> <root>/etc/qmanager/ /etc/config/ -> <root>/etc/config/
+#        "/etc/qmanager" (PF_STATE_DIR) -> "<root>/etc/qmanager"
+#        /tmp/ -> <root>/tmp/
 #        /var/run/ -> <root>/var/run/           /proc/uptime -> <root>/proc_uptime
 #   3. puts only BusyBox applets (+ jq) on PATH, like the device;
 #   4. sources the daemon with WATCHCAT_NO_MAIN=1 (inner.sh) and calls main with
@@ -29,7 +31,8 @@
 #   -d DAEMON  daemon file to test (default: scripts/usr/bin/qmanager_watchcat
 #              of this checkout; for the baseline pass the commit-0 monolith:
 #              git show 125b3ce6:scripts/usr/bin/qmanager_watchcat > FILE)
-#   -l LIBDIR  directory holding qlog/safe_tmp/events/sim_db/conn_state.sh and
+#   -l LIBDIR  directory holding qlog/safe_tmp/events/sim_db/conn_state.sh,
+#              qm_platform_cqwd.sh and
 #              any wd_*.sh (default: scripts/usr/lib/qmanager of this checkout)
 # Env: WDH_KEEP=1 keeps the work dirs; JQ=/path/to/jq overrides jq lookup.
 
@@ -109,6 +112,8 @@ run_one() { # scenario name
         sed -e "s#/usr/lib/qmanager/#$stage/lib/#g" \
             -e "s#/etc/init\\.d/#$stage/initd/#g" \
             -e "s#/etc/qmanager/#$root/etc/qmanager/#g" \
+            -e "s#\"/etc/qmanager\"#\"$root/etc/qmanager\"#g" \
+            -e "s#/etc/config/#$root/etc/config/#g" \
             -e "s#/tmp/#$root/tmp/#g" \
             -e "s#/var/run/#$root/var/run/#g" \
             -e "s#/proc/uptime#$root/proc_uptime#g" \
@@ -116,7 +121,7 @@ run_one() { # scenario name
     }
 
     rewrite "$DAEMON" "$stage/qmanager_watchcat"
-    for lib in qlog safe_tmp events sim_db conn_state schedule_guard wd_config wd_state wd_detect wd_ledger wd_tiers wd_sim; do
+    for lib in qlog safe_tmp events sim_db qm_platform_cqwd conn_state schedule_guard wd_config wd_state wd_detect wd_quality wd_carrier wd_ledger wd_tiers wd_sim; do
         [ -f "$LIBDIR/$lib.sh" ] && rewrite "$LIBDIR/$lib.sh" "$stage/lib/$lib.sh"
     done
 
@@ -131,6 +136,11 @@ STUB
 echo "watchcat_init \$*" >> "$out/calls.log"
 STUB
     chmod 755 "$stage/initd/qmanager_watchcat"
+    cat > "$stage/initd/qmanager" <<STUB
+#!/bin/sh
+echo "qmanager_init \$*" >> "$out/calls.log"
+STUB
+    chmod 755 "$stage/initd/qmanager"
     cat > "$stage/lib/profile_mgr.sh" <<STUB
 auto_apply_profile() { echo "auto_apply_profile \$1 \$2" >> "$out/calls.log"; }
 STUB
@@ -140,7 +150,7 @@ STUB
         env -i PATH="$work/bin" \
             H_HARNESS="$HERE" H_ROOT="$root" H_STAGE="$stage" H_STATE="$work/h" \
             H_OUT="$out" H_CLOCK0=1790000000 H_UP0=5000 H_SCENARIO="$scfile" \
-            "$BB" timeout 300 "$BB" sh "$HERE/inner.sh"
+            "$BB" timeout $TMO "$BB" sh "$HERE/inner.sh"
     ) > "$out/console.raw" 2>&1
     echo "$?" > "$out/exit.code"
     # let a backgrounded "( sleep 1; sync; reboot ) &" finish writing calls.log
@@ -153,7 +163,7 @@ STUB
         cd "$root" || exit 1
         find tmp etc var -type f 2>/dev/null | sort | while IFS= read -r f; do
             case "$f" in
-                tmp/qmanager_ping.json|tmp/qmanager_status.json|tmp/qmanager_ping_history) continue ;;
+                tmp/qmanager_ping.json|tmp/qmanager_status.json|tmp/qmanager_ping_history|etc/config/quecmanager) continue ;;
             esac
             echo "=== $f"
             case "$f" in
@@ -182,7 +192,9 @@ cmd_run() {
     done
     [ -f "$DAEMON" ] || die "daemon not found: $DAEMON"
     [ -d "$LIBDIR" ] || die "lib dir not found: $LIBDIR"
-    BB=$(command -v busybox) || die "busybox not found"
+    BB="${WDH_BB:-$(command -v busybox)}"; [ -x "$BB" ] || die "busybox not found"
+    # BusyBox < 1.30 timeout takes -t SECS
+    if "$BB" timeout 5 true 2>/dev/null; then TMO=300; else TMO="-t 300"; fi
     JQBIN=$(find_jq) || die "jq not found (set JQ=/path/to/jq)"
     mkdir -p "$OUTDIR" || die "cannot create $OUTDIR"
     if [ $# -gt 0 ]; then

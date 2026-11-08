@@ -1,0 +1,69 @@
+{
+  "name": "watchdog/get_status_recovery_reason_carrier_passthrough",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": {
+        "timestamp": 1731000000,
+        "state": "recovery",
+        "enabled": true,
+        "current_tier": 1,
+        "recovery_reason": "carrier",
+        "last_recovery_time": 1730999000,
+        "last_recovery_tier": 2,
+        "last_recovery_reason": "carrier",
+        "total_recoveries": 3,
+        "last_success_time": 1730999100,
+        "last_success_tier": 2,
+        "last_success_reason": "carrier",
+        "last_success_took_s": 95,
+        "failure_count": 0,
+        "failure_secs": 0,
+        "cooldown_remaining": 0,
+        "step_wait_until": 5260,
+        "holdoff_until": null,
+        "holdoff_reason": null,
+        "holdoff_carrier_level": 1,
+        "reboots_this_hour": 0,
+        "reboot_budget_exhausted": false,
+        "reboot_rest_reason": null,
+        "ssr_hold": false,
+        "ssr_hold_until": null,
+        "last_ssr_mono": null,
+        "quality_breach_secs": 0,
+        "carrier_single_secs": 900,
+        "carrier_cc": 1,
+        "failback_active": false,
+        "failback_failures": 0,
+        "failback_next_at": null,
+        "sim_failover_active": false,
+        "original_sim_slot": null,
+        "current_sim_slot": null,
+        "ping_stale": false,
+        "mono": 5200,
+        "stale_after": 60
+      },
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".status.state": "str",
+      ".status.recovery_reason": "str|null",
+      ".status.carrier_single_secs": "int",
+      ".status.carrier_cc": "int|null"
+    },
+    "equals": {
+      ".success": true,
+      ".status.state": "recovery",
+      ".status.recovery_reason": "carrier",
+      ".status.carrier_single_secs": 900,
+      ".status.carrier_cc": 1
+    }
+  }
+}

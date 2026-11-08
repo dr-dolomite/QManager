@@ -1,20 +1,13 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% consecutive=10 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=1800s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:10] WARN  [watchcat:PID] QUALITY breach: loss 100% >= 30% (shared)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] QUALITY: breach 1/10 (avg nullms vs 250ms, loss 100% vs 30%)
-[2026-09-21 14:14:20] WARN  [watchcat:PID] QUALITY breach: loss 100% >= 30% (shared)
-[2026-09-21 14:14:20] INFO  [watchcat:PID] QUALITY: breach 2/10 (avg nullms vs 250ms, loss 100% vs 30%)
-[2026-09-21 14:14:30] WARN  [watchcat:PID] QUALITY breach: loss 100% >= 30% (shared)
-[2026-09-21 14:14:30] INFO  [watchcat:PID] QUALITY: breach 3/10 (avg nullms vs 250ms, loss 100% vs 30%)
-[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY breach: loss 100% >= 30% (shared)
-[2026-09-21 14:14:40] INFO  [watchcat:PID] QUALITY: breach 4/10 (avg nullms vs 250ms, loss 100% vs 30%)
+[2026-09-21 14:14:40] WARN  [watchcat:PID] QUALITY: breach started (avg n/a vs 250ms, loss 100% vs 30%), recovery after 1800s
 

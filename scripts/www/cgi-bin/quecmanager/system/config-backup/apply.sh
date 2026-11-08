@@ -65,6 +65,10 @@ if [ "$schema" != "1" ]; then
     exit 0
 fi
 
+# Fold retired section names into their current ones (old .qmbackup files).
+normalized=$(printf '%s' "$BODY" | cfg_backup_normalize 2>/dev/null)
+[ -n "$normalized" ] && BODY="$normalized"
+
 # Validate each section key is known
 keys=$(echo "$BODY" | jq -r '.sections | keys[]' 2>/dev/null)
 for k in $keys; do

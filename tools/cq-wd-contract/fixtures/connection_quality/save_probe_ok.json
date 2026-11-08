@@ -1,0 +1,31 @@
+{
+  "name": "connection_quality/save_probe_ok",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_probe",
+    "sensitivity": "quiet",
+    "targets": [
+      "9.9.9.9",
+      "8.8.4.4",
+      "2001:4860:4860::8888",
+      "example.org"
+    ]
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool"
+    },
+    "equals": {
+      ".success": true
+    }
+  }
+}

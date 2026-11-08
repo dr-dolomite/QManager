@@ -1,0 +1,8 @@
+lower fails: rc=0 rtt=30.0 family=ipv6 leg=3
+  slots: 1=miss(null) 2=miss(null) 3=ok(30.0) 4=standby(null)
+  elapsed < 220 cs: yes
+  elapsed >= 120 cs: yes
+  probed: 1.1.1.1 2606:4700:4700::1111 8.8.8.8 cloudflare.com
+  finished: 1.1.1.1 2606:4700:4700::1111 8.8.8.8
+  cut short: cloudflare.com
+  orphans: 0

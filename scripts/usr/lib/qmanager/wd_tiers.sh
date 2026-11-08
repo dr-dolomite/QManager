@@ -4,13 +4,26 @@
 # =============================================================================
 # Sourced by qmanager_watchcat (never executed). BusyBox ash safe.
 #
-# Owns: current_tier, last_recovery_time, last_recovery_tier, total_recoveries,
-#       cooldown_remaining, cooldown_stale_retries, recovery_reason,
-#       _recovery_marker_emitted, holdoff_until, holdoff_reason
-# Functions: tower_lock_active, wait_for_modem, execute_tier1, execute_tier2,
+# Owns: current_tier, tiers_tried, last_recovery_time, last_recovery_tier,
+#       total_recoveries, cooldown_remaining, step_wait_until,
+#       cooldown_stale_retries, recovery_reason,
+#       _recovery_marker_emitted, wd_hold_out_until, wd_hold_q_until,
+#       wd_hold_q_level, wd_hold_q_end, wd_hold_c_until, wd_hold_c_level,
+#       wd_hold_c_end, holdoff_until, holdoff_reason (derived),
+#       wd_ep_start, last_success_time, last_success_tier, last_success_reason,
+#       last_success_took_s
+#       Uses wd_detect.sh _wd_dec / _wdd (scratch, consumed at once) and
+#       wd_ledger.sh _wd_clock_sane.
+# Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
-#            wd_holdoff_clear, wd_retire_service, execute_tier4, find_next_tier, do_recovery,
-#            _cooldown_handle_failure, wd_cooldown_verdict, finish_cooldown
+#            _wd_holdoff_sync, wd_holdoff_clear, wd_holdoff_reload, wd_holdoff_tick,
+#            _wd_holdoff_tick_carrier,
+#            wd_step_wait_start, wd_step_wait_due, wd_step_wait_extend,
+#            wd_step_wait_clear, wd_retire_service, execute_tier4,
+#            find_next_tier, wd_ladder_pick, _wd_ladder_exhausted, do_recovery,
+#            _cooldown_tier3_revert, _cooldown_handle_failure,
+#            _cooldown_inconclusive, wd_cooldown_verdict, _wd_record_success,
+#            finish_cooldown
 #
 # Tier 3 (execute_tier3) and every SIM-slot swap live in wd_sim.sh;
 # finish_cooldown hands the primary-recheck verdict to wd_sim_finish_recheck.
@@ -20,42 +33,226 @@
 # =============================================================================
 
 # --- State Variables (owned here) --------------------------------------------
+# current_tier is kept after an inconclusive cooldown (spec section 5.4), so the
+# next trigger of the same reason resumes at the tier after it; it returns to 0
+# on success, natural recovery, the hold-off start and every abandoned episode.
 current_tier=0
+tiers_tried=""                  # tiers run in this episode, in order ("1 2"); "" = idle
 last_recovery_time="null"
 last_recovery_tier="null"
 total_recoveries=0
+# The last cooldown verdict that was a success (Amendment 3). In memory only: a
+# daemon start begins at null. A natural recovery and a Tier 4 reboot never set
+# it. last_success_time is null while the wall clock is insane (1970 rule);
+# last_success_took_s runs from the trigger (wd_ep_start, mono) to the verdict
+# and is null when the mono clock was unreadable at either end.
+last_success_time="null"
+last_success_tier="null"
+last_success_reason=""          # "outage" | "quality" | "carrier"; "" = none yet
+last_success_took_s="null"
+wd_ep_start=0                   # mono of the trigger that opened the open ladder; 0 = unknown
+# The step wait (cooldown) runs to the mono deadline step_wait_until (0 = none);
+# cooldown_remaining = max(0, step_wait_until - mono), kept for compatibility.
+step_wait_until=0
 cooldown_remaining=0
 cooldown_stale_retries=0
-recovery_reason="unreachable"   # "unreachable" | "quality" — why current/last recovery fired
+recovery_reason="outage"   # "outage" | "quality" | "carrier" — why current/last recovery fired
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
-holdoff_until=0                 # mono_now at which a new ladder may start; 0 = no pause (HOLDOFF_SECS after an exhausted ladder)
-holdoff_reason=""               # recovery_reason the pause was started under
+# Pauses after an exhausted ladder (spec section 5.5), one per recovery reason.
+# A pause blocks a new ladder of its own reason only (wd_start_gate <reason>).
+wd_hold_out_until=0             # mono end of the outage pause; 0 = none
+wd_hold_q_until=0               # mono end of the quality pause; 0 = none
+wd_hold_q_level=0               # 0-2: step of the last quality pause (15/30/60 min)
+wd_hold_q_end=0                 # mono the last quality pause ended; 0 = none within the reset hour
+# The carrier pause (Amendment 3), stepped like the quality one with its own level.
+wd_hold_c_until=0               # mono end of the carrier pause; 0 = none
+wd_hold_c_level=0               # 0-2: step of the last carrier pause (15/30/60 min)
+wd_hold_c_end=0                 # mono the last carrier pause ended; 0 = none within the reset hour
+# Derived by _wd_holdoff_sync for the state file: the pause that ends last
+# (a tie goes to outage, then quality). Never written anywhere else.
+holdoff_until=0
+holdoff_reason=""
 
-# Ends the pause after an exhausted ladder. The only writer besides _wd_start_holdoff.
-# A pause that followed a quality ladder is not ended by a healthy-looking pass
-# (the link was reachable all along, so one lost probe would end it and the ladder
-# would restart every few minutes): only "force" (a cooldown success) clears it.
-wd_holdoff_clear() {
-    if [ "$1" != "force" ] && [ "$holdoff_reason" = "quality" ]; then
-        return 0
+_wd_holdoff_sync() {
+    holdoff_until="$wd_hold_out_until"
+    holdoff_reason="outage"
+    if [ "$wd_hold_q_until" -gt "$holdoff_until" ]; then
+        holdoff_until="$wd_hold_q_until"
+        holdoff_reason="quality"
     fi
-    holdoff_until=0
-    holdoff_reason=""
+    if [ "$wd_hold_c_until" -gt "$holdoff_until" ]; then
+        holdoff_until="$wd_hold_c_until"
+        holdoff_reason="carrier"
+    fi
+    [ "$holdoff_until" -gt 0 ] || holdoff_reason=""
 }
 
-# Check if tower lock is active (Tier 2 must be skipped)
-tower_lock_active() {
-    [ ! -f "$TOWER_LOCK_CONFIG" ] && return 1
-    local lte_locked
-    local nr_locked
-    lte_locked=$(jq -r '(.lte.enabled) | if . == null then "false" else tostring end' \
-        "$TOWER_LOCK_CONFIG" 2>/dev/null)
-    nr_locked=$(jq -r '(.nr_sa.enabled) | if . == null then "false" else tostring end' \
-        "$TOWER_LOCK_CONFIG" 2>/dev/null)
-    if [ "$lte_locked" = "true" ] || [ "$nr_locked" = "true" ]; then
+# wd_holdoff_clear <outage|quality|carrier>: ends that reason's pause early.
+# Outage: a fresh reachable=true read. Quality: a clean quality window or a
+# quality cooldown success; never reachability (the link is reachable during
+# quality trouble). Carrier: a fresh read of 2 or more carriers or a carrier
+# cooldown success. The quality and carrier levels are kept: they only reset
+# after the quiet hour or a settings reload (wd_holdoff_reload).
+wd_holdoff_clear() {
+    local now
+    if [ "$1" = "carrier" ]; then
+        [ "$wd_hold_c_until" -gt 0 ] || return 0
+        now=$(mono_now)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        if [ "$wd_hold_c_until" -gt "$now" ]; then
+            wd_hold_c_end="$now"
+        else
+            wd_hold_c_end="$wd_hold_c_until"
+        fi
+        wd_hold_c_until=0
+    elif [ "$1" = "quality" ]; then
+        [ "$wd_hold_q_until" -gt 0 ] || return 0
+        now=$(mono_now)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        if [ "$wd_hold_q_until" -gt "$now" ]; then
+            wd_hold_q_end="$now"
+        else
+            wd_hold_q_end="$wd_hold_q_until"
+        fi
+        wd_hold_q_until=0
+    else
+        [ "$wd_hold_out_until" -gt 0 ] || return 0
+        wd_hold_out_until=0
+    fi
+    _wd_holdoff_sync
+}
+
+# Settings reload: ends the quality pause and resets its growth (contract 5.4).
+wd_holdoff_reload() {
+    if [ "$wd_hold_q_until" -gt 0 ] || [ "$wd_hold_q_level" -gt 0 ] || [ "$wd_hold_q_end" -gt 0 ]; then
+        qlog_info "Settings reload: quality pause and its growth reset"
+    fi
+    wd_hold_q_until=0
+    wd_hold_q_level=0
+    wd_hold_q_end=0
+    # The carrier pause and its growth too (Amendment 3 A3.3).
+    if [ "$wd_hold_c_until" -gt 0 ] || [ "$wd_hold_c_level" -gt 0 ] || [ "$wd_hold_c_end" -gt 0 ]; then
+        qlog_info "Settings reload: carrier pause and its growth reset"
+    fi
+    wd_hold_c_until=0
+    wd_hold_c_level=0
+    wd_hold_c_end=0
+    _wd_holdoff_sync
+}
+
+# Once per pass: a quality pause that ran out records its end, and an hour after
+# the last quality pause ended the level drops back to 0. No clock read while
+# there is nothing to age.
+wd_holdoff_tick() {
+    local now
+    _wd_holdoff_tick_carrier
+    [ "$wd_hold_q_until" -gt 0 ] || [ "$wd_hold_q_end" -gt 0 ] || return 0
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$wd_hold_q_until" -gt 0 ] && [ "$wd_hold_q_until" -le "$now" ]; then
+        wd_hold_q_end="$wd_hold_q_until"
+        wd_hold_q_until=0
+        _wd_holdoff_sync
+    fi
+    if [ "$wd_hold_q_until" -eq 0 ] && [ "$wd_hold_q_end" -gt 0 ] && [ $((now - wd_hold_q_end)) -ge "$HOLDOFF_QUALITY_RESET_SECS" ]; then
+        if [ "$wd_hold_q_level" -gt 0 ]; then
+            qlog_info "No quality pause for ${HOLDOFF_QUALITY_RESET_SECS}s: quality pause length back to 15 minutes"
+        fi
+        wd_hold_q_level=0
+        wd_hold_q_end=0
+    fi
+    return 0
+}
+
+# The carrier half of wd_holdoff_tick: the same expiry and quiet-hour reset.
+_wd_holdoff_tick_carrier() {
+    local now
+    [ "$wd_hold_c_until" -gt 0 ] || [ "$wd_hold_c_end" -gt 0 ] || return 0
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$wd_hold_c_until" -gt 0 ] && [ "$wd_hold_c_until" -le "$now" ]; then
+        wd_hold_c_end="$wd_hold_c_until"
+        wd_hold_c_until=0
+        _wd_holdoff_sync
+    fi
+    if [ "$wd_hold_c_until" -eq 0 ] && [ "$wd_hold_c_end" -gt 0 ] && [ $((now - wd_hold_c_end)) -ge "$HOLDOFF_CARRIER_RESET_SECS" ]; then
+        if [ "$wd_hold_c_level" -gt 0 ]; then
+            qlog_info "No carrier pause for ${HOLDOFF_CARRIER_RESET_SECS}s: carrier pause length back to 15 minutes"
+        fi
+        wd_hold_c_level=0
+        wd_hold_c_end=0
+    fi
+    return 0
+}
+
+# --- Step wait (spec sections 5.4 and 5.9) -----------------------------------
+# wd_step_wait_start <secs>: enters the cooldown with the mono deadline
+# step_wait_until = now + secs (callers pass wd_step_wait_secs [floor]).
+wd_step_wait_start() {
+    local secs
+    local now
+    secs="$1"
+    case "$secs" in ''|*[!0-9]*) secs=$(wd_step_wait_secs) ;; esac
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    # mono_now prints 0 on an unreadable clock: no deadline then
+    # (step_wait_until 0), wd_step_wait_due counts passes instead.
+    if [ "$now" -gt 0 ]; then
+        step_wait_until=$((now + secs))
+    else
+        step_wait_until=0
+    fi
+    cooldown_remaining="$secs"
+    cooldown_stale_retries=0
+    state="cooldown"
+}
+
+# One cooldown pass: refreshes cooldown_remaining from the deadline; rc 0 once
+# it is reached. An unreadable clock (mono 0) or no deadline (step_wait_until
+# 0, started on an unreadable clock) falls back to counting passes.
+wd_step_wait_due() {
+    local now
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    case "$step_wait_until" in ''|*[!0-9]*) step_wait_until=0 ;; esac
+    if [ "$now" -eq 0 ] || [ "$step_wait_until" -eq 0 ]; then
+        case "$cooldown_remaining" in ''|*[!0-9]*) cooldown_remaining=0 ;; esac
+        cooldown_remaining=$((cooldown_remaining - CFG_CHECK_INTERVAL))
+        [ "$cooldown_remaining" -gt 0 ] && return 1
+        cooldown_remaining=0
         return 0
     fi
-    return 1
+    if [ "$step_wait_until" -gt "$now" ]; then
+        cooldown_remaining=$((step_wait_until - now))
+        return 1
+    fi
+    cooldown_remaining=0
+    return 0
+}
+
+# A verdict without data: one more pass. The deadline moves by one check
+# interval (from now, when a slow pass is already past it).
+wd_step_wait_extend() {
+    local now
+    local base
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) now=0 ;; esac
+    if [ "$now" -eq 0 ]; then
+        step_wait_until=0
+        cooldown_remaining="$CFG_CHECK_INTERVAL"
+        return 0
+    fi
+    base="$step_wait_until"
+    case "$base" in ''|*[!0-9]*) base=0 ;; esac
+    [ "$now" -gt "$base" ] && base="$now"
+    step_wait_until=$((base + CFG_CHECK_INTERVAL))
+    cooldown_remaining=$((step_wait_until - now))
+}
+
+wd_step_wait_clear() {
+    step_wait_until=0
+    cooldown_remaining=0
+    cooldown_stale_retries=0
 }
 
 # Wait for modem to respond to AT commands after recovery action
@@ -79,7 +276,7 @@ wait_for_modem() {
 
 execute_tier1() {
     qlog_info "TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)"
-    append_event "watchcat_recovery" "Watchcat: re-registering on network (Tier 1)" "warning"
+    append_event "watchcat_recovery" "Watchcat: re-registering on network (Tier 1)" "warning" "wd_tier_start"
 
     touch "$RECOVERY_FLAG"
     qcmd 'AT+COPS=2' >/dev/null 2>&1
@@ -90,19 +287,19 @@ execute_tier1() {
 
 execute_tier2() {
     # Pre-check: tower lock
-    if tower_lock_active; then
+    if plat_tower_locked; then
         qlog_warn "TIER 2 SKIPPED: tower lock active"
         return 1  # signal to skip this tier
     fi
 
     # Pre-check: long-running command
-    if qm_trusted_file "$LONG_RUNNING_FLAG"; then
+    if plat_long_running; then
         qlog_warn "TIER 2 SKIPPED: long-running AT command active"
         return 1
     fi
 
     qlog_info "TIER 2: Toggling radio (AT+CFUN=0/1)"
-    append_event "watchcat_recovery" "Watchcat: toggling radio (Tier 2)" "warning"
+    append_event "watchcat_recovery" "Watchcat: toggling radio (Tier 2)" "warning" "wd_tier_start"
 
     touch "$RECOVERY_FLAG"
 
@@ -152,56 +349,62 @@ _wd_confirm_radio_on() {
 wd_enter_radio_off() {
     qlog_warn "Radio is off (AT+CFUN 0 or 4): holding recovery until it is back on"
     rm -f "$RECOVERY_FLAG"
-    append_event "watchcat_recovery" "Watchcat: radio is off, recovery paused until it is turned back on" "info"
+    append_event "watchcat_recovery" "Watchcat: radio is off, recovery paused until it is turned back on" "info" "wd_radio_paused"
     state="radio_off"
     current_tier=0
+    tiers_tried=""
     failure_counter=0
-    cooldown_remaining=0
-    cooldown_stale_retries=0
-    quality_breach_counter=0
+    wd_step_wait_clear
+    quality_breach_since=0
+    wd_carrier_reset
     _recovery_marker_emitted=""
     ssr_hold_clear
+    wd_outage_clear
 }
 
-# Ends the service the way the UI's "off" does (disable, then stop). procd
-# respawns any exit, whatever the code, and start_service's UCI gate is not
+# The config says disabled (start, reload): end the service the way the UI's
+# "off" does (disable, then stop). Tier 4 never calls it (reboot budget). procd
+# respawns any exit, whatever the code, and start_service's config gate is not
 # consulted on respawn, so a bare exit would be re-run up to 5 times. `stop`
 # deletes the procd instance and TERMs this daemon; the TERM trap runs once the
 # init script returns. Without procd (manual run) `stop` is a no-op and the
 # caller's exit follows.
 wd_retire_service() {
-    /etc/init.d/qmanager_watchcat disable >/dev/null 2>&1
-    /etc/init.d/qmanager_watchcat stop >/dev/null 2>&1
+    svc_disable qmanager_watchcat >/dev/null 2>&1
+    svc_stop qmanager_watchcat >/dev/null 2>&1
+}
+
+# A resting Tier 4 (spent budget or long-run guard) is not an eligible tier:
+# find_next_tier passes over it and the start gate does not count it. Logs the
+# rest and fires the hourly wd_budget_spent event (once per episode).
+_wd_tier4_rest_note() {
+    if [ "$reboot_rest_reason" = "hourly" ]; then
+        qlog_warn "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour), Tier 4 rests"
+        wd_budget_spent_event
+    else
+        qlog_warn "TIER 4: Reboots paused until the link comes back (long outage)"
+    fi
 }
 
 execute_tier4() {
-    # Token bucket check
-    count_recent_reboots
-    if [ "$reboots_this_hour" -ge "$CFG_MAX_REBOOTS_PER_HOUR" ]; then
-        qlog_error "TIER 4: Reboot limit reached (${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR} per hour)"
-        qlog_error "TIER 4: Auto-disabling watchcat"
-        append_event "watchcat_recovery" "Watchcat disabled: reboot limit exceeded (${reboots_this_hour} reboots/hour)" "error"
-
-        # Permanently disable via UCI
-        uci set quecmanager.watchcat.enabled=0
-        uci commit quecmanager 2>/dev/null
-
-        CFG_ENABLED=0
-        state="disabled"
-        touch "$DISABLED_FLAG"
-        write_state
-        rm -f "$RECOVERY_FLAG"
-
-        wd_retire_service
-        exit 0
+    # Reboot budget (wd_ledger.sh, spec section 5.6): a spent budget or the
+    # long-run guard makes Tier 4 rest. It is skipped like a disabled tier
+    # (rc 1); the watchdog stays enabled and Tiers 1-3 keep working. Backstop
+    # for a rest that began after the last per-minute recount: find_next_tier
+    # already passes over a known resting Tier 4.
+    wd_reboot_rest_eval
+    if [ -n "$reboot_rest_reason" ]; then
+        _wd_tier4_rest_note
+        return 1
     fi
 
     qlog_error "TIER 4: System reboot (recovery ${reboots_this_hour}/${CFG_MAX_REBOOTS_PER_HOUR})"
-    append_event "watchcat_recovery" "Watchcat: rebooting system (Tier 4)" "error"
+    append_event "watchcat_recovery" "Watchcat: rebooting system (Tier 4)" "error" "wd_tier4_reboot"
 
     # Log reboot to crash.log (persists across reboots)
     local ts
     ts=$(date +%s)
+    plat_crash_log_prepare
     echo "${ts}|reboot|tier4_escalation" >> "$CRASH_LOG"
 
     # Trim crash.log to last 20 entries
@@ -217,11 +420,12 @@ execute_tier4() {
     last_recovery_time="$ts"
     last_recovery_tier=4
     total_recoveries=$((total_recoveries + 1))
+    tiers_tried="${tiers_tried:+$tiers_tried }4"
     write_state
     rm -f "$RECOVERY_FLAG"
 
     # Reboot after flushing state
-    ( sleep 1; sync; reboot ) &
+    ( sleep 1; plat_reboot ) &
     exit 0
 }
 
@@ -230,21 +434,76 @@ execute_tier4() {
 # =============================================================================
 
 # Find the next enabled tier >= start_tier. Returns 0 if found (sets
-# current_tier), 1 if no tiers left.
+# current_tier), 1 if no tiers left. A quality or carrier ladder stops after
+# Tier 2 (spec D5, Amendment 3): a SIM swap or a reboot is never run for a
+# reachable link.
 find_next_tier() {
     local start="$1"
     local t="$start"
+    local top=4
 
-    while [ "$t" -le 4 ]; do
+    case "$recovery_reason" in quality|carrier) top=2 ;; esac
+    while [ "$t" -le "$top" ]; do
         case "$t" in
             1) [ "$CFG_TIER1_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
             2) [ "$CFG_TIER2_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
             3) [ "$CFG_TIER3_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
-            4) [ "$CFG_TIER4_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
+            4)
+                if [ "$CFG_TIER4_ENABLED" = "1" ]; then
+                    # A resting Tier 4 is not eligible (spec section 5.3); the
+                    # rest is refreshed first, since it may have just ended.
+                    [ -n "$reboot_rest_reason" ] && wd_reboot_rest_eval
+                    [ -z "$reboot_rest_reason" ] && { current_tier="$t"; return 0; }
+                    _wd_tier4_rest_note
+                fi
+                ;;
         esac
         t=$((t + 1))
     done
+    # The ladder ended at Tier 2: say why an enabled Tier 3 was not offered.
+    if [ "$top" -eq 2 ] && [ "$start" -le 3 ] && [ "$CFG_TIER3_ENABLED" = "1" ]; then
+        qlog_warn "TIER 3 SKIPPED: recovery reason is $recovery_reason"
+    fi
     return 1  # no enabled tiers remaining
+}
+
+# wd_ladder_pick <outage|quality|carrier>: the tier a new trigger runs; sets
+# recovery_reason and current_tier. A tier that an inconclusive cooldown of the
+# same reason kept resumes at the next eligible tier (spec section 5.4); a tier
+# picked but not run yet (an SSR hold) runs as it is; anything else, including a
+# tier kept by the other reason, starts a new episode at Tier 1. rc 1: no
+# eligible tier is left (the ladder is exhausted: _wd_ladder_exhausted).
+wd_ladder_pick() {
+    local start
+    start=1
+    if [ "$current_tier" -gt 0 ] && [ "$recovery_reason" = "$1" ]; then
+        if [ "${tiers_tried##* }" = "$current_tier" ]; then
+            start=$((current_tier + 1))
+            qlog_info "Resuming the ladder after the kept Tier $current_tier (reason=$1)"
+        else
+            start="$current_tier"
+        fi
+    else
+        tiers_tried=""
+    fi
+    recovery_reason="$1"
+    # The trigger time of this ladder run; a failed tier's escalation does not
+    # pass through here, so a Tier 2 verdict still counts from the Tier 1 trigger.
+    wd_ep_start=$(mono_now)
+    find_next_tier "$start"
+}
+
+# Every eligible tier has been tried for this episode: pause new ladders of its
+# reason (_wd_start_holdoff) and return to monitor. <message> is the log line.
+_wd_ladder_exhausted() {
+    qlog_error "$1"
+    rm -f "$RECOVERY_FLAG"
+    _wd_start_holdoff
+    state="monitor"
+    current_tier=0
+    tiers_tried=""
+    failure_counter=0
+    _recovery_marker_emitted=""
 }
 
 do_recovery() {
@@ -255,15 +514,17 @@ do_recovery() {
 
     # Emit a single reason-tagged recovery-start marker before the per-tier
     # action events. The per-tier execute_* functions log their own tier-specific
-    # detail; this one carries the TRIGGER REASON (unreachable vs quality) so the
+    # detail; this one carries the TRIGGER REASON (outage vs quality) so the
     # activity feed can distinguish a reachability recovery from a quality one.
     # Suppressed on the recursive skip-to-next-tier path (only fires at entry).
     if [ "$_recovery_marker_emitted" != "$current_tier-$recovery_reason" ]; then
         _recovery_marker_emitted="$current_tier-$recovery_reason"
         if [ "$recovery_reason" = "quality" ]; then
-            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning"
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning" "wd_tier_start"
+        elif [ "$recovery_reason" = "carrier" ]; then
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — stuck on one carrier for $carrier_trigger_min min" "warning" "wd_tier_start"
         else
-            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning"
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning" "wd_tier_start"
         fi
     fi
 
@@ -285,13 +546,7 @@ do_recovery() {
         if find_next_tier $((current_tier + 1)); then
             do_recovery  # recurse with next tier
         else
-            qlog_error "No more enabled tiers — all recovery options exhausted"
-            rm -f "$RECOVERY_FLAG"
-            _wd_start_holdoff
-            state="monitor"
-            current_tier=0
-            failure_counter=0
-            _recovery_marker_emitted=""
+            _wd_ladder_exhausted "No more enabled tiers — all recovery options exhausted"
         fi
         return
     fi
@@ -304,16 +559,20 @@ do_recovery() {
     last_recovery_time="$ts"
     last_recovery_tier="$current_tier"
     total_recoveries=$((total_recoveries + 1))
-    # Tier-3 (SIM failover) needs a longer settle floor: a physical swap is still
-    # attaching well past the generic cooldown, so enforce max(CFG_COOLDOWN, 90)
-    # before finish_cooldown reads the first success ping. cooldown_remaining
-    # carries the longer value so the UI countdown stays honest.
-    if [ "$current_tier" -eq 3 ] && [ "$CFG_COOLDOWN" -lt "$SIM_SETTLE_SECS" ]; then
-        cooldown_remaining="$SIM_SETTLE_SECS"
+    tiers_tried="${tiers_tried:+$tiers_tried }$current_tier"
+    # Effective step wait (wd_step_wait_secs). Tier-3 (SIM failover) holds at
+    # least SIM_SETTLE_SECS: a physical swap is still attaching well past the
+    # generic wait, so the first verdict read would false-fail a good swap.
+    # A quality cooldown waits long enough for a 10-sample window (Amendment 2).
+    if [ "$current_tier" -eq 3 ]; then
+        wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+    elif [ "$recovery_reason" = "quality" ]; then
+        _wd_dec "$wd_ping_interval" 5
+        { [ "$_wdd" -ge 1 ] && [ "$_wdd" -le 60 ]; } || _wdd=5
+        wd_step_wait_start "$(wd_step_wait_secs $((10 * _wdd + 10)))"
     else
-        cooldown_remaining="$CFG_COOLDOWN"
+        wd_step_wait_start "$(wd_step_wait_secs)"
     fi
-    state="cooldown"
     qlog_info "Entering COOLDOWN for ${cooldown_remaining}s (after Tier $current_tier)"
 }
 
@@ -321,16 +580,80 @@ do_recovery() {
 # COOLDOWN COMPLETION
 # =============================================================================
 
-# Every enabled tier has been tried without restoring the connection: pause for
-# HOLDOFF_SECS before a new ladder may start (wd_start_gate returns "holdoff").
-# Natural recovery and any cooldown success reset it to 0.
+# Every enabled tier has been tried without restoring the connection: pause a
+# new ladder of the same reason (wd_start_gate <reason> returns "holdoff").
+# Outage: HOLDOFF_OUTAGE_SECS. Quality: 15/30/60 minutes; the level steps up when
+# the previous quality pause ended less than HOLDOFF_QUALITY_RESET_SECS ago.
+# Carrier: the same steps with its own level (HOLDOFF_CARRIER_*).
 _wd_start_holdoff() {
     local now
+    local secs
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    holdoff_until=$((now + HOLDOFF_SECS))
-    holdoff_reason="$recovery_reason"
-    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing 15 minutes" "error"
+    if [ "$recovery_reason" = "carrier" ]; then
+        # A carrier pause that ended since this pass's tick still counts.
+        _wd_holdoff_tick_carrier
+        if [ "$wd_hold_c_end" -gt 0 ] && [ $((now - wd_hold_c_end)) -lt "$HOLDOFF_CARRIER_RESET_SECS" ]; then
+            [ "$wd_hold_c_level" -lt 2 ] && wd_hold_c_level=$((wd_hold_c_level + 1))
+        else
+            wd_hold_c_level=0
+        fi
+        case "$wd_hold_c_level" in
+            1) secs="$HOLDOFF_CARRIER_SECS_1" ;;
+            2) secs="$HOLDOFF_CARRIER_SECS_2" ;;
+            *) secs="$HOLDOFF_CARRIER_SECS_0" ;;
+        esac
+        wd_hold_c_until=$((now + secs))
+        wd_hold_c_end=0
+    elif [ "$recovery_reason" = "quality" ]; then
+        # A quality pause that ended since this pass's wd_holdoff_tick still
+        # counts as the previous pause, so the level grows instead of resetting.
+        wd_holdoff_tick
+        if [ "$wd_hold_q_end" -gt 0 ] && [ $((now - wd_hold_q_end)) -lt "$HOLDOFF_QUALITY_RESET_SECS" ]; then
+            [ "$wd_hold_q_level" -lt 2 ] && wd_hold_q_level=$((wd_hold_q_level + 1))
+        else
+            wd_hold_q_level=0
+        fi
+        case "$wd_hold_q_level" in
+            1) secs="$HOLDOFF_QUALITY_SECS_1" ;;
+            2) secs="$HOLDOFF_QUALITY_SECS_2" ;;
+            *) secs="$HOLDOFF_QUALITY_SECS_0" ;;
+        esac
+        wd_hold_q_until=$((now + secs))
+        wd_hold_q_end=0
+    else
+        secs="$HOLDOFF_OUTAGE_SECS"
+        wd_hold_out_until=$((now + secs))
+    fi
+    _wd_holdoff_sync
+    append_event "watchcat_recovery" "Watchcat: all recovery steps tried, pausing $((secs / 60)) minutes" "error" "wd_holdoff"
+}
+
+# Swap back from a Tier 3 backup SIM the cooldown did not confirm (the failure
+# and the inconclusive paths). rc 0: nothing to swap back (not Tier 3, or the
+# modem is already on the original slot); rc 1: swapped back, or the unverified
+# swap recorded as the failover it is (the radio gate was read); rc 2: the radio
+# is off, the swap-back is deferred and the daemon parked in radio_off.
+_cooldown_tier3_revert() {
+    [ "$current_tier" -eq 3 ] || return 0
+    [ "$current_sim_slot" != "$original_sim_slot" ] || return 0
+    [ "$original_sim_slot" != "null" ] || return 0
+    # The swap-back cycles the radio (AT+CFUN=0/1): never over a radio the
+    # user turned off. Keep the modem on the backup as a recorded failover and
+    # park in radio_off; wd_sim_on_radio_back swaps back once it is on again.
+    wd_radio_reconcile "$recovery_reason"
+    if [ "$(wd_start_gate "$recovery_reason")" = "radio_off" ]; then
+        qlog_warn "COOLDOWN: radio is off, deferring the swap back to slot $original_sim_slot"
+        wd_sim_defer_revert
+        wd_enter_radio_off
+        return 2
+    fi
+    # A revert that cannot be verified leaves the modem on the backup slot:
+    # record that as the failover it is (wd_sim_adopt_live_slot).
+    sim_failover_fallback || wd_sim_adopt_live_slot
+    # The Tier 3 settle is over: outage age counts from here.
+    wd_resume_mark
+    return 1
 }
 
 # Shared failure path for cooldown — fallback if Tier 3, then escalate.
@@ -340,25 +663,9 @@ _cooldown_handle_failure() {
     # The radio gate was read for the swap-back below, so the escalation does not
     # read it a second time.
     local _ch_gated
-    _ch_gated=0
-
-    # If Tier 3 failed to restore connectivity, fall back to original SIM
-    if [ "$current_tier" -eq 3 ] && [ "$current_sim_slot" != "$original_sim_slot" ] && [ "$original_sim_slot" != "null" ]; then
-        # The swap-back cycles the radio (AT+CFUN=0/1): never over a radio the
-        # user turned off. Keep the modem on the backup as a recorded failover and
-        # park in radio_off; wd_sim_on_radio_back swaps back once it is on again.
-        wd_radio_reconcile
-        _ch_gated=1
-        if [ "$(wd_start_gate)" = "radio_off" ]; then
-            qlog_warn "COOLDOWN: radio is off, deferring the swap back to slot $original_sim_slot"
-            wd_sim_defer_revert
-            wd_enter_radio_off
-            return
-        fi
-        # A revert that cannot be verified leaves the modem on the backup slot:
-        # record that as the failover it is (wd_sim_adopt_live_slot).
-        sim_failover_fallback || wd_sim_adopt_live_slot
-    fi
+    _cooldown_tier3_revert
+    _ch_gated=$?
+    [ "$_ch_gated" -eq 2 ] && return
 
     # Escalate to the next enabled tier. Cooldown already verified the prior tier
     # did NOT restore the link/quality, so recovery must continue immediately.
@@ -372,53 +679,103 @@ _cooldown_handle_failure() {
     if find_next_tier $((current_tier + 1)); then
         # Tier 2 confirms its own radio-on, so AT+CFUN 0/4 here is the user's.
         if [ "$_ch_gated" -eq 0 ]; then
-            wd_radio_reconcile
-            if [ "$(wd_start_gate)" = "radio_off" ]; then
+            wd_radio_reconcile "$recovery_reason"
+            if [ "$(wd_start_gate "$recovery_reason")" = "radio_off" ]; then
                 wd_enter_radio_off
                 return
             fi
         fi
         qlog_info "Escalating to Tier $current_tier (reason=$recovery_reason)"
-        append_event "watchcat_recovery" "Watchcat: recovery escalating to Tier $current_tier — previous tier did not restore the connection" "warning"
+        append_event "watchcat_recovery" "Watchcat: recovery escalating to Tier $current_tier — previous tier did not restore the connection" "warning" "wd_escalate"
         state="recovery"
         do_recovery
     else
-        qlog_error "All recovery tiers exhausted — returning to monitor"
-        _wd_start_holdoff
-        state="monitor"
-        current_tier=0
-        failure_counter=0
-        _recovery_marker_emitted=""
+        _wd_ladder_exhausted "All recovery tiers exhausted — returning to monitor"
     fi
+}
+
+# No verdict after 3 extensions (stale ping, or no quality data): neither a
+# success nor a failure (spec section 5.4). An unconfirmed Tier 3 is swapped
+# back, the daemon returns to monitor and current_tier is KEPT, so the next
+# trigger of this reason resumes at the next tier (wd_ladder_pick) instead of
+# looping Tier 1. tiers_tried is kept with it: the episode is still open.
+_cooldown_inconclusive() {
+    local _ci_rv
+    qlog_warn "COOLDOWN: no verdict for Tier $current_tier after 3 extensions — keeping it, the next trigger resumes at the next tier"
+    _cooldown_tier3_revert
+    _ci_rv=$?
+    [ "$_ci_rv" -eq 2 ] && return
+    state="monitor"
+    failure_counter=0
+    _recovery_marker_emitted=""
 }
 
 # Pure verdict for a finished cooldown (no I/O, no globals):
 #   wd_cooldown_verdict <reason> <ping_ok 0|1> <reachable> <q_state 0|1|2> <stale_retries>
-#   reason         "quality" or anything else (= reachability)
+#   reason         "quality", "carrier" or anything else (= reachability)
 #   ping_ok        1 when read_ping returned fresh data this pass
-#   reachable      true | false | null (only read when ping_ok = 1)
-#   q_state        0 quality good, 1 breached, 2 no data (only read for "quality")
+#   reachable      true | false | null (only read when ping_ok = 1; quality
+#                  success needs true as well as a clean window)
+#   q_state        quality: 0 good, 1 breached, 2 no data; carrier: 0 two or
+#                  more carriers, 1 one, 2 unknown (unused for reachability)
 #   stale_retries  extensions already spent (cap 3)
-# Prints success | extend | fail. "no data" (stale ping or too few samples) is
-# extended up to 3 times, then counts as a failed recovery.
+# Prints success | extend | fail | inconclusive, and for carrier also handover
+# (reachable=false: the outage trigger takes over on its own rules). "No data"
+# (stale ping, too few samples, an unknown carrier count, or carrier with
+# reachable=null) is extended up to 3 times, then the verdict is inconclusive.
 wd_cooldown_verdict() {
     local retries
     retries="$5"
     case "$retries" in ''|*[!0-9]*) retries=3 ;; esac
     if [ "$2" != "1" ]; then
-        if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'fail'; fi
+        if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'inconclusive'; fi
+        return 0
+    fi
+    if [ "$1" = "carrier" ]; then
+        if [ "$3" = "false" ]; then
+            printf 'handover'
+        elif [ "$3" = "true" ] && [ "$4" = "0" ]; then
+            printf 'success'
+        elif [ "$3" = "true" ] && [ "$4" = "1" ]; then
+            printf 'fail'
+        elif [ "$retries" -lt 3 ]; then
+            printf 'extend'
+        else
+            printf 'inconclusive'
+        fi
         return 0
     fi
     if [ "$1" = "quality" ]; then
+        # Success = reachable and the window clean (spec section 5.4).
         case "$4" in
-            0) printf 'success' ;;
+            0) if [ "$3" = "true" ]; then printf 'success'; else printf 'fail'; fi ;;
             1) printf 'fail' ;;
-            *) if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'fail'; fi ;;
+            *) if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'inconclusive'; fi ;;
         esac
         return 0
     fi
     if [ "$3" = "true" ]; then printf 'success'; else printf 'fail'; fi
     return 0
+}
+
+# Records a cooldown verdict that was a success (the place that logs wd_succeeded);
+# reads current_tier, recovery_reason and wd_ep_start. Called before the episode
+# globals are reset.
+_wd_record_success() {
+    local now_m
+    _wd_dec "$(mono_now)" 0
+    now_m="$_wdd"
+    last_success_tier="$current_tier"
+    last_success_reason="$recovery_reason"
+    last_success_took_s="null"
+    _wd_dec "$wd_ep_start" 0
+    if [ "$now_m" -gt 0 ] && [ "$_wdd" -gt 0 ] && [ "$now_m" -ge "$_wdd" ]; then
+        last_success_took_s=$((now_m - _wdd))
+    fi
+    last_success_time="null"
+    if _wd_clock_sane; then
+        last_success_time=$(date +%s)
+    fi
 }
 
 finish_cooldown() {
@@ -429,6 +786,7 @@ finish_cooldown() {
     # health read whether primary is good (failback) or still bad (return to
     # backup). Must run BEFORE the revert/reason-aware arms.
     if [ "$primary_recheck_active" = "true" ]; then
+        wd_step_wait_clear
         wd_sim_finish_recheck
         return
     fi
@@ -440,12 +798,20 @@ finish_cooldown() {
     if [ "$revert_settle_active" = "true" ]; then
         revert_settle_active="false"
         qlog_info "Post-revert SIM settle complete — resuming monitoring"
+        wd_resume_mark
+        wd_step_wait_clear
         state="monitor"
         current_tier=0
+        tiers_tried=""
         failure_counter=0
-        cooldown_stale_retries=0
-        quality_breach_counter=0
+        quality_breach_since=0
         _recovery_marker_emitted=""
+        return
+    fi
+
+    # --- Carrier verdict (Amendment 3 A3.3, wd_carrier.sh) ---
+    if [ "$recovery_reason" = "carrier" ]; then
+        wd_carrier_finish
         return
     fi
 
@@ -461,6 +827,8 @@ finish_cooldown() {
         local qs=2
         if read_ping; then
             pok=1
+            # The cooldown's fresh read refreshes failure_secs / offline_secs too.
+            wd_outage_update
             if read_quality; then
                 if quality_breached; then
                     qs=1
@@ -474,56 +842,65 @@ finish_cooldown() {
             extend)
                 cooldown_stale_retries=$((cooldown_stale_retries + 1))
                 qlog_warn "COOLDOWN(quality): quality data not ready (retry $cooldown_stale_retries/3) — extending by ${CFG_CHECK_INTERVAL}s"
-                cooldown_remaining="$CFG_CHECK_INTERVAL"
+                wd_step_wait_extend
                 touch "$RECOVERY_FLAG"   # keep events suppressed during extension
                 return
                 ;;
             success)
-                cooldown_stale_retries=0
+                wd_step_wait_clear
                 qlog_info "COOLDOWN(quality) complete: quality RESTORED after Tier $current_tier"
-                append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info"
+                append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info" "wd_succeeded"
+                _wd_record_success
                 # A quality-triggered Tier-3 swap finalizes exactly like reachability —
                 # otherwise the modem strands on backup with no failover state / revert
                 # path. No-op for non-Tier-3 quality recoveries.
                 finalize_sim_failover
                 state="monitor"
                 current_tier=0
+                tiers_tried=""
                 failure_counter=0
-                quality_breach_counter=0
-                wd_holdoff_clear force
+                quality_breach_since=0
+                wd_holdoff_clear quality
                 _recovery_marker_emitted=""
                 return
                 ;;
+            inconclusive)
+                wd_step_wait_clear
+                qlog_error "COOLDOWN(quality): quality data still not ready after 3 retries — no verdict"
+                _cooldown_inconclusive
+                return
+                ;;
             *)
-                cooldown_stale_retries=0
-                if [ "$qs" -eq 2 ]; then
-                    qlog_error "COOLDOWN(quality): quality data still not ready after 3 retries — treating as recovery failure"
-                else
-                    qlog_warn "COOLDOWN(quality) complete: quality STILL degraded after Tier $current_tier"
-                fi
+                wd_step_wait_clear
+                qlog_warn "COOLDOWN(quality) complete: quality STILL degraded after Tier $current_tier"
                 _cooldown_handle_failure
                 return
                 ;;
         esac
     fi
 
-    # --- Reachability path (recovery_reason="unreachable") ---
+    # --- Reachability path (recovery_reason="outage") ---
     # Try to read fresh ping data
     local rok=0
-    read_ping && rok=1
+    if read_ping; then
+        rok=1
+        # The cooldown's fresh read refreshes failure_secs / offline_secs too.
+        wd_outage_update
+    fi
 
-    case "$(wd_cooldown_verdict unreachable "$rok" "$ping_reachable" 2 "$cooldown_stale_retries")" in
+    case "$(wd_cooldown_verdict outage "$rok" "$ping_reachable" 2 "$cooldown_stale_retries")" in
         extend)
             cooldown_stale_retries=$((cooldown_stale_retries + 1))
             qlog_warn "COOLDOWN: ping data stale (retry $cooldown_stale_retries/3) — extending by ${CFG_CHECK_INTERVAL}s"
-            cooldown_remaining="$CFG_CHECK_INTERVAL"
+            wd_step_wait_extend
             touch "$RECOVERY_FLAG"   # keep events suppressed during extension
             return
             ;;
         success)
-            cooldown_stale_retries=0
+            wd_step_wait_clear
             qlog_info "COOLDOWN complete: connectivity RESTORED after Tier $current_tier"
-            append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info"
+            append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info" "wd_succeeded"
+            _wd_record_success
 
             # If this was Tier 3 SIM failover, finalize the failover state (no-op
             # otherwise). Shared with the quality success arm.
@@ -532,19 +909,22 @@ finish_cooldown() {
             # Reset — connectivity recovered
             state="monitor"
             current_tier=0
+            tiers_tried=""
             failure_counter=0
-            quality_breach_counter=0
-            wd_holdoff_clear force
+            quality_breach_since=0
+            wd_holdoff_clear outage
             _recovery_marker_emitted=""
             return
             ;;
+        inconclusive)
+            wd_step_wait_clear
+            qlog_error "COOLDOWN: ping data still stale after 3 retries — no verdict"
+            _cooldown_inconclusive
+            return
+            ;;
         *)
-            cooldown_stale_retries=0
-            if [ "$rok" -eq 0 ]; then
-                qlog_error "COOLDOWN: ping data still stale after 3 retries — treating as recovery failure"
-            else
-                qlog_warn "COOLDOWN complete: connectivity NOT restored after Tier $current_tier"
-            fi
+            wd_step_wait_clear
+            qlog_warn "COOLDOWN complete: connectivity NOT restored after Tier $current_tier"
             _cooldown_handle_failure
             return
             ;;

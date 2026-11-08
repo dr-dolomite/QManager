@@ -1,0 +1,27 @@
+{
+  "name": "watchdog/get_carrier_stored_out_of_range_clamps",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {
+      "carrier_enabled": true,
+      "carrier_after_min": 900
+    },
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".settings.carrier_after_min": "int"
+    },
+    "equals": {
+      ".success": true,
+      ".settings.carrier_after_min": 240
+    }
+  }
+}

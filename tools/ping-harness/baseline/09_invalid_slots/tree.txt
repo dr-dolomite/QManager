@@ -1,0 +1,7 @@
+=== etc/config/quecmanager
+
+=== tmp/qmanager.log
+[TS] WARN  [ping:PID] target slot 2 rejected (empty, bad charset or length), using its default
+[TS] WARN  [ping:PID] target slot 3 rejected (empty, bad charset or length), using its default
+[TS] WARN  [ping:PID] target slot 1 rejected (empty, bad charset or length), using its default
+

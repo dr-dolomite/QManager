@@ -1,0 +1,42 @@
+--- pass 1 ---
+--- pass 2 ---
+--- pass 3 ---
+--- pass 4 ---
+--- pass 5 ---
+--- pass 6 ---
+T+390 AT+CFUN?
+T+390 AT+COPS=2
+T+392 AT+COPS=0
+--- pass 7 ---
+T+452 AT+CFUN?
+T+452 AT+CFUN=0
+T+455 AT+CFUN=1
+T+455 AT
+T+455 AT+CFUN?
+--- pass 8 ---
+--- pass 9 ---
+--- pass 10 ---
+--- pass 11 ---
+--- pass 12 ---
+--- pass 13 ---
+--- pass 14 ---
+--- pass 15 ---
+--- pass 16 ---
+--- pass 17 ---
+--- pass 18 ---
+--- pass 19 ---
+--- pass 20 ---
+T+1235 AT+CFUN?
+T+1235 AT+COPS=2
+T+1237 AT+COPS=0
+--- pass 21 ---
+T+1297 AT+CFUN?
+T+1297 AT+CFUN=0
+T+1300 AT+CFUN=1
+T+1300 AT
+T+1300 AT+CFUN?
+--- pass 22 ---
+--- pass 23 ---
+--- pass 24 ---
+--- pass 25 ---
+--- pass 26 ---

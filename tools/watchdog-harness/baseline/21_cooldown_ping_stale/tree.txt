@@ -1,17 +1,17 @@
 === tmp/qmanager.log
-[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s fail_threshold=3 probes cooldown=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% consecutive=3 (shared thresholds)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
 [2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
-[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (threshold=3)
-[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: streak_fail=4 >= 3
-[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=unreachable)
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
 [2026-09-21 14:14:10] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
 [2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
@@ -23,24 +23,27 @@
 [2026-09-21 14:15:02] WARN  [watchcat:PID] Ping data stale (age 50s > 15s), skipping cycle
 [2026-09-21 14:15:02] WARN  [watchcat:PID] COOLDOWN: ping data stale (retry 3/3) — extending by 10s
 [2026-09-21 14:15:12] WARN  [watchcat:PID] Ping data stale (age 60s > 15s), skipping cycle
-[2026-09-21 14:15:12] ERROR [watchcat:PID] COOLDOWN: ping data still stale after 3 retries — treating as recovery failure
-[2026-09-21 14:15:12] WARN  [watchcat:PID] COOLDOWN failure path entered for Tier 1
-[2026-09-21 14:15:12] INFO  [watchcat:PID] Escalating to Tier 2 (reason=unreachable)
-[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection
-[2026-09-21 14:15:12] INFO  [watchcat:PID] RECOVERY: Executing Tier 2 (reason=unreachable)
-[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 2) — internet unreachable
-[2026-09-21 14:15:12] INFO  [watchcat:PID] TIER 2: Toggling radio (AT+CFUN=0/1)
-[2026-09-21 14:15:12] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: toggling radio (Tier 2)
-[2026-09-21 14:15:15] INFO  [watchcat:PID] Modem responsive after 0s
-[2026-09-21 14:15:15] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 2)
-[2026-09-21 14:15:45] INFO  [watchcat:PID] COOLDOWN complete: connectivity RESTORED after Tier 2
-[2026-09-21 14:15:45] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 2) — internet connectivity restored
+[2026-09-21 14:15:12] ERROR [watchcat:PID] COOLDOWN: ping data still stale after 3 retries — no verdict
+[2026-09-21 14:15:12] WARN  [watchcat:PID] COOLDOWN: no verdict for Tier 1 after 3 extensions — keeping it, the next trigger resumes at the next tier
+[2026-09-21 14:15:22] WARN  [watchcat:PID] Ping data stale (age 70s > 15s), skipping cycle
+[2026-09-21 14:15:32] WARN  [watchcat:PID] Ping data stale (age 80s > 15s), skipping cycle
+[2026-09-21 14:15:42] WARN  [watchcat:PID] Ping data stale (age 90s > 15s), skipping cycle
+[2026-09-21 14:15:52] WARN  [watchcat:PID] Ping data stale (age 100s > 15s), skipping cycle
+[2026-09-21 14:16:02] WARN  [watchcat:PID] Ping data stale (age 110s > 15s), skipping cycle
+[2026-09-21 14:16:12] WARN  [watchcat:PID] Ping data stale (age 120s > 15s), skipping cycle
+[2026-09-21 14:16:22] WARN  [watchcat:PID] Ping data stale (age 130s > 15s), skipping cycle
+[2026-09-21 14:16:32] WARN  [watchcat:PID] Ping data stale (age 140s > 15s), skipping cycle
+[2026-09-21 14:16:42] WARN  [watchcat:PID] Ping data stale (age 150s > 15s), skipping cycle
+[2026-09-21 14:16:52] WARN  [watchcat:PID] Ping data stale (age 160s > 15s), skipping cycle
+[2026-09-21 14:17:02] WARN  [watchcat:PID] Ping data stale (age 170s > 15s), skipping cycle
+[2026-09-21 14:17:12] WARN  [watchcat:PID] Ping data stale (age 180s > 15s), skipping cycle
+[2026-09-21 14:17:22] WARN  [watchcat:PID] Ping data stale (age 190s > 15s), skipping cycle
+[2026-09-21 14:17:32] WARN  [watchcat:PID] Ping data stale (age 200s > 15s), skipping cycle
+[2026-09-21 14:17:42] WARN  [watchcat:PID] Ping data stale (age 210s > 15s), skipping cycle
+[2026-09-21 14:17:52] WARN  [watchcat:PID] Ping data stale (age 220s > 15s), skipping cycle
+[2026-09-21 14:18:02] WARN  [watchcat:PID] Ping data stale (age 230s > 15s), skipping cycle
 
 === tmp/qmanager_events.json
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning"}
-{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning"}
-{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: recovery escalating to Tier 2 — previous tier did not restore the connection","severity":"warning"}
-{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 2) — internet unreachable","severity":"warning"}
-{"timestamp":1790000112,"type":"watchcat_recovery","message":"Watchcat: toggling radio (Tier 2)","severity":"warning"}
-{"timestamp":1790000145,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 2) — internet connectivity restored","severity":"info"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
 

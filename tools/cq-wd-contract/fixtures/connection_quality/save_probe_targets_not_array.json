@@ -1,0 +1,31 @@
+{
+  "name": "connection_quality/save_probe_targets_not_array",
+  "method": "POST",
+  "query": "",
+  "body": {
+    "action": "save_probe",
+    "sensitivity": "relaxed",
+    "targets": "1.1.1.1"
+  },
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str",
+      ".field": "str",
+      ".detail": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "invalid_field",
+      ".field": "targets"
+    }
+  }
+}

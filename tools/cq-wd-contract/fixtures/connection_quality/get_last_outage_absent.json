@@ -1,0 +1,24 @@
+{
+  "name": "connection_quality/get_last_outage_absent",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".last_outage": "null"
+    },
+    "equals": {
+      ".success": true,
+      ".last_outage": null
+    }
+  }
+}

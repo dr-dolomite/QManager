@@ -7,6 +7,7 @@
 # Owns: sim_failover_active, original_sim_slot, original_sim_iccid,
 #       current_sim_slot, revert_settle_active, primary_recheck_active,
 #       recheck_return_slot, recheck_interrupted, last_recheck_time,
+#       failback_failures, failback_retry_at, WD_FB_NEXT_AT, WD_FAILBACK_MAX_FAILS,
 #       wd_sim_revert_pending
 # Functions: wd_read_slot, wd_swap_slot, wd_failover_save, wd_failover_clear,
 #            _wd_failover_json, _wd_failover_del, wd_sim_adopt_live_slot,
@@ -14,11 +15,13 @@
 #            finalize_sim_failover, initiate_primary_recheck,
 #            _wd_sim_revert_run, check_revert_request, wd_sim_on_radio_back,
 #            wd_sim_finish_recheck, wd_sim_resume_at_start,
-#            wd_sim_resume_retry, wd_sim_on_unlock
+#            wd_sim_resume_retry, wd_sim_on_unlock, _wd_failback_arm,
+#            _wd_failback_fail, wd_failback_due, wd_failback_next_at,
+#            wd_failback_retry_tick, wd_failback_reload
 #
-# The failover record lives in two places: /tmp (fast, what the poller reads)
-# and /etc/qmanager (flash, survives a reboot). Only wd_failover_save and
-# wd_failover_clear write or remove them.
+# The failover record lives in two places: PF_FAILOVER_MIRROR (fast, what the
+# poller reads) and PF_FAILOVER_RECORD (flash, survives a reboot). Only
+# wd_failover_save and wd_failover_clear write or remove them.
 #
 # Every SIM slot change goes through wd_swap_slot, which proves the swap by
 # reading the slot back: AT+QUIMSLOT= can return OK and change nothing.
@@ -26,8 +29,8 @@
 # The wd_sim_* functions are verbatim blocks lifted out of finish_cooldown
 # (wd_tiers.sh) and main() (qmanager_watchcat) so every SIM-failover path lives
 # in this file; each is called from the spot it came from. They also write
-# globals owned by other libs (state, cooldown_remaining, recovery_reason,
-# current_tier, ...), as the originals did. Function definitions and global
+# globals owned by other libs (state, the step wait, recovery_reason,
+# current_tier, tiers_tried, ...), as the originals did. Function definitions and global
 # initialisers only. The last line sets WD_SIM_LOADED.
 # =============================================================================
 
@@ -44,16 +47,112 @@ last_recheck_time=0             # mono_now of the last failover finalize / reche
                                 # (monotonic: a boot-time clock step must not make a recheck due at once)
 
 # Flags shared with the poller (qmanager_poller) and cellular/settings.sh.
-WD_SIM_SWITCH_FLAG="/tmp/qmanager_sim_switch_active"       # poller pauses AT while present
-WD_FORCE_TIER2_FLAG="/tmp/qmanager_force_tier2"
-WD_REFRESH_POLICY_FLAG="/tmp/qmanager_refresh_policy_band"
+WD_SIM_SWITCH_FLAG="$PF_SIM_SWITCH_FLAG"      # poller pauses AT while present
+WD_FORCE_TIER2_FLAG="$PF_FORCE_TIER2_FLAG"
+WD_REFRESH_POLICY_FLAG="$PF_REFRESH_POLICY_FLAG"
 WD_SWAP_NOOP="false"            # "true" when the last wd_swap_slot found the target already live
 WD_SWAP_FLAG_OWNED=0            # 1 while this daemon holds $WD_SIM_SWITCH_FLAG (exit cleanup removes it)
 wd_sim_revert_pending="false"   # "true": a Tier 3 swap-back was deferred because the user turned the radio off
 WD_RESUME_RETRY_SECS=60         # spacing of wd_sim_resume_retry attempts
 _wd_resume_next=0               # mono_now of the next resume retry; 0 = not armed yet
-SIM_FAILOVER_DURABLE="/etc/qmanager/sim_failover.json"   # flash copy of $SIM_FAILOVER_FILE
+SIM_FAILOVER_DURABLE="$PF_FAILOVER_RECORD"  # flash copy of $SIM_FAILOVER_FILE
 WD_ADOPT_SLOT=""                # live slot digit the last wd_sim_adopt_live_slot read; "" = unreadable / not read
+failback_failures=0             # consecutive failed failback tries, 0-3; 3 = given up until a reload or a restart
+                                # (in memory only: a restart starts at 0, nothing is written to flash)
+failback_retry_at=0             # mono_now when retry_failback was accepted; > 0 = a try is due at once
+WD_FB_NEXT_AT=""                # mono of the next failback try, "" = none (wd_failback_next_at)
+WD_FAILBACK_MAX_FAILS=3         # failed tries before the daemon gives up
+
+# Restart the failback clock: the next try is one full failback_every_min away,
+# and a pending retry request is spent.
+_wd_failback_arm() {
+    last_recheck_time=$(mono_now)
+    failback_retry_at=0
+}
+
+# A failback try ended on the backup slot (the primary was still unhealthy or the
+# swap was not verified): count it. The third consecutive failure stops the
+# tries and logs one event; a reload, a retry_failback request or a restart
+# clears it.
+_wd_failback_fail() {
+    failback_failures=$((failback_failures + 1))
+    if [ "$failback_failures" -ge "$WD_FAILBACK_MAX_FAILS" ]; then
+        failback_failures="$WD_FAILBACK_MAX_FAILS"
+        qlog_warn "PRIMARY RECHECK: $WD_FAILBACK_MAX_FAILS failed tries in a row, no more tries until a settings reload or restart"
+        append_event "sim_failover" "Watchcat: primary SIM rechecks stopped after 3 failed tries" "warning" "sim_failback_giveup"
+    else
+        qlog_info "PRIMARY RECHECK: failed try $failback_failures of $WD_FAILBACK_MAX_FAILS"
+    fi
+}
+
+# rc 0 when a failback try is due now: failback enabled, a failover active, not
+# given up, and either a retry request is pending or a full failback_every_min
+# has passed since the failback clock was armed.
+wd_failback_due() {
+    local _fd_now
+    # A retry request does not outlive a disable: re-enabling waits a full interval.
+    if [ "$CFG_FAILBACK_ENABLED" != "1" ]; then
+        failback_retry_at=0
+        return 1
+    fi
+    [ "$sim_failover_active" = "true" ] || return 1
+    [ "$failback_failures" -lt "$WD_FAILBACK_MAX_FAILS" ] || return 1
+    [ "$failback_retry_at" -gt 0 ] && return 0
+    _fd_now=$(mono_now)
+    case "$_fd_now" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$_fd_now" -ge $((last_recheck_time + CFG_FAILBACK_EVERY_MIN * 60)) ]
+}
+
+# Sets WD_FB_NEXT_AT to the mono time of the next failback try, "" when there is
+# none (disabled, no failover, or given up). A pending retry request counts as
+# the moment it was accepted: the try runs at the next idle pass.
+wd_failback_next_at() {
+    WD_FB_NEXT_AT=""
+    [ "$CFG_FAILBACK_ENABLED" = "1" ] || return 0
+    [ "$sim_failover_active" = "true" ] || return 0
+    [ "$failback_failures" -lt "$WD_FAILBACK_MAX_FAILS" ] || return 0
+    if [ "$failback_retry_at" -gt 0 ]; then
+        WD_FB_NEXT_AT="$failback_retry_at"
+    else
+        WD_FB_NEXT_AT=$((last_recheck_time + CFG_FAILBACK_EVERY_MIN * 60))
+    fi
+}
+
+# Consumes the retry flag the CGI raises (POST retry_failback; PF_FAILBACK_RETRY_FLAG).
+# Root-owned only, like the revert flag: a planted flag would make the daemon
+# cut the link for a recheck. With a failover active and failback enabled the
+# failure count restarts and the next try is due at once; otherwise the flag is
+# just removed.
+wd_failback_retry_tick() {
+    local _rt_now
+    [ -n "$PF_FAILBACK_RETRY_FLAG" ] || return 0
+    [ -e "$PF_FAILBACK_RETRY_FLAG" ] || [ -L "$PF_FAILBACK_RETRY_FLAG" ] || return 0
+    if ! qm_trusted_file "$PF_FAILBACK_RETRY_FLAG"; then
+        qlog_warn "Ignoring untrusted failback retry flag (not root-owned)"
+        rm -f "$PF_FAILBACK_RETRY_FLAG"
+        return 0
+    fi
+    rm -f "$PF_FAILBACK_RETRY_FLAG"
+    if [ "$CFG_FAILBACK_ENABLED" = "1" ] && [ "$sim_failover_active" = "true" ]; then
+        _rt_now=$(mono_now)
+        case "$_rt_now" in ''|*[!0-9]*|0) _rt_now=1 ;; esac
+        failback_failures=0
+        failback_retry_at="$_rt_now"
+        qlog_info "PRIMARY RECHECK: retry requested, next try at once"
+    else
+        qlog_info "PRIMARY RECHECK: retry requested but no failback is possible (failover or failback off), ignored"
+    fi
+    return 0
+}
+
+# A settings reload ends a give-up. The tries restart one full interval later,
+# not at once: a settings save must not cut the link by surprise.
+wd_failback_reload() {
+    [ "$failback_failures" -ge "$WD_FAILBACK_MAX_FAILS" ] || return 0
+    failback_failures=0
+    _wd_failback_arm
+    qlog_info "PRIMARY RECHECK: settings reloaded, failback tries resume"
+}
 
 # Persist the failover record (one JSON line) to /tmp and to flash. Flash is
 # written only here, at finalize and at a recheck return (rare). Refuses an
@@ -248,10 +347,20 @@ wd_swap_slot() {
     return "$_sw_ok"
 }
 
+# Skip reasons (spec section 5.4): no backup slot configured, the current slot
+# unreadable, already on the backup slot, and a quality reason (find_next_tier
+# never offers Tier 3 to a quality ladder and logs that skip). Each skip logs one
+# line naming the reason and returns 1: the ladder moves on to the next tier at once.
 execute_tier3() {
     # Pre-check: backup SIM configured
     if [ -z "$CFG_BACKUP_SIM_SLOT" ]; then
         qlog_warn "TIER 3 SKIPPED: no backup SIM slot configured"
+        return 1
+    fi
+
+    # A failover is already running: the modem is on the backup SIM.
+    if [ "$sim_failover_active" = "true" ]; then
+        qlog_warn "TIER 3 SKIPPED: already on the backup SIM (failover active, slot $current_sim_slot)"
         return 1
     fi
 
@@ -260,17 +369,17 @@ execute_tier3() {
     current_slot=$(wd_read_slot)
 
     if [ -z "$current_slot" ]; then
-        qlog_error "TIER 3: Cannot read current SIM slot"
+        qlog_warn "TIER 3 SKIPPED: current SIM slot unreadable"
         return 1
     fi
 
     if [ "$CFG_BACKUP_SIM_SLOT" = "$current_slot" ]; then
-        qlog_warn "TIER 3 SKIPPED: backup slot ($CFG_BACKUP_SIM_SLOT) equals current slot ($current_slot)"
+        qlog_warn "TIER 3 SKIPPED: already on the backup slot ($current_slot)"
         return 1
     fi
 
     qlog_info "TIER 3: SIM failover from slot $current_slot to slot $CFG_BACKUP_SIM_SLOT"
-    append_event "sim_failover" "Watchcat: switching to SIM slot $CFG_BACKUP_SIM_SLOT (Tier 3)" "warning"
+    append_event "sim_failover" "Watchcat: switching to SIM slot $CFG_BACKUP_SIM_SLOT (Tier 3)" "warning" "sim_swap"
 
     touch "$RECOVERY_FLAG"
 
@@ -283,7 +392,7 @@ execute_tier3() {
     _orig_iccid=$(_wd_sim_iccid)
 
     # Stop tower failover daemon (locks are meaningless on different SIM)
-    /etc/init.d/qmanager_tower_failover stop 2>/dev/null
+    plat_tower_failover pause
 
     # Verified Golden Rule swap (wd_swap_slot). If the slot never moved there is
     # no failover to record: put tower failover back and skip the tier. Return 2
@@ -294,8 +403,8 @@ execute_tier3() {
     _t3_swap_rc=$?
     if [ "$_t3_swap_rc" -eq 1 ]; then
         qlog_error "TIER 3: SIM swap to slot $CFG_BACKUP_SIM_SLOT not verified, skipping tier"
-        append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error"
-        /etc/init.d/qmanager_tower_failover start 2>/dev/null
+        append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error" "sim_swap"
+        plat_tower_failover resume
         return 1
     fi
     [ "$_t3_swap_rc" -eq 2 ] && qlog_warn "TIER 3: modem is on slot $CFG_BACKUP_SIM_SLOT, radio not confirmed on"
@@ -319,11 +428,11 @@ execute_tier3() {
                 ;;
             "$current_slot")
                 qlog_error "TIER 3: modem is still on slot $current_slot, skipping tier"
-                append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error"
+                append_event "sim_failover" "Watchcat: SIM swap to slot $CFG_BACKUP_SIM_SLOT did not take effect — skipped" "error" "sim_swap"
                 original_sim_slot="null"
                 original_sim_iccid=""
                 current_sim_slot="null"
-                /etc/init.d/qmanager_tower_failover start 2>/dev/null
+                plat_tower_failover resume
                 return 1
                 ;;
             *)
@@ -406,7 +515,7 @@ execute_tier3() {
 # Fallback: revert SIM to original slot
 sim_failover_fallback() {
     qlog_warn "SIM failover fallback: reverting to slot $original_sim_slot"
-    append_event "sim_failover" "Watchcat: backup SIM failed, reverting to slot $original_sim_slot" "warning"
+    append_event "sim_failover" "Watchcat: backup SIM failed, reverting to slot $original_sim_slot" "warning" "sim_revert"
 
     local _rv_iccid
     local _rv_swap_rc
@@ -422,7 +531,7 @@ sim_failover_fallback() {
         0|2) ;;
         *)
             qlog_error "SIM revert: swap back to slot $original_sim_slot not verified, failover state kept"
-            append_event "sim_failover" "Watchcat: could not revert to SIM slot $original_sim_slot — manual check needed" "error"
+            append_event "sim_failover" "Watchcat: could not revert to SIM slot $original_sim_slot — manual check needed" "error" "sim_revert"
             return 1
             ;;
     esac
@@ -436,15 +545,17 @@ sim_failover_fallback() {
     fi
 
     if [ -n "$_rv_iccid" ]; then
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_rv_iccid" "watchdog_revert" )
+        plat_profile_apply "$_rv_iccid" "watchdog_revert"
     else
         qlog_info "[watchdog_revert] ICCID query failed after revert, skipping auto-apply"
     fi
 
     # Restart tower failover daemon
-    /etc/init.d/qmanager_tower_failover start 2>/dev/null
+    plat_tower_failover resume
 
     current_sim_slot="$original_sim_slot"
+    failback_failures=0
+    failback_retry_at=0
     sim_failover_active="false"
     original_sim_slot="null"
     original_sim_iccid=""
@@ -497,7 +608,8 @@ wd_sim_adopt_live_slot() {
     _ad_json=$(_wd_failover_json "$_ad_reason" "$_ad_iccid")
     wd_failover_save "$_ad_json"
     [ -n "$_ad_iccid" ] && sim_db_add "$_ad_iccid"
-    last_recheck_time=$(mono_now)
+    failback_failures=0
+    _wd_failback_arm
     qlog_warn "SIM failover: revert not confirmed, modem is on slot $current_sim_slot - failover kept active (original slot $original_sim_slot)"
 }
 
@@ -530,6 +642,8 @@ finalize_sim_failover() {
     [ "$current_sim_slot" != "$original_sim_slot" ] || return 0
     [ "$original_sim_slot" != "null" ] || return 0
 
+    # The Tier 3 settle is over: outage age counts from here.
+    wd_resume_mark
     sim_failover_active="true"
 
     # Reason recorded in the failover file mirrors WHY recovery fired.
@@ -555,15 +669,16 @@ finalize_sim_failover() {
     fi
 
     qlog_info "SIM failover state saved: slot $original_sim_slot → $current_sim_slot (reason=$_fail_reason)"
-    append_event "sim_failover" "Watchcat: SIM failover confirmed — running on slot $current_sim_slot" "info"
+    append_event "sim_failover" "Watchcat: SIM failover confirmed — running on slot $current_sim_slot" "info" "sim_swap"
 
     # Auto-apply profile matching new SIM (watchdog)
     if [ -n "$curr_iccid" ]; then
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$curr_iccid" "watchdog" )
+        plat_profile_apply "$curr_iccid" "watchdog"
     fi
 
     # Start the auto-failback clock from the moment failover is confirmed.
-    last_recheck_time=$(mono_now)
+    failback_failures=0
+    _wd_failback_arm
 }
 
 # Initiate a BLIND recheck of the primary SIM: temporarily swap back to the
@@ -577,10 +692,11 @@ initiate_primary_recheck() {
 
     # If primary is still bad, this is the slot we return to.
     recheck_return_slot="$current_sim_slot"
+    failback_retry_at=0
 
     touch "$RECOVERY_FLAG"
     qlog_info "PRIMARY RECHECK: temporary swap-back to primary slot $original_sim_slot"
-    append_event "sim_failover" "Watchcat: rechecking primary SIM (slot $original_sim_slot) — temporary swap-back" "info"
+    append_event "sim_failover" "Watchcat: rechecking primary SIM (slot $original_sim_slot) — temporary swap-back" "info" "sim_failback"
 
     # Verified swap to PRIMARY. On failure stay on the backup (nothing changed),
     # restart the recheck clock and do not enter a settle. rc 2 (on the primary,
@@ -590,8 +706,9 @@ initiate_primary_recheck() {
     _pr_swap_rc=$?
     if [ "$_pr_swap_rc" -eq 1 ] || [ "$_pr_swap_rc" -eq 3 ]; then
         qlog_error "PRIMARY RECHECK: swap to slot $original_sim_slot not verified, staying on backup"
-        append_event "sim_failover" "Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot $recheck_return_slot" "error"
-        last_recheck_time=$(mono_now)
+        append_event "sim_failover" "Watchcat: primary SIM recheck failed (slot swap not verified) — staying on slot $recheck_return_slot" "error" "sim_failback"
+        _wd_failback_arm
+        _wd_failback_fail
         rm -f "$RECOVERY_FLAG"
         return 0
     fi
@@ -604,9 +721,8 @@ initiate_primary_recheck() {
     # health test uses the quality criterion iff the failover was quality-driven.
     # Do NOT clear sim_failover_active yet — finish_cooldown's recheck arm decides.
     primary_recheck_active="true"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
-    qlog_info "Entering primary-recheck settle for ${SIM_SETTLE_SECS}s (reason=$recovery_reason)"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+    qlog_info "Entering primary-recheck settle for ${cooldown_remaining}s (reason=$recovery_reason)"
 }
 
 # The modem runs on its original (primary) slot for good: drop the failover
@@ -621,21 +737,23 @@ _wd_sim_failback() {
     _fb_iccid=$(_wd_sim_iccid)
     if [ -n "$_fb_iccid" ]; then
         sim_db_add "$_fb_iccid"
-        ( . /usr/lib/qmanager/profile_mgr.sh && auto_apply_profile "$_fb_iccid" "watchdog_failback" )
+        plat_profile_apply "$_fb_iccid" "watchdog_failback"
     fi
 
     # Back on primary — its tower locks are valid again.
-    /etc/init.d/qmanager_tower_failover start 2>/dev/null
+    plat_tower_failover resume
 
-    append_event "sim_failover" "$1" "info"
+    append_event "sim_failover" "$1" "info" "sim_failback"
 
     original_sim_slot="null"
     original_sim_iccid=""
     current_tier=0
+    tiers_tried=""
     failure_counter=0
-    quality_breach_counter=0
+    quality_breach_since=0
     _recovery_marker_emitted=""
-    last_recheck_time=$(mono_now)
+    failback_failures=0
+    _wd_failback_arm
     state="monitor"
     rm -f "$RECOVERY_FLAG"
 }
@@ -646,10 +764,12 @@ _wd_sim_failback() {
 # caller returns right after this.
 wd_sim_finish_recheck() {
     primary_recheck_active="false"
+    # The failback settle is over: outage age counts from here.
+    wd_resume_mark
 
     local _primary_healthy
     _primary_healthy="no"
-    if read_ping && [ "$ping_reachable" = "true" ]; then
+    if read_ping && wd_outage_update && [ "$ping_reachable" = "true" ]; then
         if [ "$recovery_reason" = "quality" ]; then
             # Quality failover: primary must also pass the quality criterion.
             if read_quality && ! quality_breached; then
@@ -684,15 +804,14 @@ wd_sim_finish_recheck() {
             qlog_warn "PRIMARY RECHECK: return to backup slot $recheck_return_slot not verified, modem stayed on primary slot $original_sim_slot - treating it as a failback"
             _wd_sim_failback "Watchcat: primary SIM kept — the modem stayed on slot $original_sim_slot"
             revert_settle_active="true"
-            recovery_reason="unreachable"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
+            recovery_reason="outage"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
             touch "$RECOVERY_FLAG"
-            qlog_info "Entering post-recheck settle for ${SIM_SETTLE_SECS}s"
+            qlog_info "Entering post-recheck settle for ${cooldown_remaining}s"
             return
         fi
         qlog_error "PRIMARY RECHECK: return to backup slot $recheck_return_slot not verified"
-        append_event "sim_failover" "Watchcat: could not return to backup SIM slot $recheck_return_slot — manual check needed" "error"
+        append_event "sim_failover" "Watchcat: could not return to backup SIM slot $recheck_return_slot — manual check needed" "error" "sim_failback"
         case "$_rt_slot" in
             ''|*[!0-9]*) current_sim_slot="$recheck_return_slot" ;;
             *) current_sim_slot="$_rt_slot" ;;
@@ -721,22 +840,23 @@ wd_sim_finish_recheck() {
     # (If the return swap failed and the modem is still on the primary, the
     # error event above says so and the daemon is left running.)
     if [ "$current_sim_slot" = "$recheck_return_slot" ]; then
-        /etc/init.d/qmanager_tower_failover stop 2>/dev/null
-        append_event "sim_failover" "Watchcat: primary SIM still unhealthy — staying on backup slot $recheck_return_slot" "info"
+        plat_tower_failover pause
+        append_event "sim_failover" "Watchcat: primary SIM still unhealthy — staying on backup slot $recheck_return_slot" "info" "sim_failback"
     fi
 
-    # Restart the interval clock so the next recheck is one full interval away.
-    last_recheck_time=$(mono_now)
+    # Restart the interval clock so the next recheck is one full interval away;
+    # this try ended on the backup slot, so it counts as a failed one.
+    _wd_failback_arm
+    _wd_failback_fail
 
     # Benign post-swap settle: reuse the revert mechanism so the modem
     # stabilizes on backup WITHOUT escalation. Keep suppression (RECOVERY_FLAG
     # stays touched) during the settle, mirroring check_revert_request.
     revert_settle_active="true"
-    recovery_reason="unreachable"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
+    recovery_reason="outage"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
     touch "$RECOVERY_FLAG"
-    qlog_info "Entering post-recheck backup settle for ${SIM_SETTLE_SECS}s"
+    qlog_info "Entering post-recheck backup settle for ${cooldown_remaining}s"
     return
 }
 
@@ -766,6 +886,7 @@ _wd_sim_revert_run() {
     sim_failover_active="false"
     failure_counter=0
     current_tier=0
+    tiers_tried=""
 
     # Already on the original slot: nothing was cycled, so no settle.
     if [ "$WD_SWAP_NOOP" = "true" ]; then
@@ -779,10 +900,9 @@ _wd_sim_revert_run() {
     # honest countdown; revert_settle_active marks this as a benign hold so
     # finish_cooldown returns to monitor without recovery escalation.
     revert_settle_active="true"
-    recovery_reason="unreachable"
-    cooldown_remaining="$SIM_SETTLE_SECS"
-    state="cooldown"
-    qlog_info "Entering post-revert SIM settle for ${SIM_SETTLE_SECS}s"
+    recovery_reason="outage"
+    wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+    qlog_info "Entering post-revert SIM settle for ${cooldown_remaining}s"
     return 0
 }
 
@@ -815,7 +935,7 @@ check_revert_request() {
 
         qlog_info "User requested SIM revert to slot $original_sim_slot"
         rm -f "$REVERT_FLAG"
-        append_event "sim_failover" "Watchcat: reverting to original SIM slot $original_sim_slot (user request)" "info"
+        append_event "sim_failover" "Watchcat: reverting to original SIM slot $original_sim_slot (user request)" "info" "sim_revert"
 
         _wd_sim_revert_run
         return $?
@@ -911,7 +1031,7 @@ wd_sim_resume_at_start() {
         fi
         # Start the auto-failback clock from boot-resume so a recheck is at
         # most one interval away (not immediately on boot).
-        last_recheck_time=$(mono_now)
+        _wd_failback_arm
         qlog_info "Resumed SIM failover state: slot $original_sim_slot → $current_sim_slot (verified)"
         # A record saved by a Tier 3 swap the cooldown never judged: the modem is
         # on the backup slot, so it is a failover now.
@@ -981,10 +1101,9 @@ wd_sim_on_unlock() {
         touch "$RECOVERY_FLAG"
         if sim_failover_fallback; then
             revert_settle_active="true"
-            recovery_reason="unreachable"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
-            qlog_info "Entering post-revert SIM settle for ${SIM_SETTLE_SECS}s"
+            recovery_reason="outage"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+            qlog_info "Entering post-revert SIM settle for ${cooldown_remaining}s"
         else
             rm -f "$RECOVERY_FLAG"
             wd_sim_adopt_live_slot
@@ -998,11 +1117,10 @@ wd_sim_on_unlock() {
     if [ "$recheck_interrupted" = "true" ]; then
         recheck_interrupted="false"
         if [ "$sim_failover_active" = "true" ] && [ "$original_sim_slot" != "null" ] && [ "$current_sim_slot" = "$original_sim_slot" ] && [ "$recheck_return_slot" != "null" ]; then
-            qlog_warn "LOCKED exit: primary recheck was interrupted on slot $current_sim_slot, re-arming its settle for ${SIM_SETTLE_SECS}s"
             touch "$RECOVERY_FLAG"
             primary_recheck_active="true"
-            cooldown_remaining="$SIM_SETTLE_SECS"
-            state="cooldown"
+            wd_step_wait_start "$(wd_step_wait_secs "$SIM_SETTLE_SECS")"
+            qlog_warn "LOCKED exit: primary recheck was interrupted on slot $current_sim_slot, re-arming its settle for ${cooldown_remaining}s"
         fi
     fi
 }

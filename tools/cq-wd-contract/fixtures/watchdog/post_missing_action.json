@@ -1,0 +1,24 @@
+{
+  "name": "watchdog/post_missing_action",
+  "method": "POST",
+  "query": "",
+  "body": {},
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".error": "str"
+    },
+    "equals": {
+      ".success": false,
+      ".error": "missing_action"
+    }
+  }
+}

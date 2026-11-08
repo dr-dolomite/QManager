@@ -2,24 +2,24 @@
 --- pass 2 ---
 --- pass 3 ---
 --- pass 4 ---
-T+70 AT+CFUN?
-T+70 AT+COPS=2
-T+72 AT+COPS=0
 --- pass 5 ---
 --- pass 6 ---
 --- pass 7 ---
-T+102 AT+CFUN?
-T+102 AT+CFUN=0
-T+105 AT+CFUN=1
-T+105 AT
-T+105 AT+CFUN?
 --- pass 8 ---
+T+110 AT+CFUN?
+T+110 AT+COPS=2
+T+112 AT+COPS=0
 --- pass 9 ---
 --- pass 10 ---
 --- pass 11 ---
 --- pass 12 ---
 --- pass 13 ---
 --- pass 14 ---
+T+172 AT+CFUN?
+T+172 AT+CFUN=0
+T+175 AT+CFUN=1
+T+175 AT
+T+175 AT+CFUN?
 --- pass 15 ---
 --- pass 16 ---
 --- pass 17 ---
