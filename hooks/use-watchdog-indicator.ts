@@ -37,13 +37,18 @@ export interface WatchdogIndicator {
 }
 
 /**
- * The two states worth interrupting the nav for. `suspect` is excluded on
+ * The states worth interrupting the nav for. `suspect` is excluded on
  * purpose: failures accumulating below the threshold is the watchdog working
  * normally, and painting the sidebar red for it would train users to ignore it.
+ *
+ * `holdoff` (every step tried, pausing before the next episode) is the same
+ * class as `cooldown`: the watchdog has acted and is now deliberately waiting,
+ * so it reports as "cooldown" rather than as live recovery.
  */
 const REPORTABLE: Record<string, WatchdogActivity | undefined> = {
   recovery: "recovery",
   cooldown: "cooldown",
+  holdoff: "cooldown",
 };
 
 export function useWatchdogIndicator(): WatchdogIndicator | null {

@@ -7,6 +7,8 @@
 // See: QManager_Backend_Architecture.docx §6 "JSON Data Contract"
 // =============================================================================
 
+import type { RecoveryReason, Sensitivity } from "@/types/cq-watchdog";
+
 // --- Top-Level Status --------------------------------------------------------
 
 export interface ModemStatus {
@@ -535,11 +537,18 @@ export interface ConnectivityStatus {
   /** Whether watchcat recovery is currently active */
   during_recovery: boolean;
   /**
-   * Active ping-daemon sensitivity profile (mirrors the saved ping_profile).
-   * Optional: present once the daemon emits it; consumers must tolerate
-   * undefined for older poller output.
+   * Active ping-daemon sensitivity profile.
+   * @deprecated Superseded by `sensitivity`; kept for older poller output.
    */
   profile?: PingProfile;
+  /** Stored Connection Quality sensitivity (contract §4.1). Absent on an older poller. */
+  sensitivity?: Sensitivity;
+  /** Slot 1-4 that answered the last probe, 0 = none. Absent on an older poller. */
+  last_leg?: number;
+  /** Seconds of failed probing before the link reads down. Absent on an older poller. */
+  fail_secs?: number;
+  /** Seconds of answered probing before the link reads up. Absent on an older poller. */
+  recover_secs?: number;
   /**
    * Address family of the last successful ICMP probe: "ipv4" when the primary
    * IPv4 target answered, "ipv6" when the IPv4 leg failed and the IPv6 fallback
@@ -653,7 +662,10 @@ export type WatchcatState =
   | "ssr_hold"
   // The radio is off (airplane mode / CFUN 0), so the daemon is holding off
   // rather than treating the dead link as an outage.
-  | "radio_off";
+  | "radio_off"
+  // Every recovery step has been tried; the daemon is pausing before it
+  // starts another episode (contract §3, growing hold-off).
+  | "holdoff";
 
 export interface WatchcatStatus {
   enabled: boolean;
@@ -672,6 +684,20 @@ export interface WatchcatStatus {
   age_sec?: number | null;
   /** Age in seconds beyond which `age_sec` means the daemon stopped reporting. */
   stale_after?: number | null;
+  // Contract §4.2 hero keys. All optional: an older poller lacks them. The
+  // `*_until` / `*_at` values are MONO deadlines (device uptime seconds):
+  // remaining = deadline - `mono`.
+  recovery_reason?: RecoveryReason | null;
+  step_wait_until?: number | null;
+  holdoff_until?: number | null;
+  holdoff_reason?: RecoveryReason | null;
+  reboot_budget_exhausted?: boolean;
+  ssr_hold_until?: number | null;
+  failback_next_at?: number | null;
+  /** The ping cache has been stale for more than 5 min. */
+  ping_stale?: boolean;
+  /** Device uptime in seconds when the state was written. */
+  mono?: number;
 }
 
 export interface SimFailoverStatus {
@@ -941,6 +967,14 @@ export interface NetworkEvent {
   message: string;
   /** Severity for UI indicator (info = green, warning = amber) */
   severity: EventSeverity;
+  /**
+   * Machine event code on watchdog rows (contract §6): `wd_tier_start`,
+   * `wd_succeeded`, `wd_escalate`, `wd_holdoff`, `wd_ssr_hold`,
+   * `wd_radio_paused`, `wd_budget_spent`, `wd_ping_stale`, `wd_tier4_reboot`,
+   * `sim_swap`, `sim_revert`, `sim_failback`, `sim_failback_giveup`. Absent on
+   * every other row and on pre-upgrade rows.
+   */
+  code?: string;
 }
 
 // --- Formatting Utilities ----------------------------------------------------

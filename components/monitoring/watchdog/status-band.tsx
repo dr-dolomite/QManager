@@ -8,13 +8,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { timelineDuration, type BandFigure, type BandView, type StripView } from "./derive";
 import {
-  DISC_LIVE,
+  useFormatters,
+  type HeroFigure,
+  type HeroView,
+  type StripView,
+} from "./derive";
+import {
   DISC_TONE,
   DISC_TRANSITION,
   EYEBROW,
   FIGURE_TONE,
+  GLYPH_SPIN,
   HERO_PAD,
   HERO_SHELL,
   SKELETON,
@@ -25,30 +30,28 @@ import {
 /** A reading the device did not report. Never a zero, which is a claim. */
 const ABSENT = "—";
 
-function Figure({ figure }: { figure: BandFigure }) {
-  const { t } = useTranslation("monitoring");
+function Figure({ figure }: { figure: HeroFigure }) {
   return (
     <div className={STATUS.FIG}>
-      <span className={cn(EYEBROW, STATUS.FIG_EYEBROW)}>{t(figure.eyebrowKey)}</span>
+      <span className={cn(EYEBROW, STATUS.FIG_EYEBROW)}>{figure.eyebrow}</span>
       <span className={cn(STATUS.FIG_VALUE, FIGURE_TONE[figure.tone])}>
         {figure.value === null ? (
           <>
             <span aria-hidden>{ABSENT}</span>
-            <span className="sr-only">{t("watchdog.band.absent")}</span>
+            <span className="sr-only">{figure.valueSr}</span>
           </>
         ) : (
           figure.value
         )}
       </span>
-      <span className={STATUS.FIG_CAPTION}>
-        {t(figure.captionKey, figure.captionParams)}
-      </span>
+      <span className={STATUS.FIG_CAPTION}>{figure.caption}</span>
     </div>
   );
 }
 
 function ProbeStrip({ strip }: { strip: StripView }) {
   const { t } = useTranslation("monitoring");
+  const fmt = useFormatters();
   if (strip.kind === "empty") {
     return <div className={STRIP.EMPTY}>{t("watchdog.strip.empty")}</div>;
   }
@@ -89,7 +92,7 @@ function ProbeStrip({ strip }: { strip: StripView }) {
             );
           }
           // Newest bar is last; its age is one interval per slot behind it.
-          const age = timelineDuration((strip.bars.length - 1 - i) * strip.intervalSec);
+          const behind = strip.bars.length - 1 - i;
           return (
             <Tooltip key={i}>
               <TooltipTrigger asChild>
@@ -105,9 +108,11 @@ function ProbeStrip({ strip }: { strip: StripView }) {
                 </span>
                 <span className="opacity-70">
                   {" "}
-                  {strip.bars.length - 1 - i === 0
+                  {behind === 0
                     ? t("watchdog.strip.now")
-                    : t("watchdog.strip.tipAgo", { time: t(age.key, age.params) })}
+                    : t("watchdog.strip.tipAgo", {
+                        time: fmt.duration(behind * strip.intervalSec),
+                      })}
                 </span>
               </TooltipContent>
             </Tooltip>
@@ -122,35 +127,27 @@ function ProbeStrip({ strip }: { strip: StripView }) {
   );
 }
 
-/** Phase and figures on two edges, the probe strip under both. */
-export function StatusCard({ band, strip }: { band: BandView; strip: StripView }) {
+/** Phase and four figures on two edges, the probe strip under both. */
+export function StatusCard({ view, strip }: { view: HeroView; strip: StripView }) {
   const { t } = useTranslation("monitoring");
-  const Glyph = band.glyph;
+  const { glyph: Glyph, disc, spin } = view.style;
   return (
-    <Card className={HERO_SHELL} aria-label={t("watchdog.band.aria")} role="region">
+    <Card className={HERO_SHELL} aria-label={t("watchdog.hero.aria")} role="region">
       <CardContent className={cn(HERO_PAD, STATUS.BODY)}>
         <div className={STATUS.HEAD}>
           <div className={STATUS.PHASE}>
-            <span
-              aria-hidden
-              className={cn(
-                STATUS.DISC,
-                DISC_TRANSITION,
-                DISC_TONE[band.disc],
-                band.live && DISC_LIVE,
-              )}
-            >
-              <Glyph className={STATUS.GLYPH} />
+            <span aria-hidden className={cn(STATUS.DISC, DISC_TRANSITION, DISC_TONE[disc])}>
+              <Glyph className={cn(STATUS.GLYPH, spin && GLYPH_SPIN)} />
             </span>
             <div className={STATUS.TEXT}>
-              <p className={STATUS.TITLE}>{t(band.labelKey)}</p>
-              <p className={band.blurbNumeric ? STATUS.BLURB_NUM : STATUS.BLURB}>
-                {t(band.blurbKey, band.blurbParams)}
+              <p className={STATUS.TITLE}>{view.title}</p>
+              <p className={view.blurbNumeric ? STATUS.BLURB_NUM : STATUS.BLURB}>
+                {view.blurb}
               </p>
             </div>
           </div>
           <div className={STATUS.FIGS}>
-            {band.figures.map((figure) => (
+            {view.figures.map((figure) => (
               <Figure key={figure.key} figure={figure} />
             ))}
           </div>
@@ -175,11 +172,11 @@ export function StatusCardSkeleton() {
             </div>
           </div>
           <div className={STATUS.FIGS}>
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <div key={i} className={cn(STATUS.FIG, "gap-y-1")}>
                 <Skeleton className={cn(SKELETON.FIG_EYEBROW, STATUS.FIG_EYEBROW, "w-20")} />
                 <Skeleton className={cn(SKELETON.FIG_VALUE, STATUS.FIG_VALUE, "w-12")} />
-                <Skeleton className={cn(SKELETON.LINE, STATUS.FIG_CAPTION, "h-3 w-28")} />
+                <Skeleton className={cn(SKELETON.LINE, STATUS.FIG_CAPTION, "h-3 w-24")} />
               </div>
             ))}
           </div>

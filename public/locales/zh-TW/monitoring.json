@@ -234,88 +234,187 @@
       "unreadable": "數據機沒有回應。",
       "retry": "重試"
     },
-    "band": {
-      "checks": "失敗偵測",
-      "recoveries": "恢復",
-      "reboots": "重啟",
-      "absent": "未回報",
-      "checksCaption": "開始恢復前",
-      "cooldownCaption": "{{seconds}} 秒後重新偵測",
-      "recoveriesLast": "第 {{tier}} 步，{{ago}}",
-      "recoveriesNone": "尚無記錄",
-      "rebootsCaption": "最近一小時",
-      "rebootsOff": "重啟步驟已關閉",
-      "aria": "看門狗狀態",
-      "cooldownStep": "第 {{tier}} 步已執行，{{seconds}} 秒後重新偵測。"
+    "duration": {
+      "seconds": "{{s}} 秒",
+      "minutes": "{{m}} 分鐘",
+      "minutesSeconds": "{{m}} 分 {{s}} 秒",
+      "hours": "{{h}} 小時",
+      "hoursMinutes": "{{h}} 小時 {{m}} 分鐘"
     },
     "phase": {
+      "action": {
+        "1": "正在重新註冊到網路",
+        "2": "正在重啟無線電",
+        "3": "正在切換到備用 SIM 卡",
+        "4": "正在重啟數據機"
+      },
       "off": {
-        "label": "已關閉",
+        "title": "已關閉",
         "blurb": "看門狗未監控連線。"
       },
       "unknown": {
-        "label": "未知",
+        "title": "未知",
         "blurb": "數據機沒有回應，因此無法得知看門狗目前的狀態。"
       },
       "starting": {
-        "label": "啟動中",
-        "blurb": "服務剛啟用，尚未回報狀態。"
+        "title": "啟動中",
+        "blurb": "剛剛開啟，正在等待首次上報。"
       },
       "not_running": {
-        "label": "未回報",
-        "blurb": "已啟用，但看門狗已停止回報。"
+        "title": "未上報",
+        "blurb": "已開啟，但看門狗已停止上報。"
       },
       "auto_disabled": {
-        "label": "已自動關閉",
-        "blurb": "已達到重啟次數上限。待連線穩定後再重新開啟。"
+        "title": "已自動關閉",
+        "blurb": "舊版本在達到重啟上限時將其關閉。待連線穩定後再重新開啟。"
       },
       "monitor": {
-        "label": "監控中",
-        "blurb": "連線狀況良好，正在監控是否發生斷線。"
+        "title": "監控中",
+        "blurb": "連線正常。離線 {{time}} 後開始恢復。"
       },
       "suspect": {
-        "label": "檢查中",
-        "blurb": "剛才有一次連線檢查失敗，正在確認後才會採取行動。"
+        "title": "檢查中",
+        "blurb": "已 {{time}} 無回應。若持續，將開始恢復。",
+        "blurbNow": "剛剛有一次偵測失敗，正在確認後再採取行動。"
       },
       "recovery": {
-        "label": "恢復中",
-        "blurb": "正在依序執行恢復步驟，以恢復連線。"
+        "title": "第 {{tier}} 步：{{action}}",
+        "titleGeneric": "恢復中",
+        "blurb": {
+          "outage": "已離線 {{time}}，正在依次執行恢復步驟。",
+          "quality": "品質已差 {{time}}，正在依次執行恢復步驟。",
+          "carrier": "已 {{time}} 僅使用一個載波，正在嘗試恢復其他載波。"
+        },
+        "blurbNow": "正在依次執行恢復步驟。"
       },
       "cooldown": {
-        "label": "冷卻中",
-        "blurb": "正在等待上一個恢復步驟生效，然後再重新偵測。"
+        "title": "第 {{tier}} 步已執行，{{time}}後偵測",
+        "titleChecking": "第 {{tier}} 步已執行，正在偵測",
+        "titleGeneric": "正在檢查結果",
+        "next": {
+          "outage": "若連線仍未恢復，下一步是第 {{tier}} 步。",
+          "quality": "若品質仍然很差，下一步是第 {{tier}} 步。",
+          "carrier": "若仍只有一個載波，下一步是第 {{tier}} 步。"
+        },
+        "last": {
+          "outage": "這是最後一步。若連線仍未恢復，看門狗將暫停處理。",
+          "quality": "這是處理品質差的最後一步。若問題持續，看門狗將暫停處理。",
+          "carrier": "這是處理單載波的最後一步。若問題持續，看門狗將暫停處理。"
+        }
       },
-      "locked": {
-        "label": "已暫停",
-        "blurb": "有維護作業正在進行，看門狗暫時不會採取行動。"
+      "holdoff": {
+        "outage": {
+          "title": "暫停處理 {{time}}",
+          "titleNow": "暫停處理",
+          "blurb": "所有步驟均已執行，連線仍未恢復。將於 {{time}} 重新開始。",
+          "blurbNow": "所有步驟均已執行，連線仍未恢復。即將重新開始。"
+        },
+        "quality": {
+          "title": "暫停處理 {{time}}",
+          "blurb": "所有步驟執行後品質仍然很差。將於 {{time}} 再次嘗試。",
+          "blurbNow": "所有步驟執行後品質仍然很差。即將再次嘗試。"
+        },
+        "carrier": {
+          "title": "暫停處理 {{time}}",
+          "blurb": "執行各步驟後仍只有一個載波。將於 {{time}} 再次嘗試。",
+          "blurbNow": "執行各步驟後仍只有一個載波。即將再次嘗試。"
+        }
       },
       "radio_off": {
-        "blurb": "無線電已關閉，看門狗暫時不會採取行動。"
-      },
-      "disabled": {
-        "label": "已停用",
-        "blurb": "服務正在執行，但功能已關閉。"
+        "title": "無線電已關閉",
+        "blurb": "無線電關閉時無需恢復。重新開啟後將繼續監控。"
       },
       "ssr_hold": {
-        "label": "等待中",
-        "blurb": "基頻正在自行重新啟動，復原作業會等待其恢復。"
+        "title": "等待數據機重啟（{{time}}）",
+        "titleNow": "等待數據機重啟",
+        "blurb": "無線電已自行重啟。恢復操作會等它回來後再執行。"
+      },
+      "ping_stale": {
+        "title": "連線偵測無回應",
+        "blurb": "連線偵測已有一段時間沒有上報，因此看門狗不會據此採取行動。"
+      },
+      "locked": {
+        "title": "已暫停",
+        "blurb": "有維護作業正在進行，看門狗暫時不會採取行動。"
+      },
+      "disabled": {
+        "title": "已關閉",
+        "blurb": "服務正在執行，但功能已關閉。"
+      }
+    },
+    "hero": {
+      "aria": "看門狗狀態",
+      "absent": "未上報",
+      "none": "無",
+      "noReading": "無讀數",
+      "linkUp": "連線正常",
+      "offline": {
+        "eyebrow": "已離線",
+        "caption": "自 {{time}} 起"
+      },
+      "quality": {
+        "eyebrow": "品質差已持續",
+        "caption": "超過 {{ms}} ms 或 {{pct}}% 視為差"
+      },
+      "carrier": {
+        "eyebrow": "僅使用一個載波已持續",
+        "caption": "{{time}}後採取行動"
+      },
+      "recoveries": {
+        "eyebrow": "恢復次數",
+        "caption": "自上次重啟起"
+      },
+      "lastFix": {
+        "eyebrow": "最近一次修復",
+        "none": "尚無修復",
+        "caption": "第 {{tier}} 步",
+        "captionTook": "第 {{tier}} 步，用時 {{time}}",
+        "captionReason": "第 {{tier}} 步（{{reason}}）",
+        "captionReasonTook": "第 {{tier}} 步（{{reason}}），用時 {{time}}",
+        "reason": {
+          "quality": "品質差",
+          "carrier": "單載波"
+        }
+      },
+      "reboots": {
+        "eyebrow": "重啟",
+        "value": "{{used}} / {{limit}}",
+        "caption": "本小時",
+        "off": "重啟步驟已關閉",
+        "resting": "暫停至 {{time}}",
+        "restingNow": "暫時停用",
+        "restingLong": "長時間斷線後暫停"
       }
     },
     "master": {
-      "aria": "啟用連線看門狗"
+      "label": "自動恢復"
     },
     "ladder": {
       "title": "恢復階梯",
       "description": "按順序嘗試，從最溫和的方式開始。",
-      "aria": "恢復階梯",
-      "status": {
-        "blocked": "需要插槽",
-        "done": "已嘗試",
-        "running": "正在執行"
+      "aria": "恢復步驟",
+      "steps": "步驟",
+      "advanced": "進階",
+      "tierAria": "啟用此恢復步驟：{{name}}",
+      "state": {
+        "needsSecondSim": "需要第二張 SIM 卡",
+        "unused": {
+          "quality": "不用於品質差",
+          "carrier": "不用於單載波"
+        },
+        "resting": "暫停至 {{time}}（已用 {{used}} / {{limit}}）",
+        "restingNow": "暫停中（本小時已用 {{used}} / {{limit}}）",
+        "restingLong": "長時間斷線後暫停",
+        "checking": "{{time}}後偵測",
+        "checkingNow": "正在偵測",
+        "running": "正在執行",
+        "triedAt": "{{time}} 已嘗試",
+        "tried": "已嘗試",
+        "onBackup": "正在使用插槽 {{slot}}"
       },
       "tier1": {
         "name": "重新註冊到網路",
-        "consequence": "連線會中斷幾秒鐘。"
+        "consequence": "連線會中斷幾秒鐘。WAN IP 可能會變化。"
       },
       "tier2": {
         "name": "重新啟動無線電",
@@ -323,72 +422,125 @@
       },
       "tier3": {
         "name": "切換到備用 SIM 卡",
-        "consequence": "將使用備用卡運作，直到您切回。",
+        "consequence": "將一直使用備用卡，直到您切回。",
+        "consequenceFailback": "會自動切回主 SIM 卡。",
         "slotLabel": "備用 SIM 卡插槽",
         "slot": "插槽 {{slot}}"
       },
       "tier4": {
-        "name": "重啟裝置",
+        "name": "重啟數據機",
         "consequence": "離線約一分鐘。",
         "capLabel": "每小時最大重啟次數",
         "capLead": "最多",
-        "capUnit": "次/小時"
+        "capUnit": "次/小時",
+        "hintLabel": "關於重啟上限",
+        "hint": "達到上限後，看門狗不再重啟，並暫停到這一小時結束。其他步驟仍會繼續執行。"
       },
-      "tierAria": "啟用此恢復步驟：{{name}}",
       "failback": {
         "name": "切回主要 SIM 卡",
-        "consequence": "定期重試主要 SIM 卡，每次嘗試都會短暫斷線。",
-        "lead": "每",
+        "consequence": "重試主 SIM 卡。每次嘗試連線都會短暫中斷。",
+        "everyLabel": "主 SIM 卡複查間隔",
         "unit": "分鐘",
-        "intervalLabel": "主要 SIM 卡複查間隔"
+        "summary": "每 {{n}} 分鐘",
+        "summaryOff": "關閉",
+        "gaveUp": "嘗試 3 次後放棄",
+        "trying": "正在嘗試主 SIM 卡",
+        "next": "{{time}}後再次嘗試",
+        "nextFailed": "{{time}}後再次嘗試（已失敗 {{n}} 次）",
+        "retry": "立即重試",
+        "retryOk": "正在檢查主 SIM 卡",
+        "retryFail": "無法開始重試"
       }
     },
     "detection": {
       "title": "偵測",
-      "description": "靜默連線多久後會被判定為斷線。",
-      "probe": {
-        "label": "探測間隔",
-        "short": "{{seconds}}秒"
+      "description": "恢復何時開始，由什麼觸發。",
+      "advanced": "進階",
+      "custom": "自訂",
+      "unit": {
+        "seconds": "秒",
+        "minutes": "分鐘",
+        "ms": "毫秒"
       },
-      "threshold": {
-        "label": "斷線判定",
-        "unit": "次探測失敗"
+      "sensitivityLink": "靈敏度",
+      "sensitivity": {
+        "sensitive": "靈敏",
+        "regular": "一般",
+        "relaxed": "寬鬆",
+        "quiet": "安靜"
       },
-      "cooldown": {
-        "label": "步驟間隔",
-        "unit": "秒"
+      "down": {
+        "named": "約 {{time}} 後判定斷線（{{name}}）",
+        "plain": "約 {{time}} 後判定斷線",
+        "unknown": "連線偵測失敗後判定斷線"
       },
-      "timeline": {
-        "eyebrow": "連線中斷時",
-        "declaredStep": "判定斷線，執行第 {{tier}} 步",
-        "declaredReboot": "判定斷線，執行第 4 步：重啟",
-        "step": "第 {{tier}} 步",
-        "reboot": "第 4 步：重啟",
-        "about": "約 {{time}}",
-        "seconds": "{{s}} 秒",
-        "minutes": "{{m}} 分鐘",
-        "minutesSeconds": "{{m}} 分 {{s}} 秒",
-        "off": "看門狗已關閉，不會執行任何步驟。",
-        "none": "沒有啟用任何步驟，不會執行任何操作。",
-        "invalid": "輸入有效的偵測數值即可預覽時間線。",
-        "stopped": "第 3 步沒有插槽，恢復流程將止步於此。"
+      "act": {
+        "label": "開始恢復前等待",
+        "effective": "→ {{time}}",
+        "hintLabel": "關於開始時間",
+        "hint": "連線被判定為斷線之前不會開始恢復。使用{{name}}時約需 {{time}}，因此較小的數值會被提高到該值。",
+        "hintFallback": "目前靈敏度",
+        "note": "離線 {{time}} 後將開始恢復。"
       },
       "quality": {
-        "label": "品質觸發",
-        "unit": "次",
-        "caption": "延遲超過 {{ms}} ms 或封包遺失超過 {{pct}}%",
-        "link": "臨界值"
+        "label": "從品質差中恢復",
+        "hintLabel": "關於品質差",
+        "hint": "回覆慢於 {{ms}} ms 或封包遺失超過 {{pct}}% 時計入。僅執行第 1、2 步。",
+        "afterLabel": "品質差已持續",
+        "caption": "超過 {{lat}} 或 {{loss}} 視為差"
+      },
+      "carrier": {
+        "label": "從單載波中恢復",
+        "hintLabel": "關於單載波",
+        "hint": "僅在數據機啟動後用過載波聚合時才計入。僅執行第 1、2 步。",
+        "afterLabel": "僅使用一個載波已持續",
+        "consequence": "第 1 步會使連線中斷幾秒鐘，WAN IP 可能會變化。",
+        "rightNow": "目前",
+        "unknown": "未知",
+        "singleFor": "單載波已持續 {{time}}",
+        "count_one": "{{count}} 個載波",
+        "count_other": "{{count}} 個載波"
+      },
+      "stepWait": {
+        "label": "步驟間隔",
+        "summary": "步驟間隔 {{time}}",
+        "hintLabel": "關於等待時間",
+        "hint": "每一步在偵測連線並開始下一步之前的執行時間。不會短於連線恢復為正常所需的時間。"
       },
       "ssr": {
-        "label": "基頻重新啟動等待",
-        "unit": "秒",
-        "caption": "先等待模組自行重新啟動完成"
+        "label": "數據機無線電重啟時等待",
+        "hintLabel": "關於無線電重啟",
+        "hint": "數據機重啟自身無線電時，恢復操作會等待，而不是疊加處理。",
+        "graceLabel": "等待時長"
+      },
+      "timeline": {
+        "title": "連線中斷時",
+        "quiet": "連線無回應",
+        "markedDown": "判定斷線",
+        "markedDownNamed": "判定斷線（{{name}}）",
+        "step": {
+          "1": "第 1 步：重新註冊",
+          "2": "第 2 步：重啟無線電",
+          "3": "第 3 步：切換 SIM 卡",
+          "4": "第 4 步：重啟"
+        },
+        "reboot": "第 4 步：重啟",
+        "rebootResting": "第 4 步：重啟（暫停中）",
+        "holdoff": "暫停處理 15 分鐘後重新開始",
+        "now": "現在",
+        "off": "看門狗已關閉，不會執行任何步驟。",
+        "none": "沒有啟用任何步驟，不會執行任何操作。",
+        "summary": {
+          "reboot": "{{time}}時重啟",
+          "last": "{{time}}時執行最後一步",
+          "now": "已離線 {{time}}"
+        }
       }
     },
     "activity": {
       "title": "恢復活動",
       "description": "看門狗執行過的操作，最新優先。",
-      "tier4Reboot": "看門狗重新啟動了數據機",
+      "allEvents": "全部事件",
       "type": {
         "recovery": "恢復",
         "failover": "SIM 卡故障轉移"
@@ -414,32 +566,91 @@
         "title": "無法載入恢復活動",
         "retry": "重試"
       },
-      "allEvents": "全部事件"
+      "sr": {
+        "success": "成功",
+        "warning": "警告",
+        "destructive": "問題",
+        "info": "資訊",
+        "muted": "例行"
+      },
+      "row": {
+        "reason": {
+          "outage": "連線曾中斷",
+          "quality": "品質差",
+          "carrier": "單載波",
+          "carrierFor": "單載波已持續 {{min}} 分鐘"
+        },
+        "tierStart": {
+          "1": "正在重新註冊到網路",
+          "2": "正在重啟無線電",
+          "3": "正在切換到備用 SIM 卡",
+          "4": "正在重啟數據機"
+        },
+        "recoveryStart": "開始恢復",
+        "succeeded": {
+          "outage": "第 {{tier}} 步後已恢復上線",
+          "quality": "第 {{tier}} 步後品質已恢復",
+          "carrier": "第 {{tier}} 步後載波已恢復"
+        },
+        "succeededNoTier": {
+          "outage": "已恢復上線",
+          "quality": "品質已恢復",
+          "carrier": "載波已恢復"
+        },
+        "escalate": "轉入第 {{tier}} 步",
+        "escalateNext": "轉入下一步",
+        "escalateDetail": "上一步未能解決問題",
+        "holdoff": "暫停處理 {{min}} 分鐘",
+        "holdoffNow": "暫停處理",
+        "holdoffDetail": "所有步驟均已執行，仍未解決",
+        "ssrHold": "等待數據機重啟",
+        "ssrHoldDetail": "無線電已自行重啟",
+        "radioPaused": "已暫停：無線電已關閉",
+        "radioPausedDetail": "重新開啟之前無需恢復",
+        "budgetSpent": "已達重啟上限",
+        "budgetSpentHourly": "每小時 {{n}} 次，暫停到這一小時結束",
+        "budgetSpentLong": "長時間斷線後暫停",
+        "pingStale": "連線偵測無回應",
+        "pingStaleDetail": "不依據過期讀數採取行動",
+        "tier4Reboot": "看門狗重啟了數據機",
+        "swapFailed": "SIM 卡切換失敗",
+        "swapStart": "正在切換到備用 SIM 卡",
+        "swapDone": "已切換到備用 SIM 卡",
+        "slot": "插槽 {{slot}}",
+        "revertFailed": "SIM 卡恢復失敗",
+        "revertBackupFailed": "無法恢復，仍使用備用卡",
+        "revertRequested": "正在恢復原始 SIM 卡",
+        "revertByUser": "由您發起",
+        "failbackFailed": "切回失敗",
+        "failbackDone": "已切回主 SIM 卡",
+        "failbackTry": "正在檢查主 SIM 卡",
+        "failbackStay": "繼續使用備用 SIM 卡",
+        "giveup": "已放棄切回",
+        "giveupDetail": "準備好後請手動恢復"
+      }
     },
     "save": {
       "discard": "捨棄",
-      "action": "儲存",
-      "clean": "所有變更已儲存",
+      "ladder": "儲存恢復階梯",
+      "detection": "儲存偵測設定",
+      "ladderOk": "恢復階梯已儲存",
+      "detectionOk": "偵測設定已儲存",
+      "ladderFail": "無法儲存恢復階梯",
+      "detectionFail": "無法儲存偵測設定",
       "blockedIn": "儲存前請檢查 {{fields}}",
-      "toastOk": "看門狗設定已儲存",
-      "toastFail": "無法儲存看門狗設定",
       "confirmReboot": {
         "title": "允許看門狗重啟數據機？",
         "body": "儲存後，當所有更溫和的步驟都失敗時，看門狗可以自行重啟數據機。此頁面會消失約一分鐘，等待數據機恢復。",
-        "cap": "每小時最多重啟 {{cap}} 次。達到上限後，看門狗會自行關閉，直到您重新開啟。",
+        "cap": "每小時最多重啟 {{cap}} 次。達到上限後，看門狗會暫停，不再重啟。",
         "cancel": "取消",
         "action": "允許重啟"
       }
     },
     "errors": {
-      "failThreshold": "必須介於 1 到 20 之間",
-      "probeInterval": "必須介於 1 到 60 秒之間",
-      "cooldown": "必須介於 10 到 300 秒之間",
-      "maxReboots": "必須介於 1 到 10 之間",
-      "backupSim": "選擇備用 SIM 卡插槽以啟用故障轉移",
-      "qualityConsecutive": "必須介於 1 到 60 之間",
-      "ssrGrace": "必須介於 10 到 120 秒之間",
-      "recheckInterval": "必須介於 5 到 1440 分鐘之間"
+      "seconds": "請輸入 {{min}} 到 {{max}} 秒",
+      "minutes": "請輸入 {{min}} 到 {{max}} 分鐘",
+      "count": "請輸入 {{min}} 到 {{max}}",
+      "backupSlot": "選擇一個插槽以啟用此步驟"
     },
     "failover": {
       "title": "目前使用備用 SIM 卡",
@@ -619,64 +830,93 @@
   "connection_quality": {
     "page": {
       "title": "連線品質",
-      "description": "數據機 ping 的目標，以及把緩慢連線記為事件的門檻。"
+      "description": "數據機如何偵測網際網路連線。"
     },
     "targets": {
       "title": "探測目標",
-      "description": "依序 ping，直到有目標回應，用來判斷網際網路是否連通。",
-      "restore": "還原預設值",
-      "save": "儲存探測目標",
-      "leg": {
-        "ipv4": "IPv4 目標",
-        "ipv6": "IPv6 備援目標"
+      "description": "數據機用來偵測網際網路的 ping 目標。",
+      "group": {
+        "primary": "主要",
+        "fallbacks": "備援"
+      },
+      "fallbacks_hint_label": "關於備援目標",
+      "fallbacks_hint": "插槽 1 無回應時一併 ping，取有回應的最小插槽。沒有對應位址類型路由的插槽會被跳過，不算作無回應。",
+      "slot": {
+        "label": "插槽 {{n}} 目標",
+        "ok": "{{ms}} 毫秒",
+        "answering": "回應中",
+        "miss": "無回覆",
+        "standby": "待命",
+        "skipped": "無路由",
+        "skipped_ipv4": "無 IPv4 路由",
+        "skipped_ipv6": "無 IPv6 路由",
+        "unknown": "無即時讀數"
+      },
+      "verdict": {
+        "answering": "插槽 {{n}} 在回應",
+        "answering_any": "回應中",
+        "none": "所有插槽均無回應",
+        "unknown": "未回報"
+      },
+      "validation": {
+        "empty": "請輸入一個目標。",
+        "too_long": "最多 {{max}} 個字元。",
+        "spaces": "不允許包含空格。",
+        "disallowed": "僅可使用字母、數字和 . : % -",
+        "leading_dash": "目標不能以短橫線開頭。"
       },
       "error": {
         "title": "無法讀取探測目標",
         "body": "已儲存的目標仍在使用。",
         "retry": "重試"
       },
+      "failed": "儲存失敗",
+      "discard": "捨棄",
+      "save": "儲存",
       "toast": {
         "saved": "探測目標已儲存。",
         "failed": "無法儲存探測目標。"
-      },
-      "validation": {
-        "empty": "請輸入一個目標。",
-        "too_long": "最多 {{max}} 個字元。",
-        "spaces": "不允許包含空格。",
-        "disallowed": "包含不允許使用的字元。",
-        "ipv4_invalid": "請輸入 IPv4 位址或主機名稱。",
-        "ipv6_invalid": "不是有效的 IPv6 位址。",
-        "ipv6_colon": "IPv6 位址應包含冒號。"
-      },
-      "verdict": {
-        "ipv4": "IPv4 正在回應",
-        "ipv6": "IPv6 正在回應",
-        "none": "無回應",
-        "unknown": "未回報"
-      },
-      "group": {
-        "sensitivity": "靈敏度",
-        "ipv4": "IPv4",
-        "ipv6": "IPv6 備援"
-      },
-      "fallback_hint": "只有在 IPv4 目標沒有回應時才會 ping，因此純 IPv6 連線不會被誤判為斷線。",
-      "fallback_hint_label": "關於 IPv6 備援",
-      "interval": {
-        "label": "探測間隔",
-        "value": "每 {{seconds}} 秒",
-        "override": "每 {{seconds}} 秒（由看門狗設定）"
-      },
-      "failed": "儲存失敗",
-      "profile": {
+      }
+    },
+    "last_outage": {
+      "label": "最近一次斷線",
+      "hint_label": "關於最近一次斷線",
+      "hint": "自上次重啟起計。時長按連線檢查間隔測得，因此為近似值。",
+      "none": "自上次重啟起無斷線",
+      "down_now": "目前已斷線",
+      "about": "約 {{value}}",
+      "ended": "{{ago}}前結束",
+      "ended_now": "剛剛結束",
+      "ended_with_wan": "{{ended}}（{{wan}}）",
+      "wan_changed": "WAN IP 已變化",
+      "wan_same": "WAN IP 未變",
+      "unit": {
+        "s": "{{n}} 秒",
+        "min": "{{n}} 分鐘",
+        "h": "{{n}} 小時",
+        "d": "{{n}} 天"
+      }
+    },
+    "quality": {
+      "title": "靈敏度與品質",
+      "description": "連線何時算斷線，何時算品質差。",
+      "sensitivity": {
+        "label": "靈敏度",
         "sensitive": "靈敏",
         "regular": "一般",
         "relaxed": "寬鬆",
         "quiet": "安靜"
-      }
-    },
-    "thresholds": {
-      "title": "品質門檻",
-      "description": "何時把緩慢或封包遺失的連線記錄為網路事件。",
+      },
+      "grid": {
+        "caption": "各靈敏度的連線檢查方式",
+        "every": "偵測間隔",
+        "down": "斷線判定",
+        "up": "恢復判定",
+        "every_value": "{{n}} 秒",
+        "down_value": "約 {{n}} 秒",
+        "up_value": "{{n}} 秒"
+      },
+      "consequence": "約 {{to}} 秒後判定斷線，原為 {{from}} 秒。",
       "latency": {
         "title": "延遲"
       },
@@ -689,44 +929,39 @@
         "very_tolerant": "非常寬鬆",
         "custom": "自訂"
       },
-      "save": "儲存門檻",
-      "error": {
-        "title": "無法讀取品質門檻",
-        "body": "已儲存的門檻仍在使用。",
-        "retry": "重試"
+      "value": {
+        "latency": "{{n}} 毫秒",
+        "loss": "{{n}}%"
       },
-      "toast": {
-        "saved": "品質門檻已儲存。",
-        "failed": "無法儲存品質門檻。"
-      },
-      "row": {
-        "flags": "觸發條件",
-        "now": "目前",
-        "limit": "門檻"
-      },
-      "flags": {
-        "latency_one": "{{count}} 個樣本超過 {{ms}} 毫秒",
-        "latency_other": "{{count}} 個樣本超過 {{ms}} 毫秒",
-        "loss_one": "{{count}} 個樣本達到 {{pct}}% 或以上",
-        "loss_other": "{{count}} 個樣本達到 {{pct}}% 或以上",
-        "pending": "請輸入門檻"
-      },
-      "now": {
-        "latency": "{{ms}} 毫秒",
-        "loss": "{{pct}}%",
-        "no_reply": "無回覆",
-        "collecting": "正在收集",
-        "over_latency": "超出 {{ms}} 毫秒門檻",
-        "over_loss": "超出 {{pct}}% 門檻"
-      },
-      "default_chip": "內建預設值",
-      "failed": "儲存失敗",
       "unit": {
         "latency": "毫秒",
         "loss": "%"
       },
+      "custom": {
+        "aria": "{{metric}}門檻，{{min}} 到 {{max}}"
+      },
       "validation": {
         "range": "請輸入 {{min}} 到 {{max}} 之間的整數。"
+      },
+      "now": {
+        "label": "目前",
+        "no_reply": "無回覆",
+        "collecting": "正在收集",
+        "over_latency": "超出 {{n}} 毫秒門檻",
+        "over_loss": "達到或超出 {{n}}% 門檻"
+      },
+      "default_chip": "內建預設值",
+      "error": {
+        "title": "無法讀取設定",
+        "body": "仍在使用已儲存的設定。",
+        "retry": "重試"
+      },
+      "failed": "儲存失敗",
+      "discard": "捨棄",
+      "save": "儲存",
+      "toast": {
+        "saved": "設定已儲存。",
+        "failed": "無法儲存設定。"
       }
     }
   },

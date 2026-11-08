@@ -19,14 +19,15 @@ export const HEADER_PILL =
   "bg-surface-container text-on-surface-variant hover:bg-surface-container-high";
 
 /**
- * Ladder 7fr beside Detection 5fr, one height (Symmetric-Pair). The ladder is
- * fixed-height, so Detection's timeline absorbs the slack; stacks below 56rem.
+ * Ladder 7fr beside Detection 5fr, one height (Symmetric-Pair). Stacks below
+ * 56rem. Each card keeps its own height: Detection's disclosures grow and
+ * shrink, so the pair is top-aligned rather than stretched.
  */
 export const PAIR =
-  "grid grid-cols-1 items-stretch gap-5 @4xl/main:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]";
+  "grid grid-cols-1 items-start gap-5 @4xl/main:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]";
 
-/** A pair cell: a stretched grid track, so its card fills the row height. */
-export const PAIR_CELL = "grid min-w-0 *:h-full";
+/** A pair cell: a grid track holding one card. */
+export const PAIR_CELL = "grid min-w-0";
 
 // -----------------------------------------------------------------------------
 // Card shells
@@ -54,6 +55,10 @@ export const HEAD_DESC_SPAN = "col-span-2";
 export const EYEBROW =
   "text-on-surface-variant truncate text-[0.6875rem] font-semibold tracking-[0.02em] uppercase";
 
+/** A small section label over a run of rows (Group-Before-You-Pad). */
+export const GROUP_LABEL =
+  "text-on-surface-variant flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.02em] uppercase";
+
 // -----------------------------------------------------------------------------
 // The status card
 // -----------------------------------------------------------------------------
@@ -69,8 +74,8 @@ export const DISC_TONE = {
 
 export type DiscTone = keyof typeof DISC_TONE;
 
-/** The surface's ONE ambient loop, spent on the disc while the ladder is running. */
-export const DISC_LIVE = "animate-pulse-ring";
+/** The one ambient loop on this surface: the loader glyph while a step runs. */
+export const GLYPH_SPIN = "motion-safe:animate-spin";
 
 /** Scoped to two properties, and every custom property takes `var()`. */
 export const DISC_TRANSITION =
@@ -86,8 +91,10 @@ export const FIGURE_TONE = {
 export type FigureTone = keyof typeof FIGURE_TONE;
 
 /**
- * Phase on the left edge, three figures on the right edge, the probe strip
- * under both. Below a 30rem card the figures become receipt rows.
+ * Phase on the left edge, four figures on the right edge, the probe strip
+ * under both. The figures recompose on the card's own width: receipt rows
+ * under 30rem, a 2x2 grid to 44rem, one row of four above that, and beside the
+ * phase once the card is wide enough to hold both.
  */
 export const STATUS = {
   BODY: "flex flex-col gap-5",
@@ -96,16 +103,17 @@ export const STATUS = {
   DISC: "grid size-11 flex-none place-items-center rounded-pill",
   GLYPH: "size-[1.375rem]",
   TEXT: "flex min-w-0 flex-col gap-0.5",
-  TITLE: "text-xl leading-[1.2] font-bold tracking-[-0.01em]",
+  TITLE: "text-xl leading-[1.2] font-bold tracking-[-0.01em] text-pretty",
   BLURB: "text-on-surface-variant text-[0.8125rem] text-pretty",
   BLURB_NUM: "text-on-surface-variant text-[0.8125rem] text-pretty tabular-nums",
-  FIGS: "grid flex-[1_1_100%] grid-cols-1 gap-2.5 @[30rem]/card:grid-cols-3 @[30rem]/card:gap-x-7 @[30rem]/card:gap-y-3 @[44rem]/card:flex-[0_1_auto] @[44rem]/card:grid-cols-[repeat(3,auto)]",
+  FIGS: "grid flex-[1_1_100%] grid-cols-1 gap-2.5 @[30rem]/card:grid-cols-2 @[30rem]/card:gap-x-7 @[30rem]/card:gap-y-4 @[44rem]/card:grid-cols-4 @[64rem]/card:flex-[0_1_auto] @[64rem]/card:grid-cols-[repeat(4,auto)]",
   /** A receipt row on a phone (grid placement); a stacked figure above 30rem (flex ignores placement). */
-  FIG: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 @[30rem]/card:flex @[30rem]/card:flex-col @[30rem]/card:gap-0.5",
+  FIG: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 @[30rem]/card:flex @[30rem]/card:flex-col @[30rem]/card:items-start @[30rem]/card:gap-0.5",
   FIG_EYEBROW: "col-start-1 row-start-1 whitespace-nowrap",
   FIG_VALUE:
-    "col-start-2 row-span-2 row-start-1 text-xl leading-[1.15] font-bold tracking-[-0.01em] tabular-nums",
-  FIG_CAPTION: "text-on-surface-variant col-start-1 row-start-2 text-xs tabular-nums",
+    "col-start-2 row-span-2 row-start-1 text-xl leading-[1.15] font-bold tracking-[-0.01em] tabular-nums @[30rem]/card:col-auto @[30rem]/card:row-auto",
+  FIG_CAPTION:
+    "text-on-surface-variant col-start-1 row-start-2 text-xs text-pretty tabular-nums",
 } as const;
 
 /** A line placeholder's height for the phase title, eyebrow and figure value. */
@@ -146,11 +154,13 @@ export const STRIP = {
 // The recovery ladder
 // -----------------------------------------------------------------------------
 
-const RUNG_MIN_HEIGHT = "min-h-16";
+const RUNG_MIN_HEIGHT = "min-h-14";
 
 /**
- * One rung: disc, name + one cost line, controls. No fill at rest. Below a
- * 30rem card the controls take a second row, right-aligned under the text.
+ * One rung: a numbered disc that carries the step's state, a name over one
+ * cost-or-state line, and its control. Below a 30rem card the control takes a
+ * second row under the text. A rung's own fields (backup slot, reboot cap)
+ * hang in a `SUB` row aligned to the text column.
  */
 export const RUNG = {
   STACK: "flex flex-col gap-1",
@@ -160,27 +170,36 @@ export const RUNG = {
   TRANSITION:
     "transition-[background-color,color] duration-[var(--duration-standard)] ease-[var(--ease-standard)] motion-reduce:transition-none",
   DISC: "col-start-1 row-start-1 mt-0.5 grid size-8 flex-none place-items-center rounded-pill text-[0.8125rem] font-semibold tabular-nums @[30rem]/card:mt-0",
+  /** A child row's disc is a small glyph, not a numbered disc. */
+  DISC_CHILD: "size-6 justify-self-center",
   DISC_REST: "bg-surface-container-high text-on-surface-variant",
-  /** Step 3's companion row: the disc column held empty, so it reads as a child. */
-  SUB_DISC: "col-start-1 row-start-1 size-8",
+  /** Running: a step is in progress or being checked. */
   DISC_RUNNING: "bg-primary text-primary-foreground",
-  /** A rung the ladder has already tried and climbed past. */
+  /** Tried in this round. */
   DISC_DONE: "bg-success text-success-foreground",
+  /** Resting or gave up: a standing limit, not a failure. */
+  DISC_LIMIT: "bg-warning text-warning-foreground",
+  /** Not used for this reason, or not available on this modem. */
+  DISC_NA: "bg-surface-container text-on-surface-variant",
   DONE_GLYPH: "size-4",
   TEXT: "col-start-2 row-start-1 flex min-w-0 flex-col gap-px",
   NAME: "flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-pretty",
   NAME_INACTIVE: "text-on-surface-variant",
-  COST: "text-on-surface-variant text-[0.78125rem] text-pretty",
+  COST: "text-on-surface-variant text-[0.78125rem] text-pretty tabular-nums",
+  /** The cost line when the step is in a state worth reading. */
+  COST_STATE: "text-on-surface text-[0.78125rem] text-pretty tabular-nums",
   CONTROLS:
     "col-start-2 row-start-2 flex items-center gap-2.5 justify-self-end @[30rem]/card:col-start-3 @[30rem]/card:row-start-1",
-  /** Tier 4's field plus pill spans the full row on a phone. */
-  CONTROLS_WIDE:
-    "col-span-2 col-start-1 row-start-2 flex items-center gap-2.5 justify-self-end @[30rem]/card:col-span-1 @[30rem]/card:col-start-3 @[30rem]/card:row-start-1",
-  ERROR:
-    "text-destructive-on-surface col-span-full text-right text-xs leading-[1.5]",
-  /** The "Up to" lead before tier 4's cap; dropped on a phone-width card. */
-  CAP: "text-on-surface-variant inline-flex items-center gap-2 text-[0.8125rem] whitespace-nowrap",
-  CAP_LEAD: "hidden @[30rem]/card:inline",
+  /** Aligned to the text column, under the name and cost line. */
+  SUB: "col-start-2 col-end-[-1] flex flex-wrap items-center gap-x-3 gap-y-2 pb-1",
+  SUB_LABEL: "text-on-surface-variant inline-flex items-center gap-1.5 text-[0.8125rem] whitespace-nowrap",
+  ERROR: "text-destructive-on-surface col-start-2 col-end-[-1] text-xs leading-[1.5]",
+} as const;
+
+/** The master row: a plain key-left / pill-right row at the head of the ladder. */
+export const MASTER = {
+  ROW: "flex min-h-[2.625rem] flex-wrap items-center justify-between gap-x-4 gap-y-2",
+  KEY: "text-sm font-semibold",
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -195,50 +214,66 @@ export const NUM_FIELD = {
   GROUP: `${FIELD_HEIGHT} w-auto flex-none data-[disabled=true]:opacity-50`,
   /** The group dims as a whole; the input's own disabled dim would compound. */
   INPUT:
-    "h-full w-[3.25rem] flex-none pr-1.5 pl-3 text-right text-[0.9375rem] font-semibold tabular-nums disabled:opacity-100 md:text-[0.9375rem]",
+    "h-full w-[3.5rem] flex-none pr-1.5 pl-3 text-right text-[0.9375rem] font-semibold tabular-nums disabled:opacity-100 md:text-[0.9375rem]",
   UNIT: "text-on-surface-variant pr-3 pl-0 text-[0.8125rem] font-normal whitespace-nowrap group-data-[disabled=true]/input-group:opacity-100",
+} as const;
+
+// -----------------------------------------------------------------------------
+// Disclosures ("Advanced", "If the link drops")
+// -----------------------------------------------------------------------------
+
+export const DISCLOSURE = {
+  ROOT: "flex flex-col",
+  TRIGGER:
+    "group/disclosure -mx-2 flex min-h-[2.625rem] w-[calc(100%+1rem)] items-center gap-2 rounded-field px-2 text-left text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring",
+  CHEV: "text-on-surface-variant size-4 flex-none transition-transform duration-[var(--duration-quick)] ease-[var(--ease-quick)] group-data-[state=open]/disclosure:rotate-90 motion-reduce:transition-none",
+  SUMMARY:
+    "text-on-surface-variant ml-auto min-w-0 truncate text-[0.78125rem] font-normal tabular-nums",
+  SUMMARY_LIVE: "text-primary-on-surface font-medium",
+  BODY: "flex flex-col gap-4 pt-1 pb-2",
 } as const;
 
 // -----------------------------------------------------------------------------
 // Detection
 // -----------------------------------------------------------------------------
 
-/** Receipt rows: key left, control right, 6px apart. */
+/** Receipt rows: key left, control right. */
 export const DETECT = {
-  BODY: "flex flex-1 flex-col gap-6",
-  ROWS: "flex flex-col gap-4",
+  BODY: "flex flex-1 flex-col gap-5",
+  /** The read-only fact line at the head of the card. */
+  READ: "flex min-h-[2.625rem] flex-wrap items-center justify-between gap-x-4 gap-y-1",
+  READ_TEXT: "text-sm font-medium tabular-nums",
+  READ_NOTE: "text-on-surface-variant font-normal",
+  GROUP: "flex flex-col gap-3",
   ROW: "flex min-h-[2.625rem] flex-wrap items-center justify-between gap-x-4 gap-y-2",
-  KEY: "text-sm font-medium",
-  /** A key with a one-line caption under it (the two switch rows). */
-  KEY_STACK: "flex min-w-0 flex-[1_1_12rem] flex-col gap-0.5",
+  KEY: "inline-flex items-center gap-1.5 text-sm font-medium",
+  SUBKEY: "text-on-surface-variant inline-flex items-center gap-1.5 text-sm",
   CAPTION:
     "text-on-surface-variant flex flex-wrap items-center gap-x-2 text-[0.78125rem] text-pretty tabular-nums",
-  LINK: "text-primary-on-surface inline-flex items-center gap-0.5 font-medium underline-offset-4 hover:underline",
-  CONTROLS: "ml-auto flex flex-wrap items-center justify-end gap-2.5",
-  ERROR: "text-destructive-on-surface -mt-1 basis-full text-right text-xs leading-[1.5]",
-  /** Six numeric segments fit a 30rem card only at the tighter padding. */
-  PROBE_PILL: "[&_[data-slot=toggle-group-item]]:px-2.5",
-  PROBE_SELECT: "w-auto min-w-[7.5rem] px-4 text-[0.84375rem] font-medium",
+  /** The value the clamp turns a typed number into: "-> 20 s". */
+  EFFECTIVE: "text-primary-on-surface inline-flex items-center gap-1 text-[0.8125rem] font-medium tabular-nums",
+  LINK: "text-primary-on-surface inline-flex items-center gap-0.5 text-[0.8125rem] font-medium underline-offset-4 hover:underline",
+  /** A field and its inline readout, kept on one line. */
+  LINE: "ml-auto flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1",
+  ERROR: "text-destructive-on-surface basis-full text-right text-xs leading-[1.5]",
+  /** Five segments fit a 30rem card only at the tighter padding. */
+  PRESET_PILL: "[&_[data-slot=toggle-group-item]]:px-3",
+  /** The consequence line that stays visible beside a risky toggle. */
+  CONSEQUENCE:
+    "text-warning-on-surface flex items-start gap-1.5 text-[0.78125rem] text-pretty",
+  SEP: "bg-border h-px w-full",
 } as const;
 
-/** The tonal container behind a timeline glyph. Only the glyph tells two apart. */
-export const TIMELINE_TONE = {
-  neutral: "bg-surface-container-high text-on-surface-variant",
-  info: "bg-primary-container text-on-primary-container",
-  alert: "bg-warning-container text-on-warning-container",
-  bad: "bg-destructive-container text-on-destructive-container",
-} as const;
-
-export type TimelineTone = keyof typeof TIMELINE_TONE;
-
-/** The derived reading, and Detection's one slack region (content bottom-aligned). */
+/** The derived reading: dot rows on the card's own ground. */
 export const TIMELINE = {
-  ROOT: "flex min-h-0 flex-1 flex-col justify-end gap-3",
   ROWS: "flex flex-col gap-2.5",
   ROW: "flex items-center gap-3 text-[0.8125rem]",
-  DISC: "grid size-7 flex-none place-items-center rounded-pill",
-  GLYPH: "size-3.5",
+  DOT: "size-2 flex-none rounded-pill bg-surface-container-high",
+  DOT_DONE: "bg-success",
+  DOT_NOW: "bg-primary",
+  DOT_REST: "bg-warning",
   KEY: "min-w-0 flex-1 text-pretty",
+  KEY_QUIET: "text-on-surface-variant",
   VALUE: "flex-none font-medium tabular-nums",
   NOTE: "text-on-surface-variant min-w-0 flex-1 text-[0.78125rem] text-pretty",
 } as const;
@@ -258,7 +293,7 @@ export const LOG_LINK =
   "text-primary-on-surface hover:bg-surface-container dark:hover:bg-surface-container h-9 gap-1 pr-2.5 pl-3.5 text-[0.8125rem]";
 
 /** The newest rows shown; the rest live on Network Events. */
-export const LOG_LIMIT = 5;
+export const LOG_LIMIT = 6;
 
 /**
  * PINNED at 52px, which is what lets the skeleton mirror it exactly: 8px of
@@ -276,22 +311,45 @@ export const ROW = {
   BODY: "flex min-w-0 flex-1 flex-col gap-[2px]",
   MESSAGE: "truncate text-sm leading-[1.35] font-medium",
   META: "flex h-4 min-w-0 items-center gap-1.5",
-  /** Size overrides only; the role stays the `Tag` variant's job. */
-  META_CHIP: "h-4 shrink-0 px-1.5 py-0 text-[0.6875rem] leading-none",
-  /** On a tinted row the chip takes the container's OWN ink, at the 65% that
-   *  holds the stroke at 3:1; 45% measured 2.13:1 on `warning-container`. */
-  META_CHIP_ON_TONAL: "border-current/65 text-current",
-  META_ID:
-    "text-on-surface-variant truncate font-mono text-[0.6875rem] leading-none",
-  META_ID_ON_TONAL:
-    "truncate font-mono text-[0.6875rem] leading-none opacity-90",
+  /** The detail line under a message: the reason, in plain words. */
+  DETAIL: "truncate text-[0.75rem] leading-none",
   WHEN: "flex flex-none flex-col items-end pl-2",
   RELATIVE: "text-[0.8125rem] leading-none font-semibold tabular-nums",
   ABSOLUTE: "text-[0.6875rem] leading-none tabular-nums pt-[4px]",
 } as const;
 
-/** Ink for the absolute time on a row with no chromatic container. */
+/** Ink for the absolute time and detail on a row with no chromatic container. */
 export const ABSOLUTE_INK = "text-on-surface-variant";
+
+/**
+ * Activity tones. Each event code owns one (tone, glyph) pair, so a row is told
+ * apart by shape before it is read. `fill` is the tonal container a recent row
+ * wears for its first hour; the disc keeps the role colour for good.
+ */
+export const ACTIVITY_TONE = {
+  success: {
+    disc: "bg-success text-success-foreground",
+    fill: "bg-success-container text-on-success-container",
+  },
+  warning: {
+    disc: "bg-warning text-warning-foreground",
+    fill: "bg-warning-container text-on-warning-container",
+  },
+  destructive: {
+    disc: "bg-destructive text-destructive-foreground",
+    fill: "bg-destructive-container text-on-destructive-container",
+  },
+  info: {
+    disc: "bg-primary text-primary-foreground",
+    fill: "bg-primary-container text-on-primary-container",
+  },
+  muted: {
+    disc: "bg-surface-container-high text-on-surface-variant",
+    fill: "bg-surface-container",
+  },
+} as const;
+
+export type ActivityTone = keyof typeof ACTIVITY_TONE;
 
 /** The day divider. The one place the canon allows a square edge. */
 export const DAY = {
@@ -360,11 +418,11 @@ export const SKELETON = {
   CARD_TITLE: "h-[1.40625rem] rounded-inline",
   CARD_DESC: "h-5 rounded-inline",
   EYEBROW: "h-[1.03125rem] rounded-inline",
-  TIMELINE_ROW: "h-7 rounded-inline",
+  TIMELINE_ROW: "h-5 rounded-inline",
   DETECT_CAPTION: "h-[1.1875rem] rounded-inline",
   FOOT_STATUS: "h-5 rounded-inline",
-  RUNG_NAME: "h-5 w-28 rounded-inline",
-  RUNG_COST: "h-[1.1875rem] w-40 rounded-inline",
+  RUNG_NAME: "h-5 w-40 rounded-inline",
+  RUNG_COST: "h-[1.1875rem] w-52 rounded-inline",
   ROW: `${ROW_HEIGHT} rounded-tile`,
   FIELD: `${FIELD_HEIGHT} rounded-field`,
   /** A `size="action"` Button or a SegmentedField track. */

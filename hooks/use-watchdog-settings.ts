@@ -1,268 +1,187 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
+import { startVisibleInterval } from "@/lib/visible-interval";
+import type {
+  CqWdMutationResult,
+  UseWatchdogReturn,
+  WatchdogGetResponse,
+  WatchdogSettingsPatch,
+} from "@/types/cq-watchdog";
 
-const CGI_ENDPOINT = "/cgi-bin/quecmanager/monitoring/watchdog.sh";
+// =============================================================================
+// useWatchdogSettings: watchdog settings + live daemon status
+// =============================================================================
+// GET  → { success, settings, effective, status, sim_failover, recent_reboots,
+//          sim_dual_capable, auto_disabled }
+//        `status` is `{}` while the daemon has written no state file → null.
+// POST → { action: "save_settings", ...keys }   (settings keys are TOP-LEVEL,
+//                                                not nested under `settings`)
+//        { action: "revert_sim" } | { action: "retry_failback" }
+//        success: { success: true }
+//        failure: { success: false, error, field?, detail? }
+//
+// Polled every 5 s while the tab is visible; polls are silent and keep the last
+// good `data` on failure. `settings` keeps its object identity while the values
+// are unchanged so forms seeded from it don't reset mid-edit. `receivedAt` lets
+// the page count mono deadlines (`*_until`) down between polls.
+//
+// Mutations never throw: they return a `CqWdMutationResult`.
+//
+// CGI: /cgi-bin/quecmanager/monitoring/watchdog.sh
+// =============================================================================
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+const ENDPOINT = "/cgi-bin/quecmanager/monitoring/watchdog.sh";
+const POLL_MS = 5_000;
 
-export interface WatchdogSettings {
-  enabled: boolean;
-  /** Consecutive failed PROBES (raw ping streak) before recovery begins. */
-  fail_threshold: number;
-  /**
-   * The effective ping cadence in seconds (`interval_sec` from the GET). The
-   * CGI writes it to `ping_profile.interval_override` only when it changed.
-   */
-  probe_interval: number;
-  /** Watchdog loop cadence. Pass-through only: no card edits it. */
-  check_interval: number;
-  cooldown: number;
-  tier1_enabled: boolean;
-  tier2_enabled: boolean;
-  tier3_enabled: boolean;
-  tier4_enabled: boolean;
-  backup_sim_slot: number | null;
-  max_reboots_per_hour: number;
-  // Quality recovery (opt-in). The thresholds it acts on are the SHARED
-  // quality_thresholds owned by Connection Quality; the watchdog owns only
-  // whether to recover and how sustained a breach must be.
-  quality_enabled: boolean;
-  quality_consecutive: number;
-  // SSR-aware hold: let a recoverable baseband restart self-heal first.
-  ssr_aware: boolean;
-  ssr_grace: number;
-  // Blind periodic swap back to the primary SIM after a Tier-3 failover. Each
-  // attempt is a real outage, so it is opt-in. Interval in MINUTES (5-1440).
-  primary_recheck_enabled: boolean;
-  primary_recheck_interval: number;
+interface Snapshot {
+  data: WatchdogGetResponse;
+  receivedAt: number;
 }
 
-/**
- * One card's commit. Every key is optional on the wire: the CGI writes only
- * the keys present, so a card sends its own fields and nothing else.
- */
-export type WatchdogSavePayload = Partial<
-  Omit<WatchdogSettings, "check_interval">
-> & {
-  action: "save_settings";
-};
-
-/** Read-only resolved view of the SHARED quality thresholds. */
-export interface WatchdogQualityThresholds {
-  latency_ms: number;
-  loss_pct: number;
-  latency_preset: string;
-  loss_preset: string;
+/** Values-only equality for the small, key-stable settings object. */
+function sameValues(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/**
- * The save outcome, RETURNED rather than only stored: `error` state set in the
- * same tick is stale in the caller's closure, so the reason travels here.
- */
-export interface WatchdogSaveResult {
-  ok: boolean;
-  /** Already-translated failure reason, or null on success. */
-  message: string | null;
-  /** The rejected field's backend name, when the failure names one. */
-  field: string | null;
+/** `{}` (no state file) and any non-object read as no status. */
+function normaliseStatus(raw: unknown): WatchdogGetResponse["status"] {
+  if (!raw || typeof raw !== "object" || Object.keys(raw).length === 0) {
+    return null;
+  }
+  return raw as WatchdogGetResponse["status"];
 }
 
-// Live state (`watchcat`, `sim_failover`, connectivity) is read from the poller
-// snapshot by the page, which is the fresher source. The CGI's own copies are
-// not surfaced here.
-export interface UseWatchdogSettingsReturn {
-  settings: WatchdogSettings | null;
-  qualityThresholds: WatchdogQualityThresholds | null;
-  autoDisabled: boolean;
-  /** Epoch seconds of the watchdog's own modem restarts, newest first. */
-  recentReboots: number[];
-  isLoading: boolean;
-  isSaving: boolean;
-  error: string | null;
-  saveSettings: (payload: WatchdogSavePayload) => Promise<WatchdogSaveResult>;
-  revertSim: () => Promise<boolean>;
-  refresh: () => void;
-}
-
-const num = (v: unknown, fallback: number): number =>
-  typeof v === "number" && Number.isFinite(v) ? v : fallback;
-
-// ─── Hook ──────────────────────────────────────────────────────────────────
-
-export function useWatchdogSettings(): UseWatchdogSettingsReturn {
+export function useWatchdogSettings(): UseWatchdogReturn {
   const { t } = useTranslation("errors");
-  const [settings, setSettings] = useState<WatchdogSettings | null>(null);
-  const [qualityThresholds, setQualityThresholds] =
-    useState<WatchdogQualityThresholds | null>(null);
-  const [autoDisabled, setAutoDisabled] = useState(false);
-  const [recentReboots, setRecentReboots] = useState<number[]>([]);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const mountedRef = useRef(true);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const resp = await authFetch(ENDPOINT);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (!mountedRef.current) return;
+
+      if (!json?.success || !json.settings) {
+        setError(
+          resolveErrorMessage(t, json?.error, json?.detail, "Unknown error"),
+        );
+        return;
+      }
+
+      const next: WatchdogGetResponse = {
+        ...json,
+        status: normaliseStatus(json.status),
+        sim_failover: json.sim_failover ?? { active: false },
+        recent_reboots: Array.isArray(json.recent_reboots)
+          ? json.recent_reboots.filter(
+              (v: unknown): v is number =>
+                typeof v === "number" && Number.isFinite(v),
+            )
+          : [],
+        sim_dual_capable: json.sim_dual_capable === true,
+        auto_disabled: json.auto_disabled === true,
+      };
+      const receivedAt = performance.now();
+      setSnapshot((prev) => ({
+        receivedAt,
+        data: {
+          ...next,
+          settings:
+            prev && sameValues(prev.data.settings, next.settings)
+              ? prev.data.settings
+              : next.settings,
+        },
+      }));
+      setError(null);
+    } catch {
+      if (mountedRef.current) {
+        setError(resolveErrorMessage(t, "unknown", undefined, "Unknown error"));
+      }
+    } finally {
+      if (mountedRef.current) setIsLoading(false);
+    }
+  }, [t]);
 
   useEffect(() => {
     mountedRef.current = true;
+    const stop = startVisibleInterval(() => void fetchData(), POLL_MS);
     return () => {
       mountedRef.current = false;
+      stop();
     };
-  }, []);
+  }, [fetchData]);
 
-  const fetchSettings = useCallback(
-    async (silent = false) => {
-      if (!silent) setIsLoading(true);
-      setError(null);
-
-      try {
-        const resp = await authFetch(CGI_ENDPOINT);
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
-
-        const json = await resp.json();
-        if (!mountedRef.current) return;
-
-        if (!json.success) {
-          setError(
-            resolveErrorMessage(
-              t,
-              json.error,
-              undefined,
-              "Failed to fetch watchdog settings",
-            ),
-          );
-          return;
-        }
-
-        const s = json.settings ?? {};
-        setSettings({
-          ...s,
-          fail_threshold: num(s.fail_threshold, 5),
-          // interval_sec is the cadence the ping daemon runs (B2.1).
-          probe_interval: num(json.interval_sec ?? json.effective_interval, 5),
-          check_interval: num(s.check_interval, 10),
-          cooldown: num(s.cooldown, 60),
-          max_reboots_per_hour: num(s.max_reboots_per_hour, 3),
-          quality_consecutive: num(s.quality_consecutive, 5),
-          ssr_grace: num(s.ssr_grace, 45),
-          primary_recheck_interval: num(s.primary_recheck_interval, 30),
-        });
-        setQualityThresholds(json.quality_thresholds ?? null);
-        setAutoDisabled(json.auto_disabled === true);
-        // Absent on older backends: no history, not an error.
-        setRecentReboots(
-          Array.isArray(json.recent_reboots)
-            ? json.recent_reboots.filter(
-                (v: unknown): v is number =>
-                  typeof v === "number" && Number.isFinite(v),
-              )
-            : [],
-        );
-      } catch (err) {
-        if (!mountedRef.current) return;
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch watchdog settings",
-        );
-      } finally {
-        if (mountedRef.current && !silent) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [t],
-  );
-
-  useEffect(() => {
-    fetchSettings();
-    const id = setInterval(() => {
-      fetchSettings(true);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [fetchSettings]);
-
-  const saveSettings = useCallback(
-    async (payload: WatchdogSavePayload): Promise<WatchdogSaveResult> => {
-      setError(null);
+  const post = useCallback(
+    async (body: object): Promise<CqWdMutationResult> => {
       setIsSaving(true);
-
       try {
-        const resp = await authFetch(CGI_ENDPOINT, {
+        const resp = await authFetch(ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(body),
         });
-
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
-
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
-        if (!mountedRef.current) {
-          return { ok: false, message: null, field: null };
-        }
 
-        if (!json.success) {
-          // The watchdog CGI carries its detail in `reason`, not `detail`.
-          const message = resolveErrorMessage(
-            t,
-            json.error,
-            json.reason,
-            "Failed to save watchdog settings",
-          );
-          setError(message);
+        if (!json?.success) {
           return {
             ok: false,
-            message,
-            field: typeof json.field === "string" ? json.field : null,
+            message: resolveErrorMessage(
+              t,
+              json?.error,
+              json?.detail ?? json?.reason,
+              "Unknown error",
+            ),
+            code: typeof json?.error === "string" ? json.error : null,
+            field: typeof json?.field === "string" ? json.field : null,
           };
         }
 
-        await fetchSettings(true);
-        return { ok: true, message: null, field: null };
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to save settings";
-        if (mountedRef.current) setError(message);
-        return { ok: false, message, field: null };
+        await fetchData();
+        return { ok: true, message: null, code: null, field: null };
+      } catch {
+        return {
+          ok: false,
+          message: resolveErrorMessage(t, "unknown", undefined, "Unknown error"),
+          code: null,
+          field: null,
+        };
       } finally {
-        if (mountedRef.current) {
-          setIsSaving(false);
-        }
+        if (mountedRef.current) setIsSaving(false);
       }
     },
-    [fetchSettings, t],
+    [fetchData, t],
   );
 
-  // Request a SIM revert (watchcat picks up the flag).
-  const revertSim = useCallback(async (): Promise<boolean> => {
-    try {
-      const resp = await authFetch(CGI_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "revert_sim" }),
-      });
-      if (!resp.ok) return false;
-      const json = await resp.json();
-      return json.success === true;
-    } catch {
-      return false;
-    }
-  }, []);
+  const saveSettings = useCallback(
+    (patch: WatchdogSettingsPatch) => post({ action: "save_settings", ...patch }),
+    [post],
+  );
+  const revertSim = useCallback(() => post({ action: "revert_sim" }), [post]);
+  const retryFailback = useCallback(
+    () => post({ action: "retry_failback" }),
+    [post],
+  );
 
   return {
-    settings,
-    qualityThresholds,
-    autoDisabled,
-    recentReboots,
+    data: snapshot?.data ?? null,
+    settings: snapshot?.data.settings ?? null,
+    receivedAt: snapshot?.receivedAt ?? null,
     isLoading,
-    isSaving,
     error,
+    isSaving,
     saveSettings,
     revertSim,
-    refresh: fetchSettings,
+    retryFailback,
+    refresh: fetchData,
   };
 }

@@ -4,20 +4,18 @@ import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
 import { MonitoringPageHeader } from "@/components/monitoring/page-header";
-import { usePingProfile } from "@/hooks/use-ping-profile";
-import { useQualityThresholds } from "@/hooks/use-quality-thresholds";
+import { useConnectionQuality } from "@/hooks/use-connection-quality";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
 import ProbeTargetsCard from "./probe-targets-card";
-import QualityThresholdsCard from "./quality-thresholds-card";
 import { CARD_CELL, PAIR, PAGE_ROOT } from "./shapes";
+import SensitivityQualityCard from "./sensitivity-quality-card";
 
 const K = "connection_quality";
 
 export function ConnectionQualitySettings() {
   const { t } = useTranslation("monitoring");
-  const profile = usePingProfile();
-  const quality = useQualityThresholds();
+  const cq = useConnectionQuality();
 
   return (
     <motion.div
@@ -36,10 +34,10 @@ export function ConnectionQualitySettings() {
 
       <motion.div className={PAIR} variants={staggerContainer}>
         <motion.div variants={staggerItem} className={CARD_CELL}>
-          <ProbeTargetsCard profile={profile} />
+          <ProbeTargetsCard cq={cq} />
         </motion.div>
         <motion.div variants={staggerItem} className={CARD_CELL}>
-          <QualityThresholdsCard quality={quality} />
+          <SensitivityQualityCard cq={cq} />
         </motion.div>
       </motion.div>
     </motion.div>
