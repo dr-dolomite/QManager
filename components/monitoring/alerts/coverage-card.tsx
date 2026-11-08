@@ -213,7 +213,7 @@ function CoverageRows({ rows }: { rows: CoverageRow[] }) {
                 </Badge>
               ))}
               {empty ? (
-                allEmpty ? (
+                allEmpty || row.optional ? (
                   <span className={COVERAGE_ROW.QUIET}>
                     {t("alerts.coverage.notSent")}
                   </span>

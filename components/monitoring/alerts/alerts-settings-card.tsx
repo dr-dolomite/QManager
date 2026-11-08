@@ -46,7 +46,12 @@ import {
 } from "./channel-field";
 import { ChannelRail, panelId, tabId, type ChannelRailItem } from "./channel-rail";
 import { eventNameKey, reasonKey } from "./constants";
-import { confirmedInput, deriveCoverage, readCapability } from "./derive";
+import {
+  confirmedInput,
+  deriveCoverage,
+  readCapability,
+  visibleEvents,
+} from "./derive";
 import {
   CARD_DESC,
   CARD_PAD,
@@ -374,7 +379,7 @@ function SendsFor({
     <>
       <p className={PANEL.SECTION_LABEL}>{t("alerts.channels.sends_for")}</p>
       <div className={PANEL.TICKS}>
-        {ALERT_EVENT_ORDER.map((event) => {
+        {visibleEvents(state.capabilities).map((event) => {
           const name = t(eventNameKey(event));
           const { capable, reason } = readCapability(state.capabilities, event, channel);
           if (!capable) {
