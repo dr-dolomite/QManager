@@ -29,6 +29,10 @@ _CFG_BACKUP_SECTIONS_LOADED=1
 # enable-with-no-token restore fail, never enable without a token.
 [ -f /usr/lib/qmanager/api_auth.sh ] && . /usr/lib/qmanager/api_auth.sh
 
+# Old -> new watchdog / connection-quality key conversion (shared with
+# install.sh). Guarded: when missing, apply_watchdog refuses instead of guessing.
+[ -f /usr/lib/qmanager/cqwd_migrate.sh ] && . /usr/lib/qmanager/cqwd_migrate.sh
+
 # --- Logging ---
 if [ -f /usr/lib/qmanager/qlog.sh ]; then
     . /usr/lib/qmanager/qlog.sh
@@ -43,9 +47,10 @@ fi
 # --- Canonical apply order (safe first, IMEI/profiles last) ---
 # alert_routing sits with sms_alerts (both are trivial, safe JSON writes) so the
 # two alert-config sections restore together, ahead of the risky AT/IMEI work.
-# quality_thresholds precedes watchdog because watchcat quality recovery reads
-# them; sites is a plain JSON write with no modem side effects.
-CFG_BACKUP_APPLY_ORDER="sms_alerts alert_routing sms_storage quality_thresholds sites metrics watchdog network_mode_apn bands tower_lock ttl_hl imei profiles"
+# connection_quality precedes watchdog because watchcat quality recovery reads
+# its thresholds and an old watchdog fail_threshold converts at the restored
+# sensitivity; sites is a plain JSON write with no modem side effects.
+CFG_BACKUP_APPLY_ORDER="sms_alerts alert_routing sms_storage connection_quality sites metrics watchdog network_mode_apn bands tower_lock ttl_hl imei profiles"
 
 # --- Known section keys (used for validation) ---
 CFG_BACKUP_KNOWN_SECTIONS="$CFG_BACKUP_APPLY_ORDER"
@@ -57,6 +62,29 @@ cfg_backup_is_known_section() {
     esac
 }
 
+# --- Payload normaliser (apply.sh, before section validation) ---
+# Reads a {schema, sections} payload on stdin and prints it with the retired
+# section name folded in PERMANENTLY (.qmbackup files outlive releases):
+#   quality_thresholds -> connection_quality (a connection_quality key wins)
+# plus the backup's sensitivity copied into the watchdog fragment as
+# _sensitivity, so an old fail_threshold converts at the backup's interval.
+cfg_backup_normalize() {
+    jq -c '
+        def obj: if type == "object" then . else {} end;
+        if (.sections | type) != "object" then .
+        else
+          (if (.sections | has("quality_thresholds")) then
+             .sections.connection_quality =
+               ((.sections.quality_thresholds | obj) + (.sections.connection_quality | obj))
+             | del(.sections.quality_thresholds)
+           else . end)
+          | (if (.sections.watchdog | type) == "object"
+                and ((.sections.connection_quality | obj).sensitivity | type) == "string" then
+               .sections.watchdog._sensitivity = .sections.connection_quality.sensitivity
+             else . end)
+        end'
+}
+
 # --- Dispatcher: collect by key ---
 cfg_backup_collect() {
     local key="$1"
@@ -64,7 +92,7 @@ cfg_backup_collect() {
         sms_alerts)       collect_sms_alerts ;;
         alert_routing)    collect_alert_routing ;;
         sms_storage)      collect_sms_storage ;;
-        quality_thresholds) collect_quality_thresholds ;;
+        connection_quality) collect_connection_quality ;;
         sites)            collect_sites ;;
         metrics)          collect_metrics ;;
         watchdog)         collect_watchdog ;;
@@ -85,7 +113,7 @@ cfg_backup_apply() {
         sms_alerts)       apply_sms_alerts ;;
         alert_routing)    apply_alert_routing ;;
         sms_storage)      apply_sms_storage ;;
-        quality_thresholds) apply_quality_thresholds ;;
+        connection_quality) apply_connection_quality ;;
         sites)            apply_sites ;;
         metrics)          apply_metrics ;;
         watchdog)         apply_watchdog ;;
@@ -225,13 +253,19 @@ apply_sms_storage() {
 }
 
 # =============================================================================
-# Connection Quality thresholds — UCI quecmanager.quality_thresholds.*
+# Connection Quality — UCI quecmanager.ping_profile.{sensitivity,targets} +
+# quecmanager.quality_thresholds.* (spec 3.1; the platform adapter routes the
+# logical connection_quality keys to these two UCI sections)
 # =============================================================================
-# Mirrors system/quality_thresholds.sh. Absent presets ARE the default (the CGI
-# reports isDefault=true), so collect emits null presets when none is stored
-# and apply deletes them when the backup carries none. alert_after_min is the
-# ONE outage wait every alert channel uses; it may exist without any preset.
-# Every value is re-validated on apply.
+# Thresholds mirror system/quality_thresholds.sh. Absent presets ARE the default
+# (the CGI reports isDefault=true), so collect emits null presets when none is
+# stored and apply deletes them when the backup carries none. alert_after_min is
+# the ONE outage wait every alert channel uses (1-1440, cq_alert_after_min); it
+# may exist without any preset. Every value is re-validated on apply.
+#
+# Backups from before the rename carry this as a "quality_thresholds" section
+# (thresholds only); cfg_backup_normalize folds it into connection_quality, and
+# an absent sensitivity/targets leaves the device's own untouched.
 _qt_int_in() {
     case "$1" in
         ''|*[!0-9]*) return 1 ;;
@@ -239,8 +273,15 @@ _qt_int_in() {
     [ "$1" -ge "$2" ] 2>/dev/null && [ "$1" -le "$3" ] 2>/dev/null
 }
 
-collect_quality_thresholds() {
-    local lat loss lat_c loss_c wait
+collect_connection_quality() {
+    local lat
+    local loss
+    local lat_c
+    local loss_c
+    local wait
+    local sens
+    local tl
+    local targets
     lat=$(uci -q get quecmanager.quality_thresholds.latency_preset)
     loss=$(uci -q get quecmanager.quality_thresholds.loss_preset)
     lat_c=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms)
@@ -248,21 +289,43 @@ collect_quality_thresholds() {
     wait=$(uci -q get quecmanager.quality_thresholds.alert_after_min)
     _qt_int_in "$lat_c" 1 10000 || lat_c=""
     _qt_int_in "$loss_c" 0 100 || loss_c=""
-    _qt_int_in "$wait" 1 60 || wait=""
+    _qt_int_in "$wait" 1 1440 || wait=""
+    sens=$(uci -q get quecmanager.ping_profile.sensitivity)
+    [ -z "$sens" ] && sens=$(uci -q get quecmanager.ping_profile.profile)
+    cqm_sens_ok "$sens" || sens=""
+    # `uci get` joins list items with spaces; a valid target has no space, so
+    # the split is exact (an invalid item is dropped again on apply).
+    tl=$(uci -q get quecmanager.ping_profile.targets)
+    targets=$(printf '%s' "$tl" | tr ' ' '\n' | \
+        jq -Rsc 'split("\n") | map(select(length > 0)) | if length == 0 then null else . end')
+    [ -n "$targets" ] || targets=null
     jq -nc --arg lat "$lat" --arg loss "$loss" --arg lat_c "$lat_c" \
-        --arg loss_c "$loss_c" --arg wait "$wait" '
+        --arg loss_c "$loss_c" --arg wait "$wait" --arg sens "$sens" \
+        --argjson targets "$targets" '
         def num: if . == "" then null else tonumber end;
         def str: if . == "" then null else . end;
-        {latency_preset: ($lat | str), loss_preset: ($loss | str),
+        {sensitivity: ($sens | str), targets: $targets,
+         latency_preset: ($lat | str), loss_preset: ($loss | str),
          latency_custom_ms: ($lat_c | num), loss_custom_pct: ($loss_c | num),
          alert_after_min: ($wait | num)}'
 }
 
-apply_quality_thresholds() {
-    local input lat loss lat_c loss_c wait
+apply_connection_quality() {
+    local input
+    local lat
+    local loss
+    local lat_c
+    local loss_c
+    local wait
+    local sens
+    local tcount
+    local titems
+    local tlist
+    local t
+    local n
     input=$(cat)
     echo "$input" | jq -e 'type == "object"' >/dev/null 2>&1 || {
-        qlog_error "apply_quality_thresholds: invalid input"
+        qlog_error "apply_connection_quality: invalid input"
         return 1
     }
     lat=$(echo "$input" | jq -r '.latency_preset // empty')
@@ -270,26 +333,75 @@ apply_quality_thresholds() {
     lat_c=$(echo "$input" | jq -r '.latency_custom_ms | if . == null then empty else tostring end')
     loss_c=$(echo "$input" | jq -r '.loss_custom_pct | if . == null then empty else tostring end')
     wait=$(echo "$input" | jq -r '.alert_after_min | if . == null then empty else tostring end')
+    sens=$(echo "$input" | jq -r '.sensitivity | if . == null then empty else tostring end')
+    tcount=$(echo "$input" | jq -r '.targets | if . == null then "absent" elif type == "array" then length else "bad" end')
 
     # Presets travel as a pair (the CGI always writes both); one alone is junk.
     if [ -n "$lat" ] || [ -n "$loss" ]; then
         case "$lat" in
             standard|tolerant|very-tolerant|custom) ;;
-            *) qlog_error "apply_quality_thresholds: bad latency_preset"; return 1 ;;
+            *) qlog_error "apply_connection_quality: bad latency_preset"; return 1 ;;
         esac
         case "$loss" in
             standard|tolerant|very-tolerant|custom) ;;
-            *) qlog_error "apply_quality_thresholds: bad loss_preset"; return 1 ;;
+            *) qlog_error "apply_connection_quality: bad loss_preset"; return 1 ;;
         esac
         if [ "$lat" = "custom" ] && ! _qt_int_in "$lat_c" 1 10000; then
-            qlog_error "apply_quality_thresholds: bad latency_custom_ms"; return 1
+            qlog_error "apply_connection_quality: bad latency_custom_ms"; return 1
         fi
         if [ "$loss" = "custom" ] && ! _qt_int_in "$loss_c" 0 100; then
-            qlog_error "apply_quality_thresholds: bad loss_custom_pct"; return 1
+            qlog_error "apply_connection_quality: bad loss_custom_pct"; return 1
+        fi
+        # 0 % always breaches under >=; the range is 1-100 now (spec 3.1).
+        if [ "$loss" = "custom" ] && [ "$loss_c" -eq 0 ]; then
+            qlog_warn "apply_connection_quality: loss_custom_pct 0 -> 1 (range is 1-100)"
+            loss_c=1
         fi
     fi
-    if [ -n "$wait" ] && ! _qt_int_in "$wait" 1 60; then
-        qlog_error "apply_quality_thresholds: bad alert_after_min"; return 1
+    if [ -n "$wait" ] && ! _qt_int_in "$wait" 1 1440; then
+        qlog_error "apply_connection_quality: bad alert_after_min"; return 1
+    fi
+
+    # Sensitivity and targets: a bad value skips that key, not the section.
+    if [ -n "$sens" ] && ! cqm_sens_ok "$sens"; then
+        qlog_warn "apply_connection_quality: skipping bad sensitivity"
+        sens=""
+    fi
+    tlist=""
+    case "$tcount" in
+        absent) ;;
+        1|2|3|4)
+            # One line per item; a non-string becomes "-" (fails the rule) and an
+            # item holding a newline changes the line count, so both reject.
+            titems=$(echo "$input" | jq -r '.targets[] | if type == "string" then . else "-" end')
+            n=0
+            while IFS= read -r t; do
+                n=$((n + 1))
+                if ! cqm_target_ok "$t"; then
+                    tlist="bad"
+                    break
+                fi
+                tlist="${tlist:+$tlist }$t"
+            done <<EOT
+$titems
+EOT
+            if [ "$tlist" = "bad" ] || [ "$n" != "$tcount" ]; then
+                qlog_warn "apply_connection_quality: skipping bad targets"
+                tlist=""
+            fi
+            ;;
+        *) qlog_warn "apply_connection_quality: skipping bad targets" ;;
+    esac
+
+    uci -q get quecmanager.ping_profile >/dev/null 2>&1 || \
+        uci set quecmanager.ping_profile=ping_profile
+    [ -n "$sens" ] && uci set quecmanager.ping_profile.sensitivity="$sens"
+    if [ -n "$tlist" ]; then
+        uci -q delete quecmanager.ping_profile.targets
+        # Validated items hold no space or glob character, so the split is exact.
+        for t in $tlist; do
+            uci add_list quecmanager.ping_profile.targets="$t"
+        done
     fi
 
     uci -q get quecmanager.quality_thresholds >/dev/null 2>&1 || \
@@ -317,9 +429,9 @@ apply_quality_thresholds() {
         uci -q delete quecmanager.quality_thresholds.alert_after_min
     fi
     uci commit quecmanager || return 1
-    # Poller (events) and watchdog (recovery) read these through SEPARATE
-    # reload flags; touching only one leaves the other consumer stale.
-    touch /tmp/qmanager_quality_reload /tmp/qmanager_watchcat_reload
+    # Probe daemon (sensitivity, targets), poller (events) and watchdog
+    # (recovery) read these through SEPARATE reload flags.
+    touch /tmp/qmanager_ping_reload /tmp/qmanager_quality_reload /tmp/qmanager_watchcat_reload
     return 0
 }
 
@@ -494,9 +606,15 @@ apply_metrics() {
 }
 
 # =============================================================================
-# Watchdog / Watchcat — UCI quecmanager.watchcat.*
+# Watchdog / Watchcat — UCI quecmanager.watchcat.* (spec 3.2 + Amendment 3)
 # =============================================================================
-_WATCHCAT_KEYS="enabled fail_threshold check_interval cooldown tier1_enabled tier2_enabled tier3_enabled tier4_enabled backup_sim_slot max_reboots_per_hour quality_enabled quality_consecutive ssr_aware ssr_grace primary_recheck_enabled primary_recheck_interval"
+# New key names only. Backups from before the rename carry the old names;
+# apply translates each one PERMANENTLY with the install migration's formulas
+# (cqwd_migrate.sh), because .qmbackup files outlive releases. A new key in the
+# backup wins over its old name. A bad value skips that key (qlog_warn), never
+# the section. backup_sim_slot: "1"/"2" set it, "" or null clear it (absent =
+# no slot), a missing key leaves it untouched.
+_WATCHCAT_KEYS="enabled act_after_sec step_wait_sec tier1_enabled tier2_enabled tier3_enabled tier4_enabled backup_sim_slot max_reboots_per_hour quality_enabled quality_after_sec ssr_aware ssr_grace_sec failback_enabled failback_every_min carrier_enabled carrier_after_min"
 
 collect_watchdog() {
     local out="{"
@@ -513,31 +631,126 @@ collect_watchdog() {
     echo "$out"
 }
 
+# _wd_in <key>: the backup's value as a string; empty when absent or null.
+_wd_in() {
+    printf '%s' "$_wd_input" | jq -r --arg k "$1" '.[$k] | if . == null then empty else tostring end'
+}
+
+# _wd_validate <key> <value>: WD_V = the value to store; rc 1 = bad value.
+_wd_validate() {
+    case "$1" in
+        enabled|tier1_enabled|tier2_enabled|tier3_enabled|tier4_enabled|quality_enabled|ssr_aware|failback_enabled|carrier_enabled)
+            cqm_bool "$2" || return 1 ;;
+        act_after_sec) cqm_in_range "$2" 15 600 || return 1 ;;
+        step_wait_sec) cqm_in_range "$2" 10 300 || return 1 ;;
+        max_reboots_per_hour) cqm_in_range "$2" 1 10 || return 1 ;;
+        quality_after_sec) cqm_in_range "$2" 30 1800 || return 1 ;;
+        ssr_grace_sec) cqm_in_range "$2" 10 120 || return 1 ;;
+        failback_every_min) cqm_in_range "$2" 5 1440 || return 1 ;;
+        carrier_after_min) cqm_in_range "$2" 5 240 || return 1 ;;
+        *) return 1 ;;
+    esac
+    WD_V="$CQM_VAL"
+    return 0
+}
+
+# _wd_from_old <key>: WD_V = <key> translated from the backup's old name.
+# rc 1 = nothing to translate (no old key, or an unusable old value).
+_wd_from_old() {
+    local o
+    local s
+    local ov
+    case "$1" in
+        act_after_sec)
+            o=$(_wd_in fail_threshold)
+            [ -z "$o" ] && o=$(_wd_in max_failures)
+            [ -n "$o" ] || return 1
+            # The backup's sensitivity (cfg_backup_normalize copies it in as
+            # _sensitivity) at its own interval, else the device's current one.
+            s=$(_wd_in _sensitivity)
+            ov=""
+            if ! cqm_sens_ok "$s"; then
+                s=$(uci -q get quecmanager.ping_profile.sensitivity)
+                [ -z "$s" ] && s=$(uci -q get quecmanager.ping_profile.profile)
+                ov=$(uci -q get quecmanager.ping_profile.interval_override)
+            fi
+            cqm_effective_interval "$s" "$ov"
+            cqm_act_after_sec "$o" "$CQM_IV" || return 1
+            qlog_info "apply_watchdog: fail_threshold=$o (x ${CQM_IV}s) -> act_after_sec=$CQM_VAL"
+            ;;
+        quality_after_sec)
+            o=$(_wd_in quality_consecutive)
+            cqm_quality_after_sec "$o" "$(_wd_in check_interval)" || return 1
+            qlog_info "apply_watchdog: quality_consecutive=$o -> quality_after_sec=$CQM_VAL"
+            ;;
+        step_wait_sec)
+            o=$(_wd_in cooldown)
+            cqm_range "$o" 10 300 || return 1
+            qlog_info "apply_watchdog: cooldown=$o -> step_wait_sec=$CQM_VAL"
+            ;;
+        ssr_grace_sec)
+            o=$(_wd_in ssr_grace)
+            cqm_range "$o" 10 120 || return 1
+            qlog_info "apply_watchdog: ssr_grace=$o -> ssr_grace_sec=$CQM_VAL"
+            ;;
+        failback_enabled)
+            o=$(_wd_in primary_recheck_enabled)
+            cqm_bool "$o" || return 1
+            qlog_info "apply_watchdog: primary_recheck_enabled=$o -> failback_enabled=$CQM_VAL"
+            ;;
+        failback_every_min)
+            o=$(_wd_in primary_recheck_interval)
+            cqm_range "$o" 5 1440 || return 1
+            qlog_info "apply_watchdog: primary_recheck_interval=$o -> failback_every_min=$CQM_VAL"
+            ;;
+        *) return 1 ;;
+    esac
+    WD_V="$CQM_VAL"
+    return 0
+}
+
 apply_watchdog() {
-    local input
+    local _wd_input
     local k
     local v
-    input=$(cat)
+    local slot
+    _wd_input=$(cat)
+    echo "$_wd_input" | jq -e 'type == "object"' >/dev/null 2>&1 || {
+        qlog_error "apply_watchdog: invalid input"
+        return 1
+    }
+    command -v cqm_act_after_sec >/dev/null 2>&1 || {
+        qlog_error "apply_watchdog: cqwd_migrate.sh missing"
+        return 1
+    }
     # Ensure section exists
     uci -q get quecmanager.watchcat >/dev/null 2>&1 || {
         uci set quecmanager.watchcat=watchcat
     }
     for k in $_WATCHCAT_KEYS; do
-        v=$(echo "$input" | jq -r --arg k "$k" '.[$k] // empty')
-        # Empty string is a valid value for backup_sim_slot
-        if [ "$k" = "backup_sim_slot" ] || [ -n "$v" ]; then
-            uci set "quecmanager.watchcat.${k}=${v}"
+        [ "$k" = "backup_sim_slot" ] && continue
+        v=$(_wd_in "$k")
+        if [ -n "$v" ]; then
+            if ! _wd_validate "$k" "$v"; then
+                qlog_warn "apply_watchdog: skipping $k (bad value)"
+                continue
+            fi
+        elif ! _wd_from_old "$k"; then
+            continue
         fi
+        uci set "quecmanager.watchcat.${k}=${WD_V}"
     done
-    # Backups from before the rename carry max_failures; it is the same
-    # setting as fail_threshold, used only when the backup has no fail_threshold.
-    v=$(echo "$input" | jq -r '.fail_threshold // empty')
-    if [ -z "$v" ]; then
-        v=$(echo "$input" | jq -r '.max_failures // empty')
-        [ -n "$v" ] && uci set "quecmanager.watchcat.fail_threshold=${v}"
+    if printf '%s' "$_wd_input" | jq -e 'has("backup_sim_slot")' >/dev/null 2>&1; then
+        slot=$(_wd_in backup_sim_slot)
+        case "$slot" in
+            1|2) uci set "quecmanager.watchcat.backup_sim_slot=$slot" ;;
+            '') uci -q delete quecmanager.watchcat.backup_sim_slot ;;
+            *) qlog_warn "apply_watchdog: skipping backup_sim_slot (bad value)" ;;
+        esac
     fi
     uci commit quecmanager || return 1
-    touch /tmp/qmanager_watchcat_reload
+    # The poller gates its SA carrier read on carrier_enabled (its own flag).
+    touch /tmp/qmanager_watchcat_reload /tmp/qmanager_poller_reload
 
     local enabled
     enabled=$(uci -q get quecmanager.watchcat.enabled)
