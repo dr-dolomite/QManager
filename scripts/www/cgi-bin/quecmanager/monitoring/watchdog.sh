@@ -330,7 +330,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                          elif type == "boolean" then "bool"
                          elif type == "null" then "null"
                          else "other" end),
-               (.value | if type == "number" or type == "boolean" then tostring
+               (.value | if type == "number" then (if . == floor then (floor | tostring) else tostring end)
+                         elif type == "boolean" then tostring
                          elif type == "string" then . else "" end)]
             | @tsv')
 

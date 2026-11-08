@@ -320,7 +320,7 @@ EOF
         lat_custom=""
         if [ "$lat_preset" = "custom" ]; then
             lat_custom=$(printf '%s' "$POST_DATA" | jq -r '.latency.custom_ms
-                | if type == "number" and . == floor then tostring else "x" end')
+                | if type == "number" and . == floor then (floor | tostring) else "x" end')
             lat_custom=$(cq_int_in 1 10000 "$lat_custom") \
                 || invalid_field "latency.custom_ms" "must be an integer 1-10000 when the preset is custom"
         fi
@@ -334,7 +334,7 @@ EOF
         loss_custom=""
         if [ "$loss_preset" = "custom" ]; then
             loss_custom=$(printf '%s' "$POST_DATA" | jq -r '.loss.custom_pct
-                | if type == "number" and . == floor then tostring else "x" end')
+                | if type == "number" and . == floor then (floor | tostring) else "x" end')
             loss_custom=$(cq_int_in 1 100 "$loss_custom") \
                 || invalid_field "loss.custom_pct" "must be an integer 1-100 when the preset is custom"
         fi
