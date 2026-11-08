@@ -212,7 +212,6 @@ function SensitivityGrid({ rows, selected }: SensitivityGridProps) {
 interface MetricBlockProps {
   metric: Metric;
   state: ResolvedMetric;
-  table: Record<NamedQualityPreset, number>;
   range: readonly [number, number];
   onPreset: (preset: QualityPreset) => void;
   onText: (text: string) => void;
@@ -226,7 +225,6 @@ interface MetricBlockProps {
 function MetricBlock({
   metric,
   state,
-  table,
   range,
   onPreset,
   onText,
@@ -478,7 +476,6 @@ function QualityForm({ cq, data }: QualityFormProps) {
       <MetricBlock
         metric="latency"
         state={latency}
-        table={tables.presets.latency}
         range={tables.presets.custom_range.latency_ms}
         onPreset={pickPreset("latency")}
         onText={editText("latency")}
@@ -489,7 +486,6 @@ function QualityForm({ cq, data }: QualityFormProps) {
       <MetricBlock
         metric="loss"
         state={loss}
-        table={tables.presets.loss}
         range={tables.presets.custom_range.loss_pct}
         onPreset={pickPreset("loss")}
         onText={editText("loss")}
