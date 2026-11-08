@@ -685,32 +685,23 @@ The watchdog appends to the RAM event ring (`/tmp/qmanager_events.json`, max 50,
 
 ## Frontend files
 
-The page is the RM520N fork's compact bento with per-card saves (ledger U4.6). Order: page header with a Refresh pill, the SIM-failover banner (only while on the backup SIM), the status card, Recovery ladder (7fr) beside Detection (5fr), and Recovery activity. Every editable card commits its own draft from its own `CardFoot`; there is no page-level save.
+Rebuilt 2026-11-08 on the unified `monitoring/watchdog.sh` (contracts §3, §5.3-5.4, §6, §9 B/C, §13; Amendment 3 A3.2/A3.3). Order: page header with a Refresh pill, the SIM-failover banner (only while on the backup SIM), the status card, Recovery Ladder beside Detection, Recovery Activity. Every editable card commits its own keys from its own `CardFoot`.
 
 | File | Purpose |
 |---|---|
-| `hooks/use-watchdog-settings.ts` | Fetch (30 s poll) + save + SIM revert. `WatchdogSettings` folds `interval_sec` in as `probe_interval`. `recentReboots: number[]` from GET `recent_reboots` (absent = `[]`). `saveSettings` RETURNS `WatchdogSaveResult { ok, message, field }` (reason through `resolveErrorMessage`, CGI `reason` as detail). |
-| `hooks/use-modem-status.ts` | Poller snapshot (5 s on this page) for `watchcat`, `sim_failover`, `connectivity.latency_history`; `receivedAtMs` feeds the grace gate. |
-| `hooks/use-watchdog-indicator.ts` | Sidebar pill for `recovery`/`cooldown`; hidden when `!isWatchcatLive` or data is stale. |
-| `components/monitoring/watchdog/watchdog.tsx` | Page coordinator and the three data states (skeletons from `shapes.ts`, error block with Retry, the surface). |
-| `components/monitoring/watchdog/derive.ts` | The one derived model: `derivePhase` (13 phases: the daemon's 8 states incl. `ssr_hold` and `radio_off`, plus `off`/`unknown`/`starting`/`not_running`/`auto_disabled`), `isWatchcatLive`, `deriveBand`, `deriveStrip`, `deriveTimeline`, `useTimeAgo`, `useGraceGate`, `CLOCK_PLAUSIBLE_AFTER`. `radio_off` shares the locked disc, glyph and label ("Paused"). |
-| `components/monitoring/watchdog/shapes.ts` | Geometry and tone contract; skeletons import the same constants |
-| `components/monitoring/watchdog/use-watchdog-form.ts` | Two scoped drafts over saved truth (`ladder`, `detection`); a card POSTs only its own keys; `grantsRebootAuthority` |
-| `components/monitoring/watchdog/watchdog-foot.tsx` | One card's `CardFoot`; the Ladder foot gates the save behind the reboot-authority `AlertDialog` |
-| `components/monitoring/watchdog/status-band.tsx` | Status card: phase disc, title, blurb, three figures (failed checks, recoveries, reboots), 60-slot probe strip. Saved truth only. |
-| `components/monitoring/watchdog/ladder-card.tsx` | Master On/Off, four rungs, step 3's "Switch back to the primary SIM" row, step 4's reboot cap |
-| `components/monitoring/watchdog/detection-card.tsx` | Probe every, Down after, Wait between steps, Quality trigger, Baseband restart hold, derived outage timeline |
-| `components/monitoring/watchdog/recovery-activity-card.tsx` | Newest five rows: `watchcat_recovery`/`sim_failover` events from `useRecentActivities` merged with ledger-backed restarts (`recentReboots`), day-grouped; "All events" goes to `/monitoring/events` |
-| `components/monitoring/watchdog/banners.tsx` | `FailoverBanner` with the Revert `AlertDialog` |
-| `components/monitoring/watchdog/sim-swap-banner.tsx` | SIM swap toast (rendered globally in `app-layout.tsx`) |
+| `hooks/use-watchdog-settings.ts` | `useWatchdogSettings(): UseWatchdogReturn` (`types/cq-watchdog.ts`). GET every 5 s while visible (the hero needs `offline_secs`, `tiers_tried`, `last_success_*`, `carrier_*`, which are not in `status.json`); `status: {}` reads as null; `settings` keeps identity across polls; `receivedAt` lets mono deadlines count down between polls. `saveSettings(patch)` POSTs the keys at the TOP level (`{"action":"save_settings","act_after_sec":45,…}`, fixture `save_settings_subset_ok`), plus `revertSim`, `retryFailback`; all return `CqWdMutationResult`. |
+| `hooks/use-connection-quality.ts` | Read by Detection for "Down after about N s (Sensitivity)" and the raw latency/loss limits behind the floor clamp. |
+| `hooks/use-modem-status.ts` | Poller snapshot for the probe strip (`connectivity.latency_history`) and the SIM-swap banner. |
+| `hooks/use-watchdog-indicator.ts` | Sidebar pill for `recovery`; `cooldown` and `holdoff` both report as cooldown. |
+| `components/monitoring/watchdog/derive.ts` | Phase model (17 phases, one glyph each, incl. hold-off by reason outage / quality / carrier, ping stale, radio off, SSR hold), hero figures, tier row states (tried / running / resting / not used), timeline from effective values. |
+| `components/monitoring/watchdog/status-band.tsx` | Hero: phase disc, title, blurb, four figures (Offline / Poor quality / On one carrier for, Recoveries "Since last restart", Last fix from `last_success_*`, Reboots N of `reboot_limit`), probe strip. |
+| `components/monitoring/watchdog/ladder-card.tsx` | "Recover automatically" first row, four tier rows, Tier 3 gated on `sim_dual_capable` with the backup-slot field, failback row with give-up and "Try again now" (`retry_failback`), Tier 4 cap; Tiers 3-4 read "Not used for poor quality / one carrier" while that reason runs. |
+| `components/monitoring/watchdog/detection-card.tsx` | Start recovery after (presets + Custom, effective clamp), quality trigger (presets in minutes, Custom in seconds 30-1800, floor clamp caption), carrier trigger (`carrier_enabled`, `carrier_after_min` 5/15/30/60 + Custom, Tier 1 link-drop note, "Right now" carrier count), Advanced (step wait, baseband restart hold), "If the link drops" timeline. No "not available in 5G SA" fact: the gated SA read covers SA. |
+| `components/monitoring/watchdog/activity-model.ts`, `recovery-activity-card.tsx` | Rows keyed by event `code` (§6); rows without `code` (pre-upgrade) fall back to English-text matching; reboots de-duplicated against `recent_reboots`. |
+| `components/monitoring/watchdog/{use-watchdog-form.ts,watchdog-foot.tsx,fields.tsx,disclosure.tsx,use-clock.ts,shapes.ts}` | Scoped drafts per card, the card foot, shared field/disclosure primitives, a shared 1 s clock, geometry (skeletons import the same constants). |
+| `components/monitoring/watchdog/banners.tsx`, `sim-swap-banner.tsx` | Failover banner with the Revert dialog; SIM swap toast. |
 
-`WatchcatState` and `WatchcatStatus` in `types/modem-status.ts` carry `radio_off` and the optional `age_sec` / `stale_after`. `monitoring:watchdog.*` lives in all five locale packs (`monitoring.json`): `band.reboots` = "Reboots", `band.rebootsCaption` = "In the last hour", `phase.not_running` ("Not reporting", "Enabled, but the watchdog has stopped reporting."), `phase.radio_off.blurb`, `activity.tier4Reboot`.
-
-**Saved-state honesty.** The status card and the ladder's running-tier disc read saved settings plus poller truth, never the draft. `unknown` (poller unreachable, or stale with a plausible clock) outranks every live state. After a save enables the watchdog, `useGraceGate` holds `starting` for 60 s (measured on `receivedAtMs`) before `not_running`.
-
-**Per-card save rules.** A card sends only its own keys; a blocked save names the fields in the foot; toasts are `watchdog.save.toastOk` / `toastFail` + the returned reason; a failed save keeps the draft dirty; reboot authority is confirmed at save when the draft newly has master AND step 4 on.
-
-**Connection Sensitivity alert:** `connectivity-sensitivity-card.tsx` shows an informational Alert when `interval_override` is set.
+`monitoring:watchdog.*` lives in all five locale packs.
 
 ---
 
