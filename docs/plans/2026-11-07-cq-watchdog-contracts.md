@@ -93,7 +93,7 @@ Full set, read by the watchdog CGI (`status`):
 | `recovery_reason` | str\|null | reason of the episode in progress (`outage\|quality\|carrier`; carrier: Amendment 3), null when idle |
 | `last_recovery_time` | int\|null | epoch of the last tier action |
 | `last_recovery_tier` | int\|null | |
-| `last_recovery_reason` | str\|null | `outage\|quality\|carrier` (carrier: Amendment 3) |
+| `last_recovery_reason` | str\|null | `outage\|quality\|carrier` (carrier: Amendment 3); null while `last_recovery_time` is null |
 | `total_recoveries` | int | |
 | `last_success_time` | int\|null | epoch of the last cooldown verdict that was a success (`wd_succeeded`); null until one, or while the wall clock is insane (1970 rule) (Amendment 3) |
 | `last_success_tier` | int\|null | tier of that success (Amendment 3) |

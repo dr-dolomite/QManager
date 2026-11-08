@@ -228,7 +228,7 @@ _wd_write_state_file() {
             recovery_reason: (if ($state == "recovery" or $state == "cooldown" or $state == "ssr_hold") then $recovery_reason else null end),
             last_recovery_time: $last_time,
             last_recovery_tier: $last_tier,
-            last_recovery_reason: $recovery_reason,
+            last_recovery_reason: (if $last_time == null then null else $recovery_reason end),
             total_recoveries: $total,
             last_success_time: $ls_time,
             last_success_tier: $ls_tier,
