@@ -93,6 +93,7 @@ ph_load() {
     mkdir -p "$PH_TMP" || die "cannot make $PH_TMP"
     trap 'rm -rf "$PH_TMP"' EXIT
     [ -f "$1" ] || die "no such poller file: $1"
+    PH_POLLER="$1"
     sed -n '/^# --- BEGIN WC COMPOSER/,/^# --- END WC COMPOSER/p' "$1" > "$PH_TMP/block.sh"
     [ -s "$PH_TMP/block.sh" ] || die "no WC COMPOSER block in $1"
     PH_LOG="$PH_TMP/qlog"
@@ -248,6 +249,15 @@ sc_base() {
     wc_reboots_this_hour=0
     _WC_HB_AGE=7
     _WC_HB_STALE=90
+    wc_recovery_reason=""
+    wc_step_wait_until=null
+    wc_holdoff_until=null
+    wc_holdoff_reason=""
+    wc_reboot_budget_exhausted=false
+    wc_ssr_hold_until=null
+    wc_failback_next_at=null
+    wc_ping_stale=false
+    wc_mono=123450
     sim_fo_active=false
     sim_fo_original_slot=null
     sim_fo_current_slot=null
@@ -348,6 +358,56 @@ sc_deepstate() {
     wc_last_recovery_time=1759999000; wc_last_recovery_tier=2; wc_total_recoveries=3
     wc_cooldown_remaining=45; wc_reboots_this_hour=1; wc_failure_count=4; wc_current_tier=2
 }
+# Watchdog hero set (contracts 4.2): the republished recovery fields.
+sc_wdcarrier() {
+    # A carrier episode in its step wait: Tier 1, reason carrier.
+    sc_base
+    wc_state=cooldown; wc_current_tier=1; wc_failure_count=0
+    wc_recovery_reason=carrier
+    wc_step_wait_until=123500; wc_cooldown_remaining=50
+    wc_last_recovery_time=1759999900; wc_last_recovery_tier=1; wc_total_recoveries=1
+}
+sc_wdholdoff() {
+    # Carrier hold-off after an exhausted ladder; state reads holdoff.
+    sc_base
+    wc_state=holdoff; wc_current_tier=2
+    wc_holdoff_until=124350; wc_holdoff_reason=carrier
+    wc_last_recovery_time=1759999800; wc_last_recovery_tier=2; wc_total_recoveries=2
+}
+sc_wdoutage() {
+    sc_base
+    wc_state=recovery; wc_current_tier=3; wc_failure_count=9
+    wc_recovery_reason=outage
+    wc_reboot_budget_exhausted=true
+    wc_failback_next_at=124000
+    wc_ping_stale=true
+    wc_holdoff_until=125000; wc_holdoff_reason=quality
+}
+sc_wdssr() {
+    sc_base
+    wc_state=ssr_hold; wc_recovery_reason=quality
+    wc_ssr_hold_until=123480
+}
+sc_wdnulls() {
+    # Every nullable hero field null (a quiet, healthy daemon).
+    sc_base
+    wc_recovery_reason=""; wc_step_wait_until=null; wc_holdoff_until=null
+    wc_holdoff_reason=""; wc_ssr_hold_until=null; wc_failback_next_at=null
+}
+sc_wdabsent() {
+    # No watchdog state file: what read_watchcat_state leaves behind.
+    sc_base
+    wc_enabled=false; wc_state=disabled
+    wc_current_tier=0; wc_failure_count=0
+    wc_last_recovery_time=null; wc_last_recovery_tier=null
+    wc_total_recoveries=0; wc_cooldown_remaining=0
+    wc_reboots_this_hour=0; wc_mono=0; wc_stale_after=0
+    wc_recovery_reason=""; wc_step_wait_until=null
+    wc_holdoff_until=null; wc_holdoff_reason=""
+    wc_reboot_budget_exhausted=false; wc_ssr_hold_until=null
+    wc_failback_next_at=null; wc_ping_stale=false
+    _WC_HB_AGE=null; _WC_HB_STALE=null
+}
 sc_qmi() {
     # Deep tier between AT reads: LTE signal gap-filled from qmi.env.
     sc_base
@@ -393,6 +453,9 @@ sc_empties() {
     wc_enabled=""; wc_state=""; wc_current_tier=""; wc_failure_count=""
     wc_last_recovery_time=""; wc_last_recovery_tier=""; wc_total_recoveries=""
     wc_cooldown_remaining=""; wc_reboots_this_hour=""; _WC_HB_AGE=""; _WC_HB_STALE=""
+    wc_recovery_reason=""; wc_step_wait_until=""; wc_holdoff_until=""; wc_holdoff_reason=""
+    wc_reboot_budget_exhausted=""; wc_ssr_hold_until=""; wc_failback_next_at=""
+    wc_ping_stale=""; wc_mono=""
     sim_fo_active=""; sim_fo_original_slot=""; sim_fo_current_slot=""; sim_fo_switched_at=""
     sim_swap_detected=""
     conn_internet_available=""
@@ -403,7 +466,7 @@ sc_empties() {
 
 run_named() {
     local _s
-    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_connnull sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties; do
+    for _s in sc_base sc_lte sc_sa sc_noservice sc_cfun0 sc_simabsent sc_connunknown sc_connnull sc_deepstate sc_qmi sc_qmica sc_qmidown sc_qmiunavail sc_empties sc_wdcarrier sc_wdholdoff sc_wdoutage sc_wdssr sc_wdnulls sc_wdabsent; do
         "$_s"
         write_cache_jq "$PH_TMP/a.json" 2>/dev/null
         _wc_compose_pf "$PH_TMP/b.json"
@@ -445,6 +508,113 @@ run_named() {
             [ -z "$PH_FIRST" ] && PH_FIRST="ca_source default not at in $_s.json"
         fi
     done
+}
+
+# The watchcat object is exactly today's 11 keys plus the 9 of contracts 4.2 in
+# both composers, and the reason fields take the full vocabulary (carrier too).
+PH_WC_KEYS='["age_sec","cooldown_remaining","current_tier","enabled","failback_next_at","failure_count","holdoff_reason","holdoff_until","last_recovery_tier","last_recovery_time","mono","ping_stale","reboot_budget_exhausted","reboots_this_hour","recovery_reason","ssr_hold_until","stale_after","state","step_wait_until","total_recoveries"]'
+
+_wc_assert() {
+    # _wc_assert <name> <jq expression that must be true on both composers>
+    local _s
+    for _s in a b; do
+        if jq -e "$2" "$PH_TMP/$_s.json" >/dev/null 2>&1; then
+            PH_PASS=$((PH_PASS + 1))
+        else
+            PH_FAIL=$((PH_FAIL + 1))
+            [ -z "$PH_FIRST" ] && PH_FIRST="$1: expectation failed in $_s.json: $(jq -c .watchcat "$PH_TMP/$_s.json" 2>/dev/null | head -c 400)"
+        fi
+    done
+}
+
+run_watchcat_keys() {
+    sc_base
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdkeys ".watchcat | keys == $PH_WC_KEYS"
+    sc_wdcarrier
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdcarrier '.watchcat | (.recovery_reason == "carrier") and (.step_wait_until == 123500) and (.holdoff_reason == null) and (.holdoff_until == null) and (.mono == 123450) and (.reboot_budget_exhausted == false) and (.ping_stale == false)'
+    sc_wdholdoff
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdholdoff '.watchcat | (.holdoff_reason == "carrier") and (.holdoff_until == 124350) and (.recovery_reason == null) and (.step_wait_until == null)'
+    sc_wdoutage
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdoutage '.watchcat | (.recovery_reason == "outage") and (.holdoff_reason == "quality") and (.reboot_budget_exhausted == true) and (.ping_stale == true) and (.failback_next_at == 124000)'
+    sc_wdssr
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdssr '.watchcat | (.ssr_hold_until == 123480) and (.state == "ssr_hold")'
+    sc_wdabsent
+    write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+    _wc_compose_pf "$PH_TMP/b.json"
+    _wc_assert wdabsent '.watchcat | (.enabled == false) and (.state == "disabled") and (.recovery_reason == null) and (.holdoff_reason == null) and (.step_wait_until == null) and (.holdoff_until == null) and (.ssr_hold_until == null) and (.failback_next_at == null) and (.age_sec == null) and (.mono == 0) and (.reboot_budget_exhausted == false) and (.ping_stale == false)'
+}
+
+# The poller's own reader (read_watchcat_state, extracted from the file under
+# test) fed with watchdog state files, then both composers on the result: the
+# whole path from /tmp/qmanager_watchcat.json to status.json.watchcat.
+run_watchcat_read() {
+    local _case
+    sed -n '/^read_watchcat_state() {/,/^}/p' "$PH_POLLER" > "$PH_TMP/wcread.sh"
+    [ -s "$PH_TMP/wcread.sh" ] || { PH_FAIL=$((PH_FAIL + 1)); [ -z "$PH_FIRST" ] && PH_FIRST="no read_watchcat_state in $PH_POLLER"; return 0; }
+    _state_reload() { return 0; }
+    _US=$(printf '')
+    STATE_FORCE_EVERY=30
+    _wc_rd_n=30
+    WC_STAMP="$PH_TMP/wc.stamp"
+    . "$PH_TMP/wcread.sh"
+    WATCHCAT_CACHE="$PH_TMP/watchcat.json"
+    for _case in carrier_cooldown carrier_holdoff outage_tier3 bogus_reason old_daemon nulls absent; do
+        sc_base
+        rm -f "$WATCHCAT_CACHE"
+        case "$_case" in
+            carrier_cooldown)
+                printf '%s\n' '{"enabled":true,"state":"cooldown","current_tier":1,"failure_count":0,"last_recovery_time":1759999900,"last_recovery_tier":1,"total_recoveries":1,"cooldown_remaining":50,"reboots_this_hour":0,"mono":123450,"stale_after":80,"recovery_reason":"carrier","step_wait_until":123500,"holdoff_until":null,"holdoff_reason":null,"reboot_budget_exhausted":false,"ssr_hold_until":null,"failback_next_at":null,"ping_stale":false}' > "$WATCHCAT_CACHE"
+                ;;
+            carrier_holdoff)
+                printf '%s\n' '{"enabled":true,"state":"holdoff","current_tier":2,"failure_count":0,"last_recovery_time":1759999800,"last_recovery_tier":2,"total_recoveries":2,"cooldown_remaining":0,"reboots_this_hour":0,"mono":123450,"stale_after":80,"recovery_reason":null,"step_wait_until":null,"holdoff_until":124350,"holdoff_reason":"carrier","reboot_budget_exhausted":false,"ssr_hold_until":null,"failback_next_at":null,"ping_stale":false}' > "$WATCHCAT_CACHE"
+                ;;
+            outage_tier3)
+                printf '%s\n' '{"enabled":true,"state":"recovery","current_tier":3,"failure_count":9,"last_recovery_time":1759999900,"last_recovery_tier":3,"total_recoveries":4,"cooldown_remaining":0,"reboots_this_hour":3,"mono":123450,"stale_after":80,"recovery_reason":"outage","step_wait_until":null,"holdoff_until":125000,"holdoff_reason":"quality","reboot_budget_exhausted":true,"ssr_hold_until":123480,"failback_next_at":124000,"ping_stale":true}' > "$WATCHCAT_CACHE"
+                ;;
+            bogus_reason)
+                printf '%s\n' '{"enabled":true,"state":"recovery","mono":123450,"stale_after":80,"recovery_reason":"unreachable","holdoff_reason":"x\"y"}' > "$WATCHCAT_CACHE"
+                ;;
+            old_daemon)
+                printf '%s\n' '{"enabled":true,"state":"monitor","current_tier":0,"failure_count":0,"total_recoveries":0,"cooldown_remaining":0,"reboots_this_hour":0,"mono":123450,"stale_after":80}' > "$WATCHCAT_CACHE"
+                ;;
+            nulls)
+                printf '%s\n' '{"enabled":null,"state":null,"mono":null,"stale_after":null,"recovery_reason":null,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"reboot_budget_exhausted":null,"ssr_hold_until":null,"failback_next_at":null,"ping_stale":null}' > "$WATCHCAT_CACHE"
+                ;;
+            absent) ;;
+        esac
+        _wc_rd_n=30
+        read_watchcat_state
+        write_cache_jq "$PH_TMP/a.json" 2>/dev/null
+        _wc_compose_pf "$PH_TMP/b.json"
+        _pair "wcread_$_case" "$PH_TMP/a.json" "$PH_TMP/b.json"
+        case "$_case" in
+            carrier_cooldown)
+                _wc_assert "wcread_$_case" '.watchcat | (.recovery_reason == "carrier") and (.step_wait_until == 123500) and (.holdoff_until == null) and (.state == "cooldown") and (.mono == 123450)' ;;
+            carrier_holdoff)
+                _wc_assert "wcread_$_case" '.watchcat | (.holdoff_reason == "carrier") and (.holdoff_until == 124350) and (.recovery_reason == null)' ;;
+            outage_tier3)
+                _wc_assert "wcread_$_case" '.watchcat | (.recovery_reason == "outage") and (.holdoff_reason == "quality") and (.reboot_budget_exhausted == true) and (.ssr_hold_until == 123480) and (.failback_next_at == 124000) and (.ping_stale == true)' ;;
+            bogus_reason)
+                _wc_assert "wcread_$_case" '.watchcat | (.recovery_reason == null) and (.holdoff_reason == null)' ;;
+            old_daemon)
+                _wc_assert "wcread_$_case" '.watchcat | (.recovery_reason == null) and (.step_wait_until == null) and (.holdoff_until == null) and (.reboot_budget_exhausted == false) and (.ping_stale == false) and (.failback_next_at == null) and (.ssr_hold_until == null)' ;;
+            nulls)
+                _wc_assert "wcread_$_case" '.watchcat | (.recovery_reason == null) and (.holdoff_reason == null) and (.step_wait_until == null) and (.enabled == false)' ;;
+            absent)
+                _wc_assert "wcread_$_case" '.watchcat | (.enabled == false) and (.state == "disabled") and (.recovery_reason == null) and (.mono == 0)' ;;
+        esac
+    done
+    rm -f "$WATCHCAT_CACHE"
 }
 
 # ---------------------------------------------------------------------------
@@ -511,9 +681,9 @@ _pick_num() {
     esac
 }
 
-PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_sensitivity conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state lte_source ca_source _QMI_STATE"
+PH_STR_VARS="t2_carrier t2_bandwidth_details t2_apn t2_wan_ipv4 t2_wan_ipv6 t2_primary_dns t2_secondary_dns t2_primary_dns_v4 t2_primary_dns_v6 t2_secondary_dns_v4 t2_secondary_dns_v6 lte_band nr_band boot_firmware boot_build_date boot_manufacturer boot_model boot_imei boot_imsi boot_iccid boot_phone_number boot_lte_category t2_mimo boot_supported_lte_bands boot_supported_nsa_nr5g_bands boot_supported_sa_nr5g_bands boot_supported_nrdc_nr5g_bands hw_lte_bands hw_nsa_nr5g_bands hw_sa_nr5g_bands boot_qmanager_version boot_ippt_mode boot_ippt_mac boot_ippt_nat boot_ippt_usbnet boot_ippt_dhcpv4dns conn_ping_target conn_sensitivity conn_last_family dns_resolver sim_swap_profile_id sim_swap_profile_name service_status lte_state nr_state conn_status wc_state wc_recovery_reason wc_holdoff_reason lte_source ca_source _QMI_STATE"
 # Numeric fields that have a default in BOTH composers (empty is allowed).
-PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval conn_history_size conn_last_leg conn_fail_secs conn_recover_secs QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
+PH_NUM_VARS="t1_cfun t2_sim_slot t2_total_bandwidth_mhz lte_earfcn lte_bandwidth lte_pci lte_cell_id lte_enodeb_id lte_sector_id lte_tac lte_rsrp lte_rsrq lte_sinr lte_rssi lte_ta nr_arfcn nr_pci nr_cell_id nr_enodeb_id nr_sector_id nr_tac nr_rsrp nr_rsrq nr_sinr nr_scs nr_ta t1_temperature cpu_usage memory_used_mb memory_total_mb uptime_seconds conn_uptime_seconds conn_latency conn_avg_latency conn_min_latency conn_max_latency conn_jitter conn_packet_loss conn_history_interval conn_history_size conn_last_leg conn_fail_secs conn_recover_secs QUALITY_LAT_THRESHOLD QUALITY_LOSS_THRESHOLD dns_lookup_ms wc_current_tier wc_failure_count wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries wc_cooldown_remaining wc_reboots_this_hour _WC_HB_AGE _WC_HB_STALE wc_step_wait_until wc_holdoff_until wc_ssr_hold_until wc_failback_next_at wc_mono sim_fo_original_slot sim_fo_current_slot sim_fo_switched_at _QMI_READ_MONO _QMI_SSR"
 
 run_random() {
     local _i=0
@@ -834,6 +1004,8 @@ case "$1" in
     synthetic)
         ph_load "$2"
         run_named
+        run_watchcat_keys
+        run_watchcat_read
         run_random "${3:-300}"
         run_badnums
         _report synthetic
@@ -852,6 +1024,8 @@ case "$1" in
         ph_load "$2"
         _rc=0
         run_named
+        run_watchcat_keys
+        run_watchcat_read
         run_random "${3:-300}"
         run_badnums
         _report synthetic || _rc=1

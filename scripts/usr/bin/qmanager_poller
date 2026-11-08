@@ -1931,6 +1931,14 @@ wc_cooldown_remaining=0
 wc_reboots_this_hour=0
 wc_mono=0
 wc_stale_after=0
+wc_recovery_reason=""
+wc_step_wait_until="null"
+wc_holdoff_until="null"
+wc_holdoff_reason=""
+wc_reboot_budget_exhausted="false"
+wc_ssr_hold_until="null"
+wc_failback_next_at="null"
+wc_ping_stale="false"
 WATCHCAT_CACHE="/tmp/qmanager_watchcat.json"
 
 # SIM failover state variables
@@ -1985,6 +1993,10 @@ read_watchcat_state() {
         wc_last_recovery_time="null"; wc_last_recovery_tier="null"
         wc_total_recoveries=0; wc_cooldown_remaining=0
         wc_reboots_this_hour=0; wc_mono=0; wc_stale_after=0
+        wc_recovery_reason=""; wc_step_wait_until="null"
+        wc_holdoff_until="null"; wc_holdoff_reason=""
+        wc_reboot_budget_exhausted="false"; wc_ssr_hold_until="null"
+        wc_failback_next_at="null"; wc_ping_stale="false"
         _wc_rd_n="$STATE_FORCE_EVERY"
         return
     fi
@@ -2006,7 +2018,15 @@ read_watchcat_state() {
         ((.cooldown_remaining) | if . == null then "0" else tostring end),
         ((.reboots_this_hour) | if . == null then "0" else tostring end),
         ((.mono) | if . == null then "0" else tostring end),
-        ((.stale_after) | if . == null then "0" else tostring end)
+        ((.stale_after) | if . == null then "0" else tostring end),
+        ((.recovery_reason) | if . == "outage" or . == "quality" or . == "carrier" then . else "" end),
+        ((.step_wait_until) | if . == null then "null" else tostring end),
+        ((.holdoff_until) | if . == null then "null" else tostring end),
+        ((.holdoff_reason) | if . == "outage" or . == "quality" or . == "carrier" then . else "" end),
+        ((.reboot_budget_exhausted) | if . == null then "false" else tostring end),
+        ((.ssr_hold_until) | if . == null then "null" else tostring end),
+        ((.failback_next_at) | if . == null then "null" else tostring end),
+        ((.ping_stale) | if . == null then "false" else tostring end)
     ] | join("\u001f")' "$WATCHCAT_CACHE" 2>/dev/null)
 
     if [ -z "$_wdata" ]; then
@@ -2016,7 +2036,7 @@ read_watchcat_state() {
 
     IFS="$_US" read -r wc_enabled wc_state wc_current_tier wc_failure_count \
         wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries \
-        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after <<EOF
+        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after         wc_recovery_reason wc_step_wait_until wc_holdoff_until wc_holdoff_reason         wc_reboot_budget_exhausted wc_ssr_hold_until wc_failback_next_at         wc_ping_stale <<EOF
 $_wdata
 EOF
 }
@@ -2386,6 +2406,15 @@ _wc_compose_pf() {
     _kN reboots_this_hour "$wc_reboots_this_hour" 0
     _kN age_sec "$_WC_HB_AGE" null
     _kN stale_after "$_WC_HB_STALE" null
+    _kSN recovery_reason "$wc_recovery_reason"
+    _kN step_wait_until "$wc_step_wait_until" null
+    _kN holdoff_until "$wc_holdoff_until" null
+    _kSN holdoff_reason "$wc_holdoff_reason"
+    _kB reboot_budget_exhausted "$wc_reboot_budget_exhausted" false
+    _kN ssr_hold_until "$wc_ssr_hold_until" null
+    _kN failback_next_at "$wc_failback_next_at" null
+    _kB ping_stale "$wc_ping_stale" false
+    _kN mono "$wc_mono" 0
     _kE
     _kO sim_failover
     _kB active "$sim_fo_active" false
@@ -2539,7 +2568,7 @@ write_cache_jq() {
         --argjson wc_cooldown "${wc_cooldown_remaining:-0}" \
         --argjson wc_reboots "${wc_reboots_this_hour:-0}" \
         --argjson wc_age "${_WC_HB_AGE:-null}" \
-        --argjson wc_stale "${_WC_HB_STALE:-null}" \
+        --argjson wc_stale "${_WC_HB_STALE:-null}"         --arg wc_rec_reason "$wc_recovery_reason"         --argjson wc_swu "${wc_step_wait_until:-null}"         --argjson wc_hold_until "${wc_holdoff_until:-null}"         --arg wc_hold_reason "$wc_holdoff_reason"         --argjson wc_rb_spent "${wc_reboot_budget_exhausted:-false}"         --argjson wc_ssr_until "${wc_ssr_hold_until:-null}"         --argjson wc_fb_next "${wc_failback_next_at:-null}"         --argjson wc_ping_stale "${wc_ping_stale:-false}"         --argjson wc_mono "${wc_mono:-0}" \
         --argjson sf_active "${sim_fo_active:-false}" \
         --argjson sf_orig "${sim_fo_original_slot:-null}" \
         --argjson sf_curr "${sim_fo_current_slot:-null}" \
@@ -2654,7 +2683,16 @@ write_cache_jq() {
                 total_recoveries: $wc_total,
                 cooldown_remaining: $wc_cooldown,
                 reboots_this_hour: $wc_reboots,
-                age_sec: $wc_age, stale_after: $wc_stale
+                age_sec: $wc_age, stale_after: $wc_stale,
+                recovery_reason: (if $wc_rec_reason == "" then null else $wc_rec_reason end),
+                step_wait_until: $wc_swu,
+                holdoff_until: $wc_hold_until,
+                holdoff_reason: (if $wc_hold_reason == "" then null else $wc_hold_reason end),
+                reboot_budget_exhausted: $wc_rb_spent,
+                ssr_hold_until: $wc_ssr_until,
+                failback_next_at: $wc_fb_next,
+                ping_stale: $wc_ping_stale,
+                mono: $wc_mono
             },
             sim_failover: {
                 active: $sf_active,
