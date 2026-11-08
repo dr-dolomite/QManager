@@ -18,6 +18,8 @@
     "sim_failover": "Failover della SIM",
     "sim_swap_detected": "SIM Scambio rilevato",
     "airplane_mode": "Modalità aereo",
+    "thermal_throttled": "Limitazione termica",
+    "thermal_recovered": "Limitazione termica terminata",
     "profile_applied": "Profilo applicato",
     "profile_failed": "Profilo non riuscito",
     "profile_deactivated": "Profilo disattivato",

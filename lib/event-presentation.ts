@@ -55,6 +55,7 @@ const RESOLVED_BY: Partial<Record<NetworkEventType, NetworkEventType>> = {
   signal_lost: "signal_restored",
   high_latency: "latency_recovered",
   high_packet_loss: "packet_loss_recovered",
+  thermal_throttled: "thermal_recovered",
 };
 
 /**
@@ -231,6 +232,7 @@ const RECOVERY_TYPES: ReadonlySet<NetworkEventType> = new Set([
   "signal_restored",
   "latency_recovered",
   "packet_loss_recovered",
+  "thermal_recovered",
   "watchcat_recovery",
   "profile_applied",
   "apn_reapplied",

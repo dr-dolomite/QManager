@@ -391,7 +391,7 @@ export const CATEGORY_TEST_COUNT: Record<TestCategory, number> = {
   permissions: 6,
   at_transport: 7,
   sms: 3,
-  services: 9,
+  services: 10,
   network: 7,
   configuration: 6,
 };

@@ -18,6 +18,8 @@
     "sim_failover": "SIM Failover",
     "sim_swap_detected": "SIM Swap Detected",
     "airplane_mode": "Airplane Mode",
+    "thermal_throttled": "Heat Throttling",
+    "thermal_recovered": "Heat Throttling Cleared",
     "profile_applied": "Profile Applied",
     "profile_failed": "Profile Failed",
     "profile_deactivated": "Profile Deactivated",

@@ -73,10 +73,25 @@
     "device_uptime_caption": "自上次启动",
     "uptime_unknown": "无法连接"
   },
+  "thermal": {
+    "chip": "降频中（{{parts}}）",
+    "chip_bare": "降频中",
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "毫米波",
+      "modem": "调制解调器",
+      "cpu": "CPU",
+      "ethernet": "以太网"
+    }
+  },
   "metrics": {
     "title": "设备与速度",
     "modem_temperature": "调制解调器温度",
     "high_temp_warning": "温度过高",
+    "throttle_at": "{{temp}} 时降频",
+    "below_throttling": "距降频还差 {{delta}}",
+    "throttle_reached": "已达到降频温度",
     "cpu_usage": "CPU 使用率",
     "high_cpu_warning": "CPU 占用过高",
     "memory_usage": "内存使用率",
@@ -239,6 +254,8 @@
       "sim_failover": "SIM 卡故障切换",
       "sim_swap_detected": "检测到更换 SIM 卡",
       "airplane_mode": "飞行模式",
+      "thermal_throttled": "过热降频",
+      "thermal_recovered": "过热降频已解除",
       "profile_applied": "配置文件已应用",
       "profile_failed": "配置文件应用失败",
       "profile_deactivated": "配置文件已停用",

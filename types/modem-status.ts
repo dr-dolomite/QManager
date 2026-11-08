@@ -44,6 +44,45 @@ export interface ModemStatus {
    * `undefined` rather than assuming a card is present).
    */
   sim?: SimBlock;
+  /**
+   * Heat-throttling snapshot (optional: an older poller does not emit it, and
+   * it may be `null` before the cooling devices are discovered).
+   */
+  thermal?: ThermalStatus | null;
+}
+
+/** Which part of the modem a cooling device slows down. */
+export type ThermalPart =
+  | "lte"
+  | "nr"
+  | "mmwave"
+  | "modem"
+  | "cpu"
+  | "ethernet";
+
+/** One cooling device currently above level 0. */
+export interface ThermalActiveDevice {
+  device: string;
+  part: ThermalPart;
+  level: number;
+  max: number;
+}
+
+/** Heat-throttling block published by the poller from sysfs. */
+export interface ThermalStatus {
+  /** True while any heat-driven cooling device is engaged. */
+  throttling: boolean;
+  /** Parts currently slowed down (empty when not throttling). */
+  parts: ThermalPart[];
+  active: ThermalActiveDevice[];
+  /** Cold protection is engaged; never counts as throttling. */
+  cold_protection: boolean;
+  /** Degrees Celsius left before the nearest throttling trip, or null. */
+  headroom_c: number | null;
+  /** The trip temperature (Celsius) that headroom is measured against. */
+  trip_c: number | null;
+  /** Which part that trip slows down. */
+  trip_part: ThermalPart | null;
 }
 
 /** SIM readiness block published by the poller from AT+CPIN?. */
@@ -926,7 +965,9 @@ export type NetworkEventType =
   | "config_restore_completed" // Configuration restore completed
   | "lan_address_changed" // LAN IP address / subnet changed by user
   | "apn_reapplied" // APN profile restored after a SIM profile deactivation
-  | "apn_reapply_failed"; // APN profile could not be restored after deactivation
+  | "apn_reapply_failed" // APN profile could not be restored after deactivation
+  | "thermal_throttled" // Heat is limiting part of the radio or CPU
+  | "thermal_recovered"; // Heat throttling cleared
 
 /** Severity level for UI icon coloring */
 export type EventSeverity = "info" | "warning" | "error";

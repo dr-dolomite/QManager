@@ -962,6 +962,7 @@
         "watchcat": "Watchdog della connessione",
         "tower_failover": "Demone failover della cella",
         "dpi": "Traffic Engine (nfqws)",
+        "thermal": "Limitazione termica",
         "sms_forward": "Demone inoltro SMS",
         "tailscale": "Tailscale (opzionale)"
       },

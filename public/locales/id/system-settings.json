@@ -962,6 +962,7 @@
         "watchcat": "Watchdog koneksi",
         "tower_failover": "Daemon failover menara",
         "dpi": "Traffic Engine (nfqws)",
+        "thermal": "Pembatasan suhu",
         "sms_forward": "Daemon penerusan SMS",
         "tailscale": "Tailscale (opsional)"
       },

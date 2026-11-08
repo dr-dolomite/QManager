@@ -18,6 +18,8 @@
     "sim_failover": "SIM Failover",
     "sim_swap_detected": "Pergantian SIM Terdeteksi",
     "airplane_mode": "Mode Pesawat",
+    "thermal_throttled": "Dibatasi Panas",
+    "thermal_recovered": "Pembatasan Panas Berakhir",
     "profile_applied": "Profil Diterapkan",
     "profile_failed": "Profil Gagal",
     "profile_deactivated": "Profil Dinonaktifkan",

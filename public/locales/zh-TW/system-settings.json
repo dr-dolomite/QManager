@@ -962,6 +962,7 @@
         "watchcat": "連線看門狗",
         "tower_failover": "基地台容錯移轉常駐程式",
         "dpi": "流量引擎（nfqws）",
+        "thermal": "過熱降頻",
         "sms_forward": "簡訊轉寄常駐程式",
         "tailscale": "Tailscale（選用）"
       },
