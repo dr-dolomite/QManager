@@ -399,23 +399,27 @@ main() {
         fi
         _prev_streak="$ping_streak_fail"
 
-        # The outage pause after an exhausted ladder ends on a fresh reachable
-        # read, in any state that gets here. A quality pause is never ended by
+        # A real answer: the ping daemon starts every run reachable=true with
+        # streak_success=0 until fail_secs of failures pass, so reachable alone
+        # is not an answer. It needs a successful probe (streak_success > 0).
+        _wd_answered=0
+        [ "$ping_reachable" = "true" ] && [ "$ping_streak_success" -gt 0 ] && _wd_answered=1
+
+        # The outage pause after an exhausted ladder ends on a real answer, in
+        # any state that gets here. A quality pause is never ended by
         # reachability (wd_holdoff_clear, wd_tiers.sh).
-        [ "$ping_reachable" = "true" ] && wd_holdoff_clear outage
+        [ "$_wd_answered" -eq 1 ] && wd_holdoff_clear outage
         # A real answer also ends the reboot-budget episode and stamps the first
-        # link-up after a watchdog reboot (wd_ledger.sh, the long-run guard). The
-        # ping daemon starts every run reachable=true with streak_success=0 until
-        # fail_secs of failures pass, so reachable alone is not an answer: it
-        # needs a successful probe (streak_success > 0).
-        [ "$ping_reachable" = "true" ] && [ "$ping_streak_success" -gt 0 ] && wd_link_up_seen
+        # link-up after a watchdog reboot (wd_ledger.sh, the long-run guard).
+        [ "$_wd_answered" -eq 1 ] && wd_link_up_seen
 
         # Natural recovery ends an outage episode that an inconclusive cooldown
         # left open (wd_tiers.sh, spec section 5.4): the next outage starts at
         # Tier 1 again. A kept quality tier ends on a clean window instead
         # (evaluate_quality), and a kept carrier tier on 2 or more carriers
         # (evaluate_carrier), since the link is reachable during that trouble.
-        if [ "$ping_reachable" = "true" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$current_tier" -gt 0 ] && [ "$recovery_reason" != "quality" ] && [ "$recovery_reason" != "carrier" ]; then
+        # Like the pause above, it needs a real answer, not a fresh ping run.
+        if [ "$_wd_answered" -eq 1 ] && [ "$ping_streak_fail" -eq 0 ] && [ "$current_tier" -gt 0 ] && [ "$recovery_reason" != "quality" ] && [ "$recovery_reason" != "carrier" ]; then
             case "$state" in
                 monitor|suspect|ssr_hold)
                     qlog_info "Link is reachable: the kept Tier $current_tier is cleared"
