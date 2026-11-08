@@ -138,7 +138,7 @@ _wd_write_state_file() {
             ;;
     esac
     _wd_num "$failback_failures" 0;        v_fb_fail="$_wdn"
-    [ "$v_fb_fail" -gt 3 ] && v_fb_fail=3
+    [ "$v_fb_fail" -gt "${WD_FAILBACK_MAX_FAILS:-3}" ] && v_fb_fail="${WD_FAILBACK_MAX_FAILS:-3}"
     wd_failback_next_at
     _wd_num "$WD_FB_NEXT_AT" null;         v_fb_next="$_wdn"
     case "$ssr_hold" in
@@ -280,7 +280,8 @@ _wd_pid_live() {
     local pid
     [ -n "$1" ] && [ -f "$1" ] || return 1
     pid=$(cat "$1" 2>/dev/null)
-    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    # 0 (or 00...) would make kill -0 test the whole process group: never live.
+    case "$pid" in ''|*[!0-9]*|0|00*) return 1 ;; esac
     kill -0 "$pid" 2>/dev/null
 }
 

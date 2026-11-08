@@ -90,7 +90,11 @@ _wd_failback_fail() {
 # has passed since the failback clock was armed.
 wd_failback_due() {
     local _fd_now
-    [ "$CFG_FAILBACK_ENABLED" = "1" ] || return 1
+    # A retry request does not outlive a disable: re-enabling waits a full interval.
+    if [ "$CFG_FAILBACK_ENABLED" != "1" ]; then
+        failback_retry_at=0
+        return 1
+    fi
     [ "$sim_failover_active" = "true" ] || return 1
     [ "$failback_failures" -lt "$WD_FAILBACK_MAX_FAILS" ] || return 1
     [ "$failback_retry_at" -gt 0 ] && return 0
