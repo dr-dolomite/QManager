@@ -305,7 +305,7 @@ The install migration (`cqwd_migrate.sh`, `cqm_migrate_uci`) runs from `install.
 | `ping_profile.interval_override` | dropped | Deleted after `act_after_sec` has used it. The saved sensitivity stays. |
 | `watchcat.latency_ceiling_ms`, `loss_ceiling_pct` | `quality_thresholds` `custom` preset | `install.sh` keeps the **Watchdog-side** values (device defaults were 800 ms / 20 %); runs only while a ceiling key exists. |
 
-Old keys stay in place (except `interval_override`), so reinstalling the previous release restores the pre-upgrade values. The migration is idempotent: every new key is written only while absent. `install.sh` also deletes the long-retired `target_1` / `target_2` HTTP keys and the stale `system/ping_profile.sh` and `system/quality_thresholds.sh` CGI files, and, when the migration changed anything, touches the three reload flags so running daemons re-read.
+Old keys stay in place, except `interval_override` (dropped), the two watchcat ceilings (moved into the custom limits and deleted) and `max_failures` (renamed to `fail_threshold` by an earlier install step), so reinstalling the previous release restores the pre-upgrade values for everything else. The migration is idempotent: every new key is written only while absent. `install.sh` also deletes the long-retired `target_1` / `target_2` HTTP keys and the stale `system/ping_profile.sh` and `system/quality_thresholds.sh` CGI files, and, when the migration changed anything, touches the three reload flags so running daemons re-read.
 
 ---
 
