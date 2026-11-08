@@ -80,6 +80,9 @@ _wd_write_state_file() {
     local v_qbs
     local v_swu
     local v_tried
+    local v_ls_time
+    local v_ls_tier
+    local v_ls_took
     local t
     local json
     stale="$1"
@@ -93,6 +96,9 @@ _wd_write_state_file() {
     _wd_num "$last_recovery_time" null;    v_last_time="$_wdn"
     _wd_num "$last_recovery_tier" null;    v_last_tier="$_wdn"
     _wd_num "$total_recoveries" 0;         v_total="$_wdn"
+    _wd_num "$last_success_time" null;     v_ls_time="$_wdn"
+    _wd_num "$last_success_tier" null;     v_ls_tier="$_wdn"
+    _wd_num "$last_success_took_s" null;   v_ls_took="$_wdn"
     _wd_num "$cooldown_remaining" 0;       v_cooldown="$_wdn"
     _wd_num "$step_wait_until" 0;          v_swu="$_wdn"
     # tiers_tried ("1 2") as a JSON int array; anything but a tier digit is dropped.
@@ -169,6 +175,10 @@ _wd_write_state_file() {
         --argjson last_time "$v_last_time" \
         --argjson last_tier "$v_last_tier" \
         --argjson total "$v_total" \
+        --argjson ls_time "$v_ls_time" \
+        --argjson ls_tier "$v_ls_tier" \
+        --arg ls_reason "$last_success_reason" \
+        --argjson ls_took "$v_ls_took" \
         --argjson cooldown "$v_cooldown" \
         --argjson swu "$v_swu" \
         --argjson tried "[$v_tried]" \
@@ -202,6 +212,10 @@ _wd_write_state_file() {
             last_recovery_tier: $last_tier,
             last_recovery_reason: $recovery_reason,
             total_recoveries: $total,
+            last_success_time: $ls_time,
+            last_success_tier: $ls_tier,
+            last_success_reason: (if ($ls_reason == "outage" or $ls_reason == "quality" or $ls_reason == "carrier") then $ls_reason else null end),
+            last_success_took_s: $ls_took,
             failure_count: $failures,
             failure_secs: $fsecs,
             offline_secs: $offline,

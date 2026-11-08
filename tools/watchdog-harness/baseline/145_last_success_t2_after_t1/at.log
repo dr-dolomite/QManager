@@ -1,0 +1,26 @@
+--- pass 1 ---
+--- pass 2 ---
+T+50 AT+CFUN?
+T+50 AT+COPS=2
+T+52 AT+COPS=0
+--- pass 3 ---
+--- pass 4 ---
+--- pass 5 ---
+T+82 AT+CFUN?
+T+82 AT+CFUN=0
+T+85 AT+CFUN=1
+T+85 AT
+T+85 AT+CFUN?
+--- pass 6 ---
+--- pass 7 ---
+--- pass 8 ---
+--- pass 9 ---
+--- pass 10 ---
+--- pass 11 ---
+--- pass 12 ---
+--- pass 13 ---
+--- pass 14 ---
+--- pass 15 ---
+--- pass 16 ---
+--- pass 17 ---
+--- pass 18 ---

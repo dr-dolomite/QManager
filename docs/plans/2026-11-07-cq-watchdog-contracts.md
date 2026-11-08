@@ -95,6 +95,10 @@ Full set, read by the watchdog CGI (`status`):
 | `last_recovery_tier` | int\|null | |
 | `last_recovery_reason` | str\|null | `outage\|quality` |
 | `total_recoveries` | int | |
+| `last_success_time` | int\|null | epoch of the last cooldown verdict that was a success (`wd_succeeded`); null until one, or while the wall clock is insane (1970 rule) (Amendment 3) |
+| `last_success_tier` | int\|null | tier of that success (Amendment 3) |
+| `last_success_reason` | str\|null | `outage\|quality\|carrier` (Amendment 3) |
+| `last_success_took_s` | int\|null | seconds from the ladder's trigger to that verdict on the mono clock; null when mono was unreadable. In memory only, reset at daemon start; a natural recovery and a Tier 4 reboot never set these (Amendment 3) |
 | `failure_count` | int | = ping `streak_fail` as seen this pass (kept for Prometheus) |
 | `failure_secs` | int | current outage age (§5.2), 0 when reachable |
 | `cooldown_remaining` | int | seconds, derived from `step_wait_until − mono` (kept for compatibility) |

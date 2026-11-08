@@ -8,8 +8,11 @@
 #       total_recoveries, cooldown_remaining, step_wait_until,
 #       cooldown_stale_retries, recovery_reason,
 #       _recovery_marker_emitted, wd_hold_out_until, wd_hold_q_until,
-#       wd_hold_q_level, wd_hold_q_end, holdoff_until, holdoff_reason (derived)
-#       Uses wd_detect.sh _wd_dec / _wdd (scratch, consumed at once).
+#       wd_hold_q_level, wd_hold_q_end, holdoff_until, holdoff_reason (derived),
+#       wd_ep_start, last_success_time, last_success_tier, last_success_reason,
+#       last_success_took_s
+#       Uses wd_detect.sh _wd_dec / _wdd (scratch, consumed at once) and
+#       wd_ledger.sh _wd_clock_sane.
 # Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
 #            _wd_holdoff_sync, wd_holdoff_clear, wd_holdoff_reload, wd_holdoff_tick,
@@ -17,7 +20,8 @@
 #            wd_step_wait_clear, wd_retire_service, execute_tier4,
 #            find_next_tier, wd_ladder_pick, _wd_ladder_exhausted, do_recovery,
 #            _cooldown_tier3_revert, _cooldown_handle_failure,
-#            _cooldown_inconclusive, wd_cooldown_verdict, finish_cooldown
+#            _cooldown_inconclusive, wd_cooldown_verdict, _wd_record_success,
+#            finish_cooldown
 #
 # Tier 3 (execute_tier3) and every SIM-slot swap live in wd_sim.sh;
 # finish_cooldown hands the primary-recheck verdict to wd_sim_finish_recheck.
@@ -35,6 +39,16 @@ tiers_tried=""                  # tiers run in this episode, in order ("1 2"); "
 last_recovery_time="null"
 last_recovery_tier="null"
 total_recoveries=0
+# The last cooldown verdict that was a success (Amendment 3). In memory only: a
+# daemon start begins at null. A natural recovery and a Tier 4 reboot never set
+# it. last_success_time is null while the wall clock is insane (1970 rule);
+# last_success_took_s runs from the trigger (wd_ep_start, mono) to the verdict
+# and is null when the mono clock was unreadable at either end.
+last_success_time="null"
+last_success_tier="null"
+last_success_reason=""          # "outage" | "quality" | "carrier"; "" = none yet
+last_success_took_s="null"
+wd_ep_start=0                   # mono of the trigger that opened the open ladder; 0 = unknown
 # The step wait (cooldown) runs to the mono deadline step_wait_until (0 = none);
 # cooldown_remaining = max(0, step_wait_until - mono), kept for compatibility.
 step_wait_until=0
@@ -422,6 +436,9 @@ wd_ladder_pick() {
         tiers_tried=""
     fi
     recovery_reason="$1"
+    # The trigger time of this ladder run; a failed tier's escalation does not
+    # pass through here, so a Tier 2 verdict still counts from the Tier 1 trigger.
+    wd_ep_start=$(mono_now)
     find_next_tier "$start"
 }
 
@@ -655,6 +672,26 @@ wd_cooldown_verdict() {
     return 0
 }
 
+# Records a cooldown verdict that was a success (the place that logs wd_succeeded);
+# reads current_tier, recovery_reason and wd_ep_start. Called before the episode
+# globals are reset.
+_wd_record_success() {
+    local now_m
+    _wd_dec "$(mono_now)" 0
+    now_m="$_wdd"
+    last_success_tier="$current_tier"
+    last_success_reason="$recovery_reason"
+    last_success_took_s="null"
+    _wd_dec "$wd_ep_start" 0
+    if [ "$now_m" -gt 0 ] && [ "$_wdd" -gt 0 ] && [ "$now_m" -ge "$_wdd" ]; then
+        last_success_took_s=$((now_m - _wdd))
+    fi
+    last_success_time="null"
+    if _wd_clock_sane; then
+        last_success_time=$(date +%s)
+    fi
+}
+
 finish_cooldown() {
     rm -f "$RECOVERY_FLAG"
 
@@ -721,6 +758,7 @@ finish_cooldown() {
                 wd_step_wait_clear
                 qlog_info "COOLDOWN(quality) complete: quality RESTORED after Tier $current_tier"
                 append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — connection quality restored" "info" "wd_succeeded"
+                _wd_record_success
                 # A quality-triggered Tier-3 swap finalizes exactly like reachability —
                 # otherwise the modem strands on backup with no failover state / revert
                 # path. No-op for non-Tier-3 quality recoveries.
@@ -770,6 +808,7 @@ finish_cooldown() {
             wd_step_wait_clear
             qlog_info "COOLDOWN complete: connectivity RESTORED after Tier $current_tier"
             append_event "watchcat_recovery" "Watchcat: recovery succeeded (Tier $current_tier) — internet connectivity restored" "info" "wd_succeeded"
+            _wd_record_success
 
             # If this was Tier 3 SIM failover, finalize the failover state (no-op
             # otherwise). Shared with the quality success arm.

@@ -1,0 +1,28 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=0 backup_sim=none
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → MONITOR: connectivity restored naturally
+[2026-09-21 14:15:40] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:15:50] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:15:50] INFO  [watchcat:PID] RECOVERY: Executing Tier 1 (reason=outage)
+[2026-09-21 14:15:50] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 1) — internet unreachable
+[2026-09-21 14:15:50] INFO  [watchcat:PID] TIER 1: Network re-registration (AT+COPS=2 -> AT+COPS=0)
+[2026-09-21 14:15:50] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: re-registering on network (Tier 1)
+[2026-09-21 14:15:52] INFO  [watchcat:PID] Entering COOLDOWN for 30s (after Tier 1)
+[2026-09-21 14:16:22] INFO  [watchcat:PID] COOLDOWN complete: connectivity RESTORED after Tier 1
+[2026-09-21 14:16:22] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: recovery succeeded (Tier 1) — internet connectivity restored
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000150,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 1) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000150,"type":"watchcat_recovery","message":"Watchcat: re-registering on network (Tier 1)","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000182,"type":"watchcat_recovery","message":"Watchcat: recovery succeeded (Tier 1) — internet connectivity restored","severity":"info","code":"wd_succeeded"}
+

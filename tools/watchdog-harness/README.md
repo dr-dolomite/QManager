@@ -578,3 +578,28 @@ New scenarios: 140 (a stored `check_interval` 60 is not read: passes stay 10 s a
 retired `fail_threshold`, `cooldown`, `quality_consecutive` and `ssr_grace` keys with absurd values
 change nothing: act after 15 s, 30 s step wait), 142 (`act_after_sec` and `ssr_grace_sec`
 leading zeros and clamps on reload).
+
+## R10: last successful recovery (Amendment 3)
+
+A cooldown verdict that is a success (the two `wd_succeeded` sites in `finish_cooldown`, outage
+and quality arms) now calls `_wd_record_success` (`wd_tiers.sh`), which sets four globals
+before the episode resets: `last_success_tier`, `last_success_reason` (`recovery_reason`; the
+vocabulary also admits `carrier`, built later), `last_success_time` (epoch of the verdict, null
+while `_wd_clock_sane` says the clock is insane, the 1970 rule) and `last_success_took_s` (mono
+seconds from the trigger to the verdict; null when mono was unreadable at either end). The
+trigger stamp `wd_ep_start` is taken in `wd_ladder_pick`, so a Tier 2 verdict after a failed
+Tier 1 counts from the Tier 1 trigger (the escalation does not pass through the pick), while a
+ladder resumed after an inconclusive cooldown restarts the stamp. A natural recovery, a Tier 4
+reboot and an inconclusive or failed verdict never record. In memory only; a daemon start begins
+at null. `_wd_write_state_file` writes all four keys (`last_success_reason` is null unless it is
+`outage|quality|carrier`).
+
+Every baseline's state-file snapshot gains the four keys as null (right after
+`total_recoveries`): that is the only difference in the existing scenarios.
+
+New scenarios: 143 (outage success at Tier 1: tier 1, `outage`, took 32 s), 144 (quality success:
+`quality`, took 62 s, from the pick to the end of the 60 s quality cooldown), 145 (Tier 1 fails,
+Tier 2 restores: tier 2, took 65 s, spanning both steps), 146 (a link back in suspect leaves the
+fields null; a later Tier 1 recovery sets them), 147 (1970 clock: time null, tier, reason and
+took set), 148 (a daemon restart, simulated by re-sourcing `wd_tiers.sh` at pass 12, resets all
+four to null). Each prints the fields through `sc_snap_extra`.
