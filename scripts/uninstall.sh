@@ -591,6 +591,7 @@ remove_runtime_state() {
           /tmp/qmanager_quality_reload \
           /tmp/qmanager_poller_reload \
           /tmp/qmanager_imei_check_done \
+          /tmp/qmanager_imei_pending \
           /tmp/qmanager_refresh_policy_band \
           /tmp/qmanager_supported_bands.env \
           /tmp/qmanager_long_running \
