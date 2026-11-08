@@ -459,7 +459,7 @@ EOF
             tmp_json=$(jq -c '.dismissed = true' "$SIM_SWAP_FLAG" 2>/dev/null)
             if [ -n "$tmp_json" ]; then
                 # Root-owned rewrite, not a write-through of a planted file
-                printf '%s\n' "$tmp_json" | qm_atomic_write "$SIM_SWAP_FLAG"
+                printf '%s\n' "$tmp_json" | qm_atomic_write "$SIM_SWAP_FLAG" || save_failed
             fi
         fi
         echo '{"success":true}'
