@@ -1,4 +1,5 @@
 # CQ × Watchdog: frozen contracts (spec v2 §10 step 0)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Status: **frozen 2026-11-07** for the RM551E backend build and the RM520N port. Companion to
 `2026-11-07-cq-watchdog-unified-architecture.md` (the spec); section numbers `§` refer to it.

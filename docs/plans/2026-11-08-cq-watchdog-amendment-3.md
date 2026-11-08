@@ -1,4 +1,5 @@
 # CQ × Watchdog: Amendment 3 (approved by the owner 2026-11-08)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Owner request 2026-11-08: (1) know the last disconnection and its duration, (2) know the last
 restore, (3) an opt-in watchdog trigger for a modem stuck on one component carrier (1CC), with a

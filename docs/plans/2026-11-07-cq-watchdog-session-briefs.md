@@ -1,4 +1,5 @@
 # Session briefs: CQ × Watchdog unification (2026-11-07)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Spec for both: `D:\Projects\QM PROJECT\QManager\docs\plans\2026-11-07-cq-watchdog-unified-architecture.md` (v2, approved incl. the §5.6 reboot guard).
 

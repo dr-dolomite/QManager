@@ -1,4 +1,5 @@
 # Brief: CQ × Watchdog UI/UX build (RM551E)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Start a fresh session in a worktree cut from `refs/heads/feat/cq-watchdog-unify` and paste this brief.
 

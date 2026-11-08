@@ -1,4 +1,5 @@
 # CQ × Watchdog UI build: plan (for the owner's OK)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Branch `claude/cq-watchdog-ui-c815f0` (cut from `feat/cq-watchdog-unify` @ c316bf08). No `scripts/` edits.
 Design source: the approved artifact (2U4fFKyDFQ4HT9HqnvBXeU) + Amendment 3 frontend list, in the canon.

@@ -1,4 +1,5 @@
 # Connection Quality × Watchdog: unified architecture (RM551E + RM520N)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Status: **v2, decisions approved 2026-11-07** (D1=B, D2=a, D3=c, D4=a, D5=a). v2 folds in an independent Opus review ("approve with changes": 0 blockers, 8 majors M1-M8, 20 minors; all accepted, see §11). The D4 long-run reboot guard (§5.6) was approved with v2 on 2026-11-07.
 

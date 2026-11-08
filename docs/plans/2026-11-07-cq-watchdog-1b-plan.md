@@ -1,4 +1,5 @@
 # CQ × Watchdog step 1b: behaviour rules, one per commit (RM551E)
+> **Shipped (RM551E):** merged into development-home as dbfc827f on 2026-11-08. Archived; the live docs are docs/features/connection-quality.md and connection-watchdog.md.
 
 Implements spec v2 (`2026-11-07-cq-watchdog-unified-architecture.md`) against the frozen contracts
 (`2026-11-07-cq-watchdog-contracts.md`). Step 1a (adapter + neutral files) is done first and keeps
