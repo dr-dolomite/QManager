@@ -5,7 +5,7 @@
 # Sourced by qmanager_watchcat (never executed). BusyBox ash safe.
 #
 # Owns (declared and initialised here, see docs/plans watchdog-modular-lean 2.1):
-#   every CFG_* global, BOOT_SETTLE,
+#   every CFG_* global, WD_FAILBACK_EVERY_MIN_LO/HI, BOOT_SETTLE,
 #   MODEM_WAIT_TIMEOUT, SIM_SETTLE_SECS, HOLDOFF_OUTAGE_SECS,
 #   HOLDOFF_QUALITY_SECS_0/1/2, HOLDOFF_QUALITY_RESET_SECS
 # Functions: read_config, resolve_quality_thresholds
@@ -49,9 +49,13 @@ CFG_SSR_GRACE=45
 # Auto-failback to the primary SIM after a Tier-3 failover. The inactive primary
 # slot CANNOT be passively health-checked (single hard SIM mux), so failback is a
 # BLIND periodic swap-back-to-primary + retest — each attempt is a real outage.
-# OPT-IN, default OFF. Interval is in MINUTES (a seconds cadence would be ruinous).
-CFG_PRIMARY_RECHECK_ENABLED=0
-CFG_PRIMARY_RECHECK_INTERVAL=30
+# OPT-IN, default OFF (failback_enabled). failback_every_min is in MINUTES (a
+# seconds cadence would be ruinous): 5-1440, default 30. The bounds are globals
+# only so the harness can lower the floor.
+CFG_FAILBACK_ENABLED=0
+CFG_FAILBACK_EVERY_MIN=30
+WD_FAILBACK_EVERY_MIN_LO=5
+WD_FAILBACK_EVERY_MIN_HI=1440
 BOOT_SETTLE=30
 # Ping-cache staleness is conn_state_read's rule: max(3 * interval_sec, 15) s.
 MODEM_WAIT_TIMEOUT=60
@@ -189,18 +193,30 @@ read_config() {
             ;;
     esac
 
-    CFG_PRIMARY_RECHECK_ENABLED=$(cfg_get watchdog primary_recheck_enabled)
-    [ -z "$CFG_PRIMARY_RECHECK_ENABLED" ] && CFG_PRIMARY_RECHECK_ENABLED=0
+    CFG_FAILBACK_ENABLED=$(cfg_get watchdog failback_enabled)
+    [ -z "$CFG_FAILBACK_ENABLED" ] && CFG_FAILBACK_ENABLED=0
 
-    # interval is in MINUTES; non-numeric/empty falls back to 30.
-    val=$(cfg_get watchdog primary_recheck_interval)
-    case "$val" in ''|*[!0-9]*) CFG_PRIMARY_RECHECK_INTERVAL=30 ;; *) CFG_PRIMARY_RECHECK_INTERVAL="$val" ;; esac
+    # failback_every_min: MINUTES, 5-1440, default 30 (absent or non-numeric).
+    val=$(cfg_get watchdog failback_every_min)
+    case "$val" in
+        ''|*[!0-9]*) CFG_FAILBACK_EVERY_MIN=30 ;;
+        *)
+            # Leading zeros first ("0030" is 30, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
+            [ "${#val}" -gt 4 ] && val="$WD_FAILBACK_EVERY_MIN_HI"
+            CFG_FAILBACK_EVERY_MIN="$val"
+            [ "$CFG_FAILBACK_EVERY_MIN" -lt "$WD_FAILBACK_EVERY_MIN_LO" ] && CFG_FAILBACK_EVERY_MIN="$WD_FAILBACK_EVERY_MIN_LO"
+            [ "$CFG_FAILBACK_EVERY_MIN" -gt "$WD_FAILBACK_EVERY_MIN_HI" ] && CFG_FAILBACK_EVERY_MIN="$WD_FAILBACK_EVERY_MIN_HI"
+            ;;
+    esac
 
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s step_wait=${CFG_STEP_WAIT_SEC}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% after=${CFG_QUALITY_AFTER_SEC}s (shared thresholds, floors applied)"
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
-    qlog_info "  Primary-recheck (auto-failback): enabled=${CFG_PRIMARY_RECHECK_ENABLED} interval=${CFG_PRIMARY_RECHECK_INTERVAL}min"
+    qlog_info "  Failback: enabled=${CFG_FAILBACK_ENABLED} every=${CFG_FAILBACK_EVERY_MIN}min"
 }
 
 # Resolve the SHARED degraded thresholds from connection_quality latency/loss

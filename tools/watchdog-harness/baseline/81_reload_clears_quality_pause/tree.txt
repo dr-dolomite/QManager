@@ -3,7 +3,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=0 T3=0 T4=0 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
@@ -41,7 +41,7 @@
 [2026-09-21 14:32:54] INFO  [watchcat:PID]   Tiers: T1=1 T2=0 T3=0 T4=0 backup_sim=none
 [2026-09-21 14:32:54] INFO  [watchcat:PID]   Quality: enabled=1 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:32:54] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:32:54] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=0 interval=1min
+[2026-09-21 14:32:54] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
 [2026-09-21 14:32:54] INFO  [watchcat:PID] Settings reload: quality pause and its growth reset
 [2026-09-21 14:32:54] WARN  [watchcat:PID] QUALITY → RECOVERY: breach for 300s (avg 24.5ms / loss 50% vs 250ms / 30%)
 [2026-09-21 14:32:54] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: connection quality degraded (latency 24.5ms / loss 50%) — starting recovery

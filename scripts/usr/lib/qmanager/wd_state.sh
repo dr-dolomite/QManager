@@ -69,9 +69,8 @@ _wd_write_state_file() {
     local v_hold_out
     local v_hold_q
     local v_state
-    local v_pr_enabled
-    local v_pr_interval
-    local v_pr_last
+    local v_fb_fail
+    local v_fb_next
     local v_pr_active
     local v_ping_stale
     local v_rb_limit
@@ -138,9 +137,10 @@ _wd_write_state_file() {
             [ "$v_hold_out" -gt "$v_mono" ] && v_state="holdoff"
             ;;
     esac
-    _wd_num "$CFG_PRIMARY_RECHECK_ENABLED" 0;  v_pr_enabled="$_wdn"
-    _wd_num "$CFG_PRIMARY_RECHECK_INTERVAL" 30; v_pr_interval="$_wdn"
-    _wd_num "$last_recheck_time" 0;        v_pr_last="$_wdn"
+    _wd_num "$failback_failures" 0;        v_fb_fail="$_wdn"
+    [ "$v_fb_fail" -gt 3 ] && v_fb_fail=3
+    wd_failback_next_at
+    _wd_num "$WD_FB_NEXT_AT" null;         v_fb_next="$_wdn"
     case "$ssr_hold" in
         true) v_ssr_hold=true ;;
         *) v_ssr_hold=false ;;
@@ -154,8 +154,7 @@ _wd_write_state_file() {
         *) v_pr_active=false ;;
     esac
 
-    # Contract keys (docs/plans cq-watchdog-contracts section 3). Keys whose rule
-    # has not landed yet carry their idle value: failback_failures.
+    # Contract keys (docs/plans cq-watchdog-contracts section 3).
     # step_wait_until is null outside a cooldown.
     json=$(jq -n -c \
         --argjson ts "$ts" \
@@ -189,9 +188,8 @@ _wd_write_state_file() {
         --argjson holdoff_until "$v_holdoff" \
         --arg holdoff_reason "$holdoff_reason" \
         --argjson qlevel "$v_qlevel" \
-        --argjson pr_enabled "$v_pr_enabled" \
-        --argjson pr_interval "$v_pr_interval" \
-        --argjson pr_last "$v_pr_last" \
+        --argjson fb_fail "$v_fb_fail" \
+        --argjson fb_next "$v_fb_next" \
         --argjson pr_active "$v_pr_active" \
         --argjson qbs "$v_qbs" \
         --argjson ping_stale "$v_ping_stale" \
@@ -222,8 +220,8 @@ _wd_write_state_file() {
             last_ssr_mono: $last_ssr_mono,
             quality_breach_secs: $qbs,
             failback_active: $pr_active,
-            failback_failures: 0,
-            failback_next_at: (if ($pr_enabled == 1 and $sf_active == "true") then ($pr_last + $pr_interval * 60) else null end),
+            failback_failures: $fb_fail,
+            failback_next_at: $fb_next,
             sim_failover_active: ($sf_active == "true"),
             original_sim_slot: $sf_orig,
             current_sim_slot: $sf_curr,

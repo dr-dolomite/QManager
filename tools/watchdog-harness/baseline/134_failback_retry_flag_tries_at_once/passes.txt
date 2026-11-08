@@ -1,0 +1,1748 @@
+=== pass 1 (t+30) ===
+-- state
+{"timestamp":1790000030,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5030,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 2 (t+40) ===
+-- state
+{"timestamp":1790000040,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5040,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 3 (t+50) ===
+-- state
+{"timestamp":1790000050,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5050,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 4 (t+60) ===
+-- state
+{"timestamp":1790000060,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5060,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 5 (t+70) ===
+-- state
+{"timestamp":1790000070,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5070,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 6 (t+80) ===
+-- state
+{"timestamp":1790000080,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5080,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 7 (t+94) ===
+-- state
+{"timestamp":1790000094,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":90,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5094,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 8 (t+104) ===
+-- state
+{"timestamp":1790000104,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":80,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5104,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 9 (t+114) ===
+-- state
+{"timestamp":1790000114,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":70,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5114,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 10 (t+124) ===
+-- state
+{"timestamp":1790000124,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":60,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5124,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 11 (t+134) ===
+-- state
+{"timestamp":1790000134,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":50,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5134,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 12 (t+144) ===
+-- state
+{"timestamp":1790000144,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":40,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5144,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 13 (t+154) ===
+-- state
+{"timestamp":1790000154,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5154,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 14 (t+164) ===
+-- state
+{"timestamp":1790000164,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5164,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 15 (t+174) ===
+-- state
+{"timestamp":1790000174,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":5184,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5090,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5174,"stale_after":90}
+-- files
+etc/qmanager:
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000000,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":""}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 16 (t+188) ===
+-- state
+{"timestamp":1790000188,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":90,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5188,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 17 (t+198) ===
+-- state
+{"timestamp":1790000198,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":80,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5198,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 18 (t+208) ===
+-- state
+{"timestamp":1790000208,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":70,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5208,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 19 (t+218) ===
+-- state
+{"timestamp":1790000218,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":60,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5218,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 20 (t+228) ===
+-- state
+{"timestamp":1790000228,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":50,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5228,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 21 (t+238) ===
+-- state
+{"timestamp":1790000238,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":40,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5238,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 22 (t+248) ===
+-- state
+{"timestamp":1790000248,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":30,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5248,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 23 (t+258) ===
+-- state
+{"timestamp":1790000258,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":20,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5258,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 24 (t+268) ===
+-- state
+{"timestamp":1790000268,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":10,"step_wait_until":5278,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5268,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 25 (t+278) ===
+-- state
+{"timestamp":1790000278,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5278,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 26 (t+292) ===
+-- state
+{"timestamp":1790000292,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":90,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5292,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 27 (t+302) ===
+-- state
+{"timestamp":1790000302,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":80,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5302,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 28 (t+312) ===
+-- state
+{"timestamp":1790000312,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":70,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5312,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 29 (t+322) ===
+-- state
+{"timestamp":1790000322,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":60,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5322,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 30 (t+332) ===
+-- state
+{"timestamp":1790000332,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":50,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5332,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 31 (t+342) ===
+-- state
+{"timestamp":1790000342,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":40,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5342,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 32 (t+352) ===
+-- state
+{"timestamp":1790000352,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5352,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 33 (t+362) ===
+-- state
+{"timestamp":1790000362,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5362,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 34 (t+372) ===
+-- state
+{"timestamp":1790000372,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":5382,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5248,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5372,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000188,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 35 (t+386) ===
+-- state
+{"timestamp":1790000386,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":90,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5386,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 36 (t+396) ===
+-- state
+{"timestamp":1790000396,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":80,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5396,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 37 (t+406) ===
+-- state
+{"timestamp":1790000406,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":70,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5406,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 38 (t+416) ===
+-- state
+{"timestamp":1790000416,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":60,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5416,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 39 (t+426) ===
+-- state
+{"timestamp":1790000426,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":50,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5426,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 40 (t+436) ===
+-- state
+{"timestamp":1790000436,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":40,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5436,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 41 (t+446) ===
+-- state
+{"timestamp":1790000446,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":30,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5446,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 42 (t+456) ===
+-- state
+{"timestamp":1790000456,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":20,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5456,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 43 (t+466) ===
+-- state
+{"timestamp":1790000466,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":10,"step_wait_until":5476,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5466,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 44 (t+476) ===
+-- state
+{"timestamp":1790000476,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5476,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=2 sim_failover_active=true
+=== pass 45 (t+490) ===
+-- state
+{"timestamp":1790000490,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":90,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5490,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 46 (t+500) ===
+-- state
+{"timestamp":1790000500,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":80,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5500,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 47 (t+510) ===
+-- state
+{"timestamp":1790000510,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":70,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5510,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 48 (t+520) ===
+-- state
+{"timestamp":1790000520,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":60,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5520,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 49 (t+530) ===
+-- state
+{"timestamp":1790000530,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":50,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5530,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 50 (t+540) ===
+-- state
+{"timestamp":1790000540,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":40,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5540,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 51 (t+550) ===
+-- state
+{"timestamp":1790000550,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5550,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 52 (t+560) ===
+-- state
+{"timestamp":1790000560,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5560,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 53 (t+570) ===
+-- state
+{"timestamp":1790000570,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":5580,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":2,"failback_next_at":5446,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5570,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000386,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=2 sim_failover_active=true
+=== pass 54 (t+584) ===
+-- state
+{"timestamp":1790000584,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":90,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5584,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 55 (t+594) ===
+-- state
+{"timestamp":1790000594,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":80,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5594,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 56 (t+604) ===
+-- state
+{"timestamp":1790000604,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":70,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5604,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 57 (t+614) ===
+-- state
+{"timestamp":1790000614,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":60,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5614,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 58 (t+624) ===
+-- state
+{"timestamp":1790000624,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":50,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5624,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 59 (t+634) ===
+-- state
+{"timestamp":1790000634,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":40,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5634,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 60 (t+644) ===
+-- state
+{"timestamp":1790000644,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":30,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5644,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 61 (t+654) ===
+-- state
+{"timestamp":1790000654,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":20,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":3,"failback_next_at":null,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5654,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=3 sim_failover_active=true
+=== pass 62 (t+664) ===
+-- state
+{"timestamp":1790000664,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":10,"step_wait_until":5674,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5664,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5664,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 63 (t+674) ===
+-- state
+{"timestamp":1790000674,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":0,"failback_next_at":5664,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5674,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=0 sim_failover_active=true
+=== pass 64 (t+688) ===
+-- state
+{"timestamp":1790000688,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":90,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5688,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 65 (t+698) ===
+-- state
+{"timestamp":1790000698,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":80,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5698,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 66 (t+708) ===
+-- state
+{"timestamp":1790000708,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":70,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5708,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 67 (t+718) ===
+-- state
+{"timestamp":1790000718,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":60,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5718,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 68 (t+728) ===
+-- state
+{"timestamp":1790000728,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":50,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5728,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 69 (t+738) ===
+-- state
+{"timestamp":1790000738,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":40,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5738,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 70 (t+748) ===
+-- state
+{"timestamp":1790000748,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":30,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5748,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 71 (t+758) ===
+-- state
+{"timestamp":1790000758,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":20,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5758,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 72 (t+768) ===
+-- state
+{"timestamp":1790000768,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":10,"step_wait_until":5778,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":0,"failback_next_at":5644,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5768,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000584,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=0 sim_failover_active=true
+=== pass 73 (t+782) ===
+-- state
+{"timestamp":1790000782,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":90,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5782,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 74 (t+792) ===
+-- state
+{"timestamp":1790000792,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":80,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5792,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 75 (t+802) ===
+-- state
+{"timestamp":1790000802,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":70,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5802,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 76 (t+812) ===
+-- state
+{"timestamp":1790000812,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":60,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5812,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 77 (t+822) ===
+-- state
+{"timestamp":1790000822,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":50,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5822,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 78 (t+832) ===
+-- state
+{"timestamp":1790000832,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":40,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5832,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 79 (t+842) ===
+-- state
+{"timestamp":1790000842,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":30,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5842,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 80 (t+852) ===
+-- state
+{"timestamp":1790000852,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":20,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5852,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 81 (t+862) ===
+-- state
+{"timestamp":1790000862,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":10,"step_wait_until":5872,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5862,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 82 (t+872) ===
+-- state
+{"timestamp":1790000872,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":92,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":false,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":2,"ping_stale":false,"mono":5872,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=2 failback_failures=1 sim_failover_active=true
+=== pass 83 (t+886) ===
+-- state
+{"timestamp":1790000886,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":90,"step_wait_until":5976,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5886,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 84 (t+896) ===
+-- state
+{"timestamp":1790000896,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":80,"step_wait_until":5976,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5896,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true
+=== pass 85 (t+906) ===
+-- state
+{"timestamp":1790000906,"enabled":true,"state":"cooldown","current_tier":0,"tiers_tried":[],"recovery_reason":"outage","last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":70,"step_wait_until":5976,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"failback_active":true,"failback_failures":1,"failback_next_at":5842,"sim_failover_active":true,"original_sim_slot":1,"current_sim_slot":1,"ping_stale":false,"mono":5906,"stale_after":90}
+-- files
+etc/qmanager:
+known_iccids
+sim_failover.json
+
+tmp:
+qmanager_force_tier2
+qmanager_recovery_active
+qmanager_refresh_policy_band
+qmanager_sim_failover
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+{"active":true,"original_slot":1,"current_slot":2,"switched_at":1790000782,"reason":"connectivity_failure","original_iccid":"89000000000000000001","current_iccid":"89000000000000000002"}
+-- extra
+slot=1 failback_failures=1 sim_failover_active=true

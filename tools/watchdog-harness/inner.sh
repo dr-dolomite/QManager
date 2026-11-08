@@ -29,8 +29,8 @@ quecmanager.watchcat.quality_enabled=0
 quecmanager.watchcat.quality_after_sec=30
 quecmanager.watchcat.ssr_aware=1
 quecmanager.watchcat.ssr_grace_sec=45
-quecmanager.watchcat.primary_recheck_enabled=0
-quecmanager.watchcat.primary_recheck_interval=1
+quecmanager.watchcat.failback_enabled=0
+quecmanager.watchcat.failback_every_min=1
 UCI
 : > "$H_OUT/at.log"
 : > "$H_OUT/calls.log"
@@ -46,6 +46,11 @@ export WATCHCAT_NO_MAIN
 WD_LIB_DIR="$H_STAGE/lib"
 export WD_LIB_DIR
 . "$H_STAGE/qmanager_watchcat"
+
+# failback_every_min is clamped to 5-1440 minutes; the scenarios seed 1 to keep a
+# one-minute recheck cadence, so the floor is lowered here (a scenario that
+# tests the clamp restores it in sc_post_source).
+WD_FAILBACK_EVERY_MIN_LO=1
 
 # Must come after the daemon pulled in safe_tmp.sh: the sandbox user is not
 # root, so only the root-ownership half of the gate is stubbed open (plan 3.2):

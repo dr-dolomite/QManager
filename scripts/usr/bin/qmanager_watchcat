@@ -170,7 +170,6 @@ main() {
     #       wd_state state and failure_counter, wd_tiers current_tier,
     #       tiers_tried, the step wait, recovery_reason, _recovery_marker_emitted,
     #       wd_detect quality_breach_since.
-    # Loop temporaries _pr_now / _pr_due belong to main.
 
     local _prev_streak
     _prev_streak=0
@@ -251,6 +250,8 @@ main() {
             read_config
             # A settings save ends the quality pause and resets its growth.
             wd_holdoff_reload
+            # ... and a failback give-up (wd_sim.sh).
+            wd_failback_reload
             if [ "$CFG_ENABLED" != "1" ]; then
                 qlog_info "Watchcat disabled via config reload, exiting"
                 state="disabled"
@@ -262,6 +263,9 @@ main() {
                 exit 0
             fi
         fi
+
+        # A retry_failback request raised by the CGI (wd_sim.sh).
+        wd_failback_retry_tick
 
         # Check for user SIM revert request
         check_revert_request
@@ -511,14 +515,12 @@ main() {
         # Opt-in (default off). Only when an active failover exists, we are idle
         # in monitor, no recheck is already settling, and no user revert is
         # pending (revert takes precedence). Each attempt is a real outage, so it
-        # is gated to once every CFG_PRIMARY_RECHECK_INTERVAL minutes. A real
-        # recovery this cycle already moved state away from monitor, so it wins.
-        if [ "$CFG_PRIMARY_RECHECK_ENABLED" = "1" ] && [ "$sim_failover_active" = "true" ] && [ "$state" = "monitor" ] && [ "$primary_recheck_active" = "false" ] && [ ! -f "$REVERT_FLAG" ]; then
-            _pr_now=$(mono_now)
-            _pr_due=$((last_recheck_time + CFG_PRIMARY_RECHECK_INTERVAL * 60))
-            if [ "$_pr_now" -ge "$_pr_due" ]; then
-                initiate_primary_recheck
-            fi
+        # is gated to once every failback_every_min minutes (wd_failback_due), and
+        # stops after 3 failed tries in a row until a reload, a retry_failback
+        # request or a restart. A real recovery this cycle already moved state
+        # away from monitor, so it wins.
+        if [ "$state" = "monitor" ] && [ "$primary_recheck_active" = "false" ] && [ ! -f "$REVERT_FLAG" ] && wd_failback_due; then
+            initiate_primary_recheck
         fi
 
         write_state

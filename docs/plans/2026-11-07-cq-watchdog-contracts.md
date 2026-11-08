@@ -334,3 +334,23 @@ same flag; the neutral `check_locked` ignores it while `WD_SWAP_FLAG_OWNED=1` an
 holder for at most 120 s from first sight on the mono clock. The config-restore PID
 (`PF_RESTORE_PID`) needs no helper: `check_locked` applies the same `kill -0` test as to the
 profile-apply PID. RM520N binds its own flag and trust rule in the port.
+
+## 13. Adapter addition (R9c, 2026-11-08)
+
+`plat_paths` also sets `PF_FAILBACK_RETRY_FLAG`, the flag `POST monitoring/watchdog.sh
+{"action":"retry_failback"}` raises (Amendment 1 B) and the daemon consumes on its next pass.
+RM551E: `/tmp/qmanager_watchcat_retry_failback`. The daemon honours it only when it is a regular
+root-owned file (`qm_trusted_file`, the same rule as the revert flag `qmanager_watchcat_revert_sim`):
+a planted flag would make the watchdog cut the link for a recheck. An untrusted flag is removed with
+one warning. A trusted flag is removed on sight; with a failover active and `failback_enabled` set it
+resets `failback_failures` to 0 and makes the next try due at once (`failback_next_at` shows the
+mono of the request until the try starts), otherwise it is only removed. RM520N binds its own path
+and trust rule in the port.
+
+Failback give-up (spec §5.7), in the neutral `wd_sim.sh`: a try that ends on the backup slot (the
+primary still unhealthy, the swap not verified, or the return not proven) counts as one failure; a
+failback, a user revert or a new Tier 3 failover resets the count to 0. The third consecutive
+failure stops the tries: one `sim_failback_giveup` event, `failback_failures: 3`,
+`failback_next_at: null`. A settings reload clears it (the next try is one full
+`failback_every_min` later, not at once), as do a `retry_failback` request and a daemon start; the
+count lives in memory only.

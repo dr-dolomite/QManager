@@ -151,6 +151,9 @@ plat_paths() {
     # running procd service only starts instances that are not running; the
     # poller instance is left alone.
     PF_PING_SVC="qmanager"
+    # Raised by the watchdog CGI (POST retry_failback), consumed by the daemon
+    # on its next pass; honoured only when root-owned (qm_trusted_file).
+    PF_FAILBACK_RETRY_FLAG="/tmp/qmanager_watchcat_retry_failback"
 }
 
 # --- Platform probes and actions ---------------------------------------------

@@ -512,3 +512,47 @@ two passes later), 123 (dead restore PID, then garbage content: not locked, Tier
 (manual switch flag locks passes 2-5, then Tier 1), 125 (stale flag: locked for 120 s, one
 warning, Tier 1 with the file still present; a later fresh flag locks again), 126 (own Tier 3
 swap: `check_locked` asked mid-swap with the flag up answers rc 1, no LOCKED entry).
+
+## R9c: Tier 3 skip reasons, failback give-up, retry flag (step 1b)
+
+Tier 3 skips log one `TIER 3 SKIPPED: <reason>` line each and the ladder moves on at once:
+no backup slot configured, a failover already active (new explicit check, before the slot read),
+the current slot unreadable, the modem already on the backup slot, and a quality ladder
+(`find_next_tier` logs it when the ladder ends at Tier 2 with Tier 3 enabled; the check itself
+was there since R4). The only Tier 3 skip event stays `sim_swap` ("swap did not take effect").
+
+Failback: the daemon reads `failback_enabled` and `failback_every_min` (5-1440 min, default 30;
+`WD_FAILBACK_EVERY_MIN_LO/HI` hold the bounds) instead of `primary_recheck_enabled` /
+`primary_recheck_interval`. A try that ends on the backup slot (primary still unhealthy, swap
+not verified, return not proven) is a failed try: `failback_failures` + 1, one INFO line. The
+third in a row stops the tries: one `sim_failback_giveup` event (warning), state
+`failback_failures 3`, `failback_next_at null`, no more `initiate_primary_recheck`. A failback,
+a user revert or a new Tier 3 failover resets the count to 0. A settings reload clears the
+give-up and re-arms the clock one full interval later; a daemon start begins at 0 (in memory
+only). The retry flag (`PF_FAILBACK_RETRY_FLAG`, adapter, `qm_trusted_file` like the revert
+flag) is consumed on the next pass: with a failover active and failback enabled it sets
+`failback_failures 0` and makes a try due at once (`failback_next_at` shows the request time),
+otherwise it is only removed. `failback_next_at` is the mono of the next try (last arm + every
+minutes), null when disabled, no failover or given up.
+
+Harness: `inner.sh` lowers `WD_FAILBACK_EVERY_MIN_LO` to 1 so the existing scenarios keep their
+one-minute cadence; 137 and 138 restore 5 in `sc_post_source` to test the clamp. The retry flag
+is `h_touch qmanager_watchcat_retry_failback`. Every difference to the R9a baseline is one of
+these:
+
+- all scenarios: the config log line `Primary-recheck (auto-failback): enabled=E interval=Nmin`
+  is now `Failback: enabled=E every=Nmin`.
+- 14 (primary stays down): two INFO lines `failed try 1 of 3` / `2 of 3` and
+  `failback_failures` 1 then 2 in the state file.
+- 47 (swap swallowed): its 20 passes now hold three failed tries, so the third logs the give-up
+  line and event and the state shows `failback_failures 3`, `failback_next_at null`.
+- 94 (quality ladder stops at Tier 2, Tier 3 armed): one new WARN `TIER 3 SKIPPED: recovery
+  reason is quality`.
+
+New scenarios: 127 (no backup slot), 128 (slot unreadable), 129 (already on the backup slot),
+130 (failover active, backup differs from the live slot), 131 (quality ladder skips an enabled
+Tier 3), 132 (three failed tries, one give-up event, no fourth swap-back), 133 (reload clears the
+give-up; the next try is a full interval later), 134 (retry flag: count 0, try at once), 135
+(retry flag with no failover or failback off: only removed), 136 (two failures, then success:
+count back to 0), 137 (a configured 2 min reads as 5), 138 (99999 -> 1440, 0045 -> 45, abc -> 30,
+7, 0 -> 5), 139 (the retired `primary_recheck_*` keys are not read).

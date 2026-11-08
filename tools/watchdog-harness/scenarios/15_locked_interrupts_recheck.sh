@@ -5,8 +5,8 @@
 # decides failback (primary healthy).
 SC_PASSES=31
 sc_setup() {
-    uci_set quecmanager.watchcat.primary_recheck_enabled 1
-    uci_set quecmanager.watchcat.primary_recheck_interval 1
+    uci_set quecmanager.watchcat.failback_enabled 1
+    uci_set quecmanager.watchcat.failback_every_min 1
     mset slot 2
     failover_write true 1 2
 }

@@ -1,0 +1,25 @@
+=== tmp/qmanager.log
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Config loaded: interval=10s act_after=15s step_wait=30s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=0 T2=0 T3=1 T4=0 backup_sim=2
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=0 every=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
+[2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Reboots in last hour: 0
+[2026-09-21 14:13:20] INFO  [watchcat:PID] Boot settle: waiting 30s
+[2026-09-21 14:14:00] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=2 (act after 15s)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] SUSPECT → RECOVERY: outage age 20s >= 15s
+[2026-09-21 14:14:10] INFO  [watchcat:PID] RECOVERY: Executing Tier 3 (reason=outage)
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: starting recovery (Tier 3) — internet unreachable
+[2026-09-21 14:14:10] WARN  [watchcat:PID] TIER 3 SKIPPED: current SIM slot unreadable
+[2026-09-21 14:14:10] INFO  [watchcat:PID] Tier 3 skipped, trying next
+[2026-09-21 14:14:10] ERROR [watchcat:PID] No more enabled tiers — all recovery options exhausted
+[2026-09-21 14:14:10] INFO  [watchcat:PID] EVENT [watchcat_recovery] Watchcat: all recovery steps tried, pausing 15 minutes
+[2026-09-21 14:14:20] INFO  [watchcat:PID] MONITOR → SUSPECT: streak_fail=6 (act after 15s)
+
+=== tmp/qmanager_events.json
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: starting recovery (Tier 3) — internet unreachable","severity":"warning","code":"wd_tier_start"}
+{"timestamp":1790000050,"type":"watchcat_recovery","message":"Watchcat: all recovery steps tried, pausing 15 minutes","severity":"error","code":"wd_holdoff"}
+

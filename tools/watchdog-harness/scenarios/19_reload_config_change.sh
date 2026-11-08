@@ -10,7 +10,7 @@ sc_pass_2() {
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier3_enabled 1
     uci_set quecmanager.watchcat.backup_sim_slot 2
-    uci_set quecmanager.watchcat.primary_recheck_interval 5
+    uci_set quecmanager.watchcat.failback_every_min 5
     uci_set quecmanager.quality_thresholds.latency_preset custom
     uci_set quecmanager.quality_thresholds.latency_custom_ms abc
     uci_set quecmanager.quality_thresholds.loss_preset standard

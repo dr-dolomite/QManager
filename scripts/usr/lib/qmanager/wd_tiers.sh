@@ -395,6 +395,10 @@ find_next_tier() {
         esac
         t=$((t + 1))
     done
+    # The quality ladder ended at Tier 2: say why an enabled Tier 3 was not offered.
+    if [ "$recovery_reason" = "quality" ] && [ "$start" -le 3 ] && [ "$CFG_TIER3_ENABLED" = "1" ]; then
+        qlog_warn "TIER 3 SKIPPED: recovery reason is quality"
+    fi
     return 1  # no enabled tiers remaining
 }
 

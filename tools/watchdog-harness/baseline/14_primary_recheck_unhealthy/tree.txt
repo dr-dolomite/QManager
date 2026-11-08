@@ -9,7 +9,7 @@
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Tiers: T1=1 T2=1 T3=0 T4=1 backup_sim=none
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   Quality: enabled=0 latency=250ms loss=30% after=30s (shared thresholds, floors applied)
 [2026-09-21 14:13:20] INFO  [watchcat:PID]   SSR-aware: enabled=1 grace=45s
-[2026-09-21 14:13:20] INFO  [watchcat:PID]   Primary-recheck (auto-failback): enabled=1 interval=1min
+[2026-09-21 14:13:20] INFO  [watchcat:PID]   Failback: enabled=1 every=1min
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
 [2026-09-21 14:13:20] INFO  [watchcat:PID] QManager Watchcat starting (PID N)
 [2026-09-21 14:13:20] INFO  [watchcat:PID] ========================================
@@ -23,6 +23,7 @@
 [2026-09-21 14:16:24] WARN  [watchcat:PID] PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot 2
 [2026-09-21 14:16:28] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:16:28] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM still unhealthy — staying on backup slot 2
+[2026-09-21 14:16:28] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 1 of 3
 [2026-09-21 14:16:28] INFO  [watchcat:PID] Entering post-recheck backup settle for 90s
 [2026-09-21 14:17:58] INFO  [watchcat:PID] Post-revert SIM settle complete — resuming monitoring
 [2026-09-21 14:18:08] INFO  [watchcat:PID] PRIMARY RECHECK: temporary swap-back to primary slot 1
@@ -32,6 +33,7 @@
 [2026-09-21 14:19:42] WARN  [watchcat:PID] PRIMARY RECHECK: primary SIM still unhealthy — returning to backup slot 2
 [2026-09-21 14:19:46] INFO  [watchcat:PID] Modem responsive after 0s
 [2026-09-21 14:19:46] INFO  [watchcat:PID] EVENT [sim_failover] Watchcat: primary SIM still unhealthy — staying on backup slot 2
+[2026-09-21 14:19:46] INFO  [watchcat:PID] PRIMARY RECHECK: failed try 2 of 3
 [2026-09-21 14:19:46] INFO  [watchcat:PID] Entering post-recheck backup settle for 90s
 
 === tmp/qmanager_events.json
