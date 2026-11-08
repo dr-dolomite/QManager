@@ -232,7 +232,8 @@ plat_dual_sim() {
 # plat_cc_count: PLAT_CC = component carriers in use (integer >= 1), or empty
 # (unknown); PLAT_CC_RAT = sa (from ca.env) | lte (from qmi.env, LTE or the NSA
 # anchor) | empty. Rule (Amendment 3 A3.3): a complete ca.env with ca_rat=sa
-# (covers NR-DC), ca_nr_cc >= 1 and ca_mono at most 90 s old wins; else a
+# (covers NR-DC) and ca_mono at most 90 s old wins (ca_nr_cc >= 1, else unknown:
+# no fall-through to qmi.env); else a
 # complete qmi.env with qmi_state=up, qmi_registered=1, qmi_ca_count >= 1 (PCC
 # included) and qmi_mono at most 10 s old; else unknown. Both files are parsed
 # line by line and never sourced (as data_used.sh does): a line outside
@@ -283,9 +284,13 @@ plat_cc_count() {
             done < "$PF_CA_ENV"
         } 2>/dev/null
         if [ "$_bad" = "0" ] && [ "$_last" = "qm_sidecar_end='1'" ] && [ "$_a" = "sa" ] \
-            && _pf_cc_ok "$_b" && _pf_mono_ok "$_m" 90; then
-            PLAT_CC="$_b"
-            PLAT_CC_RAT="sa"
+            && _pf_mono_ok "$_m" 90; then
+            # A complete, fresh SA read is authoritative: a zero or invalid
+            # count is unknown, never QMI's LTE count.
+            if _pf_cc_ok "$_b"; then
+                PLAT_CC="$_b"
+                PLAT_CC_RAT="sa"
+            fi
             return 0
         fi
     fi

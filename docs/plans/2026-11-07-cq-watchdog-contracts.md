@@ -372,8 +372,9 @@ verdict. `plat_paths` also sets `PF_QMI_ENV` and `PF_CA_ENV`. RM551E binding, in
 1. `PF_CA_ENV` = `/var/run/qmanager/ca.env` (the poller's gated AT carrier sidecar, written only
    while `carrier_enabled=1`): complete (every line `ca_*='...'` inside `[A-Za-z0-9_='-]`, last line
    `qm_sidecar_end='1'`), `ca_rat='sa'` (the writer never emits `nrdc`, so `sa` covers NR-DC),
-   `ca_nr_cc` an integer >= 1 and `ca_mono` at most 90 s older than `/proc/uptime` →
-   `PLAT_CC=ca_nr_cc`, `PLAT_CC_RAT=sa`.
+   `ca_mono` at most 90 s older than `/proc/uptime` → `ca_nr_cc` an integer >= 1 gives
+   `PLAT_CC=ca_nr_cc`, `PLAT_CC_RAT=sa`; a zero, empty or invalid `ca_nr_cc` reads unknown
+   (both empty) and does NOT fall through to `qmi.env` (hardening 2026-11-08).
 2. else `PF_QMI_ENV` = `/var/run/qmanager/qmi.env` (the broker's QMI sidecar, every 2 s): complete
    (the `qmi_*` line rule of `_qmi_env_source`, end marker last), `qmi_state='up'`,
    `qmi_registered='1'`, `qmi_ca_count` an integer >= 1 (LTE carriers including the PCC) and
