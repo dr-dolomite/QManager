@@ -325,7 +325,7 @@ Per-site latency (TCP handshake to a list of websites, with history) is a separa
 
 **Schedule.** Every 60 s, plus a forced lookup on a reachable `true` to `false` edge with a 10 s floor between forced runs. At most one job runs at a time (PID file, zombie check and a 15 s age guard). The job is never run inline in the probe loop, so the probe cycle (about 4 s at worst) is unchanged. **Why:** a slow or dead resolver would otherwise stall probes and the reachability verdict.
 
-**Timing and bound.** The lookup is bounded at 5 s by the BusyBox `timeout` applet through a local `qm_timeout` fallback (the target has no `platform.sh`); a killed lookup exits 143 and reports `ok:false`. Elapsed time comes from `/proc/uptime` centiseconds, so the quantum is 10 ms and `ms` is floored at 10.
+**Timing and bound.** The lookup is bounded at 5 s by the BusyBox `timeout` applet through the adapter's `plat_timeout`; a killed lookup exits 143 and reports `ok:false`. Elapsed time comes from `/proc/uptime` centiseconds, so the quantum is 10 ms and `ms` is floored at 10.
 
 **Freshness gate.** The poller's `read_dns_data` publishes `dns_lookup_ms` as a number only when `ok` is true and the sample `mono` age against `/proc/uptime` is 0 to 180 s; otherwise `null`. `dns_resolver` is the resolver string, or `null` when unknown or stale. Both land in `/tmp/qmanager_status.json` under `connectivity` and in the `at_cmd/fetch_data.sh` response. The TS type `ConnectivityStatus` carries optional `dns_lookup_ms?: number | null` and `dns_resolver?: string | null`.
 
