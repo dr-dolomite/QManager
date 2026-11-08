@@ -1538,6 +1538,16 @@ resolve_poller_config() {
     local _ap_idle
     local _ap_threshold
     local _ap_deep
+    local _ca_en
+
+    _ca_en=$(uci -q get quecmanager.watchcat.carrier_enabled 2>/dev/null)
+    # Only a literal 1 turns the carrier sidecar on; absent or garbage is off.
+    case "$_ca_en" in
+        1) CA_ENV_ENABLED=1 ;;
+        *) CA_ENV_ENABLED=0 ;;
+    esac
+    _CA_ENV_MONO=0
+    _CA_ENV_SIG=""
 
     _ap_enabled=$(uci -q get quecmanager.poller.enabled 2>/dev/null)
     _ap_grace=$(uci -q get quecmanager.poller.active_grace 2>/dev/null)
@@ -1559,6 +1569,128 @@ resolve_poller_config() {
     # Clamp the AT-read cadences to never drop below the base cycle interval.
     [ "$AP_IDLE_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_IDLE_INTERVAL="$POLL_INTERVAL"
     [ "$AP_DEEP_INTERVAL" -lt "$POLL_INTERVAL" ] 2>/dev/null && AP_DEEP_INTERVAL="$POLL_INTERVAL"
+}
+
+# =============================================================================
+# CARRIER SIDECAR ca.env (watchdog "stuck on one carrier" trigger)
+# =============================================================================
+# The watchdog counts component carriers while the UI is idle, so the poller
+# publishes the count of its last completed carrier read. LTE / NSA come from
+# the broker's qmi.env on the watchdog side; this file exists for 5G SA, where
+# QMI shows no carriers. Written only while quecmanager.watchcat.carrier_enabled
+# is 1 (read in resolve_poller_config), so with the toggle off nothing here
+# runs and the deep tier stays QENG-only (Adaptive Polling Invariant 7).
+CA_ENV="${CA_ENV:-/var/run/qmanager/ca.env}"
+CA_ENV_ENABLED=0
+CA_GATED_MIN_SEC=60      # spacing between gated deep-tier QCAINFO reads
+CA_ENV_REWRITE_SEC=10    # unchanged values are republished at most this often
+_CA_GATED_MONO=0
+_CA_ENV_MONO=0
+_CA_ENV_SIG=""
+_CA_N=0
+
+# _ca_count <text> <needle>: occurrences of needle in text -> _CA_N (builtins).
+_ca_count() {
+    local _cac_s
+    _cac_s="$1"
+    _CA_N=0
+    while :; do
+        case "$_cac_s" in
+            *"$2"*) _cac_s="${_cac_s#*"$2"}"; _CA_N=$((_CA_N + 1)) ;;
+            *) break ;;
+        esac
+    done
+}
+
+# ca_env_publish <at|qmi>: write ca.env from the carrier list a read just left
+# in t2_carrier_components. Counts are rows of the list, so PCC and NR legs are
+# included; QMI carries LTE only, so ca_nr_cc stays empty for it. A read whose
+# list is empty or unparsed writes nothing (the previous file keeps ageing).
+ca_env_publish() {
+    local _src
+    local _rat
+    local _lte
+    local _nr
+    local _sig
+    local _rmono
+    _src="$1"
+    [ "$CA_ENV_ENABLED" = "1" ] || return 0
+    command -v qm_atomic_write >/dev/null 2>&1 || return 0
+    case "${_MONO_TOP:-0}" in ''|*[!0-9]*|0|0?*) return 0 ;; esac
+    case "$t2_carrier_components" in '[{'*) ;; *) return 0 ;; esac
+
+    _rat="unknown"
+    if [ "${_QENG_PARSED:-0}" = "1" ]; then
+        case "$network_type" in
+            LTE)    _rat="lte" ;;
+            5G-NSA) _rat="nsa" ;;
+            5G-SA)  _rat="sa" ;;
+        esac
+    fi
+    _ca_count "$t2_carrier_components" '"technology":"LTE"'
+    _lte="$_CA_N"
+    _nr=""
+    if [ "$_src" = "at" ]; then
+        _ca_count "$t2_carrier_components" '"technology":"NR"'
+        _nr="$_CA_N"
+    fi
+
+    _sig="$_src $_rat $_lte $_nr"
+    if [ "$_sig" = "$_CA_ENV_SIG" ] && [ "$_MONO_TOP" -ge "$_CA_ENV_MONO" ] \
+       && [ $((_MONO_TOP - _CA_ENV_MONO)) -lt "$CA_ENV_REWRITE_SEC" ]; then
+        return 0
+    fi
+
+    _rmono="${_CA_READ_MONO:-0}"
+    case "$_rmono" in ''|*[!0-9]*|0|0?*) _rmono="$_MONO_TOP" ;; esac
+    # Throttle on the attempt, so a failing write does not fork four times a cycle.
+    _CA_ENV_MONO="$_MONO_TOP"
+    if printf "ca_mono='%s'\nca_source='%s'\nca_rat='%s'\nca_lte_cc='%s'\nca_nr_cc='%s'\nqm_sidecar_end='1'\n" \
+        "$_rmono" "$_src" "$_rat" "$_lte" "$_nr" | qm_atomic_write "$CA_ENV"; then
+        _CA_ENV_SIG="$_sig"
+    fi
+    return 0
+}
+
+# ca_deep_read: the one carrier read the deep tier may make. Runs only while the
+# watchdog carrier trigger is on, the serving cell is 5G SA (QMI cannot count
+# NR carriers; the NR-DC master is SA too) and 60 s have passed since the last
+# one. Same exchange as the active tier (=1 only inside it, never left set:
+# R01A04 drops the connection otherwise). A good reply goes through parse_ca_info
+# exactly like the active/idle read, so status.json's CA fields and
+# .device.ca_read_mono refresh with the sidecar instead of the two disagreeing;
+# a bad or empty reply changes nothing (deep keeps last-known values).
+ca_deep_read() {
+    local _cdr_rc
+    [ "$ap_tier" = "deep" ] || return 0
+    [ "$CA_ENV_ENABLED" = "1" ] || return 0
+    [ "${_QENG_PARSED:-0}" = "1" ] || return 0
+    [ "$network_type" = "5G-SA" ] || return 0
+    case "${_MONO_TOP:-0}" in ''|*[!0-9]*|0|0?*) return 0 ;; esac
+    # Scan / SIM switch return before the AT block; re-checked here because this
+    # function is an AT path of its own.
+    qm_trusted_file "$LONG_FLAG" && return 0
+    [ -f "$SIM_SWITCH_FLAG" ] && return 0
+    [ "$system_state" = "scan_in_progress" ] && return 0
+    # One cycle of grain: deep AT is itself due every deep_idle_interval, and a
+    # strict 60 s test would skip a cycle that lands at 59 s and read every 120 s.
+    [ $((_MONO_TOP - _CA_GATED_MONO + POLL_INTERVAL)) -ge "$CA_GATED_MIN_SEC" ] || return 0
+
+    # Space the next attempt from this one even if the read fails.
+    _CA_GATED_MONO="$_MONO_TOP"
+    qcmd_exec_g 'AT+QCAINFO=1;+QCAINFO;+QCAINFO=0'
+    _cdr_rc=$?
+    [ "$_cdr_rc" -eq 0 ] || return 0
+    case "$_QR" in
+        *'+QCAINFO:'*) ;;
+        *) return 0 ;;
+    esac
+    parse_ca_info "$_QR"
+    _CA_READ_MONO="$_MONO_TOP"
+    ca_source="at"
+    qmi_ca_cache_update "$t2_carrier_components"
+    ca_env_publish at
+    return 0
 }
 
 # DNS lookup time from qmanager_ping's detached job. A number only when the last
@@ -2979,7 +3111,8 @@ poll_cycle() {
         # tower-lock failover). QCAINFO / CFUN / per-antenna are active/idle-only
         # to minimize AT load while the device is long-unattended. In deep we
         # must NOT run the QCAINFO else-branch — the CA fields keep their
-        # last-known values so write_cache emits them unchanged.
+        # last-known values so write_cache emits them unchanged. The only
+        # exception is ca_deep_read (watchdog carrier trigger on, 5G SA).
         if [ "$ap_tier" != "deep" ]; then
             # Carrier Aggregation — enable, query and disable in one exchange
             # (as QuecManager does): =1 adds the extended NR fields, and leaving
@@ -2998,6 +3131,7 @@ poll_cycle() {
                     _CA_READ_MONO="${_MONO_TOP:-0}"
                     ca_source="at"
                     qmi_ca_cache_update "$t2_carrier_components"
+                    ca_env_publish at
                 elif [ $ca_rc -ne 3 ]; then
                     # Busy (rc 3) keeps the last CA values, like the deep tier.
                     ca_source="at"
@@ -3010,6 +3144,8 @@ poll_cycle() {
                     t2_bandwidth_details=""
                     t2_carrier_components="[]"
                 fi
+            else
+                ca_env_publish qmi
             fi
 
             # CFUN — standalone query (compound commands timeout in CFUN=0).
@@ -3036,6 +3172,9 @@ poll_cycle() {
 
             # Tier 1 (per-antenna signal)
             poll_per_antenna_signal
+        else
+            # Gated exception to "deep = serving cell only": see ca_deep_read.
+            ca_deep_read
         fi
 
         # Tier 1.5 (SoC temperature via sysfs — every 10s in Active; on every
