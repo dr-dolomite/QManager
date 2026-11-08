@@ -1151,39 +1151,19 @@ seed_uci_defaults() {
         info "quecmanager.tailscale_net.enabled already set — preserving user choice"
     fi
 
-    # Connection Quality — ping profile (drives qmanager_ping interval +
-    # fail/recover thresholds and the 2 HTTP probe targets). The profile NAME
-    # is the only knob persisted; the daemon holds the profile->params table.
-    # Seed concrete, user-editable defaults. NOTE: quality_thresholds is
-    # deliberately NOT seeded — its absence is the "default" signal that drives
-    # the frontend isDefault hint and the tolerant/tolerant fallback in the
-    # poller + quality_thresholds.sh CGI.
+    # Connection Quality + Watchdog keys are seeded/migrated by cqwd_migrate.sh
+    # further down (spec section 3.3). NOTE: quality_thresholds is deliberately
+    # NOT seeded — its absence is the "default" signal that drives the frontend
+    # isDefault hint and the tolerant/tolerant fallback in the poller +
+    # quality_thresholds.sh CGI.
     if ! uci -q get quecmanager.ping_profile >/dev/null 2>&1; then
         uci set quecmanager.ping_profile=ping_profile
-    fi
-    if ! uci -q get quecmanager.ping_profile.profile >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.profile='relaxed'
-        info "Seeded quecmanager.ping_profile.profile=relaxed"
-    else
-        info "quecmanager.ping_profile.profile already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.ping_profile.target_ipv4 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_ipv4='1.1.1.1'
-        info "Seeded quecmanager.ping_profile.target_ipv4=1.1.1.1"
-    else
-        info "quecmanager.ping_profile.target_ipv4 already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.ping_profile.target_ipv6 >/dev/null 2>&1; then
-        uci set quecmanager.ping_profile.target_ipv6='2606:4700:4700::1111'
-        info "Seeded quecmanager.ping_profile.target_ipv6=2606:4700:4700::1111"
-    else
-        info "quecmanager.ping_profile.target_ipv6 already set — preserving user choice"
     fi
 
     # Upgrade migration — the ping probe is now ICMP (BusyBox ping), not curl/HTTP.
     # The legacy target_1/target_2 keys held HTTP(S) URLs and are useless as ICMP
-    # targets, so delete them outright if present. The new target_ipv4/target_ipv6
-    # keys are seeded above. The profile NAME is sacred and never touched here.
+    # targets, so delete them outright if present. The targets list is seeded
+    # by cqwd_migrate.sh below. The profile NAME is sacred and never touched here.
     # uci commit happens once at the end of this function; touch the reload flag
     # so a running daemon re-reads the new ICMP targets.
     _ping_migrated=0
@@ -1202,67 +1182,6 @@ seed_uci_defaults() {
         info "Dropped /tmp/qmanager_ping_reload — running ping daemon will pick up ICMP targets"
     fi
 
-    # Connection Watchdog (watchcat) — every key is seeded here, so a fresh
-    # install has the full section before the watchdog.sh CGI is ever opened
-    # (ensure_watchcat_config there only covers a section that is missing
-    # entirely). Idempotent + preserve-user-choice, same shape as the blocks
-    # above. fail_threshold is seeded/migrated in the block further down.
-    # Defaults match wd_config.sh and the CGI: off, 10s check, 60s cooldown,
-    # tiers 1/2/4 on and Tier 3 off, 3 reboots/hour, quality off, consecutive 5.
-    # NOTE: latency_ceiling_ms / loss_ceiling_pct are RETIRED — the watchdog now
-    # reads the SHARED quecmanager.quality_thresholds.* (resolved with a `custom`
-    # option). The migration block below moves any existing watchcat ceilings
-    # into the shared custom thresholds. Do NOT re-seed the retired keys here.
-    if ! uci -q get quecmanager.watchcat >/dev/null 2>&1; then
-        uci set quecmanager.watchcat=watchcat
-    fi
-    for _wc_kv in enabled=0 check_interval=10 cooldown=60 \
-                  tier1_enabled=1 tier2_enabled=1 tier3_enabled=0 tier4_enabled=1 \
-                  max_reboots_per_hour=3; do
-        _wc_k="${_wc_kv%%=*}"
-        _wc_v="${_wc_kv#*=}"
-        if ! uci -q get "quecmanager.watchcat.$_wc_k" >/dev/null 2>&1; then
-            uci set "quecmanager.watchcat.$_wc_k=$_wc_v"
-            info "Seeded quecmanager.watchcat.$_wc_k=$_wc_v"
-        fi
-    done
-    if ! uci -q get quecmanager.watchcat.quality_enabled >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.quality_enabled=0
-        info "Seeded quecmanager.watchcat.quality_enabled=0 (off by default)"
-    else
-        info "quecmanager.watchcat.quality_enabled already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.quality_consecutive >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.quality_consecutive=5
-        info "Seeded quecmanager.watchcat.quality_consecutive=5"
-    else
-        info "quecmanager.watchcat.quality_consecutive already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.ssr_aware >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.ssr_aware=1
-        info "Seeded quecmanager.watchcat.ssr_aware=1 (SSR-aware hold on by default)"
-    else
-        info "quecmanager.watchcat.ssr_aware already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.ssr_grace >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.ssr_grace=45
-        info "Seeded quecmanager.watchcat.ssr_grace=45"
-    else
-        info "quecmanager.watchcat.ssr_grace already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.primary_recheck_enabled >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.primary_recheck_enabled=0
-        info "Seeded quecmanager.watchcat.primary_recheck_enabled=0 (auto-failback off by default)"
-    else
-        info "quecmanager.watchcat.primary_recheck_enabled already set — preserving user choice"
-    fi
-    if ! uci -q get quecmanager.watchcat.primary_recheck_interval >/dev/null 2>&1; then
-        uci set quecmanager.watchcat.primary_recheck_interval=30
-        info "Seeded quecmanager.watchcat.primary_recheck_interval=30"
-    else
-        info "quecmanager.watchcat.primary_recheck_interval already set — preserving user choice"
-    fi
-
     # ---------------------------------------------------------------------------
     # Watchdog/Quality unification migration (idempotent, exact-match guarded)
     # ---------------------------------------------------------------------------
@@ -1271,18 +1190,17 @@ seed_uci_defaults() {
 
     # (1) max_failures -> fail_threshold. The watchdog's recovery trigger is now
     #     consecutive failed PROBES (raw ping streak_fail), not watchcat's own
-    #     loop cycles. Copy the old value across once and delete the old key. If
-    #     neither key exists (fresh install), seed fail_threshold=5.
+    #     loop cycles. Copy the old value across once and delete the old key
+    #     (a rollback reads fail_threshold). A fresh install seeds no old key.
+    if ! uci -q get quecmanager.watchcat >/dev/null 2>&1; then
+        uci set quecmanager.watchcat=watchcat
+    fi
     if ! uci -q get quecmanager.watchcat.fail_threshold >/dev/null 2>&1; then
         _old_max_fail=$(uci -q get quecmanager.watchcat.max_failures 2>/dev/null) || true
         if [ -n "$_old_max_fail" ]; then
             uci set quecmanager.watchcat.fail_threshold="$_old_max_fail"
             uci -q delete quecmanager.watchcat.max_failures 2>/dev/null
             info "Migrated watchcat.max_failures=$_old_max_fail -> watchcat.fail_threshold (deleted old key)"
-            _wq_migrated=1
-        else
-            uci set quecmanager.watchcat.fail_threshold=5
-            info "Seeded quecmanager.watchcat.fail_threshold=5"
             _wq_migrated=1
         fi
     else
@@ -1321,10 +1239,23 @@ seed_uci_defaults() {
     # (3) If no ceilings existed, quality_thresholds is intentionally left ABSENT
     #     to preserve the never-seeded isDefault semantics — nothing to do.
 
+    # (4) Spec section 3.3: profile/targets/watchcat old keys -> the new names
+    #     (cqwd_migrate.sh, shared with the Config Backup restore). Keyed on the
+    #     NEW keys, so a rerun changes nothing; a fresh install seeds only new
+    #     names. Old keys stay for a rollback; interval_override is dropped.
+    if [ -f "$LIB_DIR/cqwd_migrate.sh" ]; then
+        . "$LIB_DIR/cqwd_migrate.sh"
+        CQM_LOG_FN=info
+        cqm_migrate_uci
+        [ "$CQM_CHANGED" = "1" ] && _wq_migrated=1
+    else
+        warn "$LIB_DIR/cqwd_migrate.sh missing — Connection Quality / Watchdog keys not migrated"
+    fi
+
     # Pick up the changes on the running daemons without an init restart.
     if [ "$_wq_migrated" = "1" ]; then
-        touch /tmp/qmanager_ping_reload /tmp/qmanager_quality_reload
-        info "Dropped /tmp/qmanager_ping_reload + /tmp/qmanager_quality_reload — running daemons will re-read"
+        touch /tmp/qmanager_ping_reload /tmp/qmanager_quality_reload /tmp/qmanager_watchcat_reload
+        info "Dropped the ping, quality and watchcat reload flags — running daemons will re-read"
     fi
 
     # SMS Forwarding — opt-in inbound-SMS relay daemon (qmanager_sms_forward,
