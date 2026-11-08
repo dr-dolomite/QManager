@@ -313,9 +313,9 @@ Tier 4 rests; it never disables the Watchdog. **Why:** the old token bucket auto
 
 `execute_tier4` appends `Watchcat: rebooting system (Tier 4)` (code `wd_tier4_reboot`), writes `<epoch>|reboot|tier4_escalation` to `crash.log` (trimmed to the last 20 lines), writes the state file, removes the recovery flag and reboots in a detached subshell.
 
-> ⚠️ WARNING: The event text `Watchcat: rebooting system (Tier 4)` is an invariant. The Recovery Activity card dedupes its ledger-backed restart row against the RAM event by looking for `Tier 4` plus `reboot` in a `watchcat_recovery` message within 120 s of the ledger epoch (`isRebootEvent`, `recovery-activity-card.tsx`). Change the wording and a restart shows twice.
+> ⚠️ WARNING: The event text `Watchcat: rebooting system (Tier 4)` is an invariant. The Recovery Activity card dedupes its ledger-backed restart row against the RAM event by the event `code` `wd_tier4_reboot` within 120 s of the ledger epoch (`isRebootRow`, `activity-model.ts`); rows from before the upgrade have no `code`, so the card derives it from this exact text. Change the wording or the code and a restart shows twice.
 
-UI wording is "Reboots" with the value `reboots_this_hour of reboot_limit`; the Recovery Activity card merges `recent_reboots` with the RAM events, drops epochs at or below `CLOCK_PLAUSIBLE_AFTER` (1_600_000_000, the 1970-era rows), dedupes as described above and caps at five rows.
+UI wording is "Reboots" with the value `reboots_this_hour of reboot_limit`; the Recovery Activity card merges `recent_reboots` with the RAM events, drops epochs at or below `CLOCK_PLAUSIBLE_AFTER` (1_600_000_000, the 1970-era rows), dedupes as described above and caps the list at `LOG_LIMIT` (6) rows.
 
 ---
 
@@ -360,11 +360,11 @@ The Watchdog page must never show a frozen last state when the daemon has died, 
 |---|---|
 | State file | `write_state` adds `mono` (integer `/proc/uptime` seconds via `mono_now`) and `stale_after` (`3 * CFG_CHECK_INTERVAL + 60` = 90 s). `write_state_busy` writes the same file with `stale_after = 600`; it is called at the top of `do_recovery` and around each swap attempt in `wd_swap_slot`, so a minutes-long Tier 3 is not reported dead. |
 | Poller | `read_watchcat_state` (Tier 1.5, every 10 s, behind an mtime re-read gate) reads the state file. When the file is **absent** it resets **all** `wc_*` variables to defaults (enabled false, state `disabled`). The composers emit `watchcat.age_sec` = poller `mono` minus `watchcat.mono` (clamped at 0, `null` when either is missing or zero) and `watchcat.stale_after`. |
-| UI | `isWatchcatLive(w)` (`derive.ts`): enabled and not (`age_sec > stale_after`). `derivePhase` returns `not_running` ("Not reporting") when enabled but not live, `deriveBand` shows figures only for reporting phases, and `use-watchdog-indicator.ts` hides the sidebar pill when not live. |
+| UI | `isWatchcatLive(w)` (`derive.ts`): enabled and not (`age_sec > stale_after`). `derivePhase` returns `starting` (inside the grace window) or `not_running` ("Not reporting") when it is enabled but the daemon wrote no state, and `not_running` at once when the heartbeat has gone quiet; the hero shows figures only for the phases in `REPORTING_PHASES`, and `use-watchdog-indicator.ts` hides the sidebar pill when not live. A `watchcat` block without age fields (an older backend) counts as live. |
 
 **Why mono, not timestamps:** the NITZ `time_daemon` and `ntpd` step the wall clock about 90 s forward after an SSR, which made wall-clock ages look stale. The age is a monotonic delta on both sides.
 
-**Exit cleanup removes the state file.** A stopped daemon therefore reads as "daemon gone" at once (absent file, poller defaults), not as a frozen last state; the UI shows "Starting" inside the 60 s `useGraceGate` after a save and "Not reporting" after it. `stale_after` also covers a hung daemon (`kill -STOP`): the file stays but ages out.
+**Exit cleanup removes the state file.** A stopped daemon therefore reads as "daemon gone" at once (absent file, poller defaults), not as a frozen last state; the UI shows "Starting" inside the 60 s grace window (`GRACE_MS`, `useGraceGate`) after a save and "Not reporting" after it. `stale_after` also covers a hung daemon (`kill -STOP`): the file stays but ages out.
 
 `write_state` coerces every numeric and boolean input first (`_wd_num` accepts plain non-negative integers without a leading zero, else the default), builds the JSON into a variable and writes it atomically (`qm_atomic_write`) only when non-empty. One corrupted global cannot leave the state file empty or stale.
 
