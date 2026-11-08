@@ -234,88 +234,187 @@
       "unreadable": "The modem did not answer.",
       "retry": "Try again"
     },
-    "band": {
-      "checks": "Failed checks",
-      "recoveries": "Recoveries",
-      "reboots": "Reboots",
-      "absent": "Not reported",
-      "checksCaption": "Before recovery starts",
-      "cooldownCaption": "Rechecking in {{seconds}}s",
-      "recoveriesLast": "Step {{tier}}, {{ago}}",
-      "recoveriesNone": "None yet",
-      "rebootsCaption": "In the last hour",
-      "rebootsOff": "Reboot step is off",
-      "aria": "Watchdog status",
-      "cooldownStep": "Step {{tier}} ran. Rechecking in {{seconds}}s."
+    "duration": {
+      "seconds": "{{s}} s",
+      "minutes": "{{m}} min",
+      "minutesSeconds": "{{m}} min {{s}} s",
+      "hours": "{{h}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
     },
     "phase": {
+      "action": {
+        "1": "Re-registering to the network",
+        "2": "Restarting the radio",
+        "3": "Switching to the backup SIM",
+        "4": "Rebooting the modem"
+      },
       "off": {
-        "label": "Off",
+        "title": "Off",
         "blurb": "The watchdog is not watching the connection."
       },
       "unknown": {
-        "label": "Unknown",
+        "title": "Unknown",
         "blurb": "The modem is not answering, so we cannot say what the watchdog is doing."
       },
       "starting": {
-        "label": "Starting",
-        "blurb": "The service was just enabled and has not reported yet."
+        "title": "Starting",
+        "blurb": "Just switched on. Waiting for its first report."
       },
       "not_running": {
-        "label": "Not reporting",
-        "blurb": "Enabled, but the watchdog has stopped reporting."
+        "title": "Not reporting",
+        "blurb": "Switched on, but the watchdog has stopped reporting."
       },
       "auto_disabled": {
-        "label": "Turned itself off",
-        "blurb": "It reached the reboot limit. Turn it back on once the link is stable."
+        "title": "Turned itself off",
+        "blurb": "An earlier version switched it off at the reboot limit. Turn it back on once the link is stable."
       },
       "monitor": {
-        "label": "Monitoring",
-        "blurb": "The connection is healthy. Watching for outages."
+        "title": "Watching",
+        "blurb": "The link is healthy. Recovery starts after {{time}} offline."
       },
       "suspect": {
-        "label": "Checking",
-        "blurb": "A connectivity check just failed. Confirming before acting."
+        "title": "Checking",
+        "blurb": "No reply for {{time}}. Recovery starts if it keeps up.",
+        "blurbNow": "A check just failed. Confirming before acting."
       },
       "recovery": {
-        "label": "Recovering",
-        "blurb": "Working through the recovery ladder to restore the connection."
+        "title": "Step {{tier}}: {{action}}",
+        "titleGeneric": "Recovering",
+        "blurb": {
+          "outage": "Offline for {{time}}. Working through the steps.",
+          "quality": "Quality has been poor for {{time}}. Working through the steps.",
+          "carrier": "On one carrier for {{time}}. Trying to bring the others back."
+        },
+        "blurbNow": "Working through the recovery steps."
       },
       "cooldown": {
-        "label": "Cooling down",
-        "blurb": "Waiting for the last recovery step to settle before rechecking."
+        "title": "Step {{tier}} ran. Checking in {{time}}",
+        "titleChecking": "Step {{tier}} ran. Checking now",
+        "titleGeneric": "Checking the result",
+        "next": {
+          "outage": "If the link is still down, step {{tier}} is next.",
+          "quality": "If quality is still poor, step {{tier}} is next.",
+          "carrier": "If it is still on one carrier, step {{tier}} is next."
+        },
+        "last": {
+          "outage": "That was the last step. If the link is still down, the watchdog holds off.",
+          "quality": "That was the last step for poor quality. If it persists, the watchdog holds off.",
+          "carrier": "That was the last step for one carrier. If it persists, the watchdog holds off."
+        }
       },
-      "locked": {
-        "label": "Paused",
-        "blurb": "Maintenance is in progress, so the watchdog is holding off."
+      "holdoff": {
+        "outage": {
+          "title": "Holding off for {{time}}",
+          "titleNow": "Holding off",
+          "blurb": "Every step ran and the link is still down. It starts over at {{time}}.",
+          "blurbNow": "Every step ran and the link is still down. It starts over shortly."
+        },
+        "quality": {
+          "title": "Holding off for {{time}}",
+          "blurb": "Quality is still poor after every step. It tries again at {{time}}.",
+          "blurbNow": "Quality is still poor after every step. It tries again shortly."
+        },
+        "carrier": {
+          "title": "Holding off for {{time}}",
+          "blurb": "Still on one carrier after the steps. It tries again at {{time}}.",
+          "blurbNow": "Still on one carrier after the steps. It tries again shortly."
+        }
       },
       "radio_off": {
-        "blurb": "The radio is off, so the watchdog is holding off."
-      },
-      "disabled": {
-        "label": "Disabled",
-        "blurb": "The service is running but switched off."
+        "title": "Radio is off",
+        "blurb": "There is nothing to recover while the radio is off. Watching resumes when it is back on."
       },
       "ssr_hold": {
-        "label": "Holding",
-        "blurb": "The baseband is restarting on its own. Recovery waits for it to come back."
+        "title": "Waiting out a modem restart ({{time}})",
+        "titleNow": "Waiting out a modem restart",
+        "blurb": "The radio restarted on its own. Recovery waits for it to come back before acting."
+      },
+      "ping_stale": {
+        "title": "Connection check is quiet",
+        "blurb": "The connection check has not reported for a while, so the watchdog is not acting on it."
+      },
+      "locked": {
+        "title": "Paused",
+        "blurb": "Maintenance is in progress, so the watchdog is holding off."
+      },
+      "disabled": {
+        "title": "Switched off",
+        "blurb": "The service is running but switched off."
+      }
+    },
+    "hero": {
+      "aria": "Watchdog status",
+      "absent": "Not reported",
+      "none": "None",
+      "noReading": "No reading",
+      "linkUp": "Link is up",
+      "offline": {
+        "eyebrow": "Offline for",
+        "caption": "Since {{time}}"
+      },
+      "quality": {
+        "eyebrow": "Poor quality for",
+        "caption": "Poor is over {{ms}} ms or {{pct}} %"
+      },
+      "carrier": {
+        "eyebrow": "On one carrier for",
+        "caption": "Acts after {{time}}"
+      },
+      "recoveries": {
+        "eyebrow": "Recoveries",
+        "caption": "Since last restart"
+      },
+      "lastFix": {
+        "eyebrow": "Last fix",
+        "none": "No fix yet",
+        "caption": "Step {{tier}}",
+        "captionTook": "Step {{tier}}, took {{time}}",
+        "captionReason": "Step {{tier}} for {{reason}}",
+        "captionReasonTook": "Step {{tier}} for {{reason}}, took {{time}}",
+        "reason": {
+          "quality": "poor quality",
+          "carrier": "one carrier"
+        }
+      },
+      "reboots": {
+        "eyebrow": "Reboots",
+        "value": "{{used}} of {{limit}}",
+        "caption": "This hour",
+        "off": "Reboot step is off",
+        "resting": "Resting until {{time}}",
+        "restingNow": "Resting for now",
+        "restingLong": "Resting after a long outage"
       }
     },
     "master": {
-      "aria": "Enable the connection watchdog"
+      "label": "Recover automatically"
     },
     "ladder": {
       "title": "Recovery Ladder",
       "description": "Tried in order, gentlest first.",
-      "aria": "Recovery ladder",
-      "status": {
-        "blocked": "Needs a slot",
-        "done": "Tried",
-        "running": "Running now"
+      "aria": "Recovery steps",
+      "steps": "Steps",
+      "advanced": "Advanced",
+      "tierAria": "Arm this recovery step: {{name}}",
+      "state": {
+        "needsSecondSim": "Needs a second SIM",
+        "unused": {
+          "quality": "Not used for poor quality",
+          "carrier": "Not used for one carrier"
+        },
+        "resting": "Resting until {{time}} ({{used}} of {{limit}} used)",
+        "restingNow": "Resting ({{used}} of {{limit}} used this hour)",
+        "restingLong": "Resting after a long outage",
+        "checking": "Checking in {{time}}",
+        "checkingNow": "Checking now",
+        "running": "Running now",
+        "triedAt": "Tried at {{time}}",
+        "tried": "Tried",
+        "onBackup": "Running on slot {{slot}}"
       },
       "tier1": {
         "name": "Re-register to the network",
-        "consequence": "The link drops for a few seconds."
+        "consequence": "The link drops for a few seconds. The WAN IP may change."
       },
       "tier2": {
         "name": "Restart the radio",
@@ -323,72 +422,125 @@
       },
       "tier3": {
         "name": "Switch to the backup SIM",
-        "consequence": "Rides on the backup until you revert.",
+        "consequence": "Stays on the backup until you revert.",
+        "consequenceFailback": "Switches back to the primary SIM on its own.",
         "slotLabel": "Backup SIM slot",
         "slot": "Slot {{slot}}"
       },
       "tier4": {
-        "name": "Reboot the device",
+        "name": "Reboot the modem",
         "consequence": "Offline for about a minute.",
         "capLabel": "Maximum reboots per hour",
         "capLead": "Up to",
-        "capUnit": "per hour"
+        "capUnit": "per hour",
+        "hintLabel": "About the reboot limit",
+        "hint": "At the limit the watchdog stops rebooting and rests until the hour is up. It keeps running the other steps."
       },
-      "tierAria": "Arm this recovery step: {{name}}",
       "failback": {
         "name": "Switch back to the primary SIM",
-        "consequence": "Retries the primary; the link drops briefly each try.",
-        "lead": "Every",
+        "consequence": "Retries the primary SIM. The link drops briefly each try.",
+        "everyLabel": "Recheck the primary SIM every",
         "unit": "min",
-        "intervalLabel": "Primary SIM recheck interval"
+        "summary": "Every {{n}} min",
+        "summaryOff": "Off",
+        "gaveUp": "Gave up after 3 tries",
+        "trying": "Trying the primary SIM now",
+        "next": "Next try in {{time}}",
+        "nextFailed": "Next try in {{time}} ({{n}} failed)",
+        "retry": "Try again now",
+        "retryOk": "Checking the primary SIM now",
+        "retryFail": "Could not start the retry"
       }
     },
     "detection": {
       "title": "Detection",
-      "description": "How quickly a quiet link counts as an outage.",
-      "probe": {
-        "label": "Probe every",
-        "short": "{{seconds}}s"
+      "description": "When recovery starts and what sets it off.",
+      "advanced": "Advanced",
+      "custom": "Custom",
+      "unit": {
+        "seconds": "s",
+        "minutes": "min",
+        "ms": "ms"
       },
-      "threshold": {
-        "label": "Down after",
-        "unit": "failed probes"
+      "sensitivityLink": "Sensitivity",
+      "sensitivity": {
+        "sensitive": "Sensitive",
+        "regular": "Regular",
+        "relaxed": "Relaxed",
+        "quiet": "Quiet"
       },
-      "cooldown": {
-        "label": "Wait between steps",
-        "unit": "s"
+      "down": {
+        "named": "Down after about {{time}} ({{name}})",
+        "plain": "Down after about {{time}}",
+        "unknown": "Down after the connection check fails"
       },
-      "timeline": {
-        "eyebrow": "If the link drops",
-        "declaredStep": "Outage declared, step {{tier}}",
-        "declaredReboot": "Outage declared, step 4, reboot",
-        "step": "Step {{tier}}",
-        "reboot": "Step 4, reboot",
-        "about": "about {{time}}",
-        "seconds": "{{s}} s",
-        "minutes": "{{m}} min",
-        "minutesSeconds": "{{m}} min {{s}} s",
-        "off": "The watchdog is off, so nothing runs.",
-        "none": "No steps are armed, so nothing runs.",
-        "invalid": "Enter valid detection values to preview the timeline.",
-        "stopped": "Step 3 has no slot, so the ladder stops there."
+      "act": {
+        "label": "Start recovery after",
+        "effective": "→ {{time}}",
+        "hintLabel": "About the start time",
+        "hint": "Recovery never starts before the link counts as down. With {{name}} that takes about {{time}}, so a lower number is raised to it.",
+        "hintFallback": "the current sensitivity",
+        "note": "Recovery would start after {{time}} offline."
       },
       "quality": {
-        "label": "Quality trigger",
-        "unit": "checks",
-        "caption": "Over {{ms}} ms or {{pct}}% loss",
-        "link": "Thresholds"
+        "label": "Recover from poor quality",
+        "hintLabel": "About poor quality",
+        "hint": "Counts when replies are slower than {{ms}} ms or more than {{pct}} % are lost. Runs steps 1 and 2 only.",
+        "afterLabel": "Poor for",
+        "caption": "Poor is over {{lat}} or {{loss}}"
+      },
+      "carrier": {
+        "label": "Recover from one carrier",
+        "hintLabel": "About one carrier",
+        "hint": "Counts only after the modem has used carrier aggregation since it started. Runs steps 1 and 2 only.",
+        "afterLabel": "On one carrier for",
+        "consequence": "Step 1 drops the link for a few seconds; the WAN IP may change.",
+        "rightNow": "Right now",
+        "unknown": "Unknown",
+        "singleFor": "One carrier for {{time}}",
+        "count_one": "{{count}} carrier",
+        "count_other": "{{count}} carriers"
+      },
+      "stepWait": {
+        "label": "Wait between steps",
+        "summary": "{{time}} between steps",
+        "hintLabel": "About the wait",
+        "hint": "How long a step gets to work before the link is checked and the next step starts. Never shorter than the link needs to read as up again."
       },
       "ssr": {
-        "label": "Baseband restart hold",
-        "unit": "s",
-        "caption": "Lets a modem self-restart finish first"
+        "label": "Hold for modem radio restarts",
+        "hintLabel": "About radio restarts",
+        "hint": "When the modem restarts its own radio, recovery waits instead of piling on.",
+        "graceLabel": "Hold time"
+      },
+      "timeline": {
+        "title": "If the link drops",
+        "quiet": "Link goes quiet",
+        "markedDown": "Link counts as down",
+        "markedDownNamed": "Link counts as down ({{name}})",
+        "step": {
+          "1": "Step 1: re-register",
+          "2": "Step 2: restart the radio",
+          "3": "Step 3: switch SIM",
+          "4": "Step 4: reboot"
+        },
+        "reboot": "Step 4: reboot",
+        "rebootResting": "Step 4: reboot (resting)",
+        "holdoff": "Hold off for 15 min, then start over",
+        "now": "Now",
+        "off": "The watchdog is off, so nothing runs.",
+        "none": "No steps are armed, so nothing runs.",
+        "summary": {
+          "reboot": "Reboot at {{time}}",
+          "last": "Last step at {{time}}",
+          "now": "Offline for {{time}}"
+        }
       }
     },
     "activity": {
       "title": "Recovery Activity",
       "description": "What the watchdog has done, newest first.",
-      "tier4Reboot": "The watchdog restarted the modem",
+      "allEvents": "All events",
       "type": {
         "recovery": "Recovery",
         "failover": "SIM failover"
@@ -414,32 +566,91 @@
         "title": "Could not load recovery activity",
         "retry": "Try again"
       },
-      "allEvents": "All events"
+      "sr": {
+        "success": "Success",
+        "warning": "Warning",
+        "destructive": "Problem",
+        "info": "Information",
+        "muted": "Routine"
+      },
+      "row": {
+        "reason": {
+          "outage": "Link was down",
+          "quality": "Poor quality",
+          "carrier": "On one carrier",
+          "carrierFor": "On one carrier for {{min}} min"
+        },
+        "tierStart": {
+          "1": "Re-registering to the network",
+          "2": "Restarting the radio",
+          "3": "Switching to the backup SIM",
+          "4": "Rebooting the modem"
+        },
+        "recoveryStart": "Starting recovery",
+        "succeeded": {
+          "outage": "Back online after step {{tier}}",
+          "quality": "Quality recovered after step {{tier}}",
+          "carrier": "Carriers recovered after step {{tier}}"
+        },
+        "succeededNoTier": {
+          "outage": "Back online",
+          "quality": "Quality recovered",
+          "carrier": "Carriers recovered"
+        },
+        "escalate": "Moving on to step {{tier}}",
+        "escalateNext": "Moving on to the next step",
+        "escalateDetail": "The last step did not fix it",
+        "holdoff": "Holding off for {{min}} min",
+        "holdoffNow": "Holding off",
+        "holdoffDetail": "Every step ran without a fix",
+        "ssrHold": "Waiting out a modem restart",
+        "ssrHoldDetail": "The radio restarted on its own",
+        "radioPaused": "Paused: the radio is off",
+        "radioPausedDetail": "Nothing to recover until it is back on",
+        "budgetSpent": "Reboot limit reached",
+        "budgetSpentHourly": "{{n}} per hour, resting until the hour is up",
+        "budgetSpentLong": "Resting after a long outage",
+        "pingStale": "Connection check went quiet",
+        "pingStaleDetail": "Not acting on stale readings",
+        "tier4Reboot": "The watchdog rebooted the modem",
+        "swapFailed": "SIM switch failed",
+        "swapStart": "Switching to the backup SIM",
+        "swapDone": "Switched to the backup SIM",
+        "slot": "Slot {{slot}}",
+        "revertFailed": "SIM revert failed",
+        "revertBackupFailed": "Could not revert, staying on the backup",
+        "revertRequested": "Reverting to the original SIM",
+        "revertByUser": "Requested by you",
+        "failbackFailed": "Switching back failed",
+        "failbackDone": "Back on the primary SIM",
+        "failbackTry": "Checking the primary SIM",
+        "failbackStay": "Staying on the backup SIM",
+        "giveup": "Gave up switching back",
+        "giveupDetail": "Revert by hand when you are ready"
+      }
     },
     "save": {
       "discard": "Discard",
-      "action": "Save",
-      "clean": "All changes saved",
+      "ladder": "Save ladder",
+      "detection": "Save detection",
+      "ladderOk": "Recovery ladder saved",
+      "detectionOk": "Detection saved",
+      "ladderFail": "Could not save the recovery ladder",
+      "detectionFail": "Could not save detection",
       "blockedIn": "Check {{fields}} before saving",
-      "toastOk": "Watchdog settings saved",
-      "toastFail": "Could not save the watchdog settings",
       "confirmReboot": {
         "title": "Let the watchdog reboot the modem?",
-        "body": "Saving this lets the watchdog restart the modem on its own when every gentler step has failed. This page goes away for about a minute while the modem comes back.",
-        "cap": "Reboots are capped at {{cap}} per hour. At the cap the watchdog switches itself off until you turn it back on.",
+        "body": "Saving this lets the watchdog reboot the modem on its own when every gentler step has failed. This page goes away for about a minute while the modem comes back.",
+        "cap": "Reboots are capped at {{cap}} per hour. At the cap the watchdog rests instead of rebooting again.",
         "cancel": "Cancel",
         "action": "Allow reboots"
       }
     },
     "errors": {
-      "failThreshold": "Must be between 1 and 20",
-      "probeInterval": "Must be between 1 and 60 seconds",
-      "cooldown": "Must be between 10 and 300 seconds",
-      "maxReboots": "Must be between 1 and 10",
-      "backupSim": "Choose a backup SIM slot to enable failover",
-      "qualityConsecutive": "Must be between 1 and 60",
-      "ssrGrace": "Must be between 10 and 120 seconds",
-      "recheckInterval": "Must be between 5 and 1440 minutes"
+      "seconds": "Enter {{min}} to {{max}} seconds",
+      "minutes": "Enter {{min}} to {{max}} minutes",
+      "count": "Enter {{min}} to {{max}}",
+      "backupSlot": "Choose a slot to arm this step"
     },
     "failover": {
       "title": "Running on the backup SIM",

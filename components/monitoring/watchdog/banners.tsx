@@ -17,13 +17,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Banner, bannerActionVariants } from "@/components/ui/banner";
-import type { SimFailoverStatus } from "@/types/modem-status";
+import type { CqWdMutationResult, WatchdogFailoverRecord } from "@/types/cq-watchdog";
 
 export interface FailoverBannerProps {
-  failover: SimFailoverStatus;
+  failover: WatchdogFailoverRecord;
   /** Relative time since the switch, already translated. */
   since: string;
-  revertSim: () => Promise<boolean>;
+  revertSim: () => Promise<CqWdMutationResult>;
 }
 
 /**
@@ -37,13 +37,15 @@ export function FailoverBanner({
 }: FailoverBannerProps) {
   const { t } = useTranslation("monitoring");
   const [reverting, setReverting] = React.useState(false);
+  // A revert already asked for stays pending until the daemon acts on it.
+  const pending = reverting || failover.revert_pending === true;
 
   const handleRevert = React.useCallback(async () => {
     setReverting(true);
-    const ok = await revertSim();
+    const result = await revertSim();
     setReverting(false);
-    if (ok) toast.success(t("watchdog.failover.requested"));
-    else toast.error(t("watchdog.failover.failed"));
+    if (result.ok) toast.success(t("watchdog.failover.requested"));
+    else toast.error(result.message ?? t("watchdog.failover.failed"));
   }, [revertSim, t]);
 
   return (
@@ -60,10 +62,10 @@ export function FailoverBanner({
         <AlertDialog>
           <AlertDialogTrigger
             className={bannerActionVariants({ tone: "on-warning" })}
-            disabled={reverting}
+            disabled={pending}
           >
             <RotateCcwIcon />
-            {reverting
+            {pending
               ? t("watchdog.failover.reverting")
               : t("watchdog.failover.revert")}
           </AlertDialogTrigger>

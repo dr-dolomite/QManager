@@ -42,14 +42,17 @@ function formatList(items: string[], language: string): string {
 
 /**
  * One card's commit, on that card's bottom edge. The Ladder's save carries the
- * tier-4 reboot-authority confirm; Detection's never can.
+ * reboot-authority confirm; Detection's never can. `note` is the consequence of
+ * the pending edit (what the daemon will actually do), shown while it is dirty.
  */
 export function WatchdogFoot({
   form,
   scope,
+  note,
 }: {
   form: WatchdogForm;
   scope: WatchdogScope;
+  note?: React.ReactNode;
 }) {
   const { t, i18n } = useTranslation("monitoring");
   const state = form.scopes[scope];
@@ -59,6 +62,7 @@ export function WatchdogFoot({
     i18n.language,
   );
   const blockedText = t("watchdog.save.blockedIn", { fields: nameList });
+  const saveLabel = t(scope === "ladder" ? "watchdog.save.ladder" : "watchdog.save.detection");
 
   const [confirmReboot, setConfirmReboot] = React.useState(false);
   const saveWrapRef = React.useRef<HTMLSpanElement | null>(null);
@@ -89,9 +93,9 @@ export function WatchdogFoot({
               <AlertCircleIcon className="size-3.5 flex-none" aria-hidden />
               <span className="font-medium text-pretty">{blockedText}</span>
             </span>
-          ) : state.dirty ? null : (
-            <span className="text-pretty">{t("watchdog.save.clean")}</span>
-          )
+          ) : state.dirty && note ? (
+            <span className="text-pretty tabular-nums">{note}</span>
+          ) : null
         }
         actions={
           <>
@@ -109,7 +113,7 @@ export function WatchdogFoot({
               <SaveButton
                 type="button"
                 size="action"
-                label={t("watchdog.save.action")}
+                label={saveLabel}
                 isSaving={state.isSaving}
                 saved={state.saved}
                 blockedReason={blocked ? blockedText : null}
@@ -169,7 +173,7 @@ export function WatchdogFootSkeleton() {
       actions={
         <>
           <Skeleton className={cn(SKELETON.PILL, "w-20")} />
-          <Skeleton className={cn(SKELETON.PILL, "w-24")} />
+          <Skeleton className={cn(SKELETON.PILL, "w-28")} />
         </>
       }
     />

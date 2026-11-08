@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowRightIcon, RadarIcon, TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -12,98 +12,120 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { HintIcon } from "@/components/ui/hint-icon";
 import {
   SegmentedField,
-  SEGMENTED,
   type SegmentedOption,
 } from "@/components/ui/segmented-field";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WatchdogQualityThresholds } from "@/hooks/use-watchdog-settings";
+import type { WatchdogSettingsV2, WatchdogStatus } from "@/types/cq-watchdog";
 import { cn } from "@/lib/utils";
 
 import {
-  NOTE_GLYPH,
-  NOTE_TONE,
-  TIERS,
-  TIER_GLYPH,
-  TIER_TONE,
   deriveTimeline,
-  timelineDuration,
-  type TimelineNote,
+  isIntInRange,
+  useFormatters,
+  type Formatters,
+  type LimitFact,
+  type QualityLimits,
+  type SensitivityFacts,
+  type TimelineLabel,
   type TimelineRow,
+  type TimelineView,
 } from "./derive";
+import { Disclosure } from "./disclosure";
+import { NumberField, OnOffField, renderCheckGlyph } from "./fields";
 import {
   CARD_DESC,
   CARD_PAD,
   CARD_SHELL,
   CARD_TITLE,
   DETECT,
-  EYEBROW,
-  NUM_FIELD,
   SKELETON,
   TIMELINE,
-  TIMELINE_TONE,
 } from "./shapes";
-import {
-  FIELD_ID,
-  PROBE_INTERVAL_OPTIONS,
-  draftTiers,
-  type WatchdogDraft,
-  type WatchdogForm,
-} from "./use-watchdog-form";
+import { FIELD_ID, draftTiers, type WatchdogForm } from "./use-watchdog-form";
 import { WatchdogFoot, WatchdogFootSkeleton } from "./watchdog-foot";
 
-const renderCheckGlyph = (className: string) => (
-  <CheckIcon size={SEGMENTED.GLYPH} className={className} aria-hidden="true" />
-);
+/** Start-recovery presets, in seconds. */
+const ACT_PRESETS = [15, 30, 60, 120] as const;
+/** Poor-quality presets, in seconds (stored as seconds, 30 to 1800). */
+const QUALITY_PRESETS = [60, 120, 300, 600] as const;
+/** One-carrier presets, in minutes. */
+const CARRIER_PRESETS = [5, 15, 30, 60] as const;
 
-const NOTE_KEY: Record<TimelineNote, string> = {
-  off: "watchdog.detection.timeline.off",
-  none: "watchdog.detection.timeline.none",
-  invalid: "watchdog.detection.timeline.invalid",
-  stopped: "watchdog.detection.timeline.stopped",
-};
+const CUSTOM = "custom";
 
-type NumKey = "failThreshold" | "cooldown";
-type OnOff = "on" | "off";
+export interface DetectionCardProps {
+  form: WatchdogForm;
+  facts: SensitivityFacts;
+  limits: QualityLimits;
+  /** Saved settings: the fallback when a draft value is not a number yet. */
+  saved: WatchdogSettingsV2;
+  status: WatchdogStatus | null;
+  /** The status reflects a reporting daemon (not off, starting or silent). */
+  reporting: boolean;
+  /** Seconds offline right now, or null when the link is up. */
+  offlineSecs: number | null;
+  /** The carrier count the daemon last read, with the live single-carrier run. */
+  carrierSecs: number;
+}
+
+/** The number a draft string holds, or a fallback while it is not one. */
+const numberOr = (raw: string, fallback: number): number =>
+  Number.isInteger(Number(raw)) && raw.trim() !== "" ? Number(raw) : fallback;
+
+/** A limit as the caption reads it: "250 ms", or "5 % → 10 %" when the floor raised it. */
+function limitText(limit: LimitFact, unit: string, floorUnit = unit): string {
+  return limit.raw !== null && limit.raw !== limit.effective
+    ? `${limit.raw} ${unit} → ${limit.effective} ${floorUnit}`
+    : `${limit.effective} ${floorUnit}`;
+}
 
 /**
- * Detection: three receipt rows for the outage trigger, two for the target's
- * quality trigger and baseband-restart hold, the derived outage timeline, and
- * its own commit.
+ * Detection: when recovery starts, which signals start it (outage, poor
+ * quality, one carrier), and what a drop would set in motion.
  */
 export function DetectionCard({
   form,
-  qualityThresholds,
-}: {
-  form: WatchdogForm;
-  qualityThresholds: WatchdogQualityThresholds | null;
-}) {
+  facts,
+  limits,
+  saved,
+  status,
+  reporting,
+  offlineSecs,
+  carrierSecs,
+}: DetectionCardProps) {
   const { t } = useTranslation("monitoring");
+  const fmt = useFormatters();
   const { draft } = form;
-  const onOff: SegmentedOption<OnOff>[] = [
-    { value: "on", label: t("common:state.on") },
-    { value: "off", label: t("common:state.off") },
-  ];
 
-  // A cadence set elsewhere (an override such as 7 s) still gets a segment,
-  // so the control never shows nothing selected for a saved value.
-  const probeValues: number[] = [...PROBE_INTERVAL_OPTIONS];
-  const current = Number(draft.probeInterval);
-  if (Number.isInteger(current) && current > 0 && !probeValues.includes(current)) {
-    probeValues.push(current);
-    probeValues.sort((a, b) => a - b);
-  }
-  const probeOptions: SegmentedOption<string>[] = probeValues.map((secs) => ({
-    value: String(secs),
-    label: t("watchdog.detection.probe.short", { seconds: secs }),
-    numeric: true,
-  }));
+  const sensName = facts.name ? t(`watchdog.detection.sensitivity.${facts.name}`) : null;
+
+  // The daemon never acts sooner than the link can be called down (or up again),
+  // whatever is typed: show the value it will really use, beside the typed one.
+  const typedAct = numberOr(draft.actAfter, saved.act_after_sec);
+  const actEff = Math.max(typedAct, facts.failSecs);
+  const typedWait = numberOr(draft.stepWait, saved.step_wait_sec);
+  const waitFloor = facts.recoverSecs > 0 ? facts.recoverSecs + 20 : 0;
+  const waitEff = Math.max(typedWait, waitFloor);
+
+  const timeline = deriveTimeline({
+    enabled: draft.enabled,
+    tiers: draftTiers(draft),
+    hasSlot: draft.backupSlot !== "",
+    actSecs: actEff,
+    waitSecs: waitEff,
+    failSecs: facts.failSecs,
+    sensitivityName: sensName,
+    resting: status?.reboot_budget_exhausted === true,
+    nowSecs: reporting ? offlineSecs : null,
+  });
+
+  const actClamped = actEff !== typedAct && isIntInRange(draft.actAfter, 15, 600);
+  const waitClamped = waitEff !== typedWait && isIntInRange(draft.stepWait, 10, 300);
+
+  const carrierLive = reporting && status !== null && saved.carrier_enabled && draft.carrier;
 
   return (
     <Card className={CARD_SHELL}>
@@ -114,278 +136,404 @@ export function DetectionCard({
         </CardDescription>
       </CardHeader>
       <CardContent className={cn(CARD_PAD, DETECT.BODY)}>
-        <div className={DETECT.ROWS}>
-          <div className={DETECT.ROW}>
-            <span className={DETECT.KEY}>{t("watchdog.detection.probe.label")}</span>
-            <div ref={form.registerField(FIELD_ID.probeInterval)} className="contents">
-              <SegmentedField
-                value={draft.probeInterval}
-                onValueChange={(next) => form.setFields({ probeInterval: next })}
-                options={probeOptions}
-                ariaLabel={t("watchdog.detection.probe.label")}
-                breakpoint="lg"
-                glyph={renderCheckGlyph}
-                className={cn("w-auto", DETECT.PROBE_PILL)}
-                selectTriggerClassName={DETECT.PROBE_SELECT}
-              />
-            </div>
-            {form.errors.probeInterval ? (
-              <p id={`${FIELD_ID.probeInterval}-error`} role="alert" className={DETECT.ERROR}>
-                {t(form.errors.probeInterval)}
-              </p>
-            ) : null}
-          </div>
-
-          <NumberRow
-            form={form}
-            field="failThreshold"
-            id={FIELD_ID.failThreshold}
-            labelKey="watchdog.detection.threshold.label"
-            unitKey="watchdog.detection.threshold.unit"
-          />
-          <NumberRow
-            form={form}
-            field="cooldown"
-            id={FIELD_ID.cooldown}
-            labelKey="watchdog.detection.cooldown.label"
-            unitKey="watchdog.detection.cooldown.unit"
-          />
-          <ToggleRow
-            form={form}
-            onOff={onOff}
-            on={draft.quality}
-            onChange={(on) => form.setFields({ quality: on })}
-            field="qualityConsecutive"
-            id={FIELD_ID.qualityConsecutive}
-            labelKey="watchdog.detection.quality.label"
-            unitKey="watchdog.detection.quality.unit"
-            caption={
-              <>
-                {qualityThresholds ? (
-                  <span>
-                    {t("watchdog.detection.quality.caption", {
-                      ms: qualityThresholds.latency_ms,
-                      pct: qualityThresholds.loss_pct,
-                    })}
-                  </span>
-                ) : null}
-                <Link href="/monitoring/connection-quality" className={DETECT.LINK}>
-                  {t("watchdog.detection.quality.link")}
-                  <ChevronRightIcon className="size-3.5" aria-hidden />
-                </Link>
-              </>
-            }
-          />
-          <ToggleRow
-            form={form}
-            onOff={onOff}
-            on={draft.ssrAware}
-            onChange={(on) => form.setFields({ ssrAware: on })}
-            field="ssrGrace"
-            id={FIELD_ID.ssrGrace}
-            labelKey="watchdog.detection.ssr.label"
-            unitKey="watchdog.detection.ssr.unit"
-            caption={t("watchdog.detection.ssr.caption")}
-          />
+        <div className={DETECT.READ}>
+          <span className="flex min-w-0 items-center gap-2">
+            <RadarIcon className="text-on-surface-variant size-4 flex-none" aria-hidden />
+            <span className={DETECT.READ_TEXT}>
+              {facts.failSecs > 0
+                ? sensName
+                  ? t("watchdog.detection.down.named", {
+                      time: fmt.duration(facts.failSecs),
+                      name: sensName,
+                    })
+                  : t("watchdog.detection.down.plain", {
+                      time: fmt.duration(facts.failSecs),
+                    })
+                : t("watchdog.detection.down.unknown")}
+            </span>
+          </span>
+          <Link href="/monitoring/connection-quality/" className={DETECT.LINK}>
+            {t("watchdog.detection.sensitivityLink")}
+            <ArrowRightIcon className="size-3.5" aria-hidden />
+          </Link>
         </div>
 
-        <Timeline draft={draft} />
+        <div className={DETECT.SEP} aria-hidden />
+
+        <PresetSetting
+          form={form}
+          field="actAfter"
+          id={FIELD_ID.actAfter}
+          label={t("watchdog.detection.act.label")}
+          unit={t("watchdog.detection.unit.seconds")}
+          presets={ACT_PRESETS.map((v) => ({ value: v, label: fmt.duration(v) }))}
+          extra={
+            actClamped ? (
+              <span className="inline-flex items-center gap-1">
+                <span className={DETECT.EFFECTIVE}>
+                  {t("watchdog.detection.act.effective", { time: fmt.duration(actEff) })}
+                </span>
+                <HintIcon label={t("watchdog.detection.act.hintLabel")}>
+                  {t("watchdog.detection.act.hint", {
+                    time: fmt.duration(facts.failSecs),
+                    name: sensName ?? t("watchdog.detection.act.hintFallback"),
+                  })}
+                </HintIcon>
+              </span>
+            ) : null}
+        />
+
+        <div className={DETECT.SEP} aria-hidden />
+
+        <div className={DETECT.GROUP}>
+          <div className={DETECT.ROW}>
+            <span className={DETECT.KEY}>
+              {t("watchdog.detection.quality.label")}
+              <HintIcon label={t("watchdog.detection.quality.hintLabel")}>
+                {t("watchdog.detection.quality.hint", {
+                  ms: limits.latency.effective,
+                  pct: limits.loss.effective,
+                })}
+              </HintIcon>
+            </span>
+            <OnOffField
+              value={draft.quality}
+              onChange={(on) => form.setFields({ quality: on })}
+              ariaLabel={t("watchdog.detection.quality.label")}
+            />
+          </div>
+          {draft.quality ? (
+            <>
+              <PresetSetting
+                form={form}
+                field="qualityAfter"
+                id={FIELD_ID.qualityAfter}
+                label={t("watchdog.detection.quality.afterLabel")}
+                sub
+                unit={t("watchdog.detection.unit.seconds")}
+                presets={QUALITY_PRESETS.map((v) => ({ value: v, label: fmt.duration(v) }))}
+              />
+              <p className={DETECT.CAPTION}>
+                {t("watchdog.detection.quality.caption", {
+                  lat: limitText(limits.latency, t("watchdog.detection.unit.ms")),
+                  loss: limitText(limits.loss, "%"),
+                })}
+              </p>
+            </>
+          ) : null}
+        </div>
+
+        <div className={DETECT.SEP} aria-hidden />
+
+        <div className={DETECT.GROUP}>
+          <div className={DETECT.ROW}>
+            <span className={DETECT.KEY}>
+              {t("watchdog.detection.carrier.label")}
+              <HintIcon label={t("watchdog.detection.carrier.hintLabel")}>
+                {t("watchdog.detection.carrier.hint")}
+              </HintIcon>
+            </span>
+            <OnOffField
+              value={draft.carrier}
+              onChange={(on) => form.setFields({ carrier: on })}
+              ariaLabel={t("watchdog.detection.carrier.label")}
+            />
+          </div>
+          {draft.carrier ? (
+            <>
+              <PresetSetting
+                form={form}
+                field="carrierAfter"
+                id={FIELD_ID.carrierAfter}
+                label={t("watchdog.detection.carrier.afterLabel")}
+                sub
+                unit={t("watchdog.detection.unit.minutes")}
+                presets={CARRIER_PRESETS.map((v) => ({
+                  value: v,
+                  label: fmt.duration(v * 60),
+                }))}
+              />
+              <p className={DETECT.CONSEQUENCE}>
+                <TriangleAlertIcon className="mt-0.5 size-3.5 flex-none" aria-hidden />
+                {t("watchdog.detection.carrier.consequence")}
+              </p>
+              {carrierLive ? (
+                <div className={DETECT.ROW}>
+                  <span className={DETECT.SUBKEY}>
+                    {t("watchdog.detection.carrier.rightNow")}
+                  </span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {carrierNow(status, carrierSecs, fmt)}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        <div className={DETECT.SEP} aria-hidden />
+
+        <div className="flex flex-col">
+          <Disclosure
+            label={t("watchdog.detection.advanced")}
+            summary={t("watchdog.detection.stepWait.summary", {
+              time: fmt.duration(waitEff),
+            })}
+          >
+            <div className={DETECT.ROW}>
+              <label htmlFor={FIELD_ID.stepWait} className={DETECT.KEY}>
+                {t("watchdog.detection.stepWait.label")}
+                <HintIcon label={t("watchdog.detection.stepWait.hintLabel")}>
+                  {t("watchdog.detection.stepWait.hint")}
+                </HintIcon>
+              </label>
+              <div className={DETECT.LINE}>
+                <NumberField
+                  id={FIELD_ID.stepWait}
+                  inputRef={form.registerField(FIELD_ID.stepWait)}
+                  value={draft.stepWait}
+                  onChange={(next) => form.setFields({ stepWait: next })}
+                  unit={t("watchdog.detection.unit.seconds")}
+                  ariaLabel={t("watchdog.detection.stepWait.label")}
+                  error={form.errors.stepWait}
+                />
+                {waitClamped ? (
+                  <span className={DETECT.EFFECTIVE}>
+                    {t("watchdog.detection.act.effective", { time: fmt.duration(waitEff) })}
+                  </span>
+                ) : null}
+              </div>
+              <FieldError id={FIELD_ID.stepWait} message={form.errors.stepWait} />
+            </div>
+
+            <div className={DETECT.ROW}>
+              <span className={DETECT.KEY}>
+                {t("watchdog.detection.ssr.label")}
+                <HintIcon label={t("watchdog.detection.ssr.hintLabel")}>
+                  {t("watchdog.detection.ssr.hint")}
+                </HintIcon>
+              </span>
+              <div className={DETECT.LINE}>
+                <OnOffField
+                  value={draft.ssrAware}
+                  onChange={(on) => form.setFields({ ssrAware: on })}
+                  ariaLabel={t("watchdog.detection.ssr.label")}
+                />
+                <NumberField
+                  id={FIELD_ID.ssrGrace}
+                  inputRef={form.registerField(FIELD_ID.ssrGrace)}
+                  value={draft.ssrGrace}
+                  onChange={(next) => form.setFields({ ssrGrace: next })}
+                  unit={t("watchdog.detection.unit.seconds")}
+                  ariaLabel={t("watchdog.detection.ssr.graceLabel")}
+                  error={form.errors.ssrGrace}
+                  disabled={!draft.ssrAware}
+                />
+              </div>
+              <FieldError id={FIELD_ID.ssrGrace} message={form.errors.ssrGrace} />
+            </div>
+          </Disclosure>
+
+          <Disclosure
+            label={t("watchdog.detection.timeline.title")}
+            summary={timelineSummary(timeline, fmt)}
+            live={timeline.summary?.kind === "now"}
+            autoOpen={timeline.summary?.kind === "now"}
+          >
+            <Timeline view={timeline} fmt={fmt} />
+          </Disclosure>
+        </div>
       </CardContent>
-      <WatchdogFoot form={form} scope="detection" />
+      <WatchdogFoot
+        form={form}
+        scope="detection"
+        note={
+          draft.actAfter !== form.saved.actAfter && isIntInRange(draft.actAfter, 15, 600)
+            ? t("watchdog.detection.act.note", { time: fmt.duration(actEff) })
+            : null
+        }
+      />
     </Card>
   );
 }
 
-function NumberRow({
-  form,
-  field,
-  id,
-  labelKey,
-  unitKey,
-}: {
-  form: WatchdogForm;
-  field: NumKey;
-  id: string;
-  labelKey: string;
-  unitKey: string;
-}) {
-  const { t } = useTranslation("monitoring");
-  const error = form.errors[field];
+function carrierNow(
+  status: WatchdogStatus | null,
+  singleSecs: number,
+  fmt: Formatters,
+): string {
+  const { t } = fmt;
+  if (!status || status.carrier_cc === null || status.carrier_cc === undefined) {
+    return t("watchdog.detection.carrier.unknown");
+  }
+  if (status.carrier_cc <= 1 && singleSecs > 0) {
+    return t("watchdog.detection.carrier.singleFor", { time: fmt.duration(singleSecs) });
+  }
+  return t("watchdog.detection.carrier.count", { count: status.carrier_cc });
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
   return (
-    <div className={DETECT.ROW}>
-      <label htmlFor={id} className={DETECT.KEY}>
-        {t(labelKey)}
-      </label>
-      <InputGroup className={NUM_FIELD.GROUP}>
-        <InputGroupInput
-          id={id}
-          ref={form.registerField(id)}
-          type="text"
-          inputMode="numeric"
-          value={form.draft[field]}
-          onChange={(e) => {
-            const patch: Partial<WatchdogDraft> = {};
-            patch[field] = e.target.value;
-            form.setFields(patch);
-          }}
-          aria-invalid={error !== null}
-          aria-describedby={error ? `${id}-error` : undefined}
-          className={NUM_FIELD.INPUT}
-        />
-        <InputGroupAddon align="inline-end" className={NUM_FIELD.UNIT}>
-          {t(unitKey)}
-        </InputGroupAddon>
-      </InputGroup>
-      {error ? (
-        <p id={`${id}-error`} className={DETECT.ERROR}>
-          {t(error)}
-        </p>
-      ) : null}
-    </div>
+    <p id={`${id}-error`} role="alert" className={DETECT.ERROR}>
+      {message}
+    </p>
   );
 }
+
+type PresetField = "actAfter" | "qualityAfter" | "carrierAfter";
 
 /**
- * A switch plus the number it governs: key and caption on the left edge, the
- * number then the pill on the right. The number dims, but stays, while off.
+ * A number with the usual choices under it. The field is always the truth; a
+ * preset writes into it, and Custom is the segment lit whenever the number is
+ * not one of the presets (choosing it puts the cursor in the field).
  */
-function ToggleRow({
+function PresetSetting({
   form,
-  onOff,
-  on,
-  onChange,
   field,
   id,
-  labelKey,
-  unitKey,
-  caption,
+  label,
+  unit,
+  presets,
+  extra,
+  sub = false,
 }: {
   form: WatchdogForm;
-  onOff: SegmentedOption<OnOff>[];
-  on: boolean;
-  onChange: (on: boolean) => void;
-  field: "qualityConsecutive" | "ssrGrace";
+  field: PresetField;
   id: string;
-  labelKey: string;
-  unitKey: string;
-  caption: React.ReactNode;
+  label: string;
+  unit: string;
+  presets: { value: number; label: string }[];
+  extra?: React.ReactNode;
+  /** A follow-on row of a switch: a quieter key. */
+  sub?: boolean;
 }) {
   const { t } = useTranslation("monitoring");
+  const inputEl = React.useRef<HTMLElement | null>(null);
+  const register = form.registerField(id);
+  const value = form.draft[field];
   const error = form.errors[field];
-  const label = t(labelKey);
+
+  const options: SegmentedOption<string>[] = [
+    ...presets.map((p) => ({ value: String(p.value), label: p.label, numeric: true })),
+    { value: CUSTOM, label: t("watchdog.detection.custom") },
+  ];
+  const selected = presets.some((p) => String(p.value) === value.trim())
+    ? value.trim()
+    : CUSTOM;
+
   return (
-    <div className={DETECT.ROW}>
-      <div className={DETECT.KEY_STACK}>
-        <span className={DETECT.KEY}>{label}</span>
-        <span className={DETECT.CAPTION}>{caption}</span>
-      </div>
-      <div className={DETECT.CONTROLS}>
-        <InputGroup data-disabled={!on} className={NUM_FIELD.GROUP}>
-          <InputGroupInput
+    <div className={DETECT.GROUP}>
+      <div className={DETECT.ROW}>
+        <label htmlFor={id} className={sub ? DETECT.SUBKEY : DETECT.KEY}>
+          {label}
+        </label>
+        <div className={DETECT.LINE}>
+          <NumberField
             id={id}
-            ref={form.registerField(id)}
-            type="text"
-            inputMode="numeric"
-            value={form.draft[field]}
-            onChange={(e) => {
-              const patch: Partial<WatchdogDraft> = {};
-              patch[field] = e.target.value;
-              form.setFields(patch);
+            inputRef={(el) => {
+              inputEl.current = el;
+              register(el);
             }}
-            disabled={!on}
-            aria-label={label}
-            aria-invalid={error !== null}
-            aria-describedby={error ? `${id}-error` : undefined}
-            className={NUM_FIELD.INPUT}
+            value={value}
+            onChange={(next) => form.setFields({ [field]: next })}
+            unit={unit}
+            ariaLabel={label}
+            error={error}
           />
-          <InputGroupAddon align="inline-end" className={NUM_FIELD.UNIT}>
-            {t(unitKey)}
-          </InputGroupAddon>
-        </InputGroup>
-        <SegmentedField
-          value={on ? "on" : "off"}
-          onValueChange={(next) => onChange(next === "on")}
-          options={onOff}
-          ariaLabel={label}
-          breakpoint="never"
-          glyph={renderCheckGlyph}
-        />
-      </div>
-      {error ? (
-        <p id={`${id}-error`} className={DETECT.ERROR}>
-          {t(error)}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function NoteDisc({ note }: { note: TimelineNote }) {
-  const Glyph = NOTE_GLYPH[note];
-  return (
-    <span aria-hidden className={cn(TIMELINE.DISC, TIMELINE_TONE[NOTE_TONE[note]])}>
-      <Glyph className={TIMELINE.GLYPH} />
-    </span>
-  );
-}
-
-/** When each armed step runs into an outage, from both cards' drafts. */
-function Timeline({ draft }: { draft: WatchdogDraft }) {
-  const { t } = useTranslation("monitoring");
-  const { rows, note } = deriveTimeline({
-    enabled: draft.enabled,
-    tiers: draftTiers(draft),
-    backupSlot: draft.backupSlot,
-    probeInterval: draft.probeInterval,
-    failThreshold: draft.failThreshold,
-    cooldown: draft.cooldown,
-  });
-
-  const label = (row: TimelineRow) =>
-    row.declared
-      ? row.tier === 4
-        ? t("watchdog.detection.timeline.declaredReboot")
-        : t("watchdog.detection.timeline.declaredStep", { tier: row.tier })
-      : row.tier === 4
-        ? t("watchdog.detection.timeline.reboot")
-        : t("watchdog.detection.timeline.step", { tier: row.tier });
-
-  return (
-    <div className={TIMELINE.ROOT}>
-      <span className={EYEBROW}>{t("watchdog.detection.timeline.eyebrow")}</span>
-      {rows.length > 0 ? (
-        <ul className={TIMELINE.ROWS}>
-          {rows.map((row) => {
-            const d = timelineDuration(row.seconds);
-            const Glyph = TIER_GLYPH[row.tier];
-            return (
-              <li key={row.tier} className={TIMELINE.ROW}>
-                <span
-                  aria-hidden
-                  className={cn(TIMELINE.DISC, TIMELINE_TONE[TIER_TONE[row.tier]])}
-                >
-                  <Glyph className={TIMELINE.GLYPH} />
-                </span>
-                <span className={TIMELINE.KEY}>{label(row)}</span>
-                <span className={TIMELINE.VALUE}>
-                  {t("watchdog.detection.timeline.about", { time: t(d.key, d.params) })}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-      {note ? (
-        <div className={TIMELINE.ROW}>
-          <NoteDisc note={note} />
-          <p className={TIMELINE.NOTE}>{t(NOTE_KEY[note])}</p>
+          {extra}
         </div>
-      ) : null}
+        <FieldError id={id} message={error} />
+      </div>
+      <SegmentedField
+        value={selected}
+        onValueChange={(next) => {
+          if (next === CUSTOM) {
+            inputEl.current?.focus();
+            return;
+          }
+          form.setFields({ [field]: next });
+        }}
+        options={options}
+        ariaLabel={label}
+        breakpoint="lg"
+        glyph={renderCheckGlyph}
+        className={cn("w-auto", DETECT.PRESET_PILL)}
+      />
     </div>
   );
 }
 
-/** Mirrors the loaded card: five receipt rows, the timeline, the foot. */
+function timelineLabel(label: TimelineLabel, fmt: Formatters): string {
+  const { t } = fmt;
+  switch (label.key) {
+    case "quiet":
+      return t("watchdog.detection.timeline.quiet");
+    case "markedDown":
+      return label.name
+        ? t("watchdog.detection.timeline.markedDownNamed", { name: label.name })
+        : t("watchdog.detection.timeline.markedDown");
+    case "step":
+      return t(`watchdog.detection.timeline.step.${label.tier}`);
+    case "reboot":
+      return t("watchdog.detection.timeline.reboot");
+    case "rebootResting":
+      return t("watchdog.detection.timeline.rebootResting");
+    case "holdoff":
+      return t("watchdog.detection.timeline.holdoff");
+    case "now":
+      return t("watchdog.detection.timeline.now");
+  }
+}
+
+function timelineSummary(view: TimelineView, fmt: Formatters): string | null {
+  const { t } = fmt;
+  if (!view.summary) return null;
+  const time = fmt.duration(view.summary.seconds);
+  return t(`watchdog.detection.timeline.summary.${view.summary.kind}`, { time });
+}
+
+const DOT_STATE: Record<TimelineRow["state"], string> = {
+  "": "",
+  done: TIMELINE.DOT_DONE,
+  rest: TIMELINE.DOT_REST,
+  now: TIMELINE.DOT_NOW,
+};
+
+/** When each armed step runs into an outage, from the values the daemon will use. */
+function Timeline({ view, fmt }: { view: TimelineView; fmt: Formatters }) {
+  const { t } = fmt;
+  if (view.note) {
+    return (
+      <p className={TIMELINE.NOTE}>
+        {t(view.note === "off" ? "watchdog.detection.timeline.off" : "watchdog.detection.timeline.none")}
+      </p>
+    );
+  }
+  return (
+    <ul className={TIMELINE.ROWS}>
+      {view.rows.map((row) => (
+        <li key={row.id} className={TIMELINE.ROW}>
+          <span aria-hidden className={cn(TIMELINE.DOT, DOT_STATE[row.state])} />
+          <span
+            className={cn(
+              TIMELINE.KEY,
+              row.label.key === "quiet" && TIMELINE.KEY_QUIET,
+              row.state === "now" && "font-semibold",
+            )}
+          >
+            {timelineLabel(row.label, fmt)}
+          </span>
+          <span className={TIMELINE.VALUE}>
+            {row.seconds === 0 ? t("watchdog.duration.seconds", { s: 0 }) : fmt.duration(row.seconds)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Mirrors the loaded card: the read-only line, the settings, two disclosures, the foot. */
 export function DetectionCardSkeleton() {
   return (
     <Card className={CARD_SHELL} aria-hidden>
@@ -394,33 +542,30 @@ export function DetectionCardSkeleton() {
         <Skeleton className={cn(SKELETON.CARD_DESC, "w-56")} />
       </CardHeader>
       <CardContent className={cn(CARD_PAD, DETECT.BODY)}>
-        <div className={DETECT.ROWS}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className={DETECT.ROW}>
-              <Skeleton className={cn(SKELETON.LINE, "h-3.5 w-28")} />
-              <Skeleton className={cn(SKELETON.FIELD, "w-36")} />
-            </div>
-          ))}
-          {[3, 4].map((i) => (
-            <div key={i} className={DETECT.ROW}>
-              <div className={DETECT.KEY_STACK}>
-                <Skeleton className={cn(SKELETON.LINE, "h-3.5 w-32")} />
-                <Skeleton className={cn(SKELETON.DETECT_CAPTION, "w-44")} />
-              </div>
-              <div className={DETECT.CONTROLS}>
-                <Skeleton className={cn(SKELETON.FIELD, "w-20")} />
-                <Skeleton className={cn(SKELETON.PILL, "w-28")} />
-              </div>
-            </div>
-          ))}
+        <div className={DETECT.READ}>
+          <Skeleton className={cn(SKELETON.LINE, "h-4 w-48")} />
+          <Skeleton className={cn(SKELETON.LINE, "h-4 w-24")} />
         </div>
-        <div className={TIMELINE.ROOT}>
-          <Skeleton className={cn(SKELETON.EYEBROW, "w-28")} />
-          <div className={TIMELINE.ROWS}>
-            {TIERS.map((tier) => (
-              <Skeleton key={tier} className={cn(SKELETON.TIMELINE_ROW, "w-full")} />
-            ))}
+        {[0, 1].map((i) => (
+          <div key={i} className={DETECT.GROUP}>
+            <div className={DETECT.ROW}>
+              <Skeleton className={cn(SKELETON.LINE, "h-4 w-36")} />
+              <Skeleton className={cn(SKELETON.FIELD, "w-24")} />
+            </div>
+            <Skeleton className={cn(SKELETON.PILL, "w-full")} />
           </div>
+        ))}
+        <div className={DETECT.ROW}>
+          <Skeleton className={cn(SKELETON.LINE, "h-4 w-32")} />
+          <Skeleton className={cn(SKELETON.PILL, "w-28")} />
+        </div>
+        <div className={DETECT.GROUP}>
+          {[0, 1].map((i) => (
+            <div key={i} className={DETECT.ROW}>
+              <Skeleton className={cn(SKELETON.LINE, "h-4 w-28")} />
+              <Skeleton className={cn(SKELETON.LINE, "h-4 w-20")} />
+            </div>
+          ))}
         </div>
       </CardContent>
       <WatchdogFootSkeleton />

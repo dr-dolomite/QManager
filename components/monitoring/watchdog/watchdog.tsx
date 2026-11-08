@@ -3,31 +3,42 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { RefreshCcwIcon, WifiOffIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MonitoringPageHeader } from "@/components/monitoring/page-header";
-import {
-  useWatchdogSettings,
-  type UseWatchdogSettingsReturn,
-  type WatchdogSettings,
-} from "@/hooks/use-watchdog-settings";
+import { useConnectionQuality } from "@/hooks/use-connection-quality";
 import { useModemStatus, type UseModemStatusReturn } from "@/hooks/use-modem-status";
 import {
   useRecentActivities,
   type UseRecentActivitiesReturn,
 } from "@/hooks/use-recent-activities";
+import { useWatchdogSettings } from "@/hooks/use-watchdog-settings";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import type {
+  CqGetResponse,
+  UseWatchdogReturn,
+  WatchdogGetResponse,
+  WatchdogSettingsV2,
+} from "@/types/cq-watchdog";
 
 import { FailoverBanner } from "./banners";
 import { DetectionCard, DetectionCardSkeleton } from "./detection-card";
 import {
-  deriveBand,
+  deriveFailback,
+  deriveHero,
   derivePhase,
+  deriveQualityLimits,
+  deriveRungs,
+  deriveSensitivityFacts,
   deriveStrip,
+  elapsedSince,
+  useFormatters,
   useGraceGate,
   useTimeAgo,
+  type WatchdogPhase,
 } from "./derive";
 import { LadderCard, LadderCardSkeleton } from "./ladder-card";
 import { RecoveryActivityCard } from "./recovery-activity-card";
@@ -41,22 +52,22 @@ import {
   PILL_GLYPH,
 } from "./shapes";
 import { StatusCard, StatusCardSkeleton } from "./status-band";
+import { useClock } from "./use-clock";
 import { useWatchdogForm } from "./use-watchdog-form";
 
-/**
- * `useWatchdogForm` seeds every field straight off `settings`, so a partial
- * payload is caught BEFORE the form-consuming subtree mounts.
- */
-function isReady(s: WatchdogSettings | null): s is WatchdogSettings {
-  return (
-    !!s &&
-    typeof s.enabled === "boolean" &&
-    Number.isFinite(s.fail_threshold) &&
-    Number.isFinite(s.probe_interval) &&
-    Number.isFinite(s.check_interval) &&
-    Number.isFinite(s.cooldown) &&
-    Number.isFinite(s.max_reboots_per_hour)
-  );
+/** Phases in which the link is down and the outage clock is the one that counts. */
+const OUTAGE_PHASES: ReadonlySet<WatchdogPhase> = new Set([
+  "suspect",
+  "recovery",
+  "cooldown",
+  "holdoff_outage",
+]);
+
+/** The watchdog read and the settings both landed: the form can seed. */
+function isReady(
+  hook: UseWatchdogReturn,
+): hook is UseWatchdogReturn & { data: WatchdogGetResponse; settings: WatchdogSettingsV2 } {
+  return hook.data !== null && hook.settings !== null;
 }
 
 const WatchdogComponent = () => {
@@ -64,16 +75,21 @@ const WatchdogComponent = () => {
   const hook = useWatchdogSettings();
   const modemStatus = useModemStatus({ pollInterval: 5000 });
   const activities = useRecentActivities({ maxEvents: 50 });
-  const { settings, isLoading, error, refresh } = hook;
+  const cq = useConnectionQuality();
 
+  const hookRefresh = hook.refresh;
   const modemRefresh = modemStatus.refresh;
   const activityRefresh = activities.refresh;
+  const cqRefresh = cq.refresh;
   const reload = React.useCallback(() => {
-    // `refresh` is `fetchSettings(silent?)`: a click event must never reach it.
-    refresh();
+    // Never hand a click event to a `refresh`.
+    void hookRefresh();
     modemRefresh();
     activityRefresh();
-  }, [refresh, modemRefresh, activityRefresh]);
+    void cqRefresh();
+  }, [hookRefresh, modemRefresh, activityRefresh, cqRefresh]);
+
+  const recentReboots = hook.data?.recent_reboots;
 
   return (
     <motion.div
@@ -91,15 +107,12 @@ const WatchdogComponent = () => {
               type="button"
               variant="ghost"
               onClick={reload}
-              disabled={isLoading}
+              disabled={hook.isLoading}
               size="action"
               className={HEADER_PILL}
             >
               <RefreshCcwIcon
-                className={cn(
-                  PILL_GLYPH,
-                  isLoading && "motion-safe:animate-spin",
-                )}
+                className={cn(PILL_GLYPH, hook.isLoading && "motion-safe:animate-spin")}
               />
               {t("watchdog.page.refresh")}
             </Button>
@@ -107,14 +120,16 @@ const WatchdogComponent = () => {
         />
       </motion.div>
 
-      {isReady(settings) ? (
+      {isReady(hook) ? (
         <WatchdogSurface
           hook={hook}
-          settings={settings}
+          data={hook.data}
+          settings={hook.settings}
           modemStatus={modemStatus}
           activities={activities}
+          cq={cq.data}
         />
-      ) : isLoading ? (
+      ) : hook.isLoading ? (
         <>
           <motion.div variants={staggerItem}>
             <StatusCardSkeleton />
@@ -128,10 +143,7 @@ const WatchdogComponent = () => {
             </motion.div>
           </div>
           <motion.div variants={staggerItem}>
-            <RecoveryActivityCard
-              activities={activities}
-              recentReboots={hook.recentReboots}
-            />
+            <RecoveryActivityCard activities={activities} recentReboots={recentReboots} />
           </motion.div>
         </>
       ) : (
@@ -140,15 +152,12 @@ const WatchdogComponent = () => {
               failure outright. Activity is a separate read. */}
           <motion.div variants={staggerItem}>
             <SettingsUnreadable
-              message={error ?? t("watchdog.page.unreadable")}
+              message={hook.error ?? t("watchdog.page.unreadable")}
               onRetry={reload}
             />
           </motion.div>
           <motion.div variants={staggerItem}>
-            <RecoveryActivityCard
-              activities={activities}
-              recentReboots={hook.recentReboots}
-            />
+            <RecoveryActivityCard activities={activities} recentReboots={recentReboots} />
           </motion.div>
         </>
       )}
@@ -159,17 +168,24 @@ const WatchdogComponent = () => {
 /** One form owns both drafts; one `derivePhase` owns what the device is doing. */
 function WatchdogSurface({
   hook,
+  data,
   settings,
   modemStatus,
   activities,
+  cq,
 }: {
-  hook: UseWatchdogSettingsReturn;
-  settings: WatchdogSettings;
+  hook: UseWatchdogReturn;
+  data: WatchdogGetResponse;
+  settings: WatchdogSettingsV2;
   modemStatus: UseModemStatusReturn;
   activities: UseRecentActivitiesReturn;
+  cq: CqGetResponse | null;
 }) {
   const { t } = useTranslation("monitoring");
+  const fmt = useFormatters();
   const timeAgo = useTimeAgo();
+  const clock = useClock();
+  const [retrying, setRetrying] = React.useState(false);
 
   const form = useWatchdogForm({
     settings,
@@ -177,38 +193,68 @@ function WatchdogSurface({
     saveSettings: hook.saveSettings,
   });
 
+  const { status, effective } = data;
+  const simDual = data.sim_dual_capable;
   const watchcat = modemStatus.data?.watchcat ?? null;
-  const failover = modemStatus.data?.sim_failover ?? null;
-  const pastGrace = useGraceGate(modemStatus.receivedAtMs, settings.enabled);
+  const pastGrace = useGraceGate(hook.receivedAt, settings.enabled);
 
   const phase = derivePhase({
     settingsEnabled: settings.enabled,
-    autoDisabled: hook.autoDisabled,
+    autoDisabled: data.auto_disabled,
+    status,
     watchcat,
-    snapshotAt: modemStatus.data?.timestamp ?? null,
-    stale: modemStatus.isStale,
-    unreachable: modemStatus.error !== null || modemStatus.data === null,
     pastGrace,
   });
 
-  // The status card reports SAVED truth, never the half-edited form.
-  const lastTime = watchcat?.last_recovery_time ?? null;
-  const band = deriveBand({
+  // The hero and the ladder report SAVED truth, never the half-edited form.
+  const hero = deriveHero({
     phase,
+    status,
     settings,
-    watchcat,
-    lastAgo: lastTime !== null ? timeAgo(lastTime) : null,
+    effective,
+    simDual,
+    receivedAt: hook.receivedAt,
+    clock,
+    fmt,
+    timeAgo,
   });
   const strip = deriveStrip(modemStatus.data?.connectivity ?? null, phase);
+  const rungs = deriveRungs({ phase, status, simDual, receivedAt: hook.receivedAt, clock, fmt });
+  const failback = deriveFailback({ status, receivedAt: hook.receivedAt, clock, fmt });
+
+  const facts = deriveSensitivityFacts(cq, settings, effective);
+  const limits = deriveQualityLimits(cq, effective);
+
+  const elapsed = elapsedSince(hook.receivedAt, clock);
+  const offlineSecs =
+    status && OUTAGE_PHASES.has(phase) && status.offline_secs > 0
+      ? status.offline_secs + Math.floor(elapsed)
+      : null;
+  const carrierSecs =
+    status && status.carrier_single_secs > 0
+      ? status.carrier_single_secs + Math.floor(elapsed)
+      : 0;
+  const reporting = status !== null && phase !== "off" && phase !== "starting" && phase !== "not_running" && phase !== "auto_disabled";
+
+  const retryFailback = hook.retryFailback;
+  const handleRetryFailback = React.useCallback(async () => {
+    setRetrying(true);
+    const result = await retryFailback();
+    setRetrying(false);
+    if (result.ok) toast.success(t("watchdog.ladder.failback.retryOk"));
+    else toast.error(result.message ?? t("watchdog.ladder.failback.retryFail"));
+  }, [retryFailback, t]);
+
+  const failover = data.sim_failover;
 
   return (
     <>
-      {failover?.active ? (
+      {failover.active ? (
         <motion.div variants={staggerItem}>
           <FailoverBanner
             failover={failover}
             since={
-              failover.switched_at !== null
+              failover.switched_at != null
                 ? timeAgo(failover.switched_at)
                 : t("watchdog.failover.recently")
             }
@@ -218,34 +264,38 @@ function WatchdogSurface({
       ) : null}
 
       <motion.div variants={staggerItem}>
-        <StatusCard band={band} strip={strip} />
+        <StatusCard view={hero} strip={strip} />
       </motion.div>
 
       <div className={PAIR}>
         <motion.div variants={staggerItem} className={PAIR_CELL}>
-          {/* Not knowing outranks guessing: the same gate the status card applies. */}
           <LadderCard
             form={form}
-            runningTier={
-              phase === "unknown" ||
-              phase === "off" ||
-              phase === "starting" ||
-              phase === "not_running" ||
-              phase === "auto_disabled"
-                ? 0
-                : (watchcat?.current_tier ?? 0)
-            }
+            rungs={rungs}
+            failback={failback}
+            simDual={simDual}
+            onRetryFailback={handleRetryFailback}
+            retrying={retrying}
           />
         </motion.div>
         <motion.div variants={staggerItem} className={PAIR_CELL}>
-          <DetectionCard form={form} qualityThresholds={hook.qualityThresholds} />
+          <DetectionCard
+            form={form}
+            facts={facts}
+            limits={limits}
+            saved={settings}
+            status={status}
+            reporting={reporting}
+            offlineSecs={offlineSecs}
+            carrierSecs={carrierSecs}
+          />
         </motion.div>
       </div>
 
       <motion.div variants={staggerItem}>
         <RecoveryActivityCard
           activities={activities}
-          recentReboots={hook.recentReboots}
+          recentReboots={data.recent_reboots}
         />
       </motion.div>
     </>
