@@ -127,7 +127,7 @@ owns the ping instance). Still no recovery decision on stale data. Clears on the
 - R11: stuck-on-one-carrier trigger (`carrier_enabled`, `carrier_after_min`, reason `carrier`,
   Tiers 1-2), `plat_cc_count` (QMI sidecar; gated poller `QCAINFO` + `ca.env` for SA / NR-DC).
 
-## Checkpoint 2026-11-08 (branch `feat/cq-watchdog-unify`, tip `ee3dd200`)
+## Checkpoint 2026-11-08 (branch `feat/cq-watchdog-unify`, code tip `ee3dd200`; end-of-day state)
 
 Spec §10 progress. Fresh agents start here, then read the docs this section names.
 
@@ -137,11 +137,12 @@ Spec §10 progress. Fresh agents start here, then read the docs this section nam
 | 2 migration + Config Backup | done, validated | `7ea74031` `91fdf387` `5096f5b7`; `tools/cq-wd-migrate/run.sh` 229/0 ×3; lib `scripts/usr/lib/qmanager/cqwd_migrate.sh` |
 | 3a CGIs + contract runner | done, validated | `ee7ec0ca`..`3081939e`, `b172458f`; `tools/cq-wd-contract/run.sh` 162/0 ×3; adapter additions = contracts §15 `c053be1e` |
 | 3b poller republish, health check, plat_cc_count | done, validated | `2e211f18` `50f7edff` `7ced5282`; status_parity 378/0, sidecar 114/1 (known), ca_env 116/0, adapter_cc_check 18/18 |
-| 3 follow-ups (validator W1, W2, nits) | done | W1 range-check stored custom limits `12904381`; W2 8192-byte body cap `071fd1e0`; nits `ce5f4fec`..`ee3dd200` |
+| 3 follow-ups (validator W1, W2, nits) | done, validated (builder full run; orchestrator re-ran `check.sh` only) | W1 range-check stored custom limits `12904381` (neutral `wd_config.sh` + manifest; harness scenario 166; `tools/cq-wd-parity/poller_thresholds.sh` 14/0); W2 8192-byte body cap `071fd1e0` (`payload_too_large`, 4 new fixtures); nits `ce5f4fec`..`ee3dd200`; Step 3b independently validated (no blockers). Final-tree counts ×3 BusyBox: harness 165/165, contract runner 188/0, migrate 231/0, status_parity 378/0+19/0+6/0, sidecar 114/1 (known), ca_env 116/0, check.sh OK |
+| Open decision | ask the owner | after an SSR hold intercepts a picked ladder, state shows `last_recovery_reason` set while `last_recovery_time` is null (scenario 164; same as the monolith `125b3ce6`). Optional tidy: emit the reason as null while the time is null; neutral `wd_state.sh` change that rewrites every baseline snapshot. Not done. |
 | Frontend (UI session) | done, merged into this branch | merge `1670ec14` (from `claude/cq-watchdog-ui-c815f0`; brief `2026-11-08-cq-watchdog-ui-brief.md`, plan `2026-11-08-cq-watchdog-ui-plan.md`); tsc + i18n pass; previewed against fixtures only |
 | Merge `development-home` into this branch | approved by the owner, NOT done | 17 commits behind; dry-run conflicts in `qmanager_watchcat` and `tools/poller-parity/status_parity.sh`; `b9d809d0` (skip `AT+CFUN?` when QMI reports online) must move into neutral `wd_state.sh` → `sh tools/cq-wd-parity/check.sh --update` in the same commit |
 | 4 live validation | NOT started; every deploy/live write needs the owner's OK | checklist: spec §10 step 4 + Amendment 3 items + CGIs under real uhttpd (root-owned revert/retry flags, device jq 1.6 `all(gen;cond)`/`@tsv`, carrier save raises `/tmp/qmanager_poller_reload`), band lock survives CFUN 0/1, SA `QCAINFO` ≈1/min with `=0` sent, `ca.env` age < 90 s, migration from real old configs, Config Backup old↔new, ipk upgrade / tarball OTA / rollback, Prometheus diff, now also the rebuilt UI end to end. `sync` after every deploy. |
-| 6 docs | partly | frontend docs `90972817`; still to do: connection-quality.md, connection-watchdog.md, README routing, CLAUDE.md routing, adaptive-polling.md, config-backup-restore.md, system-health-check.md, BACKEND.md/API refs to removed CGIs, RELEASE_NOTE.md (rollback note, dropped override, new backup refused by older release, Prometheus families unchanged) |
+| 6 docs | partly | frontend docs `90972817`; also note the 8192-byte body cap (`payload_too_large`) and the exact-1/0 stored-flag rule; still to do: connection-quality.md, connection-watchdog.md, README routing, CLAUDE.md routing, adaptive-polling.md, config-backup-restore.md, system-health-check.md, BACKEND.md/API refs to removed CGIs, RELEASE_NOTE.md (rollback note, dropped override, new backup refused by older release, Prometheus families unchanged) |
 | RM520N port plan | NOT started (draft only, do not start the port) | include `plat_cc_count`, `plat_manual_sim_switch`, `PF_FAILBACK_RETRY_FLAG`, `PF_POLLER_RELOAD`, section-creating `cfg_set`, W1 neutral change, fixture README `setup.files` keys `ping`/`slots`/`last_outage` + `__MONO__`/`__NOW__` |
 | Final report | pending | branch + git status, live results item by item; ask merge / keep for PR / discard; never merge into `development-home` without the owner |
 
