@@ -53,7 +53,7 @@
 
 ### Reliability & Monitoring
 
-- **Connection Watchdog** — 4-tier auto-recovery: ifup → CFUN toggle → SIM failover → full reboot (with token bucket rate limiting)
+- **Connection Watchdog** — tiered auto-recovery (re-register → radio toggle → SIM failover → reboot) started by an outage, and optionally by poor connection quality or a stuck single carrier; reboots are budgeted and never switch the watchdog off
 - **Email Alerts** — Downtime notifications via Gmail SMTP (msmtp), sent on recovery with duration details
 - **SMS Alerts** — Downtime notifications by SMS, sent during active outages once threshold is exceeded
 - **WAN Interface Guard** — Automatically disables phantom WAN profiles to prevent netifd CPU-wasting retry loops
@@ -289,7 +289,7 @@ QManager runs 14 init.d services on the device:
 |---------|---------|
 | `qmanager` | Main poller daemon — tiered AT polling, JSON cache, event detection |
 | `qmanager_atd` | AT broker — owns `/dev/smd11`, serialises AT commands for `qcmd`, `qsms` and `qmi` |
-| `qmanager_watchcat` | Connection watchdog — 4-tier auto-recovery state machine |
+| `qmanager_watchcat` | Connection watchdog — tiered auto-recovery state machine |
 | `qmanager_dpi` | DPI service — nfqws in video optimizer or traffic masquerade mode |
 | `qmanager_tower_failover` | Tower failover — restores lock after cell loss |
 | `qmanager_eth_link` | Ethernet link speed — applies saved speed/duplex settings |
