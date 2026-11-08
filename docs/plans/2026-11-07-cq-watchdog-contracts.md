@@ -324,3 +324,13 @@ the ping cache has been stale for more than 300 s (at most once per 900 s). RM55
 procd service whose `ping` instance is the probe daemon; procd `start` on a running service only
 starts missing instances, so the poller instance is left alone; `restart` is never used). RM520N sets
 its own unit name in the port.
+
+## 12. Adapter addition (R9a, 2026-11-08)
+
+`plat_manual_sim_switch`: rc 0 while a trusted (root-owned) manual SIM-switch flag
+`PF_SIM_SWITCH_FLAG` is up. RM551E: `qm_trusted_file /tmp/qmanager_sim_switch_active` (raised by
+`cellular/settings.sh` for a slot switch, trap-cleaned). The watchdog's own Tier 3 swap raises the
+same flag; the neutral `check_locked` ignores it while `WD_SWAP_FLAG_OWNED=1` and counts any other
+holder for at most 120 s from first sight on the mono clock. The config-restore PID
+(`PF_RESTORE_PID`) needs no helper: `check_locked` applies the same `kill -0` test as to the
+profile-apply PID. RM520N binds its own flag and trust rule in the port.

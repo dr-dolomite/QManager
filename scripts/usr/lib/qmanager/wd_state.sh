@@ -4,9 +4,11 @@
 # =============================================================================
 # Sourced by qmanager_watchcat (never executed). BusyBox ash safe.
 #
-# Owns: state, prev_state, failure_counter, wd_radio_down, _wd_sleep_pid
-# Functions: write_state, write_state_busy, check_locked, wd_sleep,
-#            wd_mark_radio_down, wd_mark_radio_up, wd_cfun_now
+# Owns: state, prev_state, failure_counter, wd_radio_down, _wd_sleep_pid,
+#       _wd_ssf_seen, _wd_ssf_stale, WD_SIM_SWITCH_MAX_LOCK
+# Functions: write_state, write_state_busy, check_locked, _wd_pid_live,
+#            _wd_manual_switch, wd_sleep, wd_mark_radio_down, wd_mark_radio_up,
+#            wd_cfun_now
 #
 # write_state serialises globals owned by every lib into STATE_FILE (the poller
 # reads it); it only reads them. Function definitions and global initialisers
@@ -19,6 +21,9 @@ prev_state=""
 failure_counter=0
 wd_radio_down=0           # 1 between a CFUN=0 and its confirmed CFUN=1
 _wd_sleep_pid=""          # backgrounded sleep of the current wd_sleep
+_wd_ssf_seen=0            # mono_now when another holder's SIM-switch flag was first seen; 0 = not seen
+_wd_ssf_stale=0           # 1 once that flag outlived WD_SIM_SWITCH_MAX_LOCK (logged once)
+WD_SIM_SWITCH_MAX_LOCK=120  # a manual switch flag locks for at most this long (s, mono clock)
 
 # =============================================================================
 # STATE FILE WRITER
@@ -262,15 +267,49 @@ check_locked() {
     # Long-running AT command (cell scan, firmware update)
     plat_long_running && return 0
 
-    # Profile apply in progress
-    if [ -f "$PROFILE_APPLY_PID" ]; then
-        local pid
-        pid=$(cat "$PROFILE_APPLY_PID" 2>/dev/null)
-        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            return 0
-        fi
-    fi
+    # Profile apply or config restore in progress
+    _wd_pid_live "$PROFILE_APPLY_PID" && return 0
+    _wd_pid_live "$PF_RESTORE_PID" && return 0
 
+    # Manual SIM switch in progress (not this daemon's own Tier 3 swap)
+    _wd_manual_switch && return 0
+
+    return 1
+}
+
+# _wd_pid_live FILE: rc 0 when FILE holds the PID of a live process.
+_wd_pid_live() {
+    local pid
+    [ -n "$1" ] && [ -f "$1" ] || return 1
+    pid=$(cat "$1" 2>/dev/null)
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null
+}
+
+# _wd_manual_switch: rc 0 while another process holds the SIM-switch flag.
+# wd_swap_slot raises the same flag (WD_SWAP_FLAG_OWNED=1) and must not lock
+# the daemon out. The holder removes the flag on exit; a holder killed outright
+# leaves it behind, so the flag counts for at most WD_SIM_SWITCH_MAX_LOCK
+# seconds from first sight on the mono clock (the file's mtime is wall time,
+# which steps on NITZ). Unreadable clock: not counted (pre-union behaviour).
+_wd_manual_switch() {
+    local now
+    if [ "$WD_SWAP_FLAG_OWNED" = "1" ] || ! plat_manual_sim_switch; then
+        _wd_ssf_seen=0
+        _wd_ssf_stale=0
+        return 1
+    fi
+    _wd_num "$(mono_now)" 0
+    now="$_wdn"
+    [ "$now" = "0" ] && return 1
+    [ "$_wd_ssf_seen" = "0" ] && _wd_ssf_seen="$now"
+    if [ $((now - _wd_ssf_seen)) -lt "$WD_SIM_SWITCH_MAX_LOCK" ]; then
+        return 0
+    fi
+    if [ "$_wd_ssf_stale" = "0" ]; then
+        _wd_ssf_stale=1
+        qlog_warn "SIM-switch flag present for ${WD_SIM_SWITCH_MAX_LOCK}s, treating it as stale"
+    fi
     return 1
 }
 

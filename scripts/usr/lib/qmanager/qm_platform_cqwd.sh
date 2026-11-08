@@ -158,6 +158,10 @@ plat_paths() {
 # rc 0 while a trusted (root-owned) long-running AT operation flag is up.
 plat_long_running() { qm_trusted_file "$PF_LONG_RUNNING"; }
 
+# rc 0 while a trusted (root-owned) manual SIM-switch flag is up. The watchdog's
+# own Tier 3 swap raises the same flag; the caller tells the two apart.
+plat_manual_sim_switch() { qm_trusted_file "$PF_SIM_SWITCH_FLAG"; }
+
 # rc 0 if an LTE or NR-SA tower lock is enabled (Tier 2 must be skipped).
 plat_tower_locked() {
     [ ! -f "$PF_TOWER_LOCK_CONFIG" ] && return 1

@@ -492,3 +492,23 @@ and `tiers_tried`) instead of leaving it to resume later. Harness: model key `up
 New scenarios: 120 (clock turns unreadable after the Tier 1 action: Tier 1 and Tier 2 cooldowns
 end by pass count and the link comes back), 121 (quality cooldown without data ends inconclusive
 and keeps Tier 1; disabling quality clears it at once).
+
+## R9a: LOCKED union (step 1b)
+
+`check_locked` (`wd_state.sh`) now also locks on a live config-restore PID (`PF_RESTORE_PID`, the
+same `kill -0` test as the profile-apply PID, shared in `_wd_pid_live`, which ignores an empty or
+non-numeric file) and on a manual SIM switch (`_wd_manual_switch`): the adapter's
+`plat_manual_sim_switch` (trusted `PF_SIM_SWITCH_FLAG`) is up and this daemon is not the holder.
+Tier 3's own swap raises the same flag with `WD_SWAP_FLAG_OWNED=1` and is never counted. A flag left
+behind by a holder that was killed outright locks for at most `WD_SIM_SWITCH_MAX_LOCK` (120 s) from
+first sight on the mono clock, then one warning ("treating it as stale") and the daemon carries on
+while the file is still there; the timer resets once the flag is gone. An unreadable clock does not
+count the flag. LOCKED entry and exit are unchanged (resume mark, `wd_sim_on_unlock`). Harness: no
+new model keys; scenarios write `var/run/qmanager_config_restore.pid` and use
+`h_touch qmanager_sim_switch_active`. No existing scenario changed.
+
+New scenarios: 122 (live restore PID locks passes 2-7; the exit restarts the outage age, Tier 1
+two passes later), 123 (dead restore PID, then garbage content: not locked, Tier 1 runs), 124
+(manual switch flag locks passes 2-5, then Tier 1), 125 (stale flag: locked for 120 s, one
+warning, Tier 1 with the file still present; a later fresh flag locks again), 126 (own Tier 3
+swap: `check_locked` asked mid-swap with the flag up answers rc 1, no LOCKED entry).
