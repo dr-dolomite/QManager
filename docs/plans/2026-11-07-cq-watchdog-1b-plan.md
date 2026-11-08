@@ -150,3 +150,16 @@ Test commands (WSL, from an ext4 copy of `tools/` + `scripts/`, `export PATH=$HO
 watchdog harness `tools/watchdog-harness/run.sh run|compare` (27/28 are load-flaky; rerun alone);
 `tools/cq-wd-contract/run.sh -b <busybox>`; `<busybox> sh tools/cq-wd-migrate/run.sh`;
 `tools/poller-parity/{sidecar_parity,ca_env_parity,status_parity}.sh`; `sh tools/cq-wd-parity/check.sh`.
+
+## Checkpoint 2026-11-08 evening (Step 4 and Step 6 done)
+
+| Item | State | Evidence |
+|---|---|---|
+| Merge `development-home` into this branch | done | `c6cc2935`; `qmi_dms.sh` sourced by the RM551E adapter, watchcat bytes unchanged; harness 165/165 ×3 before the tidy |
+| SSR-hold tidy (owner chose "tidy") | done | `306eaaf6` + baselines `e432a6a5`; harness 165/165 ×3, contract 188/0, migrate 231/0, status_parity 397/0+19/0+6/0 |
+| Step 4 live validation | done | all 14 items; full log `2026-11-08-cq-watchdog-step4-live-results.md`. Not live-testable here: SA QCAINFO cadence (LTE-only coverage), ipk package-to-package upgrade (no older package in the feed), Tier 3/failback (one SIM), real SSR (none occurred) |
+| Live FAIL: long-run guard never engaged | fixed + live-verified | every ping daemon start reads reachable=true with streak_success=0, which wrote a fake link-up stamp; `049b7a2e` counts a link-up only on a successful probe (scenario 167, harness 166/166 ×3, contract 188/0); verified on device 17:50-17:51 |
+| Step 6 docs | done | `c8db22ae`..`60826beb`, `6244de37` |
+| RM520N port plan | drafted, not started | `2026-11-08-cq-watchdog-rm520n-port-plan.md` (Q1-Q12 open) |
+| Follow-ups (owner to decide) | open | outage hold-off and kept-tier clears still accept reachable=true with streak_success=0 after a ping daemon restart (same class as the link-up bug, milder); stored booleans: CGI reads non-1/0 as default, daemon as off; alerts.sh `threshold_minutes` 1-60 vs 1-1440 elsewhere |
+
