@@ -201,7 +201,8 @@ h_hist_append() { # dt reachable
 # newest sleep. Model keys: reachable, link_slot_<n> (overrides reachable by SIM
 # slot), slot, ping_stale=1 / status_stale=1 (stop refreshing), q_latency, q_loss,
 # attaching=1 (creates tmp/qmanager_ping_attaching, 0 removes it), streak_fail=N
-# (fixed ping streak_fail; empty = derived from the outage).
+# (fixed ping streak_fail; empty = derived from the outage), streak_success=N
+# (fixed ping streak_success; empty = 10 while reachable, 0 while down).
 h_refresh() {
     _h_now=$(cat "$H_STATE/clock")
     _h_up=$(( H_UP0 + _h_now - H_CLOCK0 ))
@@ -226,6 +227,10 @@ h_refresh() {
     # modelled (a few lost probes on a reachable link; R4 scenario 99).
     _h_sfo=$(mget streak_fail "")
     [ -n "$_h_sfo" ] && _h_sf="$_h_sfo"
+    # streak_success=N: a fixed success streak (0 = a reachable verdict with no
+    # answer yet, as the ping daemon reports right after it starts; scenario 167).
+    _h_sso=$(mget streak_success "")
+    [ -n "$_h_sso" ] && _h_ss="$_h_sso"
     if [ "$(mget attaching 0)" = "1" ]; then
         : > "$H_ROOT/tmp/qmanager_ping_attaching"
     else

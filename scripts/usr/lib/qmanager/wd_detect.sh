@@ -41,8 +41,9 @@ _wd_attach_seen=0         # 1 while the ping attach warm-up flag was seen
 WD_ATTACH_FLAG="/tmp/qmanager_ping_attaching"
 
 # Read ping daemon data — returns 0 if valid, 1 if stale/missing
-# Sets: ping_streak_fail, ping_reachable, ping_during_recovery
+# Sets: ping_streak_fail, ping_streak_success, ping_reachable, ping_during_recovery
 ping_streak_fail=0
+ping_streak_success=0
 ping_reachable="true"
 ping_during_recovery="false"
 
@@ -116,6 +117,7 @@ read_ping() {
     # reachable is true/false, or "null" when the cache did not say — "null"
     # is never treated as up. The down decision stays on the probe-count streak.
     ping_streak_fail="$CQ_STREAK_FAIL"
+    ping_streak_success="$CQ_STREAK_SUCCESS"
     ping_reachable="$CQ_REACHABLE"
     ping_during_recovery="$CQ_DURING_RECOVERY"
     return 0

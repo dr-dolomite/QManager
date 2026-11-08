@@ -383,6 +383,7 @@ main() {
         # A stale/garbage value must never crash the loop arithmetic; treat a
         # non-numeric streak as 0 (no failures observed this cycle).
         case "$ping_streak_fail" in ''|*[!0-9]*) ping_streak_fail=0 ;; esac
+        case "$ping_streak_success" in ''|*[!0-9]*) ping_streak_success=0 ;; esac
         # Mirror the raw streak into failure_counter purely for the state-file
         # readout (failure_count, scraped by Prometheus). The recovery DECISION
         # is the outage age in seconds (wd_outage_update / wd_outage_due).
@@ -402,9 +403,12 @@ main() {
         # read, in any state that gets here. A quality pause is never ended by
         # reachability (wd_holdoff_clear, wd_tiers.sh).
         [ "$ping_reachable" = "true" ] && wd_holdoff_clear outage
-        # It also ends the reboot-budget episode and stamps the first link-up
-        # after a watchdog reboot (wd_ledger.sh, the long-run guard).
-        [ "$ping_reachable" = "true" ] && wd_link_up_seen
+        # A real answer also ends the reboot-budget episode and stamps the first
+        # link-up after a watchdog reboot (wd_ledger.sh, the long-run guard). The
+        # ping daemon starts every run reachable=true with streak_success=0 until
+        # fail_secs of failures pass, so reachable alone is not an answer: it
+        # needs a successful probe (streak_success > 0).
+        [ "$ping_reachable" = "true" ] && [ "$ping_streak_success" -gt 0 ] && wd_link_up_seen
 
         # Natural recovery ends an outage episode that an inconclusive cooldown
         # left open (wd_tiers.sh, spec section 5.4): the next outage starts at
