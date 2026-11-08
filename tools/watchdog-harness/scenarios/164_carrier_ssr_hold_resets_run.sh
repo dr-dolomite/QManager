@@ -7,7 +7,8 @@
 # with no failures, so the hold ends as a natural recovery (monitor, tier 0,
 # tiers_tried empty); the carrier count is back to two there (the modem
 # re-aggregated after the restart), which resets the run to 0. No tier is ever
-# executed: no AT+COPS, no AT+CFUN, no AT+QUIMSLOT, no reboot.
+# executed: no state-changing AT (the one AT+CFUN? at T+340 is the start gate's
+# read-only radio check), no AT+COPS, no AT+QUIMSLOT, no reboot.
 SC_PASSES=36
 sc_setup() {
     uci_set quecmanager.watchcat.carrier_enabled 1
