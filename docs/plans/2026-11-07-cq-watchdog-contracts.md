@@ -385,3 +385,20 @@ verdict. `plat_paths` also sets `PF_QMI_ENV` and `PF_CA_ENV`. RM551E binding, in
 Both files are parsed line by line and never sourced, with builtins only (no jq, no fork). A number
 with a leading zero, more than two digits (counts) or more than ten digits (mono) reads as unknown.
 RM520N binds its own source in the port.
+
+## 15. Adapter additions (Step 3a, approved by the owner 2026-11-08)
+
+Two behaviours the Step 3a CGIs need and the earlier sections did not state:
+
+1. `cfg_set` and `cfg_set_list` create a missing UCI section before staging the value. On RM551E
+   `uci set quecmanager.<s>.<k>=<v>` on an absent section fails with "Entry not found", so the
+   adapter first stages `quecmanager.<s>=<s>` (the section type is its own name, as the installer
+   seeds it). This covers a store that was never migrated or seeded (for example a first save to
+   `connection_quality` on an old install). Nothing is committed by the adapter; the caller's
+   `cfg_commit` still decides. `cfg_del` does not create sections (absent is not an error).
+2. `plat_paths` sets `PF_POLLER_RELOAD` (RM551E: `/tmp/qmanager_poller_reload`, the same live-reload
+   flag `adaptive_polling.sh` drops). The watchdog CGI raises it with `plat_flag_raise` after a
+   successful save that carried `carrier_enabled`, because the poller gates its SA carrier read
+   (Amendment 3, `ca.env`) on that toggle. The flag is cleaned by `init.d` and uninstall alongside
+   the other reload flags. RM520N binds its own poller reload path (or a no-op if its poller has no
+   gated carrier read) in the port.
