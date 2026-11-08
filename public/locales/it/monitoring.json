@@ -234,88 +234,187 @@
       "unreadable": "Il modem non ha risposto.",
       "retry": "Riprova"
     },
-    "band": {
-      "checks": "Controlli falliti",
-      "recoveries": "Ripristini",
-      "reboots": "Riavvii",
-      "absent": "Non segnalato",
-      "checksCaption": "Prima che inizi il ripristino",
-      "cooldownCaption": "Nuovo controllo tra {{seconds}} secondi",
-      "recoveriesLast": "Passaggio {{tier}}, {{ago}}",
-      "recoveriesNone": "Nessuno finora",
-      "rebootsCaption": "Nell'ultima ora",
-      "rebootsOff": "Passaggio di riavvio disattivo",
-      "aria": "Stato del watchdog",
-      "cooldownStep": "Passaggio {{tier}} eseguito. Nuovo controllo tra {{seconds}} s."
+    "duration": {
+      "seconds": "{{s}} s",
+      "minutes": "{{m}} min",
+      "minutesSeconds": "{{m}} min {{s}} s",
+      "hours": "{{h}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
     },
     "phase": {
+      "action": {
+        "1": "Nuova registrazione alla rete",
+        "2": "Riavvio della radio",
+        "3": "Passaggio alla SIM di backup",
+        "4": "Riavvio del modem"
+      },
       "off": {
-        "label": "Spento",
+        "title": "Spento",
         "blurb": "Il watchdog non sta monitorando la connessione."
       },
       "unknown": {
-        "label": "Sconosciuto",
+        "title": "Sconosciuto",
         "blurb": "Il modem non risponde, quindi non possiamo sapere cosa sta facendo il watchdog."
       },
       "starting": {
-        "label": "Avvio in corso",
-        "blurb": "Il servizio è stato appena abilitato e non ha ancora inviato alcun rapporto."
+        "title": "Avvio in corso",
+        "blurb": "Appena attivato. In attesa del primo rapporto."
       },
       "not_running": {
-        "label": "Non segnalato",
-        "blurb": "Abilitato, ma il watchdog ha smesso di inviare rapporti."
+        "title": "Non segnalato",
+        "blurb": "Attivato, ma il watchdog ha smesso di inviare rapporti."
       },
       "auto_disabled": {
-        "label": "Disattivato automaticamente",
-        "blurb": "Ha raggiunto il limite di riavvii. Riattivalo quando il collegamento è stabile."
+        "title": "Si è disattivato da solo",
+        "blurb": "Una versione precedente lo ha disattivato al raggiungimento del limite di riavvii. Riattivalo quando il collegamento è stabile."
       },
       "monitor": {
-        "label": "Monitoraggio",
-        "blurb": "La connessione è in buono stato. Monitoraggio delle interruzioni in corso."
+        "title": "Monitoraggio",
+        "blurb": "Il collegamento è in buono stato. Il ripristino inizia dopo {{time}} offline."
       },
       "suspect": {
-        "label": "Verifica in corso",
-        "blurb": "Un controllo di connettività non è riuscito. Verifica in corso prima di agire."
+        "title": "Verifica in corso",
+        "blurb": "Nessuna risposta da {{time}}. Il ripristino inizia se continua.",
+        "blurbNow": "Un controllo è appena fallito. Verifica in corso prima di agire."
       },
       "recovery": {
-        "label": "Ripristino in corso",
-        "blurb": "Esecuzione dei passaggi della sequenza di ripristino per ripristinare la connessione."
+        "title": "Passaggio {{tier}}: {{action}}",
+        "titleGeneric": "Ripristino in corso",
+        "blurb": {
+          "outage": "Offline da {{time}}. Esecuzione dei passaggi in corso.",
+          "quality": "Qualità scadente da {{time}}. Esecuzione dei passaggi in corso.",
+          "carrier": "Su una sola portante da {{time}}. Si cerca di riportare le altre."
+        },
+        "blurbNow": "Esecuzione dei passaggi di ripristino in corso."
       },
       "cooldown": {
-        "label": "Cooldown",
-        "blurb": "In attesa che l'ultimo passaggio di ripristino si stabilizzi prima di ricontrollare."
+        "title": "Passaggio {{tier}} eseguito. Controllo tra {{time}}",
+        "titleChecking": "Passaggio {{tier}} eseguito. Controllo in corso",
+        "titleGeneric": "Verifica del risultato",
+        "next": {
+          "outage": "Se il collegamento è ancora interrotto, il prossimo è il passaggio {{tier}}.",
+          "quality": "Se la qualità è ancora scadente, il prossimo è il passaggio {{tier}}.",
+          "carrier": "Se è ancora su una sola portante, il prossimo è il passaggio {{tier}}."
+        },
+        "last": {
+          "outage": "Era l'ultimo passaggio. Se il collegamento è ancora interrotto, il watchdog rimane in attesa.",
+          "quality": "Era l'ultimo passaggio per la qualità scadente. Se persiste, il watchdog rimane in attesa.",
+          "carrier": "Era l'ultimo passaggio per la portante singola. Se persiste, il watchdog rimane in attesa."
+        }
       },
-      "locked": {
-        "label": "In pausa",
-        "blurb": "È in corso un intervento di manutenzione, quindi il watchdog rimane in attesa."
+      "holdoff": {
+        "outage": {
+          "title": "In attesa per {{time}}",
+          "titleNow": "In attesa",
+          "blurb": "Tutti i passaggi sono stati eseguiti e il collegamento è ancora interrotto. Si riparte alle {{time}}.",
+          "blurbNow": "Tutti i passaggi sono stati eseguiti e il collegamento è ancora interrotto. Si riparte a breve."
+        },
+        "quality": {
+          "title": "In attesa per {{time}}",
+          "blurb": "La qualità è ancora scadente dopo tutti i passaggi. Nuovo tentativo alle {{time}}.",
+          "blurbNow": "La qualità è ancora scadente dopo tutti i passaggi. Nuovo tentativo a breve."
+        },
+        "carrier": {
+          "title": "In attesa per {{time}}",
+          "blurb": "Ancora su una sola portante dopo i passaggi. Nuovo tentativo alle {{time}}.",
+          "blurbNow": "Ancora su una sola portante dopo i passaggi. Nuovo tentativo a breve."
+        }
       },
       "radio_off": {
-        "blurb": "La radio è spenta, quindi il watchdog rimane in attesa."
-      },
-      "disabled": {
-        "label": "Disattivato",
-        "blurb": "Il servizio è in esecuzione ma disattivato."
+        "title": "Radio spenta",
+        "blurb": "Non c'è nulla da ripristinare finché la radio è spenta. Il monitoraggio riprende quando torna accesa."
       },
       "ssr_hold": {
-        "label": "In attesa",
-        "blurb": "Il baseband si sta riavviando da solo. Il ripristino attende che torni."
+        "title": "In attesa di un riavvio del modem ({{time}})",
+        "titleNow": "In attesa di un riavvio del modem",
+        "blurb": "La radio si è riavviata da sola. Il ripristino attende che torni prima di agire."
+      },
+      "ping_stale": {
+        "title": "Il controllo della connessione è silenzioso",
+        "blurb": "Il controllo della connessione non invia rapporti da un po', quindi il watchdog non agisce in base ad esso."
+      },
+      "locked": {
+        "title": "In pausa",
+        "blurb": "È in corso un intervento di manutenzione, quindi il watchdog rimane in attesa."
+      },
+      "disabled": {
+        "title": "Disattivato",
+        "blurb": "Il servizio è in esecuzione ma disattivato."
+      }
+    },
+    "hero": {
+      "aria": "Stato del watchdog",
+      "absent": "Non segnalato",
+      "none": "Nessuno",
+      "noReading": "Nessuna lettura",
+      "linkUp": "Collegamento attivo",
+      "offline": {
+        "eyebrow": "Offline da",
+        "caption": "Dalle {{time}}"
+      },
+      "quality": {
+        "eyebrow": "Qualità scadente da",
+        "caption": "Scadente oltre {{ms}} ms o {{pct}}%"
+      },
+      "carrier": {
+        "eyebrow": "Su una sola portante da",
+        "caption": "Interviene dopo {{time}}"
+      },
+      "recoveries": {
+        "eyebrow": "Ripristini",
+        "caption": "Dall'ultimo riavvio"
+      },
+      "lastFix": {
+        "eyebrow": "Ultima correzione",
+        "none": "Nessuna correzione finora",
+        "caption": "Passaggio {{tier}}",
+        "captionTook": "Passaggio {{tier}}, durata {{time}}",
+        "captionReason": "Passaggio {{tier}} per {{reason}}",
+        "captionReasonTook": "Passaggio {{tier}} per {{reason}}, durata {{time}}",
+        "reason": {
+          "quality": "qualità scadente",
+          "carrier": "portante singola"
+        }
+      },
+      "reboots": {
+        "eyebrow": "Riavvii",
+        "value": "{{used}} su {{limit}}",
+        "caption": "In quest'ora",
+        "off": "Passaggio di riavvio disattivo",
+        "resting": "In pausa fino alle {{time}}",
+        "restingNow": "In pausa per ora",
+        "restingLong": "In pausa dopo una lunga interruzione"
       }
     },
     "master": {
-      "aria": "Abilita il watchdog della connessione"
+      "label": "Ripristina automaticamente"
     },
     "ladder": {
       "title": "Sequenza di ripristino",
       "description": "Provati in ordine, dal più delicato.",
-      "aria": "Sequenza di ripristino",
-      "status": {
-        "blocked": "Serve uno slot",
-        "done": "Provato",
-        "running": "In esecuzione"
+      "aria": "Passaggi di ripristino",
+      "steps": "Passaggi",
+      "advanced": "Avanzate",
+      "tierAria": "Attiva questo passaggio di ripristino: {{name}}",
+      "state": {
+        "needsSecondSim": "Serve una seconda SIM",
+        "unused": {
+          "quality": "Non usato per la qualità scadente",
+          "carrier": "Non usato per la portante singola"
+        },
+        "resting": "In pausa fino alle {{time}} ({{used}} su {{limit}} usati)",
+        "restingNow": "In pausa ({{used}} su {{limit}} usati in quest'ora)",
+        "restingLong": "In pausa dopo una lunga interruzione",
+        "checking": "Controllo tra {{time}}",
+        "checkingNow": "Controllo in corso",
+        "running": "In esecuzione",
+        "triedAt": "Provato alle {{time}}",
+        "tried": "Provato",
+        "onBackup": "In esecuzione sullo slot {{slot}}"
       },
       "tier1": {
         "name": "Ripeti la registrazione alla rete",
-        "consequence": "Il collegamento cade per qualche secondo."
+        "consequence": "Il collegamento cade per qualche secondo. L'IP WAN può cambiare."
       },
       "tier2": {
         "name": "Riavvia la radio",
@@ -324,71 +423,124 @@
       "tier3": {
         "name": "Passa alla SIM di backup",
         "consequence": "Resta sulla SIM di backup finché non torni indietro.",
+        "consequenceFailback": "Torna da solo alla SIM principale.",
         "slotLabel": "Slot SIM di backup",
         "slot": "Slot {{slot}}"
       },
       "tier4": {
-        "name": "Riavvia il dispositivo",
+        "name": "Riavvia il modem",
         "consequence": "Offline per circa un minuto.",
         "capLabel": "Numero massimo di riavvii all'ora",
         "capLead": "Fino a",
-        "capUnit": "all'ora"
+        "capUnit": "all'ora",
+        "hintLabel": "Informazioni sul limite di riavvii",
+        "hint": "Al limite il watchdog smette di riavviare e resta in pausa fino allo scadere dell'ora. Gli altri passaggi continuano a funzionare."
       },
-      "tierAria": "Attiva questo passaggio di ripristino: {{name}}",
       "failback": {
         "name": "Torna alla SIM principale",
-        "consequence": "Riprova la principale; il collegamento cade brevemente a ogni tentativo.",
-        "lead": "Ogni",
+        "consequence": "Riprova la SIM principale. Il collegamento cade brevemente a ogni tentativo.",
+        "everyLabel": "Ricontrolla la SIM principale ogni",
         "unit": "min",
-        "intervalLabel": "Intervallo di ricontrollo della SIM principale"
+        "summary": "Ogni {{n}} min",
+        "summaryOff": "Disattivato",
+        "gaveUp": "Rinuncia dopo 3 tentativi",
+        "trying": "Prova ora la SIM principale",
+        "next": "Prossimo tentativo tra {{time}}",
+        "nextFailed": "Prossimo tentativo tra {{time}} ({{n}} falliti)",
+        "retry": "Riprova ora",
+        "retryOk": "Controllo della SIM principale in corso",
+        "retryFail": "Impossibile avviare il nuovo tentativo"
       }
     },
     "detection": {
       "title": "Rilevamento",
-      "description": "Quanto rapidamente un collegamento silenzioso viene considerato un'interruzione.",
-      "probe": {
-        "label": "Controlla ogni",
-        "short": "{{seconds}}s"
+      "description": "Quando inizia il ripristino e che cosa lo avvia.",
+      "advanced": "Avanzate",
+      "custom": "Personalizzato",
+      "unit": {
+        "seconds": "s",
+        "minutes": "min",
+        "ms": "ms"
       },
-      "threshold": {
-        "label": "Interruzione dopo",
-        "unit": "controlli falliti"
+      "sensitivityLink": "Sensibilità",
+      "sensitivity": {
+        "sensitive": "Sensibile",
+        "regular": "Normale",
+        "relaxed": "Rilassato",
+        "quiet": "Silenzioso"
       },
-      "cooldown": {
-        "label": "Attesa tra i passaggi",
-        "unit": "s"
+      "down": {
+        "named": "Interrotto dopo circa {{time}} ({{name}})",
+        "plain": "Interrotto dopo circa {{time}}",
+        "unknown": "Interrotto quando il controllo della connessione fallisce"
       },
-      "timeline": {
-        "eyebrow": "Se il collegamento cade",
-        "declaredStep": "Interruzione dichiarata, passaggio {{tier}}",
-        "declaredReboot": "Interruzione dichiarata, passaggio 4, riavvio",
-        "step": "Passaggio {{tier}}",
-        "reboot": "Passaggio 4, riavvio",
-        "about": "circa {{time}}",
-        "seconds": "{{s}} s",
-        "minutes": "{{m}} min",
-        "minutesSeconds": "{{m}} min {{s}} s",
-        "off": "Il watchdog è disattivo, quindi non viene eseguito nulla.",
-        "none": "Nessun passaggio è attivo, quindi non viene eseguito nulla.",
-        "invalid": "Inserisci valori di rilevamento validi per vedere la sequenza.",
-        "stopped": "Il passaggio 3 non ha uno slot, quindi la sequenza si ferma lì."
+      "act": {
+        "label": "Avvia il ripristino dopo",
+        "effective": "→ {{time}}",
+        "hintLabel": "Informazioni sull'avvio",
+        "hint": "Il ripristino non inizia mai prima che il collegamento sia considerato interrotto. Con {{name}} servono circa {{time}}, quindi un valore più basso viene portato a questo.",
+        "hintFallback": "la sensibilità attuale",
+        "note": "Il ripristino inizierebbe dopo {{time}} offline."
       },
       "quality": {
-        "label": "Attivazione per qualità",
-        "unit": "controlli",
-        "caption": "Oltre {{ms}} ms o {{pct}}% di perdita",
-        "link": "Soglie"
+        "label": "Ripristina in caso di qualità scadente",
+        "hintLabel": "Informazioni sulla qualità scadente",
+        "hint": "Conta quando le risposte sono più lente di {{ms}} ms o si perde oltre il {{pct}}%. Esegue solo i passaggi 1 e 2.",
+        "afterLabel": "Scadente da",
+        "caption": "Scadente oltre {{lat}} o {{loss}}"
+      },
+      "carrier": {
+        "label": "Ripristina in caso di portante singola",
+        "hintLabel": "Informazioni sulla portante singola",
+        "hint": "Conta solo dopo che il modem ha usato l'aggregazione di portanti dall'avvio. Esegue solo i passaggi 1 e 2.",
+        "afterLabel": "Su una sola portante da",
+        "consequence": "Il passaggio 1 fa cadere il collegamento per qualche secondo; l'IP WAN può cambiare.",
+        "rightNow": "Adesso",
+        "unknown": "Sconosciuto",
+        "singleFor": "Una sola portante da {{time}}",
+        "count_one": "{{count}} portante",
+        "count_other": "{{count}} portanti"
+      },
+      "stepWait": {
+        "label": "Attesa tra i passaggi",
+        "summary": "{{time}} tra i passaggi",
+        "hintLabel": "Informazioni sull'attesa",
+        "hint": "Quanto tempo ha un passaggio per agire prima che il collegamento venga controllato e parta il successivo. Mai più breve del tempo necessario perché il collegamento risulti di nuovo attivo."
       },
       "ssr": {
-        "label": "Attesa riavvio baseband",
-        "unit": "s",
-        "caption": "Lascia terminare prima un riavvio automatico del modem"
+        "label": "Attesa per i riavvii della radio del modem",
+        "hintLabel": "Informazioni sui riavvii della radio",
+        "hint": "Quando il modem riavvia la propria radio, il ripristino attende invece di sovrapporsi.",
+        "graceLabel": "Tempo di attesa"
+      },
+      "timeline": {
+        "title": "Se il collegamento cade",
+        "quiet": "Il collegamento tace",
+        "markedDown": "Collegamento considerato interrotto",
+        "markedDownNamed": "Collegamento considerato interrotto ({{name}})",
+        "step": {
+          "1": "Passaggio 1: nuova registrazione",
+          "2": "Passaggio 2: riavvio della radio",
+          "3": "Passaggio 3: cambio SIM",
+          "4": "Passaggio 4: riavvio"
+        },
+        "reboot": "Passaggio 4: riavvio",
+        "rebootResting": "Passaggio 4: riavvio (in pausa)",
+        "holdoff": "Attesa di 15 min, poi si riparte",
+        "now": "Ora",
+        "off": "Il watchdog è disattivo, quindi non viene eseguito nulla.",
+        "none": "Nessun passaggio è attivo, quindi non viene eseguito nulla.",
+        "summary": {
+          "reboot": "Riavvio alle {{time}}",
+          "last": "Ultimo passaggio alle {{time}}",
+          "now": "Offline da {{time}}"
+        }
       }
     },
     "activity": {
       "title": "Attività di ripristino",
       "description": "Le azioni svolte dal watchdog, dalla più recente.",
-      "tier4Reboot": "Il watchdog ha riavviato il modem",
+      "allEvents": "Tutti gli eventi",
       "type": {
         "recovery": "Ripristino",
         "failover": "Failover SIM"
@@ -414,32 +566,91 @@
         "title": "Impossibile caricare l'attività di ripristino",
         "retry": "Riprova"
       },
-      "allEvents": "Tutti gli eventi"
+      "sr": {
+        "success": "Riuscito",
+        "warning": "Avviso",
+        "destructive": "Problema",
+        "info": "Informazione",
+        "muted": "Ordinario"
+      },
+      "row": {
+        "reason": {
+          "outage": "Il collegamento era interrotto",
+          "quality": "Qualità scadente",
+          "carrier": "Su una sola portante",
+          "carrierFor": "Su una sola portante da {{min}} min"
+        },
+        "tierStart": {
+          "1": "Nuova registrazione alla rete",
+          "2": "Riavvio della radio",
+          "3": "Passaggio alla SIM di backup",
+          "4": "Riavvio del modem"
+        },
+        "recoveryStart": "Avvio del ripristino",
+        "succeeded": {
+          "outage": "Di nuovo online dopo il passaggio {{tier}}",
+          "quality": "Qualità ripristinata dopo il passaggio {{tier}}",
+          "carrier": "Portanti ripristinate dopo il passaggio {{tier}}"
+        },
+        "succeededNoTier": {
+          "outage": "Di nuovo online",
+          "quality": "Qualità ripristinata",
+          "carrier": "Portanti ripristinate"
+        },
+        "escalate": "Si passa al passaggio {{tier}}",
+        "escalateNext": "Si passa al passaggio successivo",
+        "escalateDetail": "L'ultimo passaggio non ha risolto",
+        "holdoff": "In attesa per {{min}} min",
+        "holdoffNow": "In attesa",
+        "holdoffDetail": "Tutti i passaggi eseguiti senza risolvere",
+        "ssrHold": "In attesa di un riavvio del modem",
+        "ssrHoldDetail": "La radio si è riavviata da sola",
+        "radioPaused": "In pausa: la radio è spenta",
+        "radioPausedDetail": "Nulla da ripristinare finché non torna accesa",
+        "budgetSpent": "Limite di riavvii raggiunto",
+        "budgetSpentHourly": "{{n}} all'ora, in pausa fino allo scadere dell'ora",
+        "budgetSpentLong": "In pausa dopo una lunga interruzione",
+        "pingStale": "Il controllo della connessione è andato in silenzio",
+        "pingStaleDetail": "Non si agisce su letture obsolete",
+        "tier4Reboot": "Il watchdog ha riavviato il modem",
+        "swapFailed": "Cambio SIM non riuscito",
+        "swapStart": "Passaggio alla SIM di backup",
+        "swapDone": "Passato alla SIM di backup",
+        "slot": "Slot {{slot}}",
+        "revertFailed": "Ripristino della SIM non riuscito",
+        "revertBackupFailed": "Impossibile ripristinare, si resta sul backup",
+        "revertRequested": "Ripristino della SIM originale",
+        "revertByUser": "Richiesto da te",
+        "failbackFailed": "Ritorno non riuscito",
+        "failbackDone": "Di nuovo sulla SIM principale",
+        "failbackTry": "Controllo della SIM principale",
+        "failbackStay": "Si resta sulla SIM di backup",
+        "giveup": "Ritorno abbandonato",
+        "giveupDetail": "Ripristina a mano quando vuoi"
+      }
     },
     "save": {
       "discard": "Scarta",
-      "action": "Salva",
-      "clean": "Tutte le modifiche sono state salvate",
+      "ladder": "Salva la sequenza",
+      "detection": "Salva il rilevamento",
+      "ladderOk": "Sequenza di ripristino salvata",
+      "detectionOk": "Rilevamento salvato",
+      "ladderFail": "Impossibile salvare la sequenza di ripristino",
+      "detectionFail": "Impossibile salvare il rilevamento",
       "blockedIn": "Controlla {{fields}} prima di salvare",
-      "toastOk": "Impostazioni del watchdog salvate",
-      "toastFail": "Impossibile salvare le impostazioni del watchdog",
       "confirmReboot": {
         "title": "Consentire al watchdog di riavviare il modem?",
-        "body": "Salvando, il watchdog potrà riavviare il modem da solo quando tutti i passaggi più leggeri hanno fallito. Questa pagina non sarà raggiungibile per circa un minuto, mentre il modem si riavvia.",
-        "cap": "I riavvii sono limitati a {{cap}} all'ora. Al raggiungimento del limite il watchdog si disattiva finché non lo riattivi.",
+        "body": "Salvando, il watchdog potrà riavviare da solo il modem quando tutti i passaggi più delicati sono falliti. Questa pagina scompare per circa un minuto mentre il modem torna online.",
+        "cap": "I riavvii sono limitati a {{cap}} all'ora. Al limite il watchdog resta in pausa invece di riavviare ancora.",
         "cancel": "Annulla",
         "action": "Consenti i riavvii"
       }
     },
     "errors": {
-      "failThreshold": "Deve essere compreso tra 1 e 20",
-      "probeInterval": "Deve essere compreso tra 1 e 60 secondi",
-      "cooldown": "Deve essere compreso tra 10 e 300 secondi",
-      "maxReboots": "Deve essere compreso tra 1 e 10",
-      "backupSim": "Scegli uno slot SIM di backup per abilitare il failover",
-      "qualityConsecutive": "Deve essere tra 1 e 60",
-      "ssrGrace": "Deve essere tra 10 e 120 secondi",
-      "recheckInterval": "Deve essere tra 5 e 1440 minuti"
+      "seconds": "Inserisci da {{min}} a {{max}} secondi",
+      "minutes": "Inserisci da {{min}} a {{max}} minuti",
+      "count": "Inserisci da {{min}} a {{max}}",
+      "backupSlot": "Scegli uno slot per attivare questo passaggio"
     },
     "failover": {
       "title": "In esecuzione sulla SIM di backup",
@@ -619,64 +830,93 @@
   "connection_quality": {
     "page": {
       "title": "Qualità della connessione",
-      "description": "Gli endpoint a cui il modem invia ping e i limiti che trasformano una connessione lenta in un evento."
+      "description": "Come il modem verifica la connessione a internet."
     },
     "targets": {
       "title": "Destinazioni delle sonde",
-      "description": "Interrogati in ordine finché uno risponde, per capire se internet è raggiungibile.",
-      "restore": "Ripristina i valori predefiniti",
-      "save": "Salva le destinazioni",
-      "leg": {
-        "ipv4": "Destinazione IPv4",
-        "ipv6": "Destinazione IPv6 di riserva"
+      "description": "Le destinazioni a cui il modem invia ping per verificare internet.",
+      "group": {
+        "primary": "Principale",
+        "fallbacks": "Di riserva"
+      },
+      "fallbacks_hint_label": "Informazioni sulle destinazioni di riserva",
+      "fallbacks_hint": "Interrogate insieme quando lo slot 1 non risponde; conta lo slot più basso che risponde. Uno slot senza route per il suo tipo di indirizzo viene saltato, mai contato come mancata risposta.",
+      "slot": {
+        "label": "Destinazione slot {{n}}",
+        "ok": "{{ms}} ms",
+        "answering": "Risponde",
+        "miss": "Nessuna risposta",
+        "standby": "In attesa",
+        "skipped": "Nessuna route",
+        "skipped_ipv4": "Nessuna route IPv4",
+        "skipped_ipv6": "Nessuna route IPv6",
+        "unknown": "Nessuna lettura in tempo reale"
+      },
+      "verdict": {
+        "answering": "Risponde lo slot {{n}}",
+        "answering_any": "Risponde",
+        "none": "Nessuna risposta da nessuno slot",
+        "unknown": "Nessun dato"
+      },
+      "validation": {
+        "empty": "Inserisci una destinazione.",
+        "too_long": "Usa al massimo {{max}} caratteri.",
+        "spaces": "Gli spazi non sono ammessi.",
+        "disallowed": "Usa solo lettere, cifre e . : % -",
+        "leading_dash": "Una destinazione non può iniziare con un trattino."
       },
       "error": {
         "title": "Impossibile leggere le destinazioni delle sonde",
         "body": "Restano in uso le destinazioni salvate.",
         "retry": "Riprova"
       },
+      "failed": "Salvataggio non riuscito",
+      "discard": "Scarta",
+      "save": "Salva",
       "toast": {
         "saved": "Destinazioni delle sonde salvate.",
         "failed": "Impossibile salvare le destinazioni delle sonde."
-      },
-      "validation": {
-        "empty": "Inserisci una destinazione.",
-        "too_long": "Usa al massimo {{max}} caratteri.",
-        "spaces": "Gli spazi non sono ammessi.",
-        "disallowed": "Contiene caratteri non ammessi.",
-        "ipv4_invalid": "Inserisci un indirizzo IPv4 o un nome host.",
-        "ipv6_invalid": "Non è un indirizzo IPv6 valido.",
-        "ipv6_colon": "Un indirizzo IPv6 contiene i due punti."
-      },
-      "verdict": {
-        "ipv4": "IPv4 risponde",
-        "ipv6": "IPv6 risponde",
-        "none": "Nessuna risposta",
-        "unknown": "Nessun dato"
-      },
-      "group": {
-        "sensitivity": "Sensibilità",
-        "ipv4": "IPv4",
-        "ipv6": "Riserva IPv6"
-      },
-      "fallback_hint": "Interrogata solo quando la destinazione IPv4 non risponde, così una connessione solo IPv6 non viene scambiata per un'interruzione.",
-      "fallback_hint_label": "Informazioni sulla riserva IPv6",
-      "interval": {
-        "label": "Intervallo delle sonde",
-        "value": "Ogni {{seconds}} s",
-        "override": "Ogni {{seconds}} s (impostato dal Watchdog)"
-      },
-      "failed": "Salvataggio non riuscito",
-      "profile": {
+      }
+    },
+    "last_outage": {
+      "label": "Ultima interruzione",
+      "hint_label": "Informazioni sull'ultima interruzione",
+      "hint": "Dall'ultimo riavvio. Le durate sono misurate tra un controllo del collegamento e l'altro, quindi sono approssimative.",
+      "none": "Nessuna dall'ultimo riavvio",
+      "down_now": "Interrotto ora",
+      "about": "Circa {{value}}",
+      "ended": "Terminata {{ago}} fa",
+      "ended_now": "Terminata proprio adesso",
+      "ended_with_wan": "{{ended}} ({{wan}})",
+      "wan_changed": "IP WAN cambiato",
+      "wan_same": "Stesso IP WAN",
+      "unit": {
+        "s": "{{n}} s",
+        "min": "{{n}} min",
+        "h": "{{n}} h",
+        "d": "{{n}} g"
+      }
+    },
+    "quality": {
+      "title": "Sensibilità e qualità",
+      "description": "Quando il collegamento è considerato interrotto e quando scadente.",
+      "sensitivity": {
+        "label": "Sensibilità",
         "sensitive": "Sensibile",
         "regular": "Normale",
         "relaxed": "Rilassato",
         "quiet": "Silenzioso"
-      }
-    },
-    "thresholds": {
-      "title": "Soglie di qualità",
-      "description": "Quando una connessione lenta o con perdite viene registrata come evento di rete.",
+      },
+      "grid": {
+        "caption": "Come ogni sensibilità controlla il collegamento",
+        "every": "Ogni",
+        "down": "Interrotto dopo",
+        "up": "Ripristinato dopo",
+        "every_value": "{{n}} s",
+        "down_value": "circa {{n}} s",
+        "up_value": "{{n}} s"
+      },
+      "consequence": "Interrotto dopo circa {{to}} s invece di {{from}} s.",
       "latency": {
         "title": "Latenza"
       },
@@ -689,44 +929,39 @@
         "very_tolerant": "Molto tollerante",
         "custom": "Personalizzato"
       },
-      "save": "Salva le soglie",
-      "error": {
-        "title": "Impossibile leggere le soglie di qualità",
-        "body": "Restano in uso i limiti salvati.",
-        "retry": "Riprova"
+      "value": {
+        "latency": "{{n}} ms",
+        "loss": "{{n}}%"
       },
-      "toast": {
-        "saved": "Soglie di qualità salvate.",
-        "failed": "Impossibile salvare le soglie di qualità."
-      },
-      "row": {
-        "flags": "Segnala dopo",
-        "now": "Adesso",
-        "limit": "Limite"
-      },
-      "flags": {
-        "latency_one": "{{count}} campione oltre {{ms}} ms",
-        "latency_other": "{{count}} campioni oltre {{ms}} ms",
-        "loss_one": "{{count}} campione al {{pct}}% o più",
-        "loss_other": "{{count}} campioni al {{pct}}% o più",
-        "pending": "Inserisci un limite"
-      },
-      "now": {
-        "latency": "{{ms}} ms",
-        "loss": "{{pct}}%",
-        "no_reply": "Nessuna risposta",
-        "collecting": "Raccolta in corso",
-        "over_latency": "Oltre il limite di {{ms}} ms",
-        "over_loss": "Oltre il limite del {{pct}}%"
-      },
-      "default_chip": "Valori predefiniti",
-      "failed": "Salvataggio non riuscito",
       "unit": {
         "latency": "ms",
         "loss": "%"
       },
+      "custom": {
+        "aria": "Limite {{metric}}, da {{min}} a {{max}}"
+      },
       "validation": {
         "range": "Inserisci un numero intero da {{min}} a {{max}}."
+      },
+      "now": {
+        "label": "Adesso",
+        "no_reply": "Nessuna risposta",
+        "collecting": "Raccolta in corso",
+        "over_latency": "Oltre il limite di {{n}} ms",
+        "over_loss": "Pari o oltre il limite del {{n}}%"
+      },
+      "default_chip": "Valori predefiniti",
+      "error": {
+        "title": "Impossibile leggere le impostazioni",
+        "body": "Restano in uso le impostazioni salvate.",
+        "retry": "Riprova"
+      },
+      "failed": "Salvataggio non riuscito",
+      "discard": "Scarta",
+      "save": "Salva",
+      "toast": {
+        "saved": "Impostazioni salvate.",
+        "failed": "Impossibile salvare le impostazioni."
       }
     }
   },
