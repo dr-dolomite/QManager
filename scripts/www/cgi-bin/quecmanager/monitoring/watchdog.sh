@@ -53,9 +53,8 @@ fi
 # --- Helpers ------------------------------------------------------------------
 
 # invalid_field <field> <detail>: the validation reply. Everything is validated
-# before anything is staged; the revert is only a guard against a leftover.
+# before anything is staged, so there is nothing to revert.
 invalid_field() {
-    cfg_revert >/dev/null 2>&1
     jq -n --arg field "$1" --arg detail "$2" \
         '{success:false, error:"invalid_field", field:$field, detail:$detail}'
     exit 0
