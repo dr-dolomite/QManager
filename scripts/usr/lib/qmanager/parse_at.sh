@@ -575,6 +575,254 @@ parse_temperature() {
 }
 
 # -----------------------------------------------------------------------------
+# Thermal throttling — kernel cooling devices + headroom (no AT channel)
+# Populates: thermal_available thermal_sampled thermal_throttling thermal_parts
+#            thermal_cold thermal_active_json thermal_headroom_c thermal_trip_c
+#            thermal_trip_part
+#
+# Root is ${QM_THERMAL_ROOT:-/sys/class/thermal} so a fake tree can stand in
+# (tools/thermal-sim/make_fake_tree.sh). _thermal_discover walks the tree ONCE:
+# every cooling device (path, type, part, max_state) and, per thermal zone, the
+# lowest passive/active trip bound to a non-cold device. Trips are static, so a
+# sample is only `read` builtins of each cur_state and each watched zone temp.
+# An empty discovery (no cooling devices) is retried every 30th sample.
+#
+# modem_vdd is COLD protection (zone zeroc, trip ~0 C): it sets thermal_cold,
+# never thermal_throttling, and its zone is never a headroom source.
+# Paths with characters outside [A-Za-z0-9_./-] are skipped (the lists are
+# space and colon separated).
+#
+# thermal_sampled is set to 1 on every call; the poller clears it to 0 at the
+# top of each poll_cycle, so it is 1 only in the cycle that sampled.
+# -----------------------------------------------------------------------------
+_TH_DISCOVERED=0
+_TH_RETRY=0
+_TH_CDEVS=""
+_TH_ZONES=""
+_TH_I=""
+_TH_P=""
+thermal_available=""
+thermal_sampled=0
+thermal_throttling=0
+thermal_parts=""
+thermal_cold=0
+thermal_active_json="[]"
+thermal_headroom_c=""
+thermal_trip_c=""
+thermal_trip_part=""
+
+# _thermal_part <cooling device type>: _TH_P = the part it throttles.
+_thermal_part() {
+    case "$1" in
+        modem_vdd) _TH_P=cold ;;
+        modem_lte*|sdr0_lte*|pa_lte*) _TH_P=lte ;;
+        modem_nr*|sdr0_nr*|pa_nr*) _TH_P=nr ;;
+        mmw*) _TH_P=mmwave ;;
+        modem_tj|modem_pa) _TH_P=modem ;;
+        cpu*) _TH_P=cpu ;;
+        ethernet-*) _TH_P=ethernet ;;
+        *) _TH_P=modem ;;
+    esac
+}
+
+# _thermal_int <token>: _TH_I = the token as a plain decimal integer (sign kept,
+# leading zeros dropped so ash never reads octal); returns 1 and empties _TH_I
+# when it is not an integer of at most 13 digits.
+_thermal_int() {
+    local neg
+    neg=""
+    _TH_I="$1"
+    case "$_TH_I" in -*) neg="-"; _TH_I="${_TH_I#-}" ;; esac
+    case "$_TH_I" in
+        ''|*[!0-9]*|??????????????*) _TH_I=""; return 1 ;;
+    esac
+    _TH_I="${_TH_I#"${_TH_I%%[!0]*}"}"
+    if [ -z "$_TH_I" ]; then
+        _TH_I=0
+        return 0
+    fi
+    _TH_I="${neg}${_TH_I}"
+    return 0
+}
+
+_thermal_discover() {
+    local root
+    local d
+    local zone
+    local link
+    local n
+    local ty
+    local mx
+    local k
+    local tt
+    local tm
+    local best
+    local bpart
+    root="${QM_THERMAL_ROOT:-/sys/class/thermal}"
+    _TH_DISCOVERED=1
+    _TH_CDEVS=""
+    _TH_ZONES=""
+
+    for d in "$root"/cooling_device*; do
+        [ -r "$d/cur_state" ] || continue
+        case "$d" in *[!A-Za-z0-9_./-]*) continue ;; esac
+        ty=""
+        { read -r ty < "$d/type"; } 2>/dev/null
+        case "$ty" in ''|*[!A-Za-z0-9_.-]*) continue ;; esac
+        mx=""
+        { read -r mx < "$d/max_state"; } 2>/dev/null
+        if _thermal_int "$mx"; then mx="$_TH_I"; else mx=0; fi
+        _thermal_part "$ty"
+        _TH_CDEVS="${_TH_CDEVS}${_TH_CDEVS:+ }${d}:${ty}:${_TH_P}:${mx}"
+    done
+
+    for zone in "$root"/thermal_zone*; do
+        [ -r "$zone/temp" ] || continue
+        case "$zone" in *[!A-Za-z0-9_./-]*) continue ;; esac
+        best=""
+        bpart=""
+        for link in "$zone"/cdev*; do
+            n="${link##*/cdev}"
+            case "$n" in ''|*[!0-9]*) continue ;; esac
+            [ -r "$link/type" ] || continue
+            ty=""
+            { read -r ty < "$link/type"; } 2>/dev/null
+            _thermal_part "$ty"
+            [ "$_TH_P" = "cold" ] && continue
+            k=""
+            { read -r k < "$zone/cdev${n}_trip_point"; } 2>/dev/null
+            case "$k" in ''|*[!0-9]*) continue ;; esac
+            tt=""
+            { read -r tt < "$zone/trip_point_${k}_type"; } 2>/dev/null
+            case "$tt" in passive|active) ;; *) continue ;; esac
+            tm=""
+            { read -r tm < "$zone/trip_point_${k}_temp"; } 2>/dev/null
+            _thermal_int "$tm" || continue
+            [ "$_TH_I" -gt 0 ] || continue
+            if [ -z "$best" ] || [ "$_TH_I" -lt "$best" ]; then
+                best="$_TH_I"
+                bpart="$_TH_P"
+            fi
+        done
+        [ -n "$best" ] || continue
+        _TH_ZONES="${_TH_ZONES}${_TH_ZONES:+ }${zone}:${best}:${bpart}"
+    done
+}
+
+parse_thermal() {
+    local rec
+    local path
+    local rest
+    local ty
+    local part
+    local mx
+    local cur
+    local trip
+    local h
+    local js
+    local best_h
+    local best_trip
+    local best_part
+    local f_lte=0
+    local f_nr=0
+    local f_mmw=0
+    local f_modem=0
+    local f_cpu=0
+    local f_eth=0
+
+    if [ "$_TH_DISCOVERED" != "1" ]; then
+        _thermal_discover
+    elif [ -z "$_TH_CDEVS" ]; then
+        _TH_RETRY=$((_TH_RETRY + 1))
+        if [ "$_TH_RETRY" -ge 30 ]; then
+            _TH_RETRY=0
+            _thermal_discover
+        fi
+    fi
+
+    thermal_sampled=1
+    thermal_throttling=0
+    thermal_parts=""
+    thermal_cold=0
+    thermal_active_json="[]"
+    thermal_headroom_c=""
+    thermal_trip_c=""
+    thermal_trip_part=""
+    if [ -z "$_TH_CDEVS" ]; then
+        thermal_available=0
+        return 0
+    fi
+    thermal_available=1
+
+    js=""
+    for rec in $_TH_CDEVS; do
+        path="${rec%%:*}"
+        rest="${rec#*:}"
+        ty="${rest%%:*}"
+        rest="${rest#*:}"
+        part="${rest%%:*}"
+        mx="${rest#*:}"
+        cur=""
+        { read -r cur < "$path/cur_state"; } 2>/dev/null
+        _thermal_int "$cur" || continue
+        [ "$_TH_I" -gt 0 ] || continue
+        if [ "$part" = "cold" ]; then
+            thermal_cold=1
+            continue
+        fi
+        thermal_throttling=1
+        case "$part" in
+            lte) f_lte=1 ;;
+            nr) f_nr=1 ;;
+            mmwave) f_mmw=1 ;;
+            cpu) f_cpu=1 ;;
+            ethernet) f_eth=1 ;;
+            *) f_modem=1 ;;
+        esac
+        js="${js}${js:+,}{\"device\":\"${ty}\",\"part\":\"${part}\",\"level\":${_TH_I},\"max\":${mx}}"
+    done
+    thermal_active_json="[${js}]"
+    [ "$f_lte" = 1 ] && thermal_parts="lte"
+    [ "$f_nr" = 1 ] && thermal_parts="${thermal_parts}${thermal_parts:+ }nr"
+    [ "$f_mmw" = 1 ] && thermal_parts="${thermal_parts}${thermal_parts:+ }mmwave"
+    [ "$f_modem" = 1 ] && thermal_parts="${thermal_parts}${thermal_parts:+ }modem"
+    [ "$f_cpu" = 1 ] && thermal_parts="${thermal_parts}${thermal_parts:+ }cpu"
+    [ "$f_eth" = 1 ] && thermal_parts="${thermal_parts}${thermal_parts:+ }ethernet"
+
+    # Headroom: the smallest (trip - temp) over the watched zones. Disconnected
+    # sensors read -273000 / -40960 / empty and are skipped.
+    best_h=""
+    best_trip=""
+    best_part=""
+    for rec in $_TH_ZONES; do
+        path="${rec%%:*}"
+        rest="${rec#*:}"
+        trip="${rest%%:*}"
+        part="${rest#*:}"
+        cur=""
+        { read -r cur < "$path/temp"; } 2>/dev/null
+        _thermal_int "$cur" || continue
+        [ "$_TH_I" -gt -40000 ] || continue
+        h=$((trip - _TH_I))
+        if [ -z "$best_h" ] || [ "$h" -lt "$best_h" ]; then
+            best_h="$h"
+            best_trip="$trip"
+            best_part="$part"
+        fi
+    done
+    [ -n "$best_h" ] || return 0
+    # Floor division (shell division truncates toward zero).
+    if [ "$best_h" -lt 0 ] && [ $((best_h % 1000)) -ne 0 ]; then
+        thermal_headroom_c=$((best_h / 1000 - 1))
+    else
+        thermal_headroom_c=$((best_h / 1000))
+    fi
+    thermal_trip_c=$((best_trip / 1000))
+    thermal_trip_part="$best_part"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # Parse AT+COPS?
 # Populates: t2_carrier
 # -----------------------------------------------------------------------------
