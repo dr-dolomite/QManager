@@ -154,6 +154,11 @@ plat_paths() {
     # Raised by the watchdog CGI (POST retry_failback), consumed by the daemon
     # on its next pass; honoured only when root-owned (qm_trusted_file).
     PF_FAILBACK_RETRY_FLAG="/tmp/qmanager_watchcat_retry_failback"
+    # Carrier-count sources for plat_cc_count (contracts, Adapter addition
+    # R11b): the broker's QMI sidecar (rewritten every 2 s) and the poller's
+    # gated AT carrier sidecar (written only while carrier_enabled=1).
+    PF_QMI_ENV="/var/run/qmanager/qmi.env"
+    PF_CA_ENV="/var/run/qmanager/ca.env"
 }
 
 # --- Platform probes and actions ---------------------------------------------
@@ -221,6 +226,98 @@ plat_dual_sim() {
     [ -f "$PF_DUAL_SIM_CACHE" ] || return 0
     _ds=$(cat "$PF_DUAL_SIM_CACHE" 2>/dev/null)
     [ "$_ds" = "0" ] && return 1
+    return 0
+}
+
+# plat_cc_count: PLAT_CC = component carriers in use (integer >= 1), or empty
+# (unknown); PLAT_CC_RAT = sa (from ca.env) | lte (from qmi.env, LTE or the NSA
+# anchor) | empty. Rule (Amendment 3 A3.3): a complete ca.env with ca_rat=sa
+# (covers NR-DC), ca_nr_cc >= 1 and ca_mono at most 90 s old wins; else a
+# complete qmi.env with qmi_state=up, qmi_registered=1, qmi_ca_count >= 1 (PCC
+# included) and qmi_mono at most 10 s old; else unknown. Both files are parsed
+# line by line and never sourced (as data_used.sh does): a line outside
+# [A-Za-z0-9_='-] or a missing end marker makes that file unknown. Builtins
+# only; the clock is /proc/uptime (the writers' mono). Leading zeros and
+# over-long numbers read as unknown.
+_pf_cc_ok() {
+    case "$1" in ''|*[!0-9]*|0?*|???*) return 1 ;; esac
+    [ "$1" -ge 1 ]
+}
+_pf_mono_ok() {
+    case "$1" in ''|*[!0-9]*|0?*|???????????*) return 1 ;; esac
+    [ "$_pf_up" -ge "$1" ] && [ $((_pf_up - $1)) -le "$2" ]
+}
+plat_cc_count() {
+    local _l
+    local _bad
+    local _last
+    local _m
+    local _a
+    local _b
+    local _c
+    local _rest
+    PLAT_CC=""
+    PLAT_CC_RAT=""
+    _pf_up=""
+    { read -r _pf_up _rest < /proc/uptime; } 2>/dev/null
+    _pf_up="${_pf_up%%.*}"
+    case "$_pf_up" in ''|*[!0-9]*|0?*|???????????*) return 0 ;; esac
+
+    if [ -f "$PF_CA_ENV" ]; then
+        _bad=0
+        _last=""
+        _m=""
+        _a=""
+        _b=""
+        {
+            while IFS= read -r _l; do
+                case "$_l" in
+                    *[!A-Za-z0-9_=\'-]*) _bad=1; break ;;
+                    ca_mono=\'*\') _m="${_l#ca_mono=\'}"; _m="${_m%\'}" ;;
+                    ca_rat=\'*\') _a="${_l#ca_rat=\'}"; _a="${_a%\'}" ;;
+                    ca_nr_cc=\'*\') _b="${_l#ca_nr_cc=\'}"; _b="${_b%\'}" ;;
+                    ca_*=\'*\'|qm_sidecar_end=\'1\') ;;
+                    *) _bad=1; break ;;
+                esac
+                _last="$_l"
+            done < "$PF_CA_ENV"
+        } 2>/dev/null
+        if [ "$_bad" = "0" ] && [ "$_last" = "qm_sidecar_end='1'" ] && [ "$_a" = "sa" ] \
+            && _pf_cc_ok "$_b" && _pf_mono_ok "$_m" 90; then
+            PLAT_CC="$_b"
+            PLAT_CC_RAT="sa"
+            return 0
+        fi
+    fi
+
+    [ -f "$PF_QMI_ENV" ] || return 0
+    _bad=0
+    _last=""
+    _m=""
+    _a=""
+    _b=""
+    _c=""
+    {
+        while IFS= read -r _l; do
+            case "$_l" in
+                *[!A-Za-z0-9_=\'-]*) _bad=1; break ;;
+                qmi_mono=\'*\') _m="${_l#qmi_mono=\'}"; _m="${_m%\'}" ;;
+                qmi_state=\'*\') _a="${_l#qmi_state=\'}"; _a="${_a%\'}" ;;
+                qmi_registered=\'*\') _b="${_l#qmi_registered=\'}"; _b="${_b%\'}" ;;
+                qmi_ca_count=\'*\') _c="${_l#qmi_ca_count=\'}"; _c="${_c%\'}" ;;
+                qmi_*=\'*\'|qm_sidecar_end=\'1\') ;;
+                *) _bad=1; break ;;
+            esac
+            _last="$_l"
+        done < "$PF_QMI_ENV"
+    } 2>/dev/null
+    [ "$_bad" = "0" ] || return 0
+    [ "$_last" = "qm_sidecar_end='1'" ] || return 0
+    [ "$_a" = "up" ] && [ "$_b" = "1" ] || return 0
+    _pf_cc_ok "$_c" || return 0
+    _pf_mono_ok "$_m" 10 || return 0
+    PLAT_CC="$_c"
+    PLAT_CC_RAT="lte"
     return 0
 }
 
