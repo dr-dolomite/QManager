@@ -88,15 +88,25 @@ cfg_get_list() {
     return 0
 }
 
+# _pf_ensure_sec: stage the UCI section _pf_sec when it does not exist yet
+# (`uci set sec.key=v` on a missing section fails with "Entry not found"; the
+# section type is its own name, as the installer seeds it).
+_pf_ensure_sec() {
+    uci -q get "quecmanager.$_pf_sec" >/dev/null 2>&1 && return 0
+    uci set "quecmanager.$_pf_sec=$_pf_sec"
+}
+
 # cfg_set <sec> <key> <val>: stage one value (argv: uci set quecmanager.<s>.<k>=<v>).
 cfg_set() {
     _pf_route "$1" "$2" || return 1
+    _pf_ensure_sec || return 1
     uci set "quecmanager.$_pf_sec.$2=$3"
 }
 
 # cfg_set_list <sec> <key> <item>...: stage a whole list (replaces it).
 cfg_set_list() {
     _pf_route "$1" "$2" || return 1
+    _pf_ensure_sec || return 1
     _pf_k="quecmanager.$_pf_sec.$2"
     shift 2
     uci -q delete "$_pf_k"
@@ -132,6 +142,10 @@ plat_paths() {
     PF_PING_RELOAD="/tmp/qmanager_ping_reload"
     PF_QUALITY_RELOAD="/tmp/qmanager_quality_reload"
     PF_WD_RELOAD="/tmp/qmanager_watchcat_reload"
+    # Poller live-reload flag (adaptive_polling.sh drops it too). The watchdog
+    # CGI raises it on a carrier_enabled save: the poller gates its SA carrier
+    # read on that toggle.
+    PF_POLLER_RELOAD="/tmp/qmanager_poller_reload"
     PF_MAINT_LOCK="/tmp/qmanager_watchcat.lock"
     PF_PROFILE_APPLY_PID="/tmp/qmanager_profile_apply.pid"
     PF_RESTORE_PID="/var/run/qmanager_config_restore.pid"
