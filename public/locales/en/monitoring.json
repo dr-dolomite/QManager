@@ -619,114 +619,139 @@
   "connection_quality": {
     "page": {
       "title": "Connection Quality",
-      "description": "The endpoints the modem pings and the limits that turn a slow link into an event."
+      "description": "How the modem checks the internet."
     },
     "targets": {
       "title": "Probe Targets",
-      "description": "Pinged in order until one answers, to tell whether the internet is up.",
-      "restore": "Restore defaults",
-      "save": "Save Probe Targets",
-      "leg": {
-        "ipv4": "IPv4 target",
-        "ipv6": "IPv6 fallback target"
+      "description": "What the modem pings to check the internet.",
+      "group": {
+        "primary": "Primary",
+        "fallbacks": "Fallbacks"
       },
-      "error": {
-        "title": "Can't read the probe targets",
-        "body": "The saved targets are still in use.",
-        "retry": "Retry"
+      "fallbacks_hint_label": "About fallbacks",
+      "fallbacks_hint": "Pinged together when slot 1 misses; the lowest slot that answers counts. A slot with no route for its address type is skipped, never a miss.",
+      "slot": {
+        "label": "Slot {{n}} target",
+        "ok": "{{ms}} ms",
+        "answering": "Answering",
+        "miss": "No reply",
+        "standby": "Standby",
+        "skipped": "No route",
+        "skipped_ipv4": "No IPv4 route",
+        "skipped_ipv6": "No IPv6 route",
+        "unknown": "No live reading"
       },
-      "toast": {
-        "saved": "Probe targets saved.",
-        "failed": "Couldn't save the probe targets."
+      "verdict": {
+        "answering": "Slot {{n}} answering",
+        "answering_any": "Answering",
+        "none": "No answer from any slot",
+        "unknown": "Not reporting"
       },
       "validation": {
         "empty": "Enter a target.",
         "too_long": "Use {{max}} characters or fewer.",
         "spaces": "Spaces are not allowed.",
-        "disallowed": "Contains characters that are not allowed.",
-        "ipv4_invalid": "Enter an IPv4 address or hostname.",
-        "ipv6_invalid": "Not a valid IPv6 address.",
-        "ipv6_colon": "An IPv6 address contains a colon."
+        "disallowed": "Use only letters, digits and . : % -",
+        "leading_dash": "A target can't start with a dash."
       },
-      "verdict": {
-        "ipv4": "IPv4 answering",
-        "ipv6": "IPv6 answering",
-        "none": "No answer",
-        "unknown": "Not reporting"
-      },
-      "group": {
-        "sensitivity": "Sensitivity",
-        "ipv4": "IPv4",
-        "ipv6": "IPv6 fallback"
-      },
-      "fallback_hint": "Pinged only when the IPv4 target doesn't answer, so an IPv6-only connection isn't read as an outage.",
-      "fallback_hint_label": "About the IPv6 fallback",
-      "interval": {
-        "label": "Probe interval",
-        "value": "Every {{seconds}} s",
-        "override": "Every {{seconds}} s (set by Watchdog)"
+      "error": {
+        "title": "Can't read the probe targets",
+        "body": "The saved targets are still in use.",
+        "retry": "Try again"
       },
       "failed": "Couldn't save",
-      "profile": {
+      "discard": "Discard",
+      "save": "Save",
+      "toast": {
+        "saved": "Probe targets saved.",
+        "failed": "Couldn't save the probe targets."
+      }
+    },
+    "last_outage": {
+      "label": "Last outage",
+      "hint_label": "About the last outage",
+      "hint": "Since the last restart. Lengths are measured between link checks, so they are approximate.",
+      "none": "None since the last restart",
+      "down_now": "Down now",
+      "about": "About {{value}}",
+      "ended": "Ended {{ago}} ago",
+      "ended_now": "Ended just now",
+      "ended_with_wan": "{{ended}} ({{wan}})",
+      "wan_changed": "WAN IP changed",
+      "wan_same": "Same WAN IP",
+      "unit": {
+        "s": "{{n}} s",
+        "min": "{{n}} min",
+        "h": "{{n}} h",
+        "d": "{{n}} d"
+      }
+    },
+    "quality": {
+      "title": "Sensitivity and Quality",
+      "description": "When the link counts as down, and when it counts as poor.",
+      "sensitivity": {
+        "label": "Sensitivity",
         "sensitive": "Sensitive",
         "regular": "Regular",
         "relaxed": "Relaxed",
         "quiet": "Quiet"
-      }
-    },
-    "thresholds": {
-      "title": "Quality Thresholds",
-      "description": "When a slow or lossy link is logged as a network event.",
+      },
+      "grid": {
+        "caption": "How each sensitivity checks the link",
+        "every": "Every",
+        "down": "Down after",
+        "up": "Up after",
+        "every_value": "{{n}} s",
+        "down_value": "about {{n}} s",
+        "up_value": "{{n}} s"
+      },
+      "consequence": "Down after about {{to}} s instead of {{from}} s.",
       "latency": {
         "title": "Latency"
       },
       "loss": {
-        "title": "Packet Loss"
+        "title": "Packet loss"
       },
       "preset": {
         "standard": "Standard",
         "tolerant": "Tolerant",
         "very_tolerant": "Very tolerant",
-        "custom": "Custom"
+        "custom": "Custom",
+        "with_limit": "{{name}} ({{limit}})"
       },
-      "save": "Save Thresholds",
-      "error": {
-        "title": "Can't read the quality thresholds",
-        "body": "The saved limits are still in use.",
-        "retry": "Retry"
+      "value": {
+        "latency": "{{n}} ms",
+        "loss": "{{n}}%"
       },
-      "toast": {
-        "saved": "Quality thresholds saved.",
-        "failed": "Couldn't save the quality thresholds."
-      },
-      "row": {
-        "flags": "Flags after",
-        "now": "Right now",
-        "limit": "Limit"
-      },
-      "flags": {
-        "latency_one": "{{count}} sample over {{ms}} ms",
-        "latency_other": "{{count}} samples over {{ms}} ms",
-        "loss_one": "{{count}} sample at {{pct}}% or more",
-        "loss_other": "{{count}} samples at {{pct}}% or more",
-        "pending": "Enter a limit"
-      },
-      "now": {
-        "latency": "{{ms}} ms",
-        "loss": "{{pct}}%",
-        "no_reply": "No reply",
-        "collecting": "Collecting",
-        "over_latency": "Over the {{ms}} ms limit",
-        "over_loss": "Over the {{pct}}% limit"
-      },
-      "default_chip": "Built-in defaults",
-      "failed": "Couldn't save",
       "unit": {
         "latency": "ms",
         "loss": "%"
       },
+      "custom": {
+        "aria": "{{metric}} limit, {{min}} to {{max}}"
+      },
       "validation": {
         "range": "Enter a whole number from {{min}} to {{max}}."
+      },
+      "now": {
+        "label": "Right now",
+        "no_reply": "No reply",
+        "collecting": "Collecting",
+        "over_latency": "Over the {{n}} ms limit",
+        "over_loss": "At or over the {{n}}% limit"
+      },
+      "default_chip": "Built-in defaults",
+      "error": {
+        "title": "Can't read the settings",
+        "body": "The saved settings are still in use.",
+        "retry": "Try again"
+      },
+      "failed": "Couldn't save",
+      "discard": "Discard",
+      "save": "Save",
+      "toast": {
+        "saved": "Settings saved.",
+        "failed": "Couldn't save the settings."
       }
     }
   },
