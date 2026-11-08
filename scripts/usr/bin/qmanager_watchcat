@@ -107,6 +107,8 @@ for _wd_l in wd_config wd_state wd_detect wd_ledger wd_tiers wd_sim; do
         exit 1
     fi
 done
+# Optional: QMI operating mode lets wd_cfun_now skip AT+CFUN? while online.
+[ -f "$WD_LIB_DIR/qmi_dms.sh" ] && . "$WD_LIB_DIR/qmi_dms.sh"
 [ "$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "111111" ] || {
     qlog_error "watchcat: library set incomplete, refusing to start"; exit 1; }
 

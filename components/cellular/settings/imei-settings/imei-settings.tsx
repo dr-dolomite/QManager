@@ -71,6 +71,7 @@ const IMEISettings = () => {
   const { t } = useTranslation("cellular");
   const {
     currentImei,
+    pendingImei,
     backupEnabled,
     backupImei,
     isLoading,
@@ -154,6 +155,7 @@ const IMEISettings = () => {
           <IMEISettingsCard
             anchorId={DEVICE_CARD_ID}
             currentImei={currentImei}
+            pendingImei={pendingImei}
             isLoading={isLoading}
             isSaving={isSaving}
             onSave={saveImei}

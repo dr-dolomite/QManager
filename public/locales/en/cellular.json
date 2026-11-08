@@ -2307,6 +2307,7 @@
         "status": {
           "empty": "Nothing to write. The field is empty.",
           "unchanged": "This is already the IMEI on the modem.",
+          "pending": "Written. The modem switches to this IMEI when it reboots.",
           "ready": "Ready to write. The modem keeps its current identity until it reboots."
         },
         "actions": {

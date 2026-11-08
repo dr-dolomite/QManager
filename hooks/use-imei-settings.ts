@@ -28,6 +28,8 @@ const CGI_ENDPOINT = "/cgi-bin/quecmanager/cellular/imei.sh";
 export interface UseImeiSettingsReturn {
   /** Current device IMEI (null before first fetch) */
   currentImei: string | null;
+  /** IMEI written since boot, in effect after the next reboot ("" when none, null before first fetch) */
+  pendingImei: string | null;
   /** Whether backup IMEI is enabled (null before first fetch) */
   backupEnabled: boolean | null;
   /** Backup IMEI value (null before first fetch) */
@@ -51,6 +53,7 @@ export interface UseImeiSettingsReturn {
 export function useImeiSettings(): UseImeiSettingsReturn {
   const { t } = useTranslation("errors");
   const [currentImei, setCurrentImei] = useState<string | null>(null);
+  const [pendingImei, setPendingImei] = useState<string | null>(null);
   const [backupEnabled, setBackupEnabled] = useState<boolean | null>(null);
   const [backupImei, setBackupImei] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,6 +91,7 @@ export function useImeiSettings(): UseImeiSettingsReturn {
       }
 
       setCurrentImei(data.current_imei);
+      setPendingImei(data.pending_imei ?? "");
       setBackupEnabled(data.backup.enabled);
       setBackupImei(data.backup.imei);
     } catch (err) {
@@ -234,6 +238,7 @@ export function useImeiSettings(): UseImeiSettingsReturn {
 
   return {
     currentImei,
+    pendingImei,
     backupEnabled,
     backupImei,
     isLoading,

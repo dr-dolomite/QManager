@@ -187,9 +187,15 @@ wd_mark_radio_up() { wd_radio_down=0; }
 
 # Prints the current functionality level (0, 1 or 4) from AT+CFUN?, or nothing
 # when the reply cannot be read. Callers treat empty as "unknown", never as off.
+# QMI "online" (qmi_dms.sh) is exactly CFUN=1 and answers outside the AT lane,
+# so it short-circuits; any other mode or a QMI miss asks AT for the digit.
 wd_cfun_now() {
     local out
     local n
+    if command -v qm_qmi_online >/dev/null 2>&1 && qm_qmi_online; then
+        printf '1'
+        return 0
+    fi
     out=$(qcmd 'AT+CFUN?' 2>/dev/null)
     n=$(printf '%s' "$out" | sed -n 's/.*+CFUN: *\([0-9]\).*/\1/p' | head -n 1)
     case "$n" in

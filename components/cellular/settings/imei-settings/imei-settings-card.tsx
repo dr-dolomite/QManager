@@ -84,6 +84,8 @@ export interface IMEISettingsCardProps {
   /** Scroll anchor for the deferred-reboot banner's "Review" action. */
   anchorId?: string;
   currentImei: string | null;
+  /** IMEI written since boot that applies at the next reboot ("" when none). */
+  pendingImei: string | null;
   isLoading: boolean;
   isSaving: boolean;
   onSave: (imei: string) => Promise<boolean>;
@@ -96,6 +98,7 @@ export interface IMEISettingsCardProps {
 const IMEISettingsCard = ({
   anchorId,
   currentImei,
+  pendingImei,
   isLoading,
   isSaving,
   onSave,
@@ -120,10 +123,13 @@ const IMEISettingsCard = ({
     if (seededRef.current) return;
     if (currentImei === null) return;
     seededRef.current = true;
-    setImei(currentImei);
-  }, [currentImei]);
+    setImei(pendingImei || currentImei);
+  }, [currentImei, pendingImei]);
 
-  const reported = currentImei ?? "";
+  // The baseline is what the modem runs after its next reboot: a write since
+  // boot (pending) wins over the running IMEI, which only changes at reboot.
+  const pending = pendingImei ?? "";
+  const reported = pending || (currentImei ?? "");
   const hasReading = reported.length > 0;
 
   const isEmpty = imei.length === 0;
@@ -131,6 +137,7 @@ const IMEISettingsCard = ({
   const isLuhnValid = validateImei(imei);
   const hasChanged = imei !== reported;
   const matchesModem = hasReading && !hasChanged;
+  const matchesPending = matchesModem && pending.length > 0;
 
   // Shape first, then checksum: naming "not 15 digits" while the number is still
   // being typed would be noise, so the length message waits for a full field.
@@ -208,7 +215,24 @@ const IMEISettingsCard = ({
             <div className={FIELD_CLUSTER}>
               {/* Only while the draft IS the modem's IMEI. The tooltip
                   carries the sentence the footer used to. */}
-              {matchesModem ? (
+              {matchesPending ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="info"
+                      role="img"
+                      tabIndex={0}
+                      aria-label={t(`${K}.status.pending`)}
+                      className="size-7 flex-none p-0"
+                    >
+                      <MaterialSymbol name="schedule" size={BADGE_GLYPH_SIZE} />
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent variant="info">
+                    {t(`${K}.status.pending`)}
+                  </TooltipContent>
+                </Tooltip>
+              ) : matchesModem ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Badge
