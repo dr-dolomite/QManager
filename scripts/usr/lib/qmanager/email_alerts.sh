@@ -87,7 +87,7 @@ email_alerts_init() {
 }
 
 # =============================================================================
-# email_alert_emit <event> <secs> — engine-driven send + log (one message)
+# email_alert_emit <event> <secs> [<cause> [<count>]] — engine-driven send + log
 # =============================================================================
 # Called by alert_engine.sh. The engine owns downtime tracking, thresholds,
 # routing and suppression (including the conn_during_recovery gate email used
@@ -114,8 +114,10 @@ email_alert_emit() {
 
     # connection_lost is never capable for email (no internet/DNS during an
     # outage) — deliberate no-op success. connection_restored and reboot both
-    # arrive post-recovery, when email can deliver.
-    if [ "$event" != "connection_restored" ] && [ "$event" != "reboot" ]; then
+    # arrive post-recovery, when email can deliver; thermal_throttling is sent
+    # by the engine only while the link is up.
+    if [ "$event" != "connection_restored" ] && [ "$event" != "reboot" ] \
+        && [ "$event" != "thermal_throttling" ]; then
         return 0
     fi
 
@@ -129,7 +131,12 @@ email_alert_emit() {
         start_time="$start_epoch"
     dur_text=$(_ea_format_duration "$secs")
 
-    if [ "$event" = "reboot" ]; then
+    if [ "$event" = "thermal_throttling" ]; then
+        # $3 = affected parts ("5G, LTE", may be empty), $4 = headroom in whole
+        # degrees C (may be empty).
+        subject="Thermal Throttling"
+        html=$(_ea_build_thermal_html "$cause" "$dur_text" "$count")
+    elif [ "$event" = "reboot" ]; then
         if [ "$cause" = "storm" ]; then
             subject="Modem Reboot Loop"
             html=$(_ea_build_reboot_html "storm" "$dur_text" "$count")
@@ -476,6 +483,66 @@ _ea_build_reboot_html() {
   </table>
 
   <p style="margin:24px 0 0;font-size:13px;color:${_EA_COLOR_MUTED};line-height:1.5;">This alert was delivered after your modem came back online. At the moment of a reboot the device is fully offline and cannot send anything, so reboot alerts always arrive once connectivity is restored.</p>
+HTMLEOF
+
+        _ea_html_footer
+    }
+}
+
+# --- Thermal throttling email -------------------------------------------------
+# _ea_build_thermal_html <parts> <duration_text> <headroom_c>
+# parts: "5G, LTE" (may be empty). headroom_c: whole degrees C (may be empty,
+# the row is then omitted).
+_ea_build_thermal_html() {
+    local parts="$1"
+    local duration="$2"
+    local headroom="$3"
+    local headroom_row=""
+    local affected_row=""
+
+    if [ -n "$parts" ]; then
+        affected_row="
+  <tr>
+    <td style=\"padding:12px 20px;border-bottom:1px solid #e4e4e7;\">
+      <span style=\"font-size:12px;color:${_EA_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;\">Affected</span><br>
+      <span style=\"font-size:15px;color:${_EA_COLOR_TEXT};font-weight:500;\">${parts}</span>
+    </td>
+  </tr>"
+    fi
+    if [ -n "$headroom" ]; then
+        headroom_row="
+  <tr>
+    <td style=\"padding:12px 20px;border-top:1px solid #e4e4e7;\">
+      <span style=\"font-size:12px;color:${_EA_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;\">Temperature headroom</span><br>
+      <span style=\"font-size:15px;color:${_EA_COLOR_TEXT};font-weight:500;\">${headroom} &deg;C</span>
+    </td>
+  </tr>"
+    fi
+
+    {
+        _ea_html_header "Thermal Alert"
+
+        cat <<HTMLEOF
+  <!-- Badge -->
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td style="background-color:#f59e0b;color:${_EA_COLOR_WHITE};font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;">THERMAL THROTTLING</td>
+  </tr></table>
+
+  <!-- Headline -->
+  <h1 style="margin:16px 0 8px;font-size:18px;font-weight:600;color:${_EA_COLOR_TEXT};">Your modem is slowing down to cool off</h1>
+  <p style="margin:0 0 24px;font-size:14px;color:${_EA_COLOR_MUTED};line-height:1.5;">The modem has been limiting its radio or processor speed because it is running hot. Data rates may be reduced until it cools down.</p>
+
+  <!-- Detail box -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${_EA_COLOR_BG};border-radius:8px;padding:4px 0;">${affected_row}
+  <tr>
+    <td style="padding:12px 20px;">
+      <span style="font-size:12px;color:${_EA_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;">Throttling for</span><br>
+      <span style="font-size:15px;color:${_EA_COLOR_TEXT};font-weight:500;">${duration}</span>
+    </td>
+  </tr>${headroom_row}
+  </table>
+
+  <p style="margin:24px 0 0;font-size:13px;color:${_EA_COLOR_MUTED};line-height:1.5;">You get one alert per throttling episode. Improving airflow or moving the modem out of direct heat usually helps.</p>
 HTMLEOF
 
         _ea_html_footer

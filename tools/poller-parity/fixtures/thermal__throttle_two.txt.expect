@@ -1,0 +1,9 @@
+thermal_sampled=1
+thermal_available=1
+thermal_throttling=1
+thermal_parts=lte nr
+thermal_cold=0
+thermal_active_json=[{"device":"modem_nr_dsc","part":"nr","level":40,"max":255},{"device":"modem_lte_dsc","part":"lte","level":3,"max":255}]
+thermal_headroom_c=-2
+thermal_trip_c=111
+thermal_trip_part=lte

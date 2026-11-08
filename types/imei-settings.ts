@@ -24,6 +24,8 @@ export interface ImeiSettingsResponse {
   success: boolean;
   /** Current IMEI from poller cache (empty string if not available yet) */
   current_imei: string;
+  /** IMEI written since boot that takes effect at the next reboot (empty when none; absent on older backends) */
+  pending_imei?: string;
   /** Backup IMEI configuration */
   backup: BackupImeiConfig;
   error?: string;

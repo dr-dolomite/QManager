@@ -28,6 +28,8 @@ _CFG_BACKUP_SECTIONS_LOADED=1
 # qm_api_token_generate (apply_metrics). Guarded: a missing lib only makes an
 # enable-with-no-token restore fail, never enable without a token.
 [ -f /usr/lib/qmanager/api_auth.sh ] && . /usr/lib/qmanager/api_auth.sh
+# IMEI over QMI and the pending-write marker (collect_imei, apply_imei).
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
 
 # Old -> new watchdog / connection-quality key conversion (shared with
 # install.sh). Guarded: when missing, apply_watchdog refuses instead of guessing.
@@ -173,8 +175,8 @@ collect_alert_routing() {
     local cfg="/etc/qmanager/alert_routing.json"
     if [ ! -f "$cfg" ]; then
         # No file → emit the canonical default so restore is deterministic.
-        # reboot defaults off/off (opt-in); version 2 carries the reboot event.
-        echo '{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false}}}'
+        # reboot and thermal_throttling default off/off (opt-in); version 2.
+        echo '{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false},"thermal_throttling":{"sms":false,"email":false}}}'
         return 0
     fi
     jq -c '{version: (.version // 2),
@@ -190,6 +192,10 @@ collect_alert_routing() {
                 reboot: {
                     sms:   (if (.events.reboot.sms) == null then false else (.events.reboot.sms) end),
                     email: (if (.events.reboot.email) == null then false else (.events.reboot.email) end)
+                },
+                thermal_throttling: {
+                    sms:   (if (.events.thermal_throttling.sms) == null then false else (.events.thermal_throttling.sms) end),
+                    email: (if (.events.thermal_throttling.email) == null then false else (.events.thermal_throttling.email) end)
                 }
             }}' "$cfg"
 }
@@ -210,6 +216,8 @@ apply_alert_routing() {
     # The reboot event needs NO clamp (both channels are capable post-recovery)
     # and simply passes through this write untouched; a v1 backup with no reboot
     # key restores fine — alert_routing_load fail-closes reboot to off/off.
+    # thermal_throttling is the same: no clamp, passes through, and a backup
+    # without the key fail-closes to off/off.
     echo "$input" | jq '.events.connection_lost.email = false' > "$tmp" || { rm -f "$tmp"; return 1; }
     mv "$tmp" "$cfg" || return 1
     # Signal the running poller to reload routing next cycle
@@ -1068,6 +1076,9 @@ collect_imei() {
     if [ -f "$status_file" ]; then
         imei=$(jq -r '.device.imei // empty' "$status_file")
     fi
+    if [ -z "$imei" ] && command -v qm_qmi_imei >/dev/null 2>&1; then
+        imei=$(qm_qmi_imei)
+    fi
     if [ -z "$imei" ]; then
         local resp
         resp=$(qcmd 'AT+CGSN') || return 1
@@ -1095,11 +1106,18 @@ apply_imei() {
     [ "${#new_imei}" = "15" ] || { qlog_warn "apply_imei: wrong length"; return 1; }
 
     # Skip write if already matches live IMEI (avoids unnecessary NVM write)
-    current=$(jq -r '.device.imei // empty' /tmp/qmanager_status.json 2>/dev/null)
+    # Compare with the IMEI in effect after the next reboot (a write since boot
+    # wins over the stale poller cache; qmi_dms.sh), else the cache.
+    if command -v qm_imei_effective >/dev/null 2>&1; then
+        current=$(qm_imei_effective)
+    else
+        current=$(jq -r '.device.imei // empty' /tmp/qmanager_status.json 2>/dev/null)
+    fi
     if [ "$current" = "$new_imei" ]; then
         qlog_info "apply_imei: IMEI already matches, skipping"
     else
         qcmd "AT+EGMR=1,7,\"${new_imei}\"" >/dev/null || return 1
+        command -v qm_imei_mark_written >/dev/null 2>&1 && qm_imei_mark_written "$new_imei"
         # IMEI is written to NVM but does NOT take effect until the modem
         # reboots. We deliberately do NOT call AT+CFUN=1,1 here — QManager
         # runs on the modem itself, so the reboot would kill our CGI

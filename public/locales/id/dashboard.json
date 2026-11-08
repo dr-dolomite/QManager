@@ -73,10 +73,25 @@
     "device_uptime_caption": "Sejak boot terakhir",
     "uptime_unknown": "Tidak terjangkau"
   },
+  "thermal": {
+    "chip": "Dibatasi ({{parts}})",
+    "chip_bare": "Dibatasi",
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "mmWave",
+      "modem": "Modem",
+      "cpu": "CPU",
+      "ethernet": "Ethernet"
+    }
+  },
   "metrics": {
     "title": "Perangkat & Kecepatan",
     "modem_temperature": "Suhu Modem",
     "high_temp_warning": "Suhu Tinggi",
+    "throttle_at": "Dibatasi pada {{temp}}",
+    "below_throttling": "{{delta}} di bawah batas",
+    "throttle_reached": "Batas pembatasan tercapai",
     "cpu_usage": "Penggunaan CPU",
     "high_cpu_warning": "CPU Tinggi",
     "memory_usage": "Penggunaan Memori",
@@ -239,6 +254,8 @@
       "sim_failover": "Failover SIM",
       "sim_swap_detected": "Pergantian SIM Terdeteksi",
       "airplane_mode": "Mode Pesawat",
+      "thermal_throttled": "Dibatasi Panas",
+      "thermal_recovered": "Pembatasan Panas Berakhir",
       "profile_applied": "Profil Diterapkan",
       "profile_failed": "Profil Gagal",
       "profile_deactivated": "Profil Dinonaktifkan",

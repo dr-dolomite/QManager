@@ -106,6 +106,7 @@ const HomeComponent = () => {
               modemReachable={data?.modem_reachable ?? false}
               isLoading={isLoading}
               isStale={isStale}
+              thermal={data?.thermal ?? null}
             />
           }
         />
@@ -196,6 +197,7 @@ const HomeComponent = () => {
             deviceData={data?.device ?? null}
             lteData={data?.lte ?? null}
             nrData={data?.nr ?? null}
+            thermal={data?.thermal ?? null}
             isLoading={isLoading}
             modemReachable={data?.modem_reachable ?? false}
             liveLteTa={liveLteTa}

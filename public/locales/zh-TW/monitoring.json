@@ -173,7 +173,7 @@
         }
       },
       "threshold_error": "請輸入 1 到 60 之間的整數分鐘。",
-      "threshold_hint": "較短的斷線只記錄，不傳送。",
+      "threshold_hint": "較短的斷線或過熱降頻只記錄，不傳送。",
       "threshold_label": "警示前等待時間",
       "threshold_unit": "分鐘",
       "title": "管道",
@@ -200,6 +200,9 @@
         },
         "reboot": {
           "name": "數據機已重新啟動"
+        },
+        "thermal_throttling": {
+          "name": "過熱降頻"
         }
       },
       "loading": "正在載入涵蓋範圍",

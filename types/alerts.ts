@@ -13,7 +13,18 @@ export type AlertChannel = "sms" | "email";
 
 /** The trigger events a channel can be routed to. Extensible by design — new
  *  events are an additive key here + a backend capability entry + i18n. */
-export type AlertEventKey = "connection_lost" | "connection_restored" | "reboot";
+export type AlertEventKey =
+  | "connection_lost"
+  | "connection_restored"
+  | "reboot"
+  | "thermal_throttling";
+
+/** Events an older backend never sends. Absent from the capability table means
+ *  the device predates the event, so the UI hides it instead of claiming it
+ *  cannot send. */
+export const OPTIONAL_ALERT_EVENTS: readonly AlertEventKey[] = [
+  "thermal_throttling",
+];
 
 // ─── Channel transport state (identity + master enable) ──────────────────────
 
@@ -46,7 +57,7 @@ export interface AlertChannels {
 
 /** For each event, whether it is routed to each channel. */
 export type AlertRouting = {
-  events: Record<AlertEventKey, Record<AlertChannel, boolean>>;
+  events: Partial<Record<AlertEventKey, Record<AlertChannel, boolean>>>;
 };
 
 // ─── Capability matrix (physical possibility) ────────────────────────────────
@@ -59,7 +70,7 @@ export interface AlertCapabilityCell {
   email_reason?: string;
 }
 
-export type AlertCapabilities = Record<AlertEventKey, AlertCapabilityCell>;
+export type AlertCapabilities = Partial<Record<AlertEventKey, AlertCapabilityCell>>;
 
 // ─── Reboot history (read-only telemetry) ────────────────────────────────────
 
@@ -134,6 +145,7 @@ export const ALERT_EVENT_ORDER: AlertEventKey[] = [
   "connection_lost",
   "connection_restored",
   "reboot",
+  "thermal_throttling",
 ];
 
 export const ALERT_CHANNEL_ORDER: AlertChannel[] = ["sms", "email"];

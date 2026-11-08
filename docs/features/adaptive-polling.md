@@ -19,6 +19,7 @@ Adaptive Polling makes the QManager AT poller ease off modem interrogation when 
 | Tier field in status.json | `.device.poller_tier` — `"active"` | `"idle"` | `"deep"` |
 | Radio read-age fields | `.device.serving_read_mono`, `.device.ca_read_mono` (uptime s of the last `+QENG:` reply / carrier read, from QMI or `AT+QCAINFO`; `0` = never) |
 | Carrier source | `.device.ca_source`: `qmi` \| `mixed` \| `at` (Invariant 14) |
+| Thermal block | `.thermal` (object or `null`), sampled every 5th cycle (~10 s) in every tier; Invariant 15, [`thermal-throttling.md`](thermal-throttling.md) |
 | AT read cap | `QC_WAIT_MS=2500`, passed per call as `QCMD_WAIT_MS` (Invariant 8); per-cycle busy latch `_AT_LATCH` / `_AT_BUSY`, rc 3 = not run |
 | status.json composer | `_wc_compose_pf` (printf, compact one line); `write_cache_jq` is the safety net (Invariant 9) |
 | Sidecars | `/var/run/qmanager/{ping,dns,ondemand}.env` (Invariant 10); `/var/run/qmanager/ca.env` written by the poller for the watchdog (Invariant 7) |
@@ -169,7 +170,7 @@ This invariant has two layers, applied across two releases:
 
 - `AT+QENG="servingcell"` — serving-cell signal metrics
 - `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` — carrier-aggregation info, skipped on an AT-due cycle when the QMI carrier list is usable (Invariant 14). Extended reporting is switched on, read and switched off in one exchange (QuecManager's pattern); never leave `AT+QCAINFO=1` set at boot or between cycles, since a persistent `=1` drops the connection on RM551E R01A04 (confirmed by field test, fixed in v0.1.34).
-- `AT+CFUN?` — radio function state
+- `AT+CFUN?` — radio function state; skipped when `qmi opmode` reads `online` (`qm_qmi_online`, sets `t1_cfun=1`), asked only for the exact 0/4 digit otherwise ([`qmi-lane.md`](qmi-lane.md#device-service-consumers-2026-11-08))
 - `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
 
 **When the poller is Deep, only `AT+QENG="servingcell"` runs.** QCAINFO, CFUN?, and the per-antenna reads (`QRSRP`/`QRSRQ`/`QSINR`) are wrapped in an `if [ "$ap_tier" != "deep" ]; then ... fi` guard and do not execute. This is the minimum needed to keep `qmanager_tower_failover` operational (see Invariant 7 below); everything else holds last-known values via `write_cache`.
@@ -274,6 +275,14 @@ At the QCAINFO point of an AT-due, non-deep cycle, the poller calls `qmi_load` a
 
 Parity: `tools/poller-parity/qmi_ca_parity.sh` (63 checks) covers the gates and the carrier JSON. `status_parity.sh` `sc_qmica` covers the status shape.
 
+### 15. The thermal block is published by both composers
+
+`poll_cycle` calls `parse_thermal` (`parse_at.sh`) and `detect_thermal_events` (`events.sh`) in the always-every-cycle local block, when `cycle_count % TIER1_5_EVERY == 0` (every 5th 2 s cycle, about 10 s), after `read_dns_data` and before `detect_data_connection_events` / `alert_engine_check`. It reads sysfs only, runs in every tier, and sits above the scan / SIM-switch early return, so scans do not freeze it. The sampling, debounce and contract invariants are in [`thermal-throttling.md`](thermal-throttling.md).
+
+- **Both composers emit it.** `_wc_compose_pf` and `write_cache_jq` write `.thermal` as `null` when `thermal_available != 1` (before the first sample, or no cooling devices), else `{throttling, parts, active, cold_protection, headroom_c, trip_c, trip_part}` in that key order. It is the last top-level key; the hostile-text gate's expected top-level key list includes `thermal`.
+- **Parity coverage.** `thermal_expect.sh <parse_at.sh>` runs the five `thermal__*` fixtures (a fake sysfs tree spec each, with a `.txt.expect` of the nine `thermal_*` globals); `parity.sh` compares old and new libraries on them and skips them when either predates `parse_thermal`. `status_parity.sh` adds `sc_thermal_none`, `sc_thermal_unsampled` (both `null`), `sc_thermal_throttle` and `sc_thermal_unknown`, checks the exact shape of `.thermal` and the key order in both composers, and puts `thermal_headroom_c` / `thermal_trip_c` in the random and bad-number sets (a poisoned value must come out a number or `null`) and `thermal_trip_part` in the hostile-string set. See `tools/poller-parity/README.md` (Thermal).
+- **Gate.** An edit of `parse_thermal` or of the `.thermal` part of either composer must pass `thermal_expect.sh` and `status_parity.sh` on the device.
+
 ---
 
 ## CGI Envelopes
@@ -353,7 +362,7 @@ Sidebar entry key: `adaptive_polling`. Available in all 5 shipped locales.
 
 ## status.json Surface
 
-The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11), and since QMI Phase 2 `.lte.source`, `.device.qmi_read_mono`, `.device.qmi_state` and `.device.qmi_ssr_count` (Invariant 13), and since 0.7.0 `.device.ca_source` (Invariant 14).
+The poller also writes `.device.serving_read_mono` and `.device.ca_read_mono` (integers, uptime seconds of the last serving-cell / carrier-aggregation read, `0` = never; see Invariant 11), and since QMI Phase 2 `.lte.source`, `.device.qmi_read_mono`, `.device.qmi_state` and `.device.qmi_ssr_count` (Invariant 13), and since 0.7.0 `.device.ca_source` (Invariant 14). The root-level `.thermal` object (or `null`) is documented in Invariant 15.
 
 The poller writes `.device.poller_tier` as one of `"active"`, `"idle"`, or `"deep"` on every `write_cache` call. Consumers (the frontend tier badge, the CGI GET fallback) should treat the field as optional — it is absent on older builds and on the first write if the poller starts before the cache is populated.
 

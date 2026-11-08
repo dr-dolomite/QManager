@@ -1,0 +1,9 @@
+thermal_sampled=1
+thermal_available=1
+thermal_throttling=1
+thermal_parts=mmwave modem
+thermal_cold=1
+thermal_active_json=[{"device":"mmw0_dsc","part":"mmwave","level":7,"max":255},{"device":"modem_pa","part":"modem","level":1,"max":0}]
+thermal_headroom_c=67
+thermal_trip_c=110
+thermal_trip_part=cpu

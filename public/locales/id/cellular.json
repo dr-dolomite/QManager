@@ -2307,6 +2307,7 @@
         "status": {
           "empty": "Tidak ada yang ditulis. Kolom masih kosong.",
           "unchanged": "Ini sudah menjadi IMEI pada modem.",
+          "pending": "Sudah ditulis. Modem akan memakai IMEI ini setelah dimulai ulang.",
           "ready": "Siap ditulis. Modem tetap memakai identitas saat ini sampai dimulai ulang."
         },
         "actions": {

@@ -4,6 +4,8 @@ Alerts notifies you when the modem's internet connection drops and when it comes
 
 A third event, **`reboot`**, tracks every real device restart — detected via the kernel `boot_id`, classified into `watchdog`/`user`/`unplanned`, and delivered post-recovery once connectivity is back (see [Reboot Alerts](#reboot-alerts) below). It is **opt-in** (off on both channels by default); detection and the "Recent reboots" history record every boot regardless of routing.
 
+A fourth event, **`thermal_throttling`**, fires once per heat-throttling episode (see [Thermal Throttling Alert](#thermal-throttling-alert) below and [`thermal-throttling.md`](thermal-throttling.md)). It is also **opt-in** and additive within routing version 2.
+
 ## Quick Reference
 
 | Item | Value |
@@ -15,9 +17,10 @@ A third event, **`reboot`**, tracks every real device restart — detected via t
 | Email transport library | `/usr/lib/qmanager/email_alerts.sh` |
 | SMS config | `/etc/qmanager/sms_alerts.json` (shape unchanged) |
 | Email config | `/etc/qmanager/email_alerts.json` (shape unchanged) |
-| Routing config | `/etc/qmanager/alert_routing.json` (version 2, additive `reboot` event) |
+| Routing config | `/etc/qmanager/alert_routing.json` (version 2, additive `reboot` and `thermal_throttling` events) |
 | Single alert wait | UCI `quecmanager.quality_thresholds.alert_after_min` (minutes, optional, never seeded); resolver `cq_alert_after_min` in `/usr/lib/qmanager/conn_state.sh` |
 | Link detector | `detect_data_connection_events` in `/usr/lib/qmanager/events.sh` (publishes `ev_link_state`; the engine follows it) |
+| Thermal detector | `detect_thermal_events` in `/usr/lib/qmanager/events.sh` (publishes the `ev_thermal_active` / `ev_thermal_since_mono` / `ev_thermal_parts` latch that `_ae_thermal_check` follows) |
 | SMS log | `/tmp/qmanager_sms_log.json` (NDJSON, cap 100) |
 | Email log | `/tmp/qmanager_email_log.json` (NDJSON, cap 100) |
 | Reload flags | `/tmp/qmanager_sms_reload`, `/tmp/qmanager_email_reload`, `/tmp/qmanager_alert_routing_reload` |
@@ -33,14 +36,14 @@ A third event, **`reboot`**, tracks every real device restart — detected via t
 
 ## The Model: Routing vs. Capability
 
-Three events, two channels:
+Four events, two channels:
 
-- **Events**: `connection_lost` (internet has been down ≥ the single alert wait, `alert_after_min`, shared by both channels), `connection_restored` (it came back after a qualifying outage), `reboot` (the device restarted — see [Reboot Alerts](#reboot-alerts)).
+- **Events**: `connection_lost` (internet has been down ≥ the single alert wait, `alert_after_min`, shared by both channels), `connection_restored` (it came back after a qualifying outage), `reboot` (the device restarted — see [Reboot Alerts](#reboot-alerts)), `thermal_throttling` (the modem has been heat-throttling for the alert wait — see [Thermal Throttling Alert](#thermal-throttling-alert)).
 - **Channels**: `sms`, `email`.
 
 **Routing** is a *user preference* — "should this event go out over this channel" — persisted in `alert_routing.json` and edited from the routing matrix on the Alerts page.
 
-**Capability** is a *physical fact* the backend owns: `alert_capable()` in `scripts/usr/lib/qmanager/alert_routing.sh` hard-codes that `connection_lost/email` is the only incapable pair — email needs the internet and DNS to send, both of which are down during the very outage it would be reporting. Every other pair is capable, including both `reboot` cells — a reboot alert is by definition delivered *after* connectivity is back, so email is never actually incapable for it.
+**Capability** is a *physical fact* the backend owns: `alert_capable()` in `scripts/usr/lib/qmanager/alert_routing.sh` hard-codes that `connection_lost/email` is the only incapable pair — email needs the internet and DNS to send, both of which are down during the very outage it would be reporting. Every other pair is capable, including both `reboot` cells — a reboot alert is by definition delivered *after* connectivity is back, so email is never actually incapable for it. Both `thermal_throttling` cells are capable too: a throttle does not take the link down. The engine instead holds the email leg while the internet is unreachable (see [Thermal Throttling Alert](#thermal-throttling-alert)).
 
 ```sh
 alert_capable() {
@@ -51,6 +54,8 @@ alert_capable() {
         connection_restored/email) return 0 ;;
         reboot/sms)                return 0 ;;
         reboot/email)              return 0 ;;
+        thermal_throttling/sms)    return 0 ;;
+        thermal_throttling/email)  return 0 ;;
         *)                         return 1 ;;
     esac
 }
@@ -65,12 +70,14 @@ The **effective send rule**, evaluated once per channel by the engine: `channel 
 ### Default routing = legacy behavior (zero-regression upgrade)
 
 ```json
-{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false}}}
+{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false},"thermal_throttling":{"sms":false,"email":false}}}
 ```
 
 This is exactly what the two old pages did before centralization (SMS fired on both events, email only fired on recovery). An upgrade with no `alert_routing.json` present fails closed to these defaults (`alert_routing_load()` resets to them before reading the file), and the installer idempotently seeds the same document (via `alert_default_routing_json()`), so existing SMS/email settings and behavior carry over unchanged.
 
 > ℹ️ NOTE: The document is now **version 2** — the additive `reboot` key. No migration step exists or is needed: `alert_routing_load()` reads `.events.reboot.sms`/`.email` with the null-safe `if . == null then "false" else tostring end` form, so a v1 file on disk (no `reboot` key at all) silently fail-closes both `reboot` cells to `false`. That fail-closed default is exactly the desired opt-in behavior, so an existing v1 file never needs to be rewritten just to pick up the new event.
+
+> ℹ️ NOTE: `thermal_throttling` is additive **within version 2** (no version bump). `alert_routing_load()` reads `.events.thermal_throttling.sms`/`.email` with the same null-safe form, so a file without the key (every file written before this event) reads as off/off. The CGI `save_settings` treats a missing `routing.events.thermal_throttling.*` as `false`. `collect_alert_routing()` (Config Backup) emits the cell, with `false` for a missing key, and `apply_alert_routing()` passes it through with no clamp.
 
 ## The Engine: Poller-Sourced, Not a Daemon
 
@@ -83,6 +90,7 @@ qmanager_poller poll_cycle():
   update_proc_metrics
   read_ping_data        # sets conn_internet_available / conn_during_recovery
   read_dns_data
+  parse_thermal + detect_thermal_events   # every 5th cycle (~10 s): sets the ev_thermal_* latch
   detect_data_connection_events   # events.sh: the ONE link detector, sets ev_link_state
   alert_engine_check     # <-- here, every 2s base cycle, every tier
 ```
@@ -129,7 +137,7 @@ A watchdog recovery (`conn_during_recovery = "true"`) **no longer freezes the ou
 
 ### `sms_alert_emit` / `email_alert_emit` — the rc contract
 
-The engine dispatches to the channel libs via `sms_alert_emit <event> <secs>` / `email_alert_emit <event> <secs>` (`_ae_channel_emit`, `alert_engine.sh:103-109`). Both return one of three codes the engine interprets identically:
+The engine dispatches to the channel libs via `sms_alert_emit <event> <secs> [<cause> [<count>]]` / `email_alert_emit <event> <secs> [<cause> [<count>]]` (`_ae_channel_emit`). The two optional args are only read by the `reboot` and `thermal_throttling` messages. `_ae_channel_emit` takes the channel first, so its own arguments are `$1` channel, `$2` event, `$3` seconds, `$4` and `$5` forwarded as `<cause>` and `<count>`; for `thermal_throttling` `$4` is the affected-parts label (`5G, LTE`, may be empty) and `$5` is the headroom in whole degrees C (may be empty, the clause is then omitted). Both return one of three codes the engine interprets identically:
 
 | rc | Meaning | Engine behavior |
 |---|---|---|
@@ -149,7 +157,7 @@ The engine dispatches to the channel libs via `sms_alert_emit <event> <secs>` / 
 
 ## Reboot Alerts
 
-Unlike `connection_lost`/`connection_restored`, a reboot has no outage window and no downtime timer — it is a **separate one-shot detect-then-deliver path** inside `alert_engine.sh`, called from `alert_engine_check` (`_ae_reboot_check`, step 3, only while `conn_during_recovery != "true"` and the ping data is not stale, so it inherits recovery-churn suppression; it runs before the outage machine).
+Unlike `connection_lost`/`connection_restored`, a reboot has no outage window and no downtime timer — it is a **separate one-shot detect-then-deliver path** inside `alert_engine.sh`, called from `alert_engine_check` (`_ae_reboot_check`, step 2, only while `conn_during_recovery != "true"` and the ping data is not stale, so it inherits recovery-churn suppression; it runs before the outage machine).
 
 ### Detection: `boot_id`, not uptime or a shutdown hook
 
@@ -219,6 +227,36 @@ Every poller cycle, `_ae_reboot_check` early-outs if no pending file exists (the
 
 Since ledger U4.9 recorded reboots are not a card of their own: the Activity card interleaves `state.reboots` (from the same `useAlerts()` GET, no separate poll loop) with the delivery log by time. A reboot row shows regardless of whether the `reboot` alert is routed anywhere, because the history's value is independent of whether you chose to be notified. Its glyph and tag name the cause (`REBOOT_GLYPH` / `REBOOT_CAUSE_KEY` in `alerts-log-card.tsx`: `unplanned` → `TriangleAlertIcon` "Unexpected", `watchdog` → `ShieldCheckIcon` "Watchdog", `user` → `PowerIcon` "Planned"); an unknown cause falls back to `unplanned`.
 
+## Thermal Throttling Alert
+
+`thermal_throttling` tells you the modem has been slowing its radio or CPU because of heat. It is a **non-outage, once-per-episode** event driven by the `ev_thermal_*` latch from `detect_thermal_events` (`events.sh`, debounced about 20 s to enter and 30 s to exit; see [`thermal-throttling.md`](thermal-throttling.md)). It is opt-in: off on both channels by default.
+
+`alert_engine_check` calls `_ae_thermal_check` as **step 2b**, after the reboot check (step 2) and before the link signal (step 3):
+
+```
+1   reload gate            1b  deferred reboot detect
+2   reboot alert           2b  thermal throttling alert   <-- _ae_thermal_check
+3   link signal (ev_link_state) -> outage machine
+```
+
+**Inputs.** `ev_thermal_active` (0|1), `ev_thermal_since_mono` (the `mono_now` clock), `ev_thermal_parts` (space-separated union over the episode) and `thermal_headroom_c` (message text only). Unset reads as inactive.
+
+**Semantics.**
+
+- **One send per episode, per channel**, once the episode has lasted the same single wait the outage alerts use (`_ae_wait_secs`, from `alert_after_min`). An episode shorter than the wait is logged in Activity and never sent.
+- **A new `ev_thermal_since_mono` re-arms both channels.** The engine remembers the episode it is tracking (`_ae_th_ep`) and compares stamps; no explicit reset is needed. It also clears the state (and logs "thermal episode over") on the first cycle where `ev_thermal_active != 1`.
+- **Each channel finishes on its own** (`_ae_th_sms_done`, `_ae_th_email_done`): rc 0 (sent) and rc 1 (terminal failure) end that channel's episode; rc 2 retries next cycle. A channel that is master-disabled or not routed is skipped (and retried each cycle until the episode ends, which costs nothing).
+- **Email is held while `conn_internet_available != "true"`.** An smtp attempt without DNS or a route would block the poller's local block for minutes, so the engine skips the leg and retries next cycle instead of burning the attempt. SMS is not gated on the link.
+- **SMS rc 2 retries.** `sms_alert_emit` returns 2 when the modem is not registered (`_sa_is_registered`) without calling the sender.
+- **Not gated on `conn_during_recovery`.** A throttle is independent of the watchdog.
+- **No "recovered" message.** The Activity feed already carries `thermal_recovered`.
+- **A poller respawn mid-episode may duplicate one alert.** The latch and the engine's sent flags are poller memory. The new poller starts a fresh episode with a new `ev_thermal_since_mono`, waits the full `alert_after_min` again and can send a second message for what is physically one episode. This is accepted.
+- **SMS text is ASCII only:** `[QManager] Modem is thermal throttling (5G, LTE) for 5m. Temperature headroom: 6 C.` The parts and headroom clauses are dropped when empty. **Why:** a degree sign forces UCS-2 encoding and cuts the message to 70 characters, so the unit is written as the letter `C`.
+- **Email:** subject `Thermal Throttling`, a "Thermal Alert" body with Affected (parts), Throttling for (duration) and Temperature headroom rows; the Affected and headroom rows are omitted when empty.
+- Both libs log `trigger: "thermal_throttling"`; the Activity table translates it with the event's `alerts.coverage.event.thermal_throttling.name`.
+
+> ℹ️ NOTE: The "Wait before alerting" hint on the Channels card now reads "Outages and heat throttling shorter than this are logged, not sent."
+
 ## CGI (`monitoring/alerts.sh`)
 
 Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `monitoring/email_alerts.sh`, `monitoring/sms_alert_log.sh`, `monitoring/email_alert_log.sh`. All four are deleted from the repo and actively removed from `/www/cgi-bin/quecmanager/monitoring/` on upgrade (`install.sh:1094-1104`, unconditional — harmless no-op on fresh installs).
@@ -237,13 +275,15 @@ Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `mon
     "events": {
       "connection_lost":     { "sms": true, "email": false },
       "connection_restored": { "sms": true, "email": true },
-      "reboot":              { "sms": false, "email": false }
+      "reboot":              { "sms": false, "email": false },
+      "thermal_throttling":  { "sms": false, "email": false }
     }
   },
   "capabilities": {
     "connection_lost":     { "sms": true, "email": false, "email_reason": "email_needs_internet" },
     "connection_restored": { "sms": true, "email": true },
-    "reboot":              { "sms": true, "email": true }
+    "reboot":              { "sms": true, "email": true },
+    "thermal_throttling":  { "sms": true, "email": true }
   },
   "reboots": [
     { "epoch": 1737158400, "cause": "watchdog" },
@@ -263,7 +303,7 @@ Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `mon
 
 | Action | Body | Notes |
 |---|---|---|
-| `save_settings` | `{sms:{...}, email:{...}, routing:{events:{...}}}` | Writes all 3 config files atomically (temp-file + validate + `mv`); clamps `connection_lost.email` to `false` server-side regardless of the posted value; a missing/null `routing.events.reboot.*` defaults to `false` (opt-in), unlike the other events which default `true`/preserve; no server-side clamp on `reboot` (both channels stay capable); touches all 3 reload flags |
+| `save_settings` | `{sms:{...}, email:{...}, routing:{events:{...}}}` | Writes all 3 config files atomically (temp-file + validate + `mv`); clamps `connection_lost.email` to `false` server-side regardless of the posted value; a missing/null `routing.events.reboot.*` defaults to `false` (opt-in), unlike the other events which default `true`/preserve; no server-side clamp on `reboot` (both channels stay capable); a missing/null `routing.events.thermal_throttling.*` defaults to `false` the same way and is not clamped; touches all 3 reload flags |
 | `send_test` | `{channel: "sms"\|"email"}` | Sends a real test message over the real send path; requires the channel be `enabled` (not just filled in) |
 | `install` | — | Installs `msmtp` via `opkg` in the background; progress file at `/tmp/qmanager_msmtp_install.json` |
 | `install_status` | — | Polls install progress |
@@ -281,7 +321,7 @@ Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `mon
 
 ## Config Backup / Restore
 
-`alert_routing` is a new, additive section in `config_backup_sections.sh` (`CFG_BACKUP_APPLY_ORDER`), inserted immediately after `sms_alerts` — both alert-config sections restore together, ahead of the riskier AT/IMEI work. `collect_alert_routing()` emits the canonical default document (now version 2, with `reboot`) when `alert_routing.json` is absent (deterministic restores). `apply_alert_routing()` validates `.events` is present, then **re-clamps `connection_lost.email = false`** on the incoming document before writing — restoring a backup taken on a hypothetical future version that allowed the pair can never re-enable it on this version. **`reboot` gets no clamp** and passes through untouched (both channels are legitimately capable); a v1 backup with no `reboot` key restores fine — `alert_routing_load` fail-closes the missing cells to `false` on the next read, which is the correct opt-in default anyway. See [Config Backup & Restore](config-backup-restore.md) for the general apply-order/lock model.
+`alert_routing` is a new, additive section in `config_backup_sections.sh` (`CFG_BACKUP_APPLY_ORDER`), inserted immediately after `sms_alerts` — both alert-config sections restore together, ahead of the riskier AT/IMEI work. `collect_alert_routing()` emits the canonical default document (now version 2, with `reboot`) when `alert_routing.json` is absent (deterministic restores). `apply_alert_routing()` validates `.events` is present, then **re-clamps `connection_lost.email = false`** on the incoming document before writing — restoring a backup taken on a hypothetical future version that allowed the pair can never re-enable it on this version. **`reboot` gets no clamp** and passes through untouched (both channels are legitimately capable), and so does `thermal_throttling`: `collect_alert_routing()` now includes its cell (a missing key is emitted as `false`/`false`, and the no-file default document carries it); a v1 backup with no `reboot` key restores fine — `alert_routing_load` fail-closes the missing cells to `false` on the next read, which is the correct opt-in default anyway. See [Config Backup & Restore](config-backup-restore.md) for the general apply-order/lock model.
 
 > ⚠️ WARNING: Config Backup does not carry the `quality_thresholds` UCI section, so the wait travels only as `sms_alerts.json`'s `threshold_minutes` (the mirror). Restoring onto a device that already has an `alert_after_min` key keeps that device's wait, because the UCI key outranks the channel file in `cq_alert_after_min`.
 
@@ -296,6 +336,7 @@ Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `mon
 
 - **Coverage** (`coverage-card.tsx`) shows SAVED truth only, from `deriveCoverage` (`derive.ts`, the page's one derived model: capable AND enabled AND routed). One row per event lists the channels that will deliver (neutral `Tag`s), a warning chip for a channel that would fire but is not configured, and a verdict chip in `CardAction` (all covered / outage not covered / n of m / nothing). A draft in Channels never moves it.
 - **Channels** (`alerts-settings-card.tsx`) owns the write path: the one "Wait before alerting" field, a channel rail (`channel-rail.tsx`, roving-tabindex tablist; the dot reports saved status), and the selected channel's panel (Off/On `SegmentedField`, the "Sends for" checkboxes, its fields from `channel-field.tsx`). One `CardFoot` carries Test, Discard and the `SaveButton`; Save commits both channels and the routing in one POST. The form is `use-alerts-form.ts`, re-seeded in render on a settings signature (no remount, so the save flash and the active channel survive a save).
+- **Optional events.** `OPTIONAL_ALERT_EVENTS` (`types/alerts.ts`) lists `thermal_throttling`. `visibleEvents(capabilities)` (`derive.ts`) hides an optional event the backend never advertised (an older device) instead of showing it as incapable, while a core event missing from the table still shows as incapable (fail closed). Coverage rows for optional events never pull the verdict down (`optional` on `CoverageRow`, "not sent" in quiet ink), and `AlertRouting.events` / `AlertCapabilities` are `Partial<Record<...>>`.
 - **Activity** (`alerts-log-card.tsx` + `activity-row.tsx`) interleaves deliveries and reboots by time in day groups of 52px rows; the list scrolls inside the card and, wide, the card stretches to the left column's height (`FEED_FILL`). A read failure with rows in hand is a notice above them, never a blank card.
 
 **The wait is sent per channel.** The target CGI still takes per-channel `threshold_minutes` (1-60) and mirrors the value into UCI `alert_after_min` (B2.3), so the form sends the one field as both channels' `threshold_minutes` and validates 1-60. The source's top-level `alert_after_min` (1-1440) in the POST was not ported.
@@ -312,6 +353,7 @@ Unified replacement for four retired endpoints: `monitoring/sms_alerts.sh`, `mon
 
 ## Cross-References
 
+- [Thermal Throttling](thermal-throttling.md) — the `.thermal` block, the `detect_thermal_events` latch and sampling invariants behind the `thermal_throttling` trigger.
 - [Connection Watchdog](connection-watchdog.md) — status-first page anatomy this page follows; SSR-aware clock-step hardening this engine mirrors; owns the `tier4_escalation`-only half of the shared `crash.log` ledger contract (`count_recent_reboots`).
 - [Adaptive Polling](adaptive-polling.md) — the always-every-cycle local-block invariant `alert_engine_check` (and `alert_engine_reboot_detect`) depends on.
 - [SMS](sms.md) — `qsms` transport, `/dev/smd11` invariant, broker-owned lock, phone-number normalization (unchanged by this centralization).

@@ -962,6 +962,7 @@
         "watchcat": "连接看门狗",
         "tower_failover": "基站故障转移守护进程",
         "dpi": "流量引擎（nfqws）",
+        "thermal": "过热降频",
         "sms_forward": "短信转发守护进程",
         "tailscale": "Tailscale（可选）"
       },

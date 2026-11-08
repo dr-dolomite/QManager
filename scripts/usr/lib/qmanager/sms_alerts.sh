@@ -114,7 +114,7 @@ sms_alerts_init() {
 }
 
 # =============================================================================
-# sms_alert_emit <event> <secs> — engine-driven send + log (one message)
+# sms_alert_emit <event> <secs> [<cause> [<count>]] — engine-driven send + log
 # =============================================================================
 # Called by alert_engine.sh once the centralized state machine decides a
 # message is warranted. The engine owns downtime tracking, thresholds, routing
@@ -170,6 +170,17 @@ sms_alert_emit() {
                 esac
                 _sae_body="[QManager] Modem rebooted ~${_sae_dur} ago (${_sae_phrase}) - now back online."
             fi
+            ;;
+        thermal_throttling)
+            # $3 = affected parts ("5G, LTE", may be empty), $4 = headroom in
+            # whole degrees C (may be empty). ASCII only: a degree sign would
+            # force UCS-2 and cut the message to 70 characters.
+            if ! _sa_is_registered; then
+                qlog_debug "SMS alerts: thermal_throttling deferred - modem not registered"
+                return 2
+            fi
+            _sae_body="[QManager] Modem is thermal throttling${_sae_cause:+ ($_sae_cause)} for ${_sae_dur}."
+            [ -n "$_sae_count" ] && _sae_body="${_sae_body} Temperature headroom: ${_sae_count} C."
             ;;
         *)
             qlog_warn "SMS alerts: unknown event '$_sae_event'"

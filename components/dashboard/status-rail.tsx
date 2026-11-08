@@ -15,6 +15,8 @@ import type {
   NetworkStatus,
   ConnectivityStatus,
   ConnectivityState,
+  ThermalStatus,
+  ThermalPart,
 } from "@/types/modem-status";
 import { cn } from "@/lib/utils";
 import { TAG_HEIGHT } from "./shapes";
@@ -49,6 +51,8 @@ interface DashboardStatusRailProps {
   modemReachable: boolean;
   isLoading: boolean;
   isStale: boolean;
+  /** Heat-throttling block; absent on older pollers. */
+  thermal?: ThermalStatus | null;
 }
 
 // ─── Chips ────────────────────────────────────────────────────────────────
@@ -320,12 +324,24 @@ function InternetDot({ chip }: { chip: InternetChip }) {
   );
 }
 
+// ─── Throttling chip ──────────────────────────────────────────────────────
+// "Throttling (5G)" / "Throttling (5G, LTE)": the parts are the ones the poller
+// measured as slowed, localized one by one. An empty list (the poller said
+// "throttling" without naming a part) falls back to the part-less word.
+function buildThrottleLabel(parts: ThermalPart[], t: TFunction): string {
+  if (parts.length === 0) return t("thermal.chip_bare");
+  return t("thermal.chip", {
+    parts: parts.map((part) => t(`thermal.parts.${part}`)).join(", "),
+  });
+}
+
 export function DashboardStatusRail({
   data,
   connectivity,
   modemReachable,
   isLoading,
   isStale,
+  thermal,
 }: DashboardStatusRailProps) {
   const { t } = useTranslation("dashboard");
 
@@ -342,6 +358,14 @@ export function DashboardStatusRail({
     t,
   );
   const internet = buildInternetChip(connectivity, t);
+
+  // Heat throttling is a live fact about the box, so it follows the Radio
+  // chip's rule: it may not be asserted off a stale or unreachable snapshot.
+  // A throttle nobody can re-read is worse than no chip.
+  const throttleLabel =
+    thermal?.throttling && modemReachable && !isStale
+      ? buildThrottleLabel(thermal.parts, t)
+      : null;
 
   if (isLoading) {
     return (
@@ -382,6 +406,21 @@ export function DashboardStatusRail({
               className="shrink-0"
             />
             {t("network.data_delayed_badge")}
+          </Chip>
+        </motion.span>
+      )}
+
+      {/* Throttling: present only while heat is limiting the radio or CPU. */}
+      {throttleLabel && (
+        <motion.span variants={staggerRowItem} className="inline-flex">
+          <Chip tone="warning" swapKey={throttleLabel}>
+            <MaterialSymbol
+              name="thermostat"
+              size={15}
+              filled
+              className="shrink-0"
+            />
+            {throttleLabel}
           </Chip>
         </motion.span>
       )}

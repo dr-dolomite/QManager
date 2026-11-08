@@ -457,6 +457,8 @@ fi
 # QMI gap-fill (optional). Missing lib = AT-only status.json; removing it is the
 # per-device off switch.
 [ -f /usr/lib/qmanager/qmi_merge.sh ] && . /usr/lib/qmanager/qmi_merge.sh
+# QMI device-service reads (optional): Tier 1 radio state skips AT+CFUN? while online.
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
 command -v qmi_load >/dev/null 2>&1 || qmi_load() { return 1; }
 command -v qmi_overlay_apply >/dev/null 2>&1 || qmi_overlay_apply() { lte_source="at"; return 1; }
 command -v qmi_overlay_restore >/dev/null 2>&1 || qmi_overlay_restore() { lte_source="at"; }
@@ -2448,6 +2450,28 @@ _wc_compose_pf() {
     _kO sim
     _kS status "${t2_sim_status:-unknown}"
     _kE
+    # Thermal throttling (parse_thermal). null until the first sample, and when
+    # the tree has no cooling devices. parts: fixed tokens, never modem text.
+    if [ "$thermal_available" = "1" ]; then
+        _kO thermal
+        if [ "$thermal_throttling" = "1" ]; then _kR throttling true; else _kR throttling false; fi
+        _jc_tp=""
+        set -f
+        for _jc_p in $thermal_parts; do
+            _jstr "$_jc_p"
+            _jc_tp="${_jc_tp}${_jc_tp:+,}${_JV}"
+        done
+        set +f
+        _kR parts "[${_jc_tp}]"
+        _kC active "$thermal_active_json" "[]"
+        if [ "$thermal_cold" = "1" ]; then _kR cold_protection true; else _kR cold_protection false; fi
+        _kN headroom_c "$thermal_headroom_c" null
+        _kN trip_c "$thermal_trip_c" null
+        _kSN trip_part "$thermal_trip_part"
+        _kE
+    else
+        _kR thermal null
+    fi
     printf '%s\n' "${_jc_acc}}" 2>/dev/null > "$1"
 }
 
@@ -2604,6 +2628,14 @@ write_cache_jq() {
         --argjson ss_detected "${sim_swap_detected:-false}" \
         --arg ss_profile_id "$sim_swap_profile_id" \
         --arg ss_profile_name "$sim_swap_profile_name"         --arg sim_status "${t2_sim_status:-unknown}" \
+        --arg th_avail "$thermal_available" \
+        --arg th_thr "$thermal_throttling" \
+        --arg th_parts "$thermal_parts" \
+        --argjson th_active "${thermal_active_json:-[]}" \
+        --arg th_cold "$thermal_cold" \
+        --argjson th_head "${thermal_headroom_c:-null}" \
+        --argjson th_trip "${thermal_trip_c:-null}" \
+        --arg th_tpart "$thermal_trip_part" \
         '{
             timestamp: $timestamp,
             mono: $mono,
@@ -2735,7 +2767,16 @@ write_cache_jq() {
             },
             sim: {
                 status: $sim_status
-            }
+            },
+            thermal: (if $th_avail == "1" then {
+                throttling: ($th_thr == "1"),
+                parts: ($th_parts | split(" ") | map(select(. != ""))),
+                active: $th_active,
+                cold_protection: ($th_cold == "1"),
+                headroom_c: $th_head,
+                trip_c: $th_trip,
+                trip_part: (if $th_tpart == "" then null else $th_tpart end)
+            } else null end)
         }' > "$1"
 }
 
@@ -3008,6 +3049,14 @@ poll_cycle() {
     update_proc_metrics
     read_ping_data
     read_dns_data
+    # Thermal throttling (sysfs, no AT): every Tier 1.5 interval (10 s) in every
+    # tier, including the scan / SIM-switch early return below. thermal_sampled
+    # is cleared at the top of each cycle, so the detector sees 1 only here.
+    thermal_sampled=0
+    if [ $((cycle_count % TIER1_5_EVERY)) -eq 0 ]; then
+        parse_thermal
+        command -v detect_thermal_events >/dev/null 2>&1 && detect_thermal_events
+    fi
     # The ONE link/quality detector (events.sh): logs internet_lost/restored and
     # the quality pairs, and sets ev_link_state for the alert engine below.
     detect_data_connection_events
@@ -3215,11 +3264,17 @@ poll_cycle() {
             fi
 
             # CFUN — standalone query (compound commands timeout in CFUN=0).
-            # Active/idle only; deep tier skips this read.
-            local cfun_result
-            _qc_read 'AT+CFUN?'
-            _tap_at 'AT+CFUN?' "$?" "$_QRAW"
-            cfun_result="$_QRAW"
+            # Active/idle only; deep tier skips this read. QMI "online" is
+            # exactly CFUN=1, so it skips the AT round trip; any other mode
+            # (or a QMI miss) asks AT for the exact 0/4 digit.
+            local cfun_result=""
+            if command -v qm_qmi_online >/dev/null 2>&1 && qm_qmi_online; then
+                t1_cfun=1
+            else
+                _qc_read 'AT+CFUN?'
+                _tap_at 'AT+CFUN?' "$?" "$_QRAW"
+                cfun_result="$_QRAW"
+            fi
             if [ -n "$cfun_result" ]; then
                 # Value after the first ": " on the first +CFUN: line, CRs and
                 # spaces removed (awk -F': ' '{print $2}' | tr -d ' ').

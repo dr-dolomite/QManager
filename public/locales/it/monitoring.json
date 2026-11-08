@@ -173,7 +173,7 @@
         }
       },
       "threshold_error": "Inserisci un numero intero di minuti da 1 a 60.",
-      "threshold_hint": "Le interruzioni più brevi vengono registrate, non inviate.",
+      "threshold_hint": "Le interruzioni e le limitazioni termiche più brevi vengono registrate, non inviate.",
       "threshold_label": "Attesa prima di avvisare",
       "threshold_unit": "min",
       "title": "Canali",
@@ -200,6 +200,9 @@
         },
         "reboot": {
           "name": "Modem riavviato"
+        },
+        "thermal_throttling": {
+          "name": "Limitazione termica"
         }
       },
       "loading": "Caricamento della copertura…",

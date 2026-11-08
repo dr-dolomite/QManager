@@ -73,10 +73,25 @@
     "device_uptime_caption": "Since last boot",
     "uptime_unknown": "Not reachable"
   },
+  "thermal": {
+    "chip": "Throttling ({{parts}})",
+    "chip_bare": "Throttling",
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "mmWave",
+      "modem": "Modem",
+      "cpu": "CPU",
+      "ethernet": "Ethernet"
+    }
+  },
   "metrics": {
     "title": "Device & Speed",
     "modem_temperature": "Modem Temperature",
     "high_temp_warning": "High Temp",
+    "throttle_at": "Throttles at {{temp}}",
+    "below_throttling": "{{delta}} below throttling",
+    "throttle_reached": "Throttling point reached",
     "cpu_usage": "CPU Usage",
     "high_cpu_warning": "High CPU",
     "memory_usage": "Memory Usage",
@@ -239,6 +254,8 @@
       "sim_failover": "SIM Failover",
       "sim_swap_detected": "SIM Swap Detected",
       "airplane_mode": "Airplane Mode",
+      "thermal_throttled": "Heat Throttling",
+      "thermal_recovered": "Heat Throttling Cleared",
       "profile_applied": "Profile Applied",
       "profile_failed": "Profile Failed",
       "profile_deactivated": "Profile Deactivated",

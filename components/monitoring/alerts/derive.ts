@@ -2,6 +2,7 @@ import type { BadgeVariant } from "@/components/ui/badge";
 import {
   ALERT_CHANNEL_ORDER,
   ALERT_EVENT_ORDER,
+  OPTIONAL_ALERT_EVENTS,
   type AlertCapabilities,
   type AlertChannel,
   type AlertChannels,
@@ -47,6 +48,8 @@ export interface CoverageRow {
   event: AlertEventKey;
   fires: AlertChannel[];
   attempt: AlertChannel[];
+  /** Opt-in event: off by default, so it never counts against the verdict. */
+  optional: boolean;
 }
 
 export type CoverageVerdict =
@@ -56,7 +59,7 @@ export type CoverageVerdict =
   | { kind: "none"; variant: BadgeVariant };
 
 export interface AlertsCoverage {
-  cells: Record<AlertEventKey, Record<AlertChannel, AlertCell>>;
+  cells: Partial<Record<AlertEventKey, Record<AlertChannel, AlertCell>>>;
   channels: Record<AlertChannel, ChannelCoverage>;
   rows: CoverageRow[];
   verdict: CoverageVerdict;
@@ -76,10 +79,21 @@ export const CHANNEL_STATUS_DOT: Record<ChannelStatus, RailDotTone> = {
   off: "off",
 };
 
+/** The events this device can route. An optional event an older backend never
+ *  advertised is hidden outright; a core event it did not advertise still shows
+ *  as incapable (fail closed). */
+export function visibleEvents(
+  capabilities: AlertCapabilities | undefined,
+): AlertEventKey[] {
+  return ALERT_EVENT_ORDER.filter(
+    (event) => !OPTIONAL_ALERT_EVENTS.includes(event) || !!capabilities?.[event],
+  );
+}
+
 export function confirmedInput(state: AlertsState): CoverageInput {
   return {
     channels: state.channels,
-    routing: state.routing?.events ?? ({} as AlertRouting["events"]),
+    routing: state.routing?.events ?? {},
     capabilities: state.capabilities,
   };
 }
@@ -107,18 +121,21 @@ function resolveState(
 }
 
 function verdictOf(rows: CoverageRow[]): CoverageVerdict {
-  const covered = rows.filter((row) => row.fires.length > 0).length;
-  if (covered === 0) return { kind: "none", variant: "destructive" };
+  if (!rows.some((row) => row.fires.length > 0))
+    return { kind: "none", variant: "destructive" };
   const outage = rows.find((row) => row.event === OUTAGE_EVENT);
   if (outage && outage.fires.length === 0)
     return { kind: "outage", variant: "warning" };
-  if (covered < rows.length)
-    return { kind: "partial", variant: "warning", covered, total: rows.length };
+  // Opt-in events are off by default, so they never pull the verdict down.
+  const core = rows.filter((row) => !row.optional);
+  const covered = core.filter((row) => row.fires.length > 0).length;
+  if (covered < core.length)
+    return { kind: "partial", variant: "warning", covered, total: core.length };
   return { kind: "all", variant: "success" };
 }
 
 export function deriveCoverage(input: CoverageInput): AlertsCoverage {
-  const cells = {} as Record<AlertEventKey, Record<AlertChannel, AlertCell>>;
+  const cells: AlertsCoverage["cells"] = {};
   const channels = {} as Record<AlertChannel, ChannelCoverage>;
 
   for (const channel of ALERT_CHANNEL_ORDER) {
@@ -133,9 +150,14 @@ export function deriveCoverage(input: CoverageInput): AlertsCoverage {
   }
 
   const rows: CoverageRow[] = [];
-  for (const event of ALERT_EVENT_ORDER) {
+  for (const event of visibleEvents(input.capabilities)) {
     const row = {} as Record<AlertChannel, AlertCell>;
-    const view: CoverageRow = { event, fires: [], attempt: [] };
+    const view: CoverageRow = {
+      event,
+      fires: [],
+      attempt: [],
+      optional: OPTIONAL_ALERT_EVENTS.includes(event),
+    };
     for (const channel of ALERT_CHANNEL_ORDER) {
       const { capable, reason } = readCapability(input.capabilities, event, channel);
       const c = channels[channel];

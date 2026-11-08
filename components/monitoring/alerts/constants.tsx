@@ -5,6 +5,7 @@ import {
   MailIcon,
   MessageSquareIcon,
   RotateCcwIcon,
+  ThermometerSunIcon,
   WifiIcon,
   WifiOffIcon,
   type LucideIcon,
@@ -20,6 +21,7 @@ export const EVENT_GLYPH: Record<AlertEventKey, LucideIcon> = {
   connection_lost: WifiOffIcon,
   connection_restored: WifiIcon,
   reboot: RotateCcwIcon,
+  thermal_throttling: ThermometerSunIcon,
 };
 
 export const channelNameKey = (channel: AlertChannel) =>

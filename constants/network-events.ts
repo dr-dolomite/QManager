@@ -38,6 +38,8 @@ export const EVENT_TAB_CATEGORIES: Record<NetworkEventType, EventTabCategory> =
     lan_address_changed: "dataConnection",
     apn_reapplied: "dataConnection",
     apn_reapply_failed: "dataConnection",
+    thermal_throttled: "dataConnection",
+    thermal_recovered: "dataConnection",
   };
 
 /** The filter rail on `/monitoring/events`, in render order. `all` is not a category. */

@@ -962,6 +962,7 @@
         "watchcat": "Connection watchdog",
         "tower_failover": "Tower failover daemon",
         "dpi": "Traffic Engine (nfqws)",
+        "thermal": "Thermal throttling",
         "sms_forward": "SMS forwarding daemon",
         "tailscale": "Tailscale (optional)"
       },

@@ -15,6 +15,8 @@
 # The engine reads globals owned by those libs at call time:
 #   ev_link_state                                   (events.sh detector)
 #   conn_internet_available / conn_during_recovery  (poller; reboot delivery only)
+#   ev_thermal_active / _since_mono / _parts        (events.sh detector; thermal only)
+#   thermal_headroom_c                              (poller; thermal message only)
 #   CQ_ALERT_AFTER_MIN / cq_alert_after_min         (conn_state.sh, the one wait)
 #   _sa_enabled / _ea_enabled                       (channel libs)
 #   alert_route_enabled / alert_routing_load        (alert_routing.sh)
@@ -98,6 +100,16 @@ _ae_sms_armed="0"
 _ae_email_armed="0"
 _ae_sms_lost_sent="0"
 _ae_email_lost_sent="0"
+
+# --- Thermal-throttling latch (a non-outage, once-per-episode event) ---------
+# _ae_th_ep         : the ev_thermal_since_mono of the episode being tracked
+#                     ("" = idle). A new episode has a new start stamp, so it
+#                     re-arms the sent flags without any explicit reset.
+# _ae_th_<ch>_done  : this channel's attempt for the episode is finished (sent
+#                     or terminally failed) - never re-attempted this episode
+_ae_th_ep=""
+_ae_th_sms_done="0"
+_ae_th_email_done="0"
 
 # --- Last cleared outage (published as connectivity.last_outage_*) -----------
 # _ae_last_outage_s        : total seconds of the most recently CLEARED outage
@@ -218,6 +230,9 @@ alert_engine_init() {
     _ae_email_armed="0"
     _ae_sms_lost_sent="0"
     _ae_email_lost_sent="0"
+    _ae_th_ep=""
+    _ae_th_sms_done="0"
+    _ae_th_email_done="0"
     _ae_last_outage_load
     _ae_wan_seen_refresh force
     alert_routing_load
@@ -259,10 +274,12 @@ _ae_set_lost_sent() { case "$1" in sms) _ae_sms_lost_sent="$2" ;;   email) _ae_e
 
 # Dispatch a send to the right channel lib. Returns the emit's rc:
 #   0 = sent, 1 = attempted but failed (terminal), 2 = not ready (retry later).
+# Args: <channel> <event> <secs> [<cause> [<count>]]; the last two are only
+# read by the reboot and thermal_throttling messages.
 _ae_channel_emit() {
     case "$1" in
-        sms)   sms_alert_emit "$2" "$3" ;;
-        email) email_alert_emit "$2" "$3" ;;
+        sms)   sms_alert_emit "$2" "$3" "$4" "$5" ;;
+        email) email_alert_emit "$2" "$3" "$4" "$5" ;;
         *)     return 1 ;;
     esac
 }
@@ -307,6 +324,11 @@ alert_engine_check() {
             true|false) _ae_reboot_check ;;
         esac
     fi
+
+    # --- 2b. Thermal-throttling alert (non-outage, once per episode) ---------
+    # Not gated on conn_during_recovery: throttling is independent of the
+    # watchdog. The email leg holds itself on conn_internet_available instead.
+    _ae_thermal_check
 
     # --- 3. Signal source [guardrail 1]: the events.sh detector --------------
     # ev_link_state is decided once per cycle by detect_data_connection_events
@@ -440,6 +462,118 @@ _ae_handle_up() {
     _ae_sms_lost_sent="0"
     _ae_email_lost_sent="0"
     qlog_info "Alert engine: outage cleared (total=${_ae_total}s)"
+}
+
+# =============================================================================
+# THERMAL THROTTLING ALERT - one message per episode, after the one wait
+# =============================================================================
+# Inputs are the events.sh latch (already debounced, ~20 s to enter / ~30 s to
+# exit): ev_thermal_active 0|1, ev_thermal_since_mono (mono_now clock) and
+# ev_thermal_parts (space-separated subset of lte nr mmwave modem cpu ethernet;
+# a union over the episode). Unset reads as inactive.
+# The alert fires once the episode has lasted the SAME wait the outage alerts
+# use (_ae_wait_secs), then never again until a new episode starts. There is no
+# "recovered" message; the Activity feed already carries thermal_recovered.
+
+# _ae_thermal_parts_label - "5G, LTE" for ev_thermal_parts (unknown tokens skipped).
+_ae_thermal_parts_label() {
+    local _p
+    local _n
+    local _out=""
+    for _p in $ev_thermal_parts; do
+        case "$_p" in
+            lte)      _n="LTE" ;;
+            nr)       _n="5G" ;;
+            mmwave)   _n="mmWave" ;;
+            modem)    _n="modem" ;;
+            cpu)      _n="CPU" ;;
+            ethernet) _n="Ethernet" ;;
+            *)        continue ;;
+        esac
+        _out="${_out:+$_out, }$_n"
+    done
+    printf '%s' "$_out"
+}
+
+# _ae_thermal_headroom - whole degrees C from thermal_headroom_c, or "" when it
+# is unset / not a number (the message then omits the clause).
+_ae_thermal_headroom() {
+    local _h="${thermal_headroom_c:-}"
+    _h="${_h%%.*}"
+    case "$_h" in
+        ''|-|*[!0-9-]*|*?-*) printf '' ;;
+        *) printf '%s' "$_h" ;;
+    esac
+}
+
+_ae_thermal_check() {
+    local _ae_ch
+    local _ae_since
+    local _ae_elapsed
+    local _ae_label=""
+    local _ae_head=""
+    local _ae_built=0
+    local _ae_rc
+
+    # Cheap early-out for the common case: not throttling and nothing tracked.
+    if [ "${ev_thermal_active:-0}" != "1" ]; then
+        if [ -n "$_ae_th_ep" ]; then
+            qlog_info "Alert engine: thermal episode over (since=$_ae_th_ep)"
+            _ae_th_ep=""
+            _ae_th_sms_done="0"
+            _ae_th_email_done="0"
+        fi
+        return 0
+    fi
+
+    _ae_since="${ev_thermal_since_mono:-}"
+    case "$_ae_since" in ''|*[!0-9]*) return 0 ;; esac
+
+    # New episode (or first sight after a poller respawn): re-arm both channels.
+    if [ "$_ae_since" != "$_ae_th_ep" ]; then
+        _ae_th_ep="$_ae_since"
+        _ae_th_sms_done="0"
+        _ae_th_email_done="0"
+        _ae_resolve_wait
+        qlog_info "Alert engine: thermal episode started (since=$_ae_since wait=${CQ_ALERT_AFTER_MIN:-5}m)"
+    fi
+
+    [ "$_ae_th_sms_done" = "1" ] && [ "$_ae_th_email_done" = "1" ] && return 0
+
+    _ae_elapsed=$(( $(mono_now) - _ae_since ))
+    [ "$_ae_elapsed" -lt 0 ] && _ae_elapsed=0
+    [ "$_ae_elapsed" -ge "$(_ae_wait_secs)" ] || return 0
+
+    for _ae_ch in sms email; do
+        case "$_ae_ch" in
+            sms)   [ "$_ae_th_sms_done" = "1" ] && continue ;;
+            email) [ "$_ae_th_email_done" = "1" ] && continue ;;
+        esac
+        _ae_channel_enabled "$_ae_ch" || continue
+        alert_route_enabled thermal_throttling "$_ae_ch" || continue
+        # Email needs DNS + a route; an smtp attempt without them would block the
+        # poller for minutes. Hold (retry next cycle) rather than burn the send.
+        if [ "$_ae_ch" = "email" ] && [ "$conn_internet_available" != "true" ]; then
+            continue
+        fi
+
+        if [ "$_ae_built" = "0" ]; then
+            _ae_label=$(_ae_thermal_parts_label)
+            _ae_head=$(_ae_thermal_headroom)
+            _ae_built=1
+        fi
+        _ae_channel_emit "$_ae_ch" thermal_throttling "$_ae_elapsed" "$_ae_label" "$_ae_head"
+        _ae_rc=$?
+        # rc 2 = not ready (SMS modem not registered / busy): retry next cycle.
+        # rc 0 (sent) and rc 1 (terminal failure) finish the channel's episode.
+        if [ "$_ae_rc" != "2" ]; then
+            case "$_ae_ch" in
+                sms)   _ae_th_sms_done="1" ;;
+                email) _ae_th_email_done="1" ;;
+            esac
+        fi
+    done
+    return 0
 }
 
 # =============================================================================

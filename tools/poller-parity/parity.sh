@@ -17,6 +17,9 @@
 # the two libraries are run back-to-back on the device (old, new, old). PASS if
 # new matches either old reading (sysfs jitter between calls is tolerated).
 #
+# thermal__*.txt: a fake sysfs tree spec (see dump_globals.sh); skipped when
+# either library has no parse_thermal. thermal_expect.sh checks the values.
+#
 # Tap mode: delegates to tap_replay.sh (see there for what is compared).
 
 HERE=${0%/*}
@@ -87,9 +90,15 @@ for f in "$FXD"/*__*.txt; do
     fi
     parser=${name%%__*}
     case "$parser" in
-        serving_cell|qrsrp|qrsrq|qsinr|signal|ca_info|carrier|sim_slot|sim_status|tier2|temperature|helpers) ;;
+        serving_cell|qrsrp|qrsrq|qsinr|signal|ca_info|carrier|sim_slot|sim_status|tier2|temperature|thermal|helpers) ;;
         *) skip=$((skip + 1)); continue ;;
     esac
+    # thermal: a library from before parse_thermal has nothing to compare.
+    if [ "$parser" = "thermal" ]; then
+        if ! grep -q '^parse_thermal()' "$OLD" || ! grep -q '^parse_thermal()' "$NEW"; then
+            skip=$((skip + 1)); continue
+        fi
+    fi
 
     if [ "$parser" = "temperature" ]; then
         try=0 ; ok=0

@@ -66,9 +66,11 @@ else
     _ar_cr_email="true"
     _ar_rb_sms="false"
     _ar_rb_email="false"
+    _ar_th_sms="false"
+    _ar_th_email="false"
     alert_routing_load() { :; }
     alert_capabilities_json() {
-        printf '%s' '{"connection_lost":{"sms":true,"email":false,"email_reason":"email_needs_internet"},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":true,"email":true}}'
+        printf '%s' '{"connection_lost":{"sms":true,"email":false,"email_reason":"email_needs_internet"},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":true,"email":true},"thermal_throttling":{"sms":true,"email":true}}'
     }
 fi
 
@@ -195,6 +197,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
         --argjson cr_email "$_ar_cr_email" \
         --argjson rb_sms "$_ar_rb_sms" \
         --argjson rb_email "$_ar_rb_email" \
+        --argjson th_sms "$_ar_th_sms" \
+        --argjson th_email "$_ar_th_email" \
         --argjson capabilities "$(alert_capabilities_json)" \
         --argjson reboots "$reboots_arr" \
         '{
@@ -220,7 +224,8 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
                 events: {
                     connection_lost:     { sms: $cl_sms, email: $cl_email },
                     connection_restored: { sms: $cr_sms, email: $cr_email },
-                    reboot:              { sms: $rb_sms, email: $rb_email }
+                    reboot:              { sms: $rb_sms, email: $rb_email },
+                    thermal_throttling:  { sms: $th_sms, email: $th_email }
                 }
             },
             capabilities: $capabilities,
@@ -333,6 +338,10 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # No clamp: both channels are capable post-recovery.
         r_rb_sms=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.reboot.sms)                  | (if . == null then false else . end) | if . == true then "true" else "false" end')
         r_rb_email=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.reboot.email)              | (if . == null then false else . end) | if . == true then "true" else "false" end')
+        # thermal_throttling is OPT-IN too -> null defaults to FALSE. Both channels
+        # are capable (a throttle does not take the link down), so no clamp.
+        r_th_sms=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.thermal_throttling.sms)      | (if . == null then false else . end) | if . == true then "true" else "false" end')
+        r_th_email=$(printf '%s' "$POST_DATA" | jq -r '(.routing.events.thermal_throttling.email)  | (if . == null then false else . end) | if . == true then "true" else "false" end')
         # CLAMP: connection_lost.email is always false — email cannot deliver
         # during an outage (no internet/DNS). Server is authoritative.
         r_cl_email="false"
@@ -380,10 +389,13 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                 --argjson cr_email "$r_cr_email" \
                 --argjson rb_sms "$r_rb_sms" \
                 --argjson rb_email "$r_rb_email" \
+                --argjson th_sms "$r_th_sms" \
+                --argjson th_email "$r_th_email" \
                 '{version: 2, events: {
                     connection_lost:     {sms: $cl_sms, email: $cl_email},
                     connection_restored: {sms: $cr_sms, email: $cr_email},
-                    reboot:              {sms: $rb_sms, email: $rb_email}
+                    reboot:              {sms: $rb_sms, email: $rb_email},
+                    thermal_throttling:  {sms: $th_sms, email: $th_email}
                 }}' \
                 | _write_json_atomic "/etc/qmanager/alert_routing.json"; then
             cgi_error "write_failed" "Failed to write alert routing config"
@@ -420,7 +432,7 @@ MSMTPEOF
         # --- Signal poller: reload channel configs + routing next cycle ---
         touch /tmp/qmanager_sms_reload /tmp/qmanager_email_reload /tmp/qmanager_alert_routing_reload
 
-        qlog_info "Alert settings saved: sms_enabled=$sms_enabled email_enabled=$email_enabled routing(cl:sms=$r_cl_sms,email=$r_cl_email cr:sms=$r_cr_sms,email=$r_cr_email rb:sms=$r_rb_sms,email=$r_rb_email)"
+        qlog_info "Alert settings saved: sms_enabled=$sms_enabled email_enabled=$email_enabled routing(cl:sms=$r_cl_sms,email=$r_cl_email cr:sms=$r_cr_sms,email=$r_cr_email rb:sms=$r_rb_sms,email=$r_rb_email th:sms=$r_th_sms,email=$r_th_email)"
         cgi_success
         exit 0
     fi

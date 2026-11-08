@@ -173,7 +173,7 @@
         }
       },
       "threshold_error": "Masukkan jumlah menit bulat dari 1 sampai 60.",
-      "threshold_hint": "Gangguan yang lebih singkat dicatat, tidak dikirim.",
+      "threshold_hint": "Gangguan dan pembatasan suhu yang lebih singkat dicatat, tidak dikirim.",
       "threshold_label": "Tunggu sebelum memberi peringatan",
       "threshold_unit": "mnt",
       "title": "Saluran",
@@ -200,6 +200,9 @@
         },
         "reboot": {
           "name": "Modem reboot"
+        },
+        "thermal_throttling": {
+          "name": "Pembatasan suhu"
         }
       },
       "loading": "Memuat cakupan",

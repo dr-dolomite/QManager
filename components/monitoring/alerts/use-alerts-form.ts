@@ -9,6 +9,7 @@ import type {
   AlertEventKey,
 } from "@/types/alerts";
 import { ALERT_EVENT_ORDER, ALERT_CHANNEL_ORDER } from "@/types/alerts";
+import { visibleEvents } from "./derive";
 
 // =============================================================================
 // useAlertsForm — the single editable form behind the whole Alerts page
@@ -69,7 +70,9 @@ function settingsSignature(state: AlertsState): string {
   ].join("|");
 }
 
-export type RoutingDraft = Record<AlertEventKey, Record<AlertChannel, boolean>>;
+export type RoutingDraft = Partial<
+  Record<AlertEventKey, Record<AlertChannel, boolean>>
+>;
 
 export interface AlertsFormErrors {
   smsPhone?: boolean;
@@ -148,12 +151,13 @@ export function useAlertsForm({
   const [appPassword, setAppPassword] = useState(""); // never pre-filled
 
   const seedRouting = useCallback((): RoutingDraft => {
-    const draft = {} as RoutingDraft;
+    const draft: RoutingDraft = {};
     for (const ev of ALERT_EVENT_ORDER) {
-      draft[ev] = {} as Record<AlertChannel, boolean>;
+      const row = {} as Record<AlertChannel, boolean>;
+      draft[ev] = row;
       for (const ch of ALERT_CHANNEL_ORDER) {
         const capable = state.capabilities[ev]?.[ch] ?? false;
-        draft[ev][ch] = capable && (state.routing.events[ev]?.[ch] ?? false);
+        row[ch] = capable && (state.routing.events[ev]?.[ch] ?? false);
       }
     }
     return draft;
@@ -246,12 +250,15 @@ export function useAlertsForm({
 
   // ── Payload / discard ──────────────────────────────────────────────────────
   const buildPayload = useCallback((): AlertsSavePayload => {
-    const events = {} as RoutingDraft;
-    for (const ev of ALERT_EVENT_ORDER) {
-      events[ev] = {} as Record<AlertChannel, boolean>;
+    // Only events the device advertised go out, so an older backend never
+    // receives a key it does not know.
+    const events: RoutingDraft = {};
+    for (const ev of visibleEvents(state.capabilities)) {
+      const row = {} as Record<AlertChannel, boolean>;
+      events[ev] = row;
       for (const ch of ALERT_CHANNEL_ORDER) {
         const capable = state.capabilities[ev]?.[ch] ?? false;
-        events[ev][ch] = capable && (routing[ev]?.[ch] ?? false);
+        row[ch] = capable && (routing[ev]?.[ch] ?? false);
       }
     }
     // The one wait goes out as both channels' value, so neither can drift.

@@ -172,7 +172,7 @@ Both start sites (the reachability threshold in `main` and the `evaluate_quality
 | 3 | `radio_off` | `AT+CFUN?` reads 0 or 4 | `wd_enter_radio_off` |
 | 4 | `go` | otherwise | `ssr_hold_gate`, then `do_recovery` |
 
-An unreadable `AT+CFUN?` counts as on, so recovery is never blocked by a failed read. `wd_start_gate` reads `AT+CFUN?` only when it matters: some tier enabled, no hold-off running, and `wd_radio_down != 1`. While our own Tier 2 marker is set, a radio that is off is ours, not the user's, so it is reported as on and the ladder keeps escalating. `wd_radio_reconcile` runs first: with the marker set it reads `AT+CFUN?` and clears the marker when the radio reads 1.
+`wd_cfun_now` asks QMI first (`qm_qmi_online` from `qmi_dms.sh`, sourced optionally by `qmanager_watchcat`): `online` prints 1 without touching the AT lane; any other mode or a QMI miss falls through to `AT+CFUN?` for the exact 0 or 4 ([`qmi-lane.md`](qmi-lane.md#device-service-consumers-2026-11-08)). An unreadable `AT+CFUN?` counts as on, so recovery is never blocked by a failed read. `wd_start_gate` reads `AT+CFUN?` only when it matters: some tier enabled, no hold-off running, and `wd_radio_down != 1`. While our own Tier 2 marker is set, a radio that is off is ours, not the user's, so it is reported as on and the ladder keeps escalating. `wd_radio_reconcile` runs first: with the marker set it reads `AT+CFUN?` and clears the marker when the radio reads 1.
 
 ### radio_off (shown as "Paused")
 

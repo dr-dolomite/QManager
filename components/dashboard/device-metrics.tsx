@@ -23,7 +23,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import type { DeviceStatus, LteStatus, NrStatus } from "@/types/modem-status";
+import type {
+  DeviceStatus,
+  LteStatus,
+  NrStatus,
+  ThermalStatus,
+} from "@/types/modem-status";
 import {
   calculateLteDistance,
   calculateNrDistance,
@@ -63,6 +68,8 @@ interface DeviceMetricsComponentProps {
   deviceData: DeviceStatus | null;
   lteData: LteStatus | null;
   nrData: NrStatus | null;
+  /** Heat-throttling block (trip and headroom); absent on older pollers. */
+  thermal?: ThermalStatus | null;
   isLoading: boolean;
   /**
    * Whether the last poll actually reached the modem.
@@ -87,6 +94,17 @@ interface DeviceMetricsComponentProps {
 // --- Warning thresholds ---
 const TEMP_WARN = 60; // °C
 const TEMP_DANGER = 75; // °C
+const THROTTLE_NEAR_C = 10; // °C of headroom at which the hint turns warning
+
+/** A temperature DIFFERENCE: Fahrenheit scales by 9/5 but has no +32 offset. */
+function formatTempDelta(
+  deltaC: number,
+  unit?: "celsius" | "fahrenheit",
+): string {
+  return unit === "fahrenheit"
+    ? `${Math.round((deltaC * 9) / 5)}°F`
+    : `${Math.round(deltaC)}°C`;
+}
 const CPU_WARN = 70; // percentage
 const CPU_DANGER = 90; // percentage
 
@@ -172,6 +190,7 @@ function MeterRow({
   label,
   children,
   bar,
+  hint,
 }: {
   label: string;
   /** The value cell — already wrapped in its own `TickingValue`. */
@@ -187,6 +206,8 @@ function MeterRow({
    * beside it would have put both in the same slot on the same card.
    */
   bar: React.ReactNode;
+  /** An optional quiet line under the track (Rethink Sans, tabular figures). */
+  hint?: React.ReactNode;
 }) {
   return (
     <motion.div variants={staggerRowItem} className="flex flex-col gap-1.5">
@@ -197,6 +218,7 @@ function MeterRow({
         <div className="flex items-center gap-1.5">{children}</div>
       </div>
       {bar}
+      {hint}
     </motion.div>
   );
 }
@@ -219,6 +241,7 @@ function MetricsSkeleton() {
             <Skeleton className="h-4 w-20" />
           </div>
           <Skeleton className={cn(METER_H, "w-full rounded-pill")} />
+          {i === 0 && <Skeleton className="h-4 w-36" />}
         </div>
       ))}
       {Array.from({ length: 2 }).map((_, i) => (
@@ -235,6 +258,7 @@ const DeviceMetricsComponent = ({
   deviceData,
   lteData,
   nrData,
+  thermal,
   isLoading,
   modemReachable,
   liveLteTa,
@@ -319,8 +343,10 @@ const DeviceMetricsComponent = ({
   // because `modem_reachable` means exactly one thing: the last AT command
   // timed out. It is not a verdict on the machine serving the page.
   //
-  // GATED — read over AT, and free to have changed since. Temperature is
-  // AT+QTEMP; both distances derive from the serving cell's timing advance.
+  // GATED — free to have changed since the last good poll. Temperature comes
+  // from the kernel's thermal zones rather than an AT command, but it is still
+  // published by the same cycle that lost the modem; both distances derive
+  // from the serving cell's timing advance.
   // When the poll fails the poller parses nothing and the PREVIOUS value
   // survives, so what is on screen is a photograph. Step 03 made this same
   // call for the two uptimes.
@@ -342,6 +368,25 @@ const DeviceMetricsComponent = ({
     unreachable || temp === null
       ? ABSENT
       : formatTemperature(temp, unitPrefs?.tempUnit);
+  // Headroom to the nearest throttling trip. A quiet line while there is room;
+  // inside THROTTLE_NEAR_C it takes warning ink, because "8 degrees from
+  // slowing down" is the one thing the meter above cannot say by itself.
+  const tripC = !unreachable ? (thermal?.trip_c ?? null) : null;
+  const headroomC = !unreachable ? (thermal?.headroom_c ?? null) : null;
+  const nearTrip = headroomC !== null && headroomC <= THROTTLE_NEAR_C;
+  let throttleHint: string | null = null;
+  if (nearTrip && headroomC !== null) {
+    throttleHint =
+      headroomC <= 0
+        ? t("metrics.throttle_reached")
+        : t("metrics.below_throttling", {
+            delta: formatTempDelta(headroomC, unitPrefs?.tempUnit),
+          });
+  } else if (tripC !== null) {
+    throttleHint = t("metrics.throttle_at", {
+      temp: formatTemperature(tripC, unitPrefs?.tempUnit),
+    });
+  }
   const cpuValue = cpu !== null ? `${cpu}%` : ABSENT;
   const memValue = memTotal > 0 ? `${memUsed} MB / ${memTotal} MB` : ABSENT;
 
@@ -403,6 +448,20 @@ const DeviceMetricsComponent = ({
               track="surface-container-high"
               index={0}
             />
+          }
+          hint={
+            throttleHint ? (
+              <span
+                className={cn(
+                  "text-xs tabular-nums",
+                  nearTrip
+                    ? "text-warning-on-surface font-semibold"
+                    : "text-on-surface-variant",
+                )}
+              >
+                {throttleHint}
+              </span>
+            ) : null
           }
         >
           {isTempHigh && (

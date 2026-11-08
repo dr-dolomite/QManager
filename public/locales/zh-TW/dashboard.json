@@ -73,10 +73,25 @@
     "device_uptime_caption": "自上次開機",
     "uptime_unknown": "無法連線"
   },
+  "thermal": {
+    "chip": "降頻中（{{parts}}）",
+    "chip_bare": "降頻中",
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "毫米波",
+      "modem": "調變解調器",
+      "cpu": "CPU",
+      "ethernet": "乙太網路"
+    }
+  },
   "metrics": {
     "title": "裝置與速度",
     "modem_temperature": "調變解調器溫度",
     "high_temp_warning": "溫度過高",
+    "throttle_at": "{{temp}} 時降頻",
+    "below_throttling": "距離降頻還差 {{delta}}",
+    "throttle_reached": "已達到降頻溫度",
     "cpu_usage": "CPU 使用率",
     "high_cpu_warning": "CPU 佔用過高",
     "memory_usage": "記憶體使用率",
@@ -239,6 +254,8 @@
       "sim_failover": "SIM 卡容錯移轉",
       "sim_swap_detected": "偵測到更換 SIM 卡",
       "airplane_mode": "飛航模式",
+      "thermal_throttled": "過熱降頻",
+      "thermal_recovered": "過熱降頻已解除",
       "profile_applied": "設定檔已套用",
       "profile_failed": "設定檔套用失敗",
       "profile_deactivated": "設定檔已停用",

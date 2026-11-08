@@ -173,7 +173,7 @@
         }
       },
       "threshold_error": "请输入 1 到 60 之间的整数分钟。",
-      "threshold_hint": "较短的断网只记录，不发送。",
+      "threshold_hint": "较短的断网或过热降频只记录，不发送。",
       "threshold_label": "提醒前等待时间",
       "threshold_unit": "分钟",
       "title": "渠道",
@@ -200,6 +200,9 @@
         },
         "reboot": {
           "name": "调制解调器已重启"
+        },
+        "thermal_throttling": {
+          "name": "过热降频"
         }
       },
       "loading": "正在加载覆盖范围",

@@ -480,6 +480,57 @@ compound tier2__quimslot_hostile "$T2" '+COPS: 0,0,"G",7' '+QUIMSLOT: $(id);`x`'
 compound tier2__cpin_two_lines "$T2" '+COPS: 0,0,"G",7' '+QUIMSLOT: 1' '+CPIN: SIM PIN' '+CPIN: READY'
 lfonly tier2__lf_only "$T2" '+COPS: 0,0,"G",7' '+QUIMSLOT: 1' '+CPIN: READY'
 emptyf temperature__live
+
+# ------------------------------------------------------------------ thermal --
+# Fake sysfs tree specs (format in dump_globals.sh) plus <name>.txt.expect, the
+# thermal_* globals parse_thermal must set (checked by thermal_expect.sh).
+specf() { _f="$OUT/$1.txt"; shift; printf '%s\n' "$@" > "$_f"; N=$((N + 1)); }
+expf()  { _f="$OUT/$1.txt.expect"; shift; printf '%s\n' "$@" > "$_f"; }
+# The RM551E layout probed 2026-11-08 (bindings as live, temps rounded).
+TH_LIVE='dev 0 cpu-hotplug1 1 0
+dev 3 ethernet-usxgmii 2 0
+dev 4 ethernet-sgmii 1 0
+dev 5 cpufreq-cpu0 11 0
+dev 7 modem_vdd 1 0
+dev 8 modem_lte_dsc 255 0
+dev 10 modem_nr_dsc 255 0
+dev 12 modem_nr_scg_dsc 255 0
+dev 20 mmw0_dsc 255 0
+dev 24 modem_tj 3 0
+zone 16 cpuss-1 42400
+bind 16 0 0 1 110000 passive
+zone 19 ethphy-0 41600
+bind 19 0 3 2 135000 passive
+bind 19 1 3 3 135000 passive
+bind 19 2 4 4 135000 passive
+zone 23 mdmss-0 40000
+bind 23 0 8 1 111000 passive
+bind 23 1 8 2 115000 passive
+bind 23 2 10 1 111000 passive
+bind 23 3 10 2 115000 passive
+bind 23 4 12 1 111000 passive
+zone 26 zeroc 0
+bind 26 0 7 1 1 passive
+zone 40 dead-sensor -273000
+bind 40 0 10 1 50000 passive
+zone 41 crit-only 99000
+bind 41 0 10 1 100000 critical'
+specf thermal__none 'zone 1 lonely 40000'
+expf thermal__none thermal_sampled=1 thermal_available=0 thermal_throttling=0 thermal_parts= thermal_cold=0 'thermal_active_json=[]' thermal_headroom_c= thermal_trip_c= thermal_trip_part=
+specf thermal__idle "$TH_LIVE"
+expf thermal__idle thermal_sampled=1 thermal_available=1 thermal_throttling=0 thermal_parts= thermal_cold=0 'thermal_active_json=[]' thermal_headroom_c=67 thermal_trip_c=110 thermal_trip_part=cpu
+# Two parts, two devices; mdmss-0 1.5 C above its trip (floor -> -2). The
+# active array follows the glob order of cooling_device* (10 before 8).
+specf thermal__throttle_two "$(printf '%s\n' "$TH_LIVE" | sed -e 's/^dev 8 modem_lte_dsc 255 0$/dev 8 modem_lte_dsc 255 3/' -e 's/^dev 10 modem_nr_dsc 255 0$/dev 10 modem_nr_dsc 255 40/' -e 's/^zone 23 mdmss-0 40000$/zone 23 mdmss-0 112500/')"
+expf thermal__throttle_two thermal_sampled=1 thermal_available=1 thermal_throttling=1 'thermal_parts=lte nr' thermal_cold=0 'thermal_active_json=[{"device":"modem_nr_dsc","part":"nr","level":40,"max":255},{"device":"modem_lte_dsc","part":"lte","level":3,"max":255}]' thermal_headroom_c=-2 thermal_trip_c=111 thermal_trip_part=lte
+# Every watched sensor disconnected or unreadable: headroom unknown.
+specf thermal__unknown_headroom "$(printf '%s\n' "$TH_LIVE" | sed -e 's/^zone 16 cpuss-1 42400$/zone 16 cpuss-1 -40960/' -e 's/^zone 19 ethphy-0 41600$/zone 19 ethphy-0 <empty>/' -e 's/^zone 23 mdmss-0 40000$/zone 23 mdmss-0 -273000/')"
+expf thermal__unknown_headroom thermal_sampled=1 thermal_available=1 thermal_throttling=0 thermal_parts= thermal_cold=0 'thermal_active_json=[]' thermal_headroom_c= thermal_trip_c= thermal_trip_part=
+# Cold protection alone is not throttling; leading zeros and junk cur_state.
+specf thermal__cold_and_junk "$(printf '%s\n' "$TH_LIVE" | sed -e 's/^dev 7 modem_vdd 1 0$/dev 7 modem_vdd 1 1/' -e 's/^dev 0 cpu-hotplug1 1 0$/dev 0 cpu-hotplug1 1 abc/' -e 's/^dev 24 modem_tj 3 0$/dev 24 modem_tj 3 -2/' -e 's/^dev 20 mmw0_dsc 255 0$/dev 20 mmw0_dsc 255 007/')
+dev 25 bad\$(touch_/tmp/pp_pwned) 255 9
+dev 26 modem_pa x 1"
+expf thermal__cold_and_junk thermal_sampled=1 thermal_available=1 thermal_throttling=1 'thermal_parts=mmwave modem' thermal_cold=1 'thermal_active_json=[{"device":"mmw0_dsc","part":"mmwave","level":7,"max":255},{"device":"modem_pa","part":"modem","level":1,"max":0}]' thermal_headroom_c=67 thermal_trip_c=110 thermal_trip_part=cpu
 compound carrier__only_cops "AT+COPS?" '+COPS: 0,0,"Smart",7'
 compound sim_slot__only "AT+QUIMSLOT?" '+QUIMSLOT: 2'
 compound sim_status__ready_only "AT+CPIN?" '+CPIN: READY'

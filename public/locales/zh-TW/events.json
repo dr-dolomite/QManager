@@ -18,6 +18,8 @@
     "sim_failover": "SIM 卡切換",
     "sim_swap_detected": "檢測到 SIM 卡更換",
     "airplane_mode": "飛航模式",
+    "thermal_throttled": "過熱降頻",
+    "thermal_recovered": "過熱降頻已解除",
     "profile_applied": "設定檔已套用",
     "profile_failed": "設定檔套用失敗",
     "profile_deactivated": "設定檔已停用",

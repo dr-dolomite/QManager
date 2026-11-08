@@ -1,6 +1,8 @@
 #!/bin/sh
 . /usr/lib/qmanager/cgi_base.sh
 . /usr/lib/qmanager/cgi_at.sh
+[ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
 # =============================================================================
 # imei.sh — CGI Endpoint: IMEI Mangling Settings (GET + POST)
 # =============================================================================
@@ -14,6 +16,7 @@
 #   /tmp/qmanager_status.json         -> Poller cache (read IMEI from .device.imei)
 #   /etc/qmanager/imei_backup.json    -> Backup IMEI configuration
 #   /etc/qmanager/imei_check_pending  -> Flag for boot-time rejection check
+#   /tmp/qmanager_imei_pending        -> IMEI written since boot (qmi_dms.sh)
 #
 # Endpoint: GET/POST /cgi-bin/quecmanager/cellular/imei.sh
 # Install location: /www/cgi-bin/quecmanager/cellular/imei.sh
@@ -36,11 +39,16 @@ CMD_GAP=0.2
 if [ "$REQUEST_METHOD" = "GET" ]; then
     qlog_info "Fetching IMEI settings"
 
-    # --- 1. Read current IMEI from poller cache ---
+    # --- 1. Running IMEI (poller cache) and a write still waiting for reboot ---
     current_imei=""
-    if [ -f "$POLLER_CACHE" ]; then
+    pending_imei=""
+    if command -v qm_imei_running >/dev/null 2>&1; then
+        current_imei=$(qm_imei_running)
+        pending_imei=$(qm_imei_pending)
+    elif [ -f "$POLLER_CACHE" ]; then
         current_imei=$(jq -r '.device.imei // ""' "$POLLER_CACHE" 2>/dev/null)
     fi
+    [ "$pending_imei" = "$current_imei" ] && pending_imei=""
 
     # --- 2. Read backup config ---
     backup_enabled="false"
@@ -54,11 +62,13 @@ if [ "$REQUEST_METHOD" = "GET" ]; then
 
     jq -n \
         --arg imei "$current_imei" \
+        --arg pending "$pending_imei" \
         --argjson b_enabled "$backup_enabled" \
         --arg b_imei "$backup_imei" \
         '{
             success: true,
             current_imei: $imei,
+            pending_imei: $pending,
             backup: {
                 enabled: $b_enabled,
                 imei: $b_imei
@@ -98,14 +108,20 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
             exit 0
         fi
 
-        # Compare with current IMEI from poller cache
+        # Compare with the IMEI the modem will run after the next reboot: a
+        # write since boot (pending marker) wins over the stale poller cache.
         current_imei=""
-        if [ -f "$POLLER_CACHE" ]; then
+        if command -v qm_imei_effective >/dev/null 2>&1; then
+            current_imei=$(qm_imei_effective)
+        elif [ -f "$POLLER_CACHE" ]; then
             current_imei=$(jq -r '.device.imei // ""' "$POLLER_CACHE" 2>/dev/null)
         fi
 
         if [ "$NEW_IMEI" = "$current_imei" ]; then
-            jq -n '{"success":true,"detail":"IMEI already set to this value","reboot_required":false}'
+            # Already written but not in effect yet: the reboot is still owed.
+            still_pending="false"
+            command -v qm_imei_pending >/dev/null 2>&1 && [ -n "$(qm_imei_pending)" ] && still_pending="true"
+            jq -n --argjson rr "$still_pending" '{"success":true,"detail":"IMEI already set to this value","reboot_required":$rr}'
             exit 0
         fi
 
@@ -121,6 +137,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
                 exit 0
                 ;;
         esac
+
+        command -v qm_imei_mark_written >/dev/null 2>&1 && qm_imei_mark_written "$NEW_IMEI"
 
         # Set check-pending flag if backup IMEI is enabled
         if [ -f "$BACKUP_CONFIG" ]; then

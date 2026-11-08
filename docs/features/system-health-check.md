@@ -1,6 +1,6 @@
 # System Health Check
 
-An on-demand, read-only sweep of every QManager subsystem on the device (49 checks in 7 groups), plus a redacted `.tar.gz` support bundle. Ported from the RM520N fork in ledger row B3.4 (2026-10-16). The runner was rewritten from bash/systemd/sudo to BusyBox ash, and it probes this target's real stack: the Rust AT broker, procd services, fw4/nft and the poller and ping caches.
+An on-demand, read-only sweep of every QManager subsystem on the device (50 checks in 7 groups), plus a redacted `.tar.gz` support bundle. Ported from the RM520N fork in ledger row B3.4 (2026-10-16). The runner was rewritten from bash/systemd/sudo to BusyBox ash, and it probes this target's real stack: the Rust AT broker, procd services, fw4/nft and the poller and ping caches.
 
 **UI:** System Settings → System Health Check (`/system-settings/system-health-check`). The page is a diagnostics surface, so it may name paths, daemons and AT commands (No Debug-Build Copy exemption).
 
@@ -41,8 +41,9 @@ An on-demand, read-only sweep of every QManager subsystem on the device (49 chec
 - **Every external command is bounded** with `timeout` (ping 10 s, nslookup 5 s, logread and dmesg). A full run takes about 8–11 s.
 - **Durations come from `/proc/uptime`.** `date +%N` is unsupported on this BusyBox.
 - **Freshness uses the monotonic `mono` field** (falling back to mtime), because the wall clock steps on NITZ/ntpd. Poller cache: pass under 30 s, warn under 180 s (`write_cache` runs every 2 s in every tier). Ping cache: pass up to `max(3 × interval_sec, 15)` s, warn under 180 s.
+- **`svc.thermal` reads the poller cache, never the modem.** It skips when `/tmp/qmanager_status.json` is missing or 30 s or older (`_cache_age`: `mono` field, mtime fallback), or when `.thermal` is `null`; it warns while `.thermal.throttling` is true (naming the parts) and passes otherwise, with the headroom when known. It is not feature-gated. Details: [`thermal-throttling.md`](thermal-throttling.md#health-check-svcthermal).
 - **Feature-gated checks skip when the feature is off.** Watchcat (`quecmanager.watchcat.enabled`), tower failover (`/etc/qmanager/tower_lock.json` `failover.enabled` with an LTE or NR-SA lock), Traffic Engine (`video_optimizer` or `traffic_masquerade` enabled), SMS forwarding, Tailscale (installed). A present binary for a disabled feature still passes.
-- **The catalog lives in two places.** The runner seeds every check as `pending`; `CATEGORY_TEST_COUNT` in `shapes.ts` restates the per-category counts for the empty state, and the locale `tests.<id>` keys translate each label (the runner's English label is the fallback). Add or remove a check in all three.
+- **The catalog lives in two places.** The runner seeds every check as `pending`; `CATEGORY_TEST_COUNT` in `shapes.ts` restates the per-category counts for the empty state, and the locale `tests.<id>` keys translate each label (the runner's English label is the fallback). Add or remove a check in all three. The Services group has 10 checks (`CATEGORY_TEST_COUNT.services`), including `svc.thermal` (locale key `tests.svc.thermal`).
 
 ## Redaction (bundle)
 

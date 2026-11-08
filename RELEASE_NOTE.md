@@ -1,6 +1,10 @@
 # 🚀 QManager BETA v0.1.36-draft
 
-v0.1.36 is a polish release focused on how much work the web interface asks of the modem, plus a faster and more honest internet check. Background tabs now stay quiet, every page request starts faster, and open tabs share one detailed radio reading. The connection check now falls back to a second provider and reports an outage within the time its sensitivity setting promises.
+v0.1.36 adds heat-throttling detection, cuts how much work the web interface asks of the modem, and makes the internet check faster and more honest. Background tabs now stay quiet, every page request starts faster, and open tabs share one detailed radio reading. The connection check now falls back to a second provider and reports an outage within the time its sensitivity setting promises.
+
+## ✨ New Features
+
+- **Thermal throttling detection.** When the modem slows part of its radio, processor or Ethernet port because it is running hot, the dashboard now shows a "Throttling" chip naming what is affected (for example 5G or LTE). The temperature meter also shows how far the modem is from its throttling point ("Throttles at 110 °C", then "8 °C below throttling" as it gets close), and the Activity feed logs when throttling starts and when it clears. You can turn on an optional SMS or email alert on the Alerts page (off by default): it is sent once per throttling episode, after your usual "Wait before alerting" time. System Health Check has a new Thermal throttling item that warns while the modem is throttling.
 
 ## ✅ Improvements
 

@@ -1,0 +1,9 @@
+thermal_sampled=1
+thermal_available=0
+thermal_throttling=0
+thermal_parts=
+thermal_cold=0
+thermal_active_json=[]
+thermal_headroom_c=
+thermal_trip_c=
+thermal_trip_part=

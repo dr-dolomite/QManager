@@ -56,6 +56,9 @@
         },
         "reboot": {
           "name": "Modem rebooted"
+        },
+        "thermal_throttling": {
+          "name": "Thermal throttling"
         }
       },
       "reason": {
@@ -128,7 +131,7 @@
         "sub": "Sent through Gmail once the link is back."
       },
       "threshold_label": "Wait before alerting",
-      "threshold_hint": "Shorter outages are logged, not sent.",
+      "threshold_hint": "Outages and heat throttling shorter than this are logged, not sent.",
       "threshold_error": "Enter a whole number of minutes from 1 to 60.",
       "threshold_unit": "min",
       "test": {

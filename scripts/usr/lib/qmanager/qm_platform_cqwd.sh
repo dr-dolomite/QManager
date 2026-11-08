@@ -407,5 +407,9 @@ cq_alert_after_min() {
     return 0
 }
 
+# QMI device service (RM551E only): defines qm_qmi_online, which the neutral
+# wd_cfun_now (wd_state.sh) uses when present to skip AT+CFUN? while online.
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
+
 plat_paths
 QM_PLATFORM_CQWD_LOADED=1
