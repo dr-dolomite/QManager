@@ -2048,7 +2048,10 @@ read_watchcat_state() {
 
     IFS="$_US" read -r wc_enabled wc_state wc_current_tier wc_failure_count \
         wc_last_recovery_time wc_last_recovery_tier wc_total_recoveries \
-        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after         wc_recovery_reason wc_step_wait_until wc_holdoff_until wc_holdoff_reason         wc_reboot_budget_exhausted wc_ssr_hold_until wc_failback_next_at         wc_ping_stale <<EOF
+        wc_cooldown_remaining wc_reboots_this_hour wc_mono wc_stale_after \
+        wc_recovery_reason wc_step_wait_until wc_holdoff_until wc_holdoff_reason \
+        wc_reboot_budget_exhausted wc_ssr_hold_until wc_failback_next_at \
+        wc_ping_stale <<EOF
 $_wdata
 EOF
 }
@@ -2543,7 +2546,11 @@ write_cache_jq() {
         --argjson sc_read_mono "${_SERVING_READ_MONO:-0}" \
         --argjson ca_read_mono "${_CA_READ_MONO:-0}" \
         --arg ca_src "${ca_source:-at}" \
-        --arg ap_tier "${ap_tier:-active}"         --arg lte_src "${lte_source:-at}"         --argjson qmi_rmono "${_QMI_READ_MONO:-0}"         --arg qmi_st "$_QMI_STATE"         --argjson qmi_ssr "${_QMI_SSR:-0}" \
+        --arg ap_tier "${ap_tier:-active}" \
+        --arg lte_src "${lte_source:-at}" \
+        --argjson qmi_rmono "${_QMI_READ_MONO:-0}" \
+        --arg qmi_st "$_QMI_STATE" \
+        --argjson qmi_ssr "${_QMI_SSR:-0}" \
         --argjson inet "${conn_internet_available:-null}" \
         --arg conn_st "$conn_status" \
         --argjson lat "${conn_latency:-null}" \
@@ -2580,7 +2587,16 @@ write_cache_jq() {
         --argjson wc_cooldown "${wc_cooldown_remaining:-0}" \
         --argjson wc_reboots "${wc_reboots_this_hour:-0}" \
         --argjson wc_age "${_WC_HB_AGE:-null}" \
-        --argjson wc_stale "${_WC_HB_STALE:-null}"         --arg wc_rec_reason "$wc_recovery_reason"         --argjson wc_swu "${wc_step_wait_until:-null}"         --argjson wc_hold_until "${wc_holdoff_until:-null}"         --arg wc_hold_reason "$wc_holdoff_reason"         --argjson wc_rb_spent "${wc_reboot_budget_exhausted:-false}"         --argjson wc_ssr_until "${wc_ssr_hold_until:-null}"         --argjson wc_fb_next "${wc_failback_next_at:-null}"         --argjson wc_ping_stale "${wc_ping_stale:-false}"         --argjson wc_mono "${wc_mono:-0}" \
+        --argjson wc_stale "${_WC_HB_STALE:-null}" \
+        --arg wc_rec_reason "$wc_recovery_reason" \
+        --argjson wc_swu "${wc_step_wait_until:-null}" \
+        --argjson wc_hold_until "${wc_holdoff_until:-null}" \
+        --arg wc_hold_reason "$wc_holdoff_reason" \
+        --argjson wc_rb_spent "${wc_reboot_budget_exhausted:-false}" \
+        --argjson wc_ssr_until "${wc_ssr_hold_until:-null}" \
+        --argjson wc_fb_next "${wc_failback_next_at:-null}" \
+        --argjson wc_ping_stale "${wc_ping_stale:-false}" \
+        --argjson wc_mono "${wc_mono:-0}" \
         --argjson sf_active "${sim_fo_active:-false}" \
         --argjson sf_orig "${sim_fo_original_slot:-null}" \
         --argjson sf_curr "${sim_fo_current_slot:-null}" \
