@@ -7,7 +7,8 @@
 # Owns (declared and initialised here, see docs/plans watchdog-modular-lean 2.1):
 #   every CFG_* global, WD_FAILBACK_EVERY_MIN_LO/HI, BOOT_SETTLE,
 #   MODEM_WAIT_TIMEOUT, SIM_SETTLE_SECS, HOLDOFF_OUTAGE_SECS,
-#   HOLDOFF_QUALITY_SECS_0/1/2, HOLDOFF_QUALITY_RESET_SECS
+#   HOLDOFF_QUALITY_SECS_0/1/2, HOLDOFF_QUALITY_RESET_SECS,
+#   HOLDOFF_CARRIER_SECS_0/1/2, HOLDOFF_CARRIER_RESET_SECS
 # Functions: read_config, resolve_quality_thresholds
 #
 # Libraries hold function definitions and global initialisers only: no top-level
@@ -47,6 +48,11 @@ QUALITY_LOSS_FLOOR_PCT=10
 # Seconds a quality breach must persist on the monotonic clock before the
 # quality ladder starts (quality_after_sec, 30-1800, default 120).
 CFG_QUALITY_AFTER_SEC=120
+# Stuck on one component carrier (Amendment 3 A3.3, opt-in, wd_carrier.sh):
+# carrier_enabled (default off) and carrier_after_min (5-240, default 15), the
+# minutes a fresh single-carrier read must last before the carrier ladder starts.
+CFG_CARRIER_ENABLED=0
+CFG_CARRIER_AFTER_MIN=15
 CFG_SSR_AWARE=1
 CFG_SSR_GRACE=45
 # Auto-failback to the primary SIM after a Tier-3 failover. The inactive primary
@@ -78,6 +84,11 @@ HOLDOFF_QUALITY_SECS_0=900
 HOLDOFF_QUALITY_SECS_1=1800
 HOLDOFF_QUALITY_SECS_2=3600
 HOLDOFF_QUALITY_RESET_SECS=3600
+# The carrier pause steps the same way, with its own level (Amendment 3).
+HOLDOFF_CARRIER_SECS_0=900
+HOLDOFF_CARRIER_SECS_1=1800
+HOLDOFF_CARRIER_SECS_2=3600
+HOLDOFF_CARRIER_RESET_SECS=3600
 
 # =============================================================================
 # CONFIGURATION
@@ -176,6 +187,25 @@ read_config() {
             ;;
     esac
 
+    CFG_CARRIER_ENABLED=$(cfg_get watchdog carrier_enabled)
+    [ "$CFG_CARRIER_ENABLED" = "1" ] || CFG_CARRIER_ENABLED=0
+
+    # carrier_after_min: MINUTES, 5-240, default 15 (absent or non-numeric).
+    val=$(cfg_get watchdog carrier_after_min)
+    case "$val" in
+        ''|*[!0-9]*) CFG_CARRIER_AFTER_MIN=15 ;;
+        *)
+            # Leading zeros first ("015" is 15, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
+            [ "${#val}" -gt 3 ] && val=240
+            CFG_CARRIER_AFTER_MIN="$val"
+            [ "$CFG_CARRIER_AFTER_MIN" -lt 5 ] && CFG_CARRIER_AFTER_MIN=5
+            [ "$CFG_CARRIER_AFTER_MIN" -gt 240 ] && CFG_CARRIER_AFTER_MIN=240
+            ;;
+    esac
+
     CFG_SSR_AWARE=$(cfg_get watchdog ssr_aware)
     [ -z "$CFG_SSR_AWARE" ] && CFG_SSR_AWARE=1
 
@@ -217,6 +247,10 @@ read_config() {
     qlog_info "Config loaded: interval=${CFG_CHECK_INTERVAL}s act_after=${CFG_ACT_AFTER_SEC}s step_wait=${CFG_STEP_WAIT_SEC}s"
     qlog_info "  Tiers: T1=${CFG_TIER1_ENABLED} T2=${CFG_TIER2_ENABLED} T3=${CFG_TIER3_ENABLED} T4=${CFG_TIER4_ENABLED} backup_sim=${CFG_BACKUP_SIM_SLOT:-none}"
     qlog_info "  Quality: enabled=${CFG_QUALITY_ENABLED} latency=${CFG_LATENCY_THRESHOLD_MS}ms loss=${CFG_LOSS_THRESHOLD_PCT}% after=${CFG_QUALITY_AFTER_SEC}s (shared thresholds, floors applied)"
+    # Opt-in: logged only while on, so an off feature leaves the log as it was.
+    if [ "$CFG_CARRIER_ENABLED" = "1" ]; then
+        qlog_info "  Carrier: enabled=1 after=${CFG_CARRIER_AFTER_MIN}min"
+    fi
     qlog_info "  SSR-aware: enabled=${CFG_SSR_AWARE} grace=${CFG_SSR_GRACE}s"
     qlog_info "  Failback: enabled=${CFG_FAILBACK_ENABLED} every=${CFG_FAILBACK_EVERY_MIN}min"
 }

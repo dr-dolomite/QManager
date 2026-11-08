@@ -8,7 +8,8 @@
 #       total_recoveries, cooldown_remaining, step_wait_until,
 #       cooldown_stale_retries, recovery_reason,
 #       _recovery_marker_emitted, wd_hold_out_until, wd_hold_q_until,
-#       wd_hold_q_level, wd_hold_q_end, holdoff_until, holdoff_reason (derived),
+#       wd_hold_q_level, wd_hold_q_end, wd_hold_c_until, wd_hold_c_level,
+#       wd_hold_c_end, holdoff_until, holdoff_reason (derived),
 #       wd_ep_start, last_success_time, last_success_tier, last_success_reason,
 #       last_success_took_s
 #       Uses wd_detect.sh _wd_dec / _wdd (scratch, consumed at once) and
@@ -16,6 +17,7 @@
 # Functions: wait_for_modem, execute_tier1, execute_tier2,
 #            _wd_confirm_radio_on, wd_enter_radio_off, _wd_start_holdoff,
 #            _wd_holdoff_sync, wd_holdoff_clear, wd_holdoff_reload, wd_holdoff_tick,
+#            _wd_holdoff_tick_carrier,
 #            wd_step_wait_start, wd_step_wait_due, wd_step_wait_extend,
 #            wd_step_wait_clear, wd_retire_service, execute_tier4,
 #            find_next_tier, wd_ladder_pick, _wd_ladder_exhausted, do_recovery,
@@ -54,7 +56,7 @@ wd_ep_start=0                   # mono of the trigger that opened the open ladde
 step_wait_until=0
 cooldown_remaining=0
 cooldown_stale_retries=0
-recovery_reason="outage"   # "outage" | "quality" — why current/last recovery fired
+recovery_reason="outage"   # "outage" | "quality" | "carrier" — why current/last recovery fired
 _recovery_marker_emitted=""     # "<tier>-<reason>" of the last emitted start marker; "" = none this episode
 # Pauses after an exhausted ladder (spec section 5.5), one per recovery reason.
 # A pause blocks a new ladder of its own reason only (wd_start_gate <reason>).
@@ -62,30 +64,48 @@ wd_hold_out_until=0             # mono end of the outage pause; 0 = none
 wd_hold_q_until=0               # mono end of the quality pause; 0 = none
 wd_hold_q_level=0               # 0-2: step of the last quality pause (15/30/60 min)
 wd_hold_q_end=0                 # mono the last quality pause ended; 0 = none within the reset hour
+# The carrier pause (Amendment 3), stepped like the quality one with its own level.
+wd_hold_c_until=0               # mono end of the carrier pause; 0 = none
+wd_hold_c_level=0               # 0-2: step of the last carrier pause (15/30/60 min)
+wd_hold_c_end=0                 # mono the last carrier pause ended; 0 = none within the reset hour
 # Derived by _wd_holdoff_sync for the state file: the pause that ends last
-# (outage wins a tie). Never written anywhere else.
+# (a tie goes to outage, then quality). Never written anywhere else.
 holdoff_until=0
 holdoff_reason=""
 
 _wd_holdoff_sync() {
-    if [ "$wd_hold_out_until" -ge "$wd_hold_q_until" ]; then
-        holdoff_until="$wd_hold_out_until"
-        holdoff_reason="outage"
-        [ "$wd_hold_out_until" -gt 0 ] || holdoff_reason=""
-    else
+    holdoff_until="$wd_hold_out_until"
+    holdoff_reason="outage"
+    if [ "$wd_hold_q_until" -gt "$holdoff_until" ]; then
         holdoff_until="$wd_hold_q_until"
         holdoff_reason="quality"
     fi
+    if [ "$wd_hold_c_until" -gt "$holdoff_until" ]; then
+        holdoff_until="$wd_hold_c_until"
+        holdoff_reason="carrier"
+    fi
+    [ "$holdoff_until" -gt 0 ] || holdoff_reason=""
 }
 
-# wd_holdoff_clear <outage|quality>: ends that reason's pause early. Outage: a
-# fresh reachable=true read. Quality: a clean quality window or a quality
-# cooldown success; never reachability (the link is reachable during quality
-# trouble). The quality level is kept: it only resets after the quiet hour or a
-# settings reload (wd_holdoff_reload).
+# wd_holdoff_clear <outage|quality|carrier>: ends that reason's pause early.
+# Outage: a fresh reachable=true read. Quality: a clean quality window or a
+# quality cooldown success; never reachability (the link is reachable during
+# quality trouble). Carrier: a fresh read of 2 or more carriers or a carrier
+# cooldown success. The quality and carrier levels are kept: they only reset
+# after the quiet hour or a settings reload (wd_holdoff_reload).
 wd_holdoff_clear() {
     local now
-    if [ "$1" = "quality" ]; then
+    if [ "$1" = "carrier" ]; then
+        [ "$wd_hold_c_until" -gt 0 ] || return 0
+        now=$(mono_now)
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+        if [ "$wd_hold_c_until" -gt "$now" ]; then
+            wd_hold_c_end="$now"
+        else
+            wd_hold_c_end="$wd_hold_c_until"
+        fi
+        wd_hold_c_until=0
+    elif [ "$1" = "quality" ]; then
         [ "$wd_hold_q_until" -gt 0 ] || return 0
         now=$(mono_now)
         case "$now" in ''|*[!0-9]*) now=0 ;; esac
@@ -110,6 +130,13 @@ wd_holdoff_reload() {
     wd_hold_q_until=0
     wd_hold_q_level=0
     wd_hold_q_end=0
+    # The carrier pause and its growth too (Amendment 3 A3.3).
+    if [ "$wd_hold_c_until" -gt 0 ] || [ "$wd_hold_c_level" -gt 0 ] || [ "$wd_hold_c_end" -gt 0 ]; then
+        qlog_info "Settings reload: carrier pause and its growth reset"
+    fi
+    wd_hold_c_until=0
+    wd_hold_c_level=0
+    wd_hold_c_end=0
     _wd_holdoff_sync
 }
 
@@ -118,6 +145,7 @@ wd_holdoff_reload() {
 # there is nothing to age.
 wd_holdoff_tick() {
     local now
+    _wd_holdoff_tick_carrier
     [ "$wd_hold_q_until" -gt 0 ] || [ "$wd_hold_q_end" -gt 0 ] || return 0
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) return 0 ;; esac
@@ -132,6 +160,27 @@ wd_holdoff_tick() {
         fi
         wd_hold_q_level=0
         wd_hold_q_end=0
+    fi
+    return 0
+}
+
+# The carrier half of wd_holdoff_tick: the same expiry and quiet-hour reset.
+_wd_holdoff_tick_carrier() {
+    local now
+    [ "$wd_hold_c_until" -gt 0 ] || [ "$wd_hold_c_end" -gt 0 ] || return 0
+    now=$(mono_now)
+    case "$now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$wd_hold_c_until" -gt 0 ] && [ "$wd_hold_c_until" -le "$now" ]; then
+        wd_hold_c_end="$wd_hold_c_until"
+        wd_hold_c_until=0
+        _wd_holdoff_sync
+    fi
+    if [ "$wd_hold_c_until" -eq 0 ] && [ "$wd_hold_c_end" -gt 0 ] && [ $((now - wd_hold_c_end)) -ge "$HOLDOFF_CARRIER_RESET_SECS" ]; then
+        if [ "$wd_hold_c_level" -gt 0 ]; then
+            qlog_info "No carrier pause for ${HOLDOFF_CARRIER_RESET_SECS}s: carrier pause length back to 15 minutes"
+        fi
+        wd_hold_c_level=0
+        wd_hold_c_end=0
     fi
     return 0
 }
@@ -307,6 +356,7 @@ wd_enter_radio_off() {
     failure_counter=0
     wd_step_wait_clear
     quality_breach_since=0
+    wd_carrier_reset
     _recovery_marker_emitted=""
     ssr_hold_clear
     wd_outage_clear
@@ -384,14 +434,15 @@ execute_tier4() {
 # =============================================================================
 
 # Find the next enabled tier >= start_tier. Returns 0 if found (sets
-# current_tier), 1 if no tiers left. A quality ladder stops after Tier 2 (spec
-# D5): a SIM swap or a reboot is never run for a reachable but degraded link.
+# current_tier), 1 if no tiers left. A quality or carrier ladder stops after
+# Tier 2 (spec D5, Amendment 3): a SIM swap or a reboot is never run for a
+# reachable link.
 find_next_tier() {
     local start="$1"
     local t="$start"
     local top=4
 
-    [ "$recovery_reason" = "quality" ] && top=2
+    case "$recovery_reason" in quality|carrier) top=2 ;; esac
     while [ "$t" -le "$top" ]; do
         case "$t" in
             1) [ "$CFG_TIER1_ENABLED" = "1" ] && { current_tier="$t"; return 0; } ;;
@@ -409,14 +460,14 @@ find_next_tier() {
         esac
         t=$((t + 1))
     done
-    # The quality ladder ended at Tier 2: say why an enabled Tier 3 was not offered.
-    if [ "$recovery_reason" = "quality" ] && [ "$start" -le 3 ] && [ "$CFG_TIER3_ENABLED" = "1" ]; then
-        qlog_warn "TIER 3 SKIPPED: recovery reason is quality"
+    # The ladder ended at Tier 2: say why an enabled Tier 3 was not offered.
+    if [ "$top" -eq 2 ] && [ "$start" -le 3 ] && [ "$CFG_TIER3_ENABLED" = "1" ]; then
+        qlog_warn "TIER 3 SKIPPED: recovery reason is $recovery_reason"
     fi
     return 1  # no enabled tiers remaining
 }
 
-# wd_ladder_pick <outage|quality>: the tier a new trigger runs; sets
+# wd_ladder_pick <outage|quality|carrier>: the tier a new trigger runs; sets
 # recovery_reason and current_tier. A tier that an inconclusive cooldown of the
 # same reason kept resumes at the next eligible tier (spec section 5.4); a tier
 # picked but not run yet (an SSR hold) runs as it is; anything else, including a
@@ -470,6 +521,8 @@ do_recovery() {
         _recovery_marker_emitted="$current_tier-$recovery_reason"
         if [ "$recovery_reason" = "quality" ]; then
             append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — connection quality degraded" "warning" "wd_tier_start"
+        elif [ "$recovery_reason" = "carrier" ]; then
+            append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — stuck on one carrier for $carrier_trigger_min min" "warning" "wd_tier_start"
         else
             append_event "watchcat_recovery" "Watchcat: starting recovery (Tier $current_tier) — internet unreachable" "warning" "wd_tier_start"
         fi
@@ -531,12 +584,28 @@ do_recovery() {
 # new ladder of the same reason (wd_start_gate <reason> returns "holdoff").
 # Outage: HOLDOFF_OUTAGE_SECS. Quality: 15/30/60 minutes; the level steps up when
 # the previous quality pause ended less than HOLDOFF_QUALITY_RESET_SECS ago.
+# Carrier: the same steps with its own level (HOLDOFF_CARRIER_*).
 _wd_start_holdoff() {
     local now
     local secs
     now=$(mono_now)
     case "$now" in ''|*[!0-9]*) now=0 ;; esac
-    if [ "$recovery_reason" = "quality" ]; then
+    if [ "$recovery_reason" = "carrier" ]; then
+        # A carrier pause that ended since this pass's tick still counts.
+        _wd_holdoff_tick_carrier
+        if [ "$wd_hold_c_end" -gt 0 ] && [ $((now - wd_hold_c_end)) -lt "$HOLDOFF_CARRIER_RESET_SECS" ]; then
+            [ "$wd_hold_c_level" -lt 2 ] && wd_hold_c_level=$((wd_hold_c_level + 1))
+        else
+            wd_hold_c_level=0
+        fi
+        case "$wd_hold_c_level" in
+            1) secs="$HOLDOFF_CARRIER_SECS_1" ;;
+            2) secs="$HOLDOFF_CARRIER_SECS_2" ;;
+            *) secs="$HOLDOFF_CARRIER_SECS_0" ;;
+        esac
+        wd_hold_c_until=$((now + secs))
+        wd_hold_c_end=0
+    elif [ "$recovery_reason" = "quality" ]; then
         # A quality pause that ended since this pass's wd_holdoff_tick still
         # counts as the previous pause, so the level grows instead of resetting.
         wd_holdoff_tick
@@ -643,20 +712,37 @@ _cooldown_inconclusive() {
 
 # Pure verdict for a finished cooldown (no I/O, no globals):
 #   wd_cooldown_verdict <reason> <ping_ok 0|1> <reachable> <q_state 0|1|2> <stale_retries>
-#   reason         "quality" or anything else (= reachability)
+#   reason         "quality", "carrier" or anything else (= reachability)
 #   ping_ok        1 when read_ping returned fresh data this pass
 #   reachable      true | false | null (only read when ping_ok = 1; quality
 #                  success needs true as well as a clean window)
-#   q_state        0 quality good, 1 breached, 2 no data (only read for "quality")
+#   q_state        quality: 0 good, 1 breached, 2 no data; carrier: 0 two or
+#                  more carriers, 1 one, 2 unknown (unused for reachability)
 #   stale_retries  extensions already spent (cap 3)
-# Prints success | extend | fail | inconclusive. "No data" (stale ping or too
-# few samples) is extended up to 3 times, then the verdict is inconclusive.
+# Prints success | extend | fail | inconclusive, and for carrier also handover
+# (reachable=false: the outage trigger takes over on its own rules). "No data"
+# (stale ping, too few samples, an unknown carrier count, or carrier with
+# reachable=null) is extended up to 3 times, then the verdict is inconclusive.
 wd_cooldown_verdict() {
     local retries
     retries="$5"
     case "$retries" in ''|*[!0-9]*) retries=3 ;; esac
     if [ "$2" != "1" ]; then
         if [ "$retries" -lt 3 ]; then printf 'extend'; else printf 'inconclusive'; fi
+        return 0
+    fi
+    if [ "$1" = "carrier" ]; then
+        if [ "$3" = "false" ]; then
+            printf 'handover'
+        elif [ "$3" = "true" ] && [ "$4" = "0" ]; then
+            printf 'success'
+        elif [ "$3" = "true" ] && [ "$4" = "1" ]; then
+            printf 'fail'
+        elif [ "$retries" -lt 3 ]; then
+            printf 'extend'
+        else
+            printf 'inconclusive'
+        fi
         return 0
     fi
     if [ "$1" = "quality" ]; then
@@ -720,6 +806,12 @@ finish_cooldown() {
         failure_counter=0
         quality_breach_since=0
         _recovery_marker_emitted=""
+        return
+    fi
+
+    # --- Carrier verdict (Amendment 3 A3.3, wd_carrier.sh) ---
+    if [ "$recovery_reason" = "carrier" ]; then
+        wd_carrier_finish
         return
     fi
 

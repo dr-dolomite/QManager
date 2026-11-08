@@ -28,6 +28,7 @@
 #   wd_state.sh   state file writer, maintenance-lock check, wd_sleep, radio markers
 #   wd_detect.sh  ping read, start gate, SSR gate
 #   wd_quality.sh quality window, quality trigger
+#   wd_carrier.sh stuck-on-one-carrier trigger (opt-in)
 #   wd_ledger.sh  reboot count from crash.log
 #   wd_tiers.sh   Tiers 1/2/4, escalation, cooldown verdict
 #   wd_sim.sh     Tier 3, fallback, revert, auto-failback, failover record
@@ -101,7 +102,7 @@ CRASH_LOG="$PF_CRASH_LOG"
 # ends by setting WD_<NAME>_LOADED, so a missing or truncated lib refuses to
 # start here, before the PID file, the trap or any AT command.
 WD_LIB_DIR="${WD_LIB_DIR:-/usr/lib/qmanager}"   # override for the harness only
-for _wd_l in wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; do
+for _wd_l in wd_config wd_state wd_detect wd_quality wd_carrier wd_ledger wd_tiers wd_sim; do
     if [ -f "$WD_LIB_DIR/$_wd_l.sh" ]; then
         . "$WD_LIB_DIR/$_wd_l.sh"
     else
@@ -110,7 +111,7 @@ for _wd_l in wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; 
         exit 1
     fi
 done
-[ "${QM_PLATFORM_CQWD_LOADED:-0}$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_QUALITY_LOADED$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "11111111" ] || {
+[ "${QM_PLATFORM_CQWD_LOADED:-0}$WD_CONFIG_LOADED$WD_STATE_LOADED$WD_DETECT_LOADED$WD_QUALITY_LOADED${WD_CARRIER_LOADED:-0}$WD_LEDGER_LOADED$WD_TIERS_LOADED$WD_SIM_LOADED" = "111111111" ] || {
     qlog_error "watchcat: library set incomplete, refusing to start"; exit 1; }
 
 # =============================================================================
@@ -155,8 +156,11 @@ main() {
     #       RECOVERY" arm: failure_counter, quality_breach_since, current_tier,
     #       tiers_tried (also the outage natural-recovery reset below),
     #       primary_recheck_active, _recovery_marker_emitted, ssr_hold_clear.
-    #   wd_detect evaluate_quality: wd_state state, wd_tiers recovery_reason and
-    #       current_tier and tiers_tried (via wd_ladder_pick).
+    #   wd_quality evaluate_quality and wd_carrier evaluate_carrier /
+    #       wd_carrier_finish: wd_state state and failure_counter, wd_detect
+    #       quality_breach_since, wd_tiers recovery_reason and current_tier and
+    #       tiers_tried (via wd_ladder_pick). LOCKED entry and wd_enter_radio_off
+    #       end the carrier run through wd_carrier_reset.
     #   wd_tiers wd_enter_radio_off (from the start gates) and the radio_off arm
     #       below: wd_state state and failure_counter, wd_detect
     #       quality_breach_since and ssr_hold, wd_tiers current_tier,
@@ -250,6 +254,8 @@ main() {
             read_config
             # A settings save ends the quality pause and resets its growth.
             wd_holdoff_reload
+            # ... re-arms the carrier trigger (wd_carrier.sh) ...
+            wd_carrier_reload
             # ... and a failback give-up (wd_sim.sh).
             wd_failback_reload
             if [ "$CFG_ENABLED" != "1" ]; then
@@ -289,6 +295,7 @@ main() {
                 failure_counter=0
                 wd_step_wait_clear
                 quality_breach_since=0
+                wd_carrier_reset
                 _recovery_marker_emitted=""
                 ssr_hold_clear
                 wd_outage_clear
@@ -402,8 +409,9 @@ main() {
         # Natural recovery ends an outage episode that an inconclusive cooldown
         # left open (wd_tiers.sh, spec section 5.4): the next outage starts at
         # Tier 1 again. A kept quality tier ends on a clean window instead
-        # (evaluate_quality), since the link is reachable during quality trouble.
-        if [ "$ping_reachable" = "true" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$current_tier" -gt 0 ] && [ "$recovery_reason" != "quality" ]; then
+        # (evaluate_quality), and a kept carrier tier on 2 or more carriers
+        # (evaluate_carrier), since the link is reachable during that trouble.
+        if [ "$ping_reachable" = "true" ] && [ "$ping_streak_fail" -eq 0 ] && [ "$current_tier" -gt 0 ] && [ "$recovery_reason" != "quality" ] && [ "$recovery_reason" != "carrier" ]; then
             case "$state" in
                 monitor|suspect|ssr_hold)
                     qlog_info "Link is reachable: the kept Tier $current_tier is cleared"
@@ -510,6 +518,12 @@ main() {
         if [ "$state" = "monitor" ] || [ "$state" = "suspect" ]; then
             evaluate_quality
         fi
+
+        # --- Stuck-on-one-carrier trigger (opt-in, wd_carrier.sh) ---
+        # After the outage path and quality: on the same pass outage wins, then
+        # quality, then carrier (either moves state away from monitor first).
+        # Every pass that gets here runs it, so a non-monitor state ends the run.
+        evaluate_carrier
 
         # --- Auto-failback: blind periodic primary-SIM recheck ---
         # Opt-in (default off). Only when an active failover exists, we are idle

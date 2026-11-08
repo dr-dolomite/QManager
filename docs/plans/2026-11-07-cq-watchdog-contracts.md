@@ -90,10 +90,10 @@ Full set, read by the watchdog CGI (`status`):
 | `state` | str | `monitor\|suspect\|ssr_hold\|recovery\|cooldown\|holdoff\|radio_off\|locked\|disabled` |
 | `enabled` | bool | |
 | `current_tier` | int | 0-4; kept after an inconclusive cooldown (§5.4) |
-| `recovery_reason` | str\|null | reason of the episode in progress (`outage\|quality`), null when idle |
+| `recovery_reason` | str\|null | reason of the episode in progress (`outage\|quality\|carrier`; carrier: Amendment 3), null when idle |
 | `last_recovery_time` | int\|null | epoch of the last tier action |
 | `last_recovery_tier` | int\|null | |
-| `last_recovery_reason` | str\|null | `outage\|quality` |
+| `last_recovery_reason` | str\|null | `outage\|quality\|carrier` (carrier: Amendment 3) |
 | `total_recoveries` | int | |
 | `last_success_time` | int\|null | epoch of the last cooldown verdict that was a success (`wd_succeeded`); null until one, or while the wall clock is insane (1970 rule) (Amendment 3) |
 | `last_success_tier` | int\|null | tier of that success (Amendment 3) |
@@ -104,7 +104,8 @@ Full set, read by the watchdog CGI (`status`):
 | `cooldown_remaining` | int | seconds, derived from `step_wait_until − mono` (kept for compatibility) |
 | `step_wait_until` | int\|null | mono deadline of the current step wait |
 | `holdoff_until` | int\|null | mono deadline of the hold-off |
-| `holdoff_reason` | str\|null | `outage\|quality` |
+| `holdoff_reason` | str\|null | `outage\|quality\|carrier`: the pause that ends last, a tie goes to outage, then quality (carrier: Amendment 3) |
+| `holdoff_carrier_level` | int | 0-2, the step of the 15 → 30 → 60 min carrier hold-off (Amendment 3) |
 | `reboots_this_hour` | int | |
 | `reboot_budget_exhausted` | bool | |
 | `reboot_rest_reason` | str\|null | `hourly\|long_outage` while Tier 4 rests |
@@ -112,6 +113,8 @@ Full set, read by the watchdog CGI (`status`):
 | `ssr_hold_until` | int\|null | mono deadline |
 | `last_ssr_mono` | int\|null | mono of the last detected SSR |
 | `quality_breach_secs` | int | seconds the current quality breach has lasted |
+| `carrier_single_secs` | int | seconds the current single-carrier run has lasted (mono), 0 when none (Amendment 3) |
+| `carrier_cc` | int\|null | last component-carrier count read (`plat_cc_count`); null when unknown or while `carrier_enabled` is off (Amendment 3) |
 | `failback_active` | bool | a primary-SIM recheck is settling |
 | `failback_failures` | int | 0-3; 3 = given up until the next save or boot |
 | `failback_next_at` | int\|null | mono of the next failback try |
@@ -244,10 +247,10 @@ Removed endpoints: `system/ping_profile.sh`, `system/quality_thresholds.sh`.
 
 | code | type | severity | message (English, identical on both repos) |
 |---|---|---|---|
-| `wd_tier_start` | watchcat_recovery | warning | `Watchcat: starting recovery (Tier N) — internet unreachable` / `… — connection quality degraded` |
+| `wd_tier_start` | watchcat_recovery | warning | `Watchcat: starting recovery (Tier N) — internet unreachable` / `… — connection quality degraded` / `… — stuck on one carrier for M min` (Amendment 3) |
 | `wd_tier_start` | watchcat_recovery | warning | `Watchcat: re-registering on network (Tier 1)` / `Watchcat: toggling radio (Tier 2)` |
 | `wd_tier4_reboot` | watchcat_recovery | error | `Watchcat: rebooting system (Tier 4)` |
-| `wd_succeeded` | watchcat_recovery | info | `Watchcat: recovery succeeded (Tier N) — internet connectivity restored` / `… — connection quality restored` |
+| `wd_succeeded` | watchcat_recovery | info | `Watchcat: recovery succeeded (Tier N) — internet connectivity restored` / `… — connection quality restored` / `… — carrier aggregation restored` (Amendment 3) |
 | `wd_escalate` | watchcat_recovery | warning | `Watchcat: recovery escalating to Tier N — previous tier did not restore the connection` |
 | `wd_holdoff` | watchcat_recovery | error | `Watchcat: all recovery steps tried, pausing N minutes` |
 | `wd_ssr_hold` | watchcat_recovery | info | `Watchcat: recoverable baseband restart detected — holding recovery to let the modem self-heal` |
@@ -358,3 +361,26 @@ failure stops the tries: one `sim_failback_giveup` event, `failback_failures: 3`
 `failback_next_at: null`. A settings reload clears it (the next try is one full
 `failback_every_min` later, not at once), as do a `retry_failback` request and a daemon start; the
 count lives in memory only.
+
+## 14. Adapter addition (R11b, 2026-11-08)
+
+`plat_cc_count` sets `PLAT_CC` (component carriers in use, an integer >= 1, or empty = unknown) and
+`PLAT_CC_RAT` (`sa` | `lte` | empty) for the opt-in carrier trigger (Amendment 3 A3.3). The neutral
+`wd_carrier.sh` calls it only while `carrier_enabled=1`, once per evaluated pass and once per carrier
+verdict. `plat_paths` also sets `PF_QMI_ENV` and `PF_CA_ENV`. RM551E binding, in this order:
+
+1. `PF_CA_ENV` = `/var/run/qmanager/ca.env` (the poller's gated AT carrier sidecar, written only
+   while `carrier_enabled=1`): complete (every line `ca_*='...'` inside `[A-Za-z0-9_='-]`, last line
+   `qm_sidecar_end='1'`), `ca_rat='sa'` (the writer never emits `nrdc`, so `sa` covers NR-DC),
+   `ca_nr_cc` an integer >= 1 and `ca_mono` at most 90 s older than `/proc/uptime` →
+   `PLAT_CC=ca_nr_cc`, `PLAT_CC_RAT=sa`.
+2. else `PF_QMI_ENV` = `/var/run/qmanager/qmi.env` (the broker's QMI sidecar, every 2 s): complete
+   (the `qmi_*` line rule of `_qmi_env_source`, end marker last), `qmi_state='up'`,
+   `qmi_registered='1'`, `qmi_ca_count` an integer >= 1 (LTE carriers including the PCC) and
+   `qmi_mono` at most 10 s older than `/proc/uptime` → `PLAT_CC=qmi_ca_count`, `PLAT_CC_RAT=lte`
+   (LTE, or the NSA anchor side).
+3. else both empty.
+
+Both files are parsed line by line and never sourced, with builtins only (no jq, no fork). A number
+with a leading zero, more than two digits (counts) or more than ten digits (mono) reads as unknown.
+RM520N binds its own source in the port.

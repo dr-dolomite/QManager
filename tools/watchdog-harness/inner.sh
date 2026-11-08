@@ -26,6 +26,7 @@ quecmanager.watchcat.tier4_enabled=1
 quecmanager.watchcat.max_reboots_per_hour=3
 quecmanager.watchcat.quality_enabled=0
 quecmanager.watchcat.quality_after_sec=30
+quecmanager.watchcat.carrier_enabled=0
 quecmanager.watchcat.ssr_aware=1
 quecmanager.watchcat.ssr_grace_sec=45
 quecmanager.watchcat.failback_enabled=0

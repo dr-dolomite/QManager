@@ -121,7 +121,7 @@ run_one() { # scenario name
     }
 
     rewrite "$DAEMON" "$stage/qmanager_watchcat"
-    for lib in qlog safe_tmp events sim_db qm_platform_cqwd conn_state schedule_guard wd_config wd_state wd_detect wd_quality wd_ledger wd_tiers wd_sim; do
+    for lib in qlog safe_tmp events sim_db qm_platform_cqwd conn_state schedule_guard wd_config wd_state wd_detect wd_quality wd_carrier wd_ledger wd_tiers wd_sim; do
         [ -f "$LIBDIR/$lib.sh" ] && rewrite "$LIBDIR/$lib.sh" "$stage/lib/$lib.sh"
     done
 

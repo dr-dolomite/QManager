@@ -267,16 +267,16 @@ wd_decide_start() {
     return 0
 }
 
-# wd_holdoff_left <outage|quality>: prints the seconds left of that reason's
-# pause after an exhausted ladder (0 = none). Anything but "quality" = outage.
+# wd_holdoff_left <outage|quality|carrier>: prints the seconds left of that
+# reason's pause after an exhausted ladder (0 = none). Anything else = outage.
 wd_holdoff_left() {
     local now
     local hold_end
-    if [ "$1" = "quality" ]; then
-        hold_end="$wd_hold_q_until"
-    else
-        hold_end="$wd_hold_out_until"
-    fi
+    case "$1" in
+        quality) hold_end="$wd_hold_q_until" ;;
+        carrier) hold_end="$wd_hold_c_until" ;;
+        *) hold_end="$wd_hold_out_until" ;;
+    esac
     case "$hold_end" in
         ''|*[!0-9]*) printf '0'; return 0 ;;
     esac
@@ -310,7 +310,7 @@ wd_radio_reconcile() {
     return 0
 }
 
-# wd_start_gate <outage|quality>: gathers the three inputs for wd_decide_start
+# wd_start_gate <outage|quality|carrier>: gathers the three inputs for wd_decide_start
 # (the hold-off left of that reason only) and prints its verdict. The one
 # AT read (AT+CFUN?) is skipped when an earlier gate already decides. While a
 # Tier 2 radio toggle is unresolved (wd_radio_down=1) a radio that is off is ours,
@@ -322,12 +322,15 @@ wd_start_gate() {
     any=0
     [ "$CFG_TIER1_ENABLED" = "1" ] && any=1
     [ "$CFG_TIER2_ENABLED" = "1" ] && any=1
-    # The quality ladder is Tier 1-2 only (find_next_tier, spec D5).
-    if [ "$1" != "quality" ]; then
-        [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
-        # A resting Tier 4 (wd_ledger.sh) is not an eligible tier.
-        [ "$CFG_TIER4_ENABLED" = "1" ] && [ -z "$reboot_rest_reason" ] && any=1
-    fi
+    # The quality and carrier ladders are Tier 1-2 only (find_next_tier, spec D5).
+    case "$1" in
+        quality|carrier) ;;
+        *)
+            [ "$CFG_TIER3_ENABLED" = "1" ] && any=1
+            # A resting Tier 4 (wd_ledger.sh) is not an eligible tier.
+            [ "$CFG_TIER4_ENABLED" = "1" ] && [ -z "$reboot_rest_reason" ] && any=1
+            ;;
+    esac
 
     hl=$(wd_holdoff_left "$1")
 

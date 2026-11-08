@@ -23,6 +23,7 @@ scripts/usr/lib/qmanager/wd_config.sh
 scripts/usr/lib/qmanager/wd_state.sh
 scripts/usr/lib/qmanager/wd_detect.sh
 scripts/usr/lib/qmanager/wd_quality.sh
+scripts/usr/lib/qmanager/wd_carrier.sh
 scripts/usr/lib/qmanager/wd_tiers.sh
 scripts/usr/lib/qmanager/wd_sim.sh
 scripts/usr/lib/qmanager/wd_ledger.sh"
@@ -50,7 +51,7 @@ esac
 compute > "$HERE/.actual.$$" || { rm -f "$HERE/.actual.$$"; exit 2; }
 if diff "$MANIFEST" "$HERE/.actual.$$"; then
     rm -f "$HERE/.actual.$$"
-    echo "cq-wd-parity: OK (10 neutral files match the manifest)"
+    echo "cq-wd-parity: OK (11 neutral files match the manifest)"
     exit 0
 fi
 rm -f "$HERE/.actual.$$"

@@ -68,6 +68,11 @@ _wd_write_state_file() {
     local v_qlevel
     local v_hold_out
     local v_hold_q
+    local v_clevel
+    local v_hold_c
+    local v_csince
+    local v_css
+    local v_cc
     local v_state
     local v_fb_fail
     local v_fb_next
@@ -124,6 +129,16 @@ _wd_write_state_file() {
     _wd_num "$wd_hold_q_level" 0;          v_qlevel="$_wdn"
     _wd_num "$wd_hold_out_until" 0;        v_hold_out="$_wdn"
     _wd_num "$wd_hold_q_until" 0;          v_hold_q="$_wdn"
+    _wd_num "$wd_hold_c_level" 0;          v_clevel="$_wdn"
+    _wd_num "$wd_hold_c_until" 0;          v_hold_c="$_wdn"
+    # carrier_single_secs: how long the current single-carrier run has lasted;
+    # carrier_cc: the last carrier count read (null = unknown or not read).
+    _wd_num "$carrier_single_since" 0;     v_csince="$_wdn"
+    v_css=0
+    if [ "$v_csince" -gt 0 ] && [ "$v_mono" -ge "$v_csince" ]; then
+        v_css=$((v_mono - v_csince))
+    fi
+    _wd_num "$carrier_cc" null;            v_cc="$_wdn"
     # quality_breach_secs: how long the current quality breach has lasted.
     _wd_num "$quality_breach_since" 0;     v_qsince="$_wdn"
     v_qbs=0
@@ -135,7 +150,7 @@ _wd_write_state_file() {
     v_state="$state"
     case "$state" in
         monitor)
-            if [ "$v_hold_out" -gt "$v_mono" ] || [ "$v_hold_q" -gt "$v_mono" ]; then
+            if [ "$v_hold_out" -gt "$v_mono" ] || [ "$v_hold_q" -gt "$v_mono" ] || [ "$v_hold_c" -gt "$v_mono" ]; then
                 v_state="holdoff"
             fi
             ;;
@@ -198,10 +213,13 @@ _wd_write_state_file() {
         --argjson holdoff_until "$v_holdoff" \
         --arg holdoff_reason "$holdoff_reason" \
         --argjson qlevel "$v_qlevel" \
+        --argjson clevel "$v_clevel" \
         --argjson fb_fail "$v_fb_fail" \
         --argjson fb_next "$v_fb_next" \
         --argjson pr_active "$v_pr_active" \
         --argjson qbs "$v_qbs" \
+        --argjson css "$v_css" \
+        --argjson cc "$v_cc" \
         --argjson ping_stale "$v_ping_stale" \
         '{
             timestamp: $ts, enabled: ($enabled == 1),
@@ -224,6 +242,7 @@ _wd_write_state_file() {
             holdoff_until: (if $holdoff_until > $mono then $holdoff_until else null end),
             holdoff_reason: (if $holdoff_until > $mono and $holdoff_reason != "" then $holdoff_reason else null end),
             holdoff_quality_level: $qlevel,
+            holdoff_carrier_level: $clevel,
             reboots_this_hour: $reboots,
             reboot_limit: $rb_limit,
             reboot_budget_exhausted: $rb_spent,
@@ -233,6 +252,8 @@ _wd_write_state_file() {
             ssr_hold_until: (if $ssr_hold then ($ssr_started + $ssr_grace) else null end),
             last_ssr_mono: $last_ssr_mono,
             quality_breach_secs: $qbs,
+            carrier_single_secs: $css,
+            carrier_cc: $cc,
             failback_active: $pr_active,
             failback_failures: $fb_fail,
             failback_next_at: $fb_next,

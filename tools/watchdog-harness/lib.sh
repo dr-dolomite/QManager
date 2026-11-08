@@ -250,6 +250,38 @@ h_refresh() {
         printf '{"timestamp":%s,"mono":%s,"connectivity":{"avg_latency_ms":%s,"packet_loss_pct":%s}}\n' \
             "$_h_now" "$_h_up" "$(mget q_latency 24.5)" "$(mget q_loss 0)" > "$H_ROOT/tmp/qmanager_status.json"
     fi
+    # Carrier-count sidecars (R11b), only while the scenario sets cc_src, so
+    # every other scenario leaves var/run/qmanager as it was.
+    _h_csrc=$(mget cc_src "")
+    if [ -n "$_h_csrc" ] && [ "$(mget cc_stale 0)" != "1" ]; then
+        h_cc_write "$_h_csrc" "$_h_up"
+    fi
+}
+
+# h_cc_write SRC UPTIME: the broker's qmi.env and the poller's ca.env as the
+# watchdog adapter reads them. Model keys: cc (count; empty = the field is
+# empty), cc_src qmi (LTE / NSA: qmi.env registered, qmi_ca_count=cc) | sa
+# (ca.env ca_rat=sa, ca_nr_cc=cc; qmi.env not registered) | none (both files
+# removed), cc_stale=1 (stop rewriting: the files age out), qmi_state (default
+# up). Switching sa -> qmi leaves the old ca.env to age out, like the poller.
+h_cc_write() {
+    _h_qd="$H_ROOT/var/run/qmanager"
+    _h_cc=$(mget cc "")
+    case "$1" in
+        qmi)
+            printf "qmi_mono='%s'\nqmi_state='%s'\nqmi_ssr_count='0'\nqmi_registered='1'\nqmi_ca_count='%s'\nqm_sidecar_end='1'\n" \
+                "$2" "$(mget qmi_state up)" "$_h_cc" > "$_h_qd/qmi.env"
+            ;;
+        sa)
+            printf "qmi_mono='%s'\nqmi_state='%s'\nqmi_ssr_count='0'\nqmi_registered='0'\nqmi_ca_count=''\nqm_sidecar_end='1'\n" \
+                "$2" "$(mget qmi_state up)" > "$_h_qd/qmi.env"
+            printf "ca_mono='%s'\nca_source='at'\nca_rat='sa'\nca_lte_cc=''\nca_nr_cc='%s'\nqm_sidecar_end='1'\n" \
+                "$2" "$_h_cc" > "$_h_qd/ca.env"
+            ;;
+        none)
+            rm -f "$_h_qd/qmi.env" "$_h_qd/ca.env"
+            ;;
+    esac
 }
 
 # --- scenario helpers ----------------------------------------------------------

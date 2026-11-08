@@ -603,3 +603,47 @@ Tier 2 restores: tier 2, took 65 s, spanning both steps), 146 (a link back in su
 fields null; a later Tier 1 recovery sets them), 147 (1970 clock: time null, tier, reason and
 took set), 148 (a daemon restart, simulated by re-sourcing `wd_tiers.sh` at pass 12, resets all
 four to null). Each prints the fields through `sc_snap_extra`.
+
+## R11: stuck on one carrier (Amendment 3)
+
+Opt-in trigger, reason `carrier` (new neutral lib `wd_carrier.sh`, loaded after `wd_quality.sh`;
+staged by `run.sh`, listed in `tools/cq-wd-parity`). Config: `carrier_enabled` (only `1` is on) and
+`carrier_after_min` (minutes, default 15, clamp 5-240, leading zeros stripped); the config log gains a
+`Carrier:` line only while it is on. The count comes from the adapter (`plat_cc_count`, read only
+while on): a fresh SA `ca.env` (`ca_nr_cc`, at most 90 s old), else a fresh registered `qmi.env`
+(`qmi_ca_count`, at most 10 s old), else unknown. `evaluate_carrier` runs after `evaluate_quality` on
+every pass that reaches the trigger block, so on one pass outage wins, then quality, then carrier. It
+counts only in `monitor` with a fresh `reachable=true` and `streak_fail=0`; any other state ends the
+run (LOCKED and radio_off entry too). Two or more carriers arm it (once per start or reload), reset
+the run, end a carrier pause and clear a kept carrier tier; unknown keeps the run; one carrier counts
+only once armed and never under a tower lock. A run of `carrier_after_min` goes through
+`wd_start_gate carrier` (Tiers 1-2 only, `none` when both are off) and `wd_ladder_pick carrier`; Tiers
+3 and 4 are never run. The cooldown is the outage step wait; the verdict (`wd_cooldown_verdict
+carrier`) is success on a fresh read of 2 or more on a reachable link (`_wd_record_success` with
+`carrier`), fail on one carrier, extend (max 3, then inconclusive, tier kept) on unknown or
+`reachable=null`, and `handover` on `reachable=false` (the episode ends, the outage path acts on its
+own rules). The carrier pause has its own level (`wd_hold_c_*`, 15/30/60 min, reset after a quiet
+hour); it never blocks outage or quality and vice versa; `holdoff_reason` names the pause ending
+last (tie: outage, then quality). A settings reload ends it, resets its growth and re-arms the
+trigger. Events: `starting recovery (Tier N) — stuck on one carrier for M min` (`wd_tier_start`),
+`recovery succeeded (Tier N) — carrier aggregation restored` (`wd_succeeded`), and the usual
+`wd_holdoff`.
+
+Harness: `inner.sh` seeds `carrier_enabled=0`. Model keys (`h_refresh` writes the sidecars only
+while `cc_src` is set): `cc` (count, empty = empty field), `cc_src qmi|sa|none`, `cc_stale=1` (stop
+rewriting, the files age out), `qmi_state`. Every baseline's state-file snapshots gain
+`"holdoff_carrier_level":0` after `holdoff_quality_level` and `"carrier_single_secs":0,
+"carrier_cc":null` after `quality_breach_secs`: that is the only difference in the existing
+scenarios (stripping those keys leaves every existing output byte-identical).
+
+New scenarios: 149 (one carrier from the start: never armed, nothing runs), 150 (default 15 min:
+Tier 1 900 s after the run starts, AT+COPS=0 restores two carriers, last success tier 1 `carrier`),
+151 (Tier 3 armed and Tier 4 on: Tier 1, Tier 2, 15 min pause, the run outlasts it, second pause
+30 min; no QUIMSLOT, no reboot), 152 (tower lock: no run until the lock ends), 153 (empty count keeps
+the run), 154 (stale `qmi.env` is unknown; the first fresh read fires at once), 155 (SA via `ca.env`,
+success; a stale `ca.env` is unknown after 90 s), 156 (an outage mid-run wins, a new run after it),
+157 (quality and carrier due on one pass: quality), 158 (reload ends the pause, resets growth and
+re-arms), 159 (off: `plat_cc_count` never called; on after a reload, armed by two carriers), 160
+(`carrier_after_min` clamps), 161 (unknown verdict: 3 extensions, inconclusive, Tier 1 kept, next
+run resumes at Tier 2), 162 (link down at the verdict: handover to the outage ladder), 163 (two
+carriers end the pause early; the next pause within the hour is 30 min).
