@@ -145,8 +145,8 @@ collect_alert_routing() {
     local cfg="/etc/qmanager/alert_routing.json"
     if [ ! -f "$cfg" ]; then
         # No file → emit the canonical default so restore is deterministic.
-        # reboot defaults off/off (opt-in); version 2 carries the reboot event.
-        echo '{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false}}}'
+        # reboot and thermal_throttling default off/off (opt-in); version 2.
+        echo '{"version":2,"events":{"connection_lost":{"sms":true,"email":false},"connection_restored":{"sms":true,"email":true},"reboot":{"sms":false,"email":false},"thermal_throttling":{"sms":false,"email":false}}}'
         return 0
     fi
     jq -c '{version: (.version // 2),
@@ -162,6 +162,10 @@ collect_alert_routing() {
                 reboot: {
                     sms:   (if (.events.reboot.sms) == null then false else (.events.reboot.sms) end),
                     email: (if (.events.reboot.email) == null then false else (.events.reboot.email) end)
+                },
+                thermal_throttling: {
+                    sms:   (if (.events.thermal_throttling.sms) == null then false else (.events.thermal_throttling.sms) end),
+                    email: (if (.events.thermal_throttling.email) == null then false else (.events.thermal_throttling.email) end)
                 }
             }}' "$cfg"
 }
@@ -182,6 +186,8 @@ apply_alert_routing() {
     # The reboot event needs NO clamp (both channels are capable post-recovery)
     # and simply passes through this write untouched; a v1 backup with no reboot
     # key restores fine — alert_routing_load fail-closes reboot to off/off.
+    # thermal_throttling is the same: no clamp, passes through, and a backup
+    # without the key fail-closes to off/off.
     echo "$input" | jq '.events.connection_lost.email = false' > "$tmp" || { rm -f "$tmp"; return 1; }
     mv "$tmp" "$cfg" || return 1
     # Signal the running poller to reload routing next cycle
