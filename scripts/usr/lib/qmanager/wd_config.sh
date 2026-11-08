@@ -17,6 +17,9 @@
 
 # --- Configuration (defaults, overridden by the config store) ----------------
 CFG_ENABLED=0
+# Seconds per main-loop pass. An internal constant (spec section 3.2: no config
+# key); nothing assigns it at run time, so the harness may override it after
+# sourcing to shorten long scenarios.
 CFG_CHECK_INTERVAL=10
 # Seconds of outage age (wd_detect.sh wd_outage_update) before recovery starts;
 # the effective value is max(act_after_sec, the ping daemon's fail_secs).
@@ -85,22 +88,16 @@ read_config() {
     [ -z "$CFG_ENABLED" ] && CFG_ENABLED=0
 
     local val
-    # check_interval feeds cooldown arithmetic: digits only, leading zeros
-    # stripped (ash reads "08" as a bad octal), 0 or garbage keeps the default.
-    val=$(cfg_get watchdog check_interval)
-    case "$val" in
-        ''|*[!0-9]*) ;;
-        *)
-            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do val="${val#0}"; done
-            [ "${#val}" -le 4 ] && [ "$val" -ge 1 ] && CFG_CHECK_INTERVAL="$val"
-            ;;
-    esac
-
     # act_after_sec: 15-600, default 30 (absent or non-numeric).
     val=$(cfg_get watchdog act_after_sec)
     case "$val" in
         ''|*[!0-9]*) CFG_ACT_AFTER_SEC=30 ;;
         *)
+            # Leading zeros first ("0030" is 30, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
+            [ "${#val}" -gt 3 ] && val=600
             CFG_ACT_AFTER_SEC="$val"
             [ "$CFG_ACT_AFTER_SEC" -lt 15 ] && CFG_ACT_AFTER_SEC=15
             [ "$CFG_ACT_AFTER_SEC" -gt 600 ] && CFG_ACT_AFTER_SEC=600
@@ -187,6 +184,11 @@ read_config() {
     case "$val" in
         ''|*[!0-9]*) CFG_SSR_GRACE=45 ;;
         *)
+            # Leading zeros first ("045" is 45, never octal), then the length.
+            while [ "${#val}" -gt 1 ] && [ "${val#0}" != "$val" ]; do
+                val="${val#0}"
+            done
+            [ "${#val}" -gt 3 ] && val=120
             CFG_SSR_GRACE="$val"
             [ "$CFG_SSR_GRACE" -lt 10 ] && CFG_SSR_GRACE=10
             [ "$CFG_SSR_GRACE" -gt 120 ] && CFG_SSR_GRACE=120

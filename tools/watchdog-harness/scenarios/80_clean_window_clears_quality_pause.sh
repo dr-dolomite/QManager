@@ -4,8 +4,8 @@
 # q_end stamped). The loss is back at pass 11 and the new ladder runs at once;
 # exhausted again within the hour, it pauses 30 minutes (level 1).
 SC_PASSES=20
+sc_post_source() { CFG_CHECK_INTERVAL=60; }
 sc_setup() {
-    uci_set quecmanager.watchcat.check_interval 60
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier2_enabled 0
     uci_set quecmanager.watchcat.tier4_enabled 0

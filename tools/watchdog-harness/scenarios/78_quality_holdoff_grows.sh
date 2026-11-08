@@ -5,8 +5,8 @@
 # name 15, 30, 60 and 60 minutes); while a pause runs no AT is sent.
 # Check interval 60 keeps the run short.
 SC_PASSES=125
+sc_post_source() { CFG_CHECK_INTERVAL=60; }
 sc_setup() {
-    uci_set quecmanager.watchcat.check_interval 60
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier2_enabled 0
     uci_set quecmanager.watchcat.tier4_enabled 0

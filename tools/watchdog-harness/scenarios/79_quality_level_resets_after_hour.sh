@@ -7,8 +7,8 @@
 # level is back to 0 and q_end is cleared. When the loss returns at pass 108
 # the next exhausted ladder pauses 15 minutes, not 60.
 SC_PASSES=115
+sc_post_source() { CFG_CHECK_INTERVAL=60; }
 sc_setup() {
-    uci_set quecmanager.watchcat.check_interval 60
     uci_set quecmanager.watchcat.quality_enabled 1
     uci_set quecmanager.watchcat.tier2_enabled 0
     uci_set quecmanager.watchcat.tier4_enabled 0

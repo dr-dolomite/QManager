@@ -7,8 +7,8 @@
 # gate ignored the airplane mode and Tier 2 cycled the radio.
 # Check interval 30 keeps the pause short.
 SC_PASSES=48
+sc_post_source() { CFG_CHECK_INTERVAL=30; }
 sc_setup() {
-    uci_set quecmanager.watchcat.check_interval 30
     uci_set quecmanager.watchcat.tier4_enabled 0
 }
 sc_pass_2() { mset reachable false; }

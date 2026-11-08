@@ -556,3 +556,25 @@ give-up; the next try is a full interval later), 134 (retry flag: count 0, try a
 (retry flag with no failover or failback off: only removed), 136 (two failures, then success:
 count back to 0), 137 (a configured 2 min reads as 5), 138 (99999 -> 1440, 0045 -> 45, abc -> 30,
 7, 0 -> 5), 139 (the retired `primary_recheck_*` keys are not read).
+
+## R9d: config key audit and the internal check interval (step 1b)
+
+`check_interval` is no longer a config key: `CFG_CHECK_INTERVAL` is the internal constant 10
+(`wd_config.sh`), and `read_config` no longer reads the store for it. Every watchdog key the
+daemon reads now matches spec section 3.2 (`enabled, act_after_sec, step_wait_sec,
+tier1..4_enabled, backup_sim_slot, max_reboots_per_hour, quality_enabled, quality_after_sec,
+ssr_aware, ssr_grace_sec, failback_enabled, failback_every_min`); `fail_threshold, cooldown,
+quality_consecutive, ssr_grace, primary_recheck_*` and `check_interval` are read nowhere in the
+neutral files. `act_after_sec` and `ssr_grace_sec` now strip leading zeros and cap their length
+like the other numeric keys (`0030` is 30, never a bad octal in ash arithmetic). The config log
+line keeps `interval=` (it prints the constant).
+
+Harness: nothing assigns `CFG_CHECK_INTERVAL` at run time any more, so the scenarios that used a
+longer pass to keep a long run short (29, 38, 53, 78-81) set it in `sc_post_source`, which runs
+after the daemon is sourced and before `main`. `inner.sh` no longer seeds `check_interval`.
+No baseline changes: every existing scenario is byte-identical to the R9c baseline.
+
+New scenarios: 140 (a stored `check_interval` 60 is not read: passes stay 10 s apart), 141 (the
+retired `fail_threshold`, `cooldown`, `quality_consecutive` and `ssr_grace` keys with absurd values
+change nothing: act after 15 s, 30 s step wait), 142 (`act_after_sec` and `ssr_grace_sec`
+leading zeros and clamps on reload).

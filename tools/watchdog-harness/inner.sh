@@ -17,7 +17,6 @@ printf '%s.00 0.00\n' "$H_UP0" > "$H_ROOT/proc_uptime"
 : > "$H_STATE/dmesg.txt"
 cat > "$H_STATE/uci.db" <<UCI
 quecmanager.watchcat.enabled=1
-quecmanager.watchcat.check_interval=10
 quecmanager.watchcat.act_after_sec=15
 quecmanager.watchcat.step_wait_sec=30
 quecmanager.watchcat.tier1_enabled=1
