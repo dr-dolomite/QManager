@@ -5,14 +5,10 @@ import Link from "next/link";
 import { motion, type Variants } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowRightLeftIcon,
-  CheckCircle2Icon,
   ChevronRightIcon,
   InboxIcon,
   RefreshCcwIcon,
-  TriangleAlertIcon,
   WifiOffIcon,
-  XCircleIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,24 +22,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tag } from "@/components/ui/tag";
 import type { UseRecentActivitiesReturn } from "@/hooks/use-recent-activities";
-import {
-  computeUnresolved,
-  eventKey,
-  isFresh,
-  presentEvent,
-  splitEventMessage,
-  type EventPresentation,
-  type EventTone,
-} from "@/lib/event-presentation";
+import { FRESH_WINDOW_SEC } from "@/lib/event-presentation";
 import { rowCascadeDelay, transitionStandard } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import type { NetworkEvent, NetworkEventType } from "@/types/modem-status";
 
-import { CLOCK_PLAUSIBLE_AFTER, useTimeAgo } from "./derive";
+import { buildActivityRows, type ActivityRow } from "./activity-model";
+import { useClock } from "./use-clock";
+import { useFormatters, useTimeAgo } from "./derive";
 import {
   ABSOLUTE_INK,
+  ACTIVITY_TONE,
   CARD_DESC,
   CARD_PAD,
   CARD_SHELL,
@@ -52,7 +41,6 @@ import {
   CONDITION_TONE,
   DAY,
   LOG,
-  LOG_LIMIT,
   LOG_LINK,
   LOG_STACK,
   PILL_GLYPH,
@@ -61,41 +49,9 @@ import {
   type ConditionTone,
 } from "./shapes";
 
-/** The two types the watchdog writes. Everything else belongs to another page. */
-const WATCHDOG_TYPES: ReadonlySet<NetworkEventType> = new Set([
-  "watchcat_recovery",
-  "sim_failover",
-]);
-
-const TYPE_KEY: Record<string, string> = {
-  watchcat_recovery: "watchdog.activity.type.recovery",
-  sim_failover: "watchdog.activity.type.failover",
-};
-
-/** Four tones, four distinct glyphs. Two rows never share one. */
-const TONE_GLYPH = {
-  success: CheckCircle2Icon,
-  warning: TriangleAlertIcon,
-  error: XCircleIcon,
-  routine: ArrowRightLeftIcon,
-} satisfies Record<EventTone, LucideIcon>;
-
-const DAY_SEC = 86_400;
+const DAY_MS = 86_400_000;
 
 const NO_REBOOTS: readonly number[] = [];
-
-/** How far apart the log's own restart row and the recorded restart may sit. */
-const REBOOT_MATCH_SEC = 120;
-
-/** The event ring's own row for a Tier 4 restart, so the two are drawn once. */
-function isRebootEvent(event: NetworkEvent, epoch: number): boolean {
-  return (
-    event.type === "watchcat_recovery" &&
-    event.message.includes("Tier 4") &&
-    /reboot/i.test(event.message) &&
-    Math.abs(event.timestamp - epoch) <= REBOOT_MATCH_SEC
-  );
-}
 
 /** 80ms per row, capped by `rowCascadeDelay` so a long feed cannot choreograph. */
 const rowItem: Variants = {
@@ -107,27 +63,14 @@ const rowItem: Variants = {
   }),
 };
 
-function useNowSec(): number {
-  const [now, setNow] = React.useState(() => Math.floor(Date.now() / 1000));
-  React.useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
-
 function dayKey(ms: number): string {
   const d = new Date(ms);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 interface RowView {
-  key: string;
-  event: NetworkEvent;
-  presentation: EventPresentation;
-  unresolved: boolean;
-  typeLabel: string;
-  severityWord: string;
+  row: ActivityRow;
+  fresh: boolean;
   timeAgo: string;
   clockTime: string;
 }
@@ -139,8 +82,9 @@ interface DayGroup {
 }
 
 /**
- * Recovery activity: the same 52px event row the dashboard and Network Events
- * render. The newest five; "All events" links to the full log.
+ * Recovery activity: one row per thing the watchdog did, each with its own tone
+ * and glyph, read from the event's code. The newest few; "All events" links to
+ * the full log.
  */
 export function RecoveryActivityCard({
   activities,
@@ -151,95 +95,43 @@ export function RecoveryActivityCard({
   recentReboots?: readonly number[];
 }) {
   const { t, i18n } = useTranslation("monitoring");
+  const fmt = useFormatters();
   const { events, isLoading, error, refresh } = activities;
-  const nowSec = useNowSec();
+  const { epochMs } = useClock();
   const timeAgo = useTimeAgo();
 
-  const dayLabel = React.useCallback(
-    (ms: number): string => {
-      const nowMs = Date.now();
-      if (dayKey(ms) === dayKey(nowMs)) return t("watchdog.activity.day.today");
-      if (dayKey(ms) === dayKey(nowMs - DAY_SEC * 1000))
-        return t("watchdog.activity.day.yesterday");
+  const groups = React.useMemo<DayGroup[]>(() => {
+    const nowSec = Math.floor(epochMs / 1000);
+    const dayLabel = (ms: number): string => {
+      if (dayKey(ms) === dayKey(epochMs)) return t("watchdog.activity.day.today");
+      if (dayKey(ms) === dayKey(epochMs - DAY_MS)) return t("watchdog.activity.day.yesterday");
       // The app's locale, not the browser's: the two disagree by design here.
       return new Date(ms).toLocaleDateString(i18n.language, {
         weekday: "short",
         month: "short",
         day: "numeric",
       });
-    },
-    [i18n.language, t],
-  );
+    };
 
-  const groups = React.useMemo<DayGroup[]>(() => {
-    // Resolution is judged against the WHOLE feed, then filtered: an internet
-    // recovery that closes a watchdog row is not itself a watchdog row.
-    const unresolved = computeUnresolved(events);
     const out: DayGroup[] = [];
-
-    // The hook only REVERSES the file, and file order is not timestamp order on
-    // this platform: with no RTC the modem boots at Jan 1970, so rows appended
-    // after a SIM-less reboot pre-date the ones already in the ring. Sort, or
-    // the card contradicts its own "newest first" description. Indices are
-    // carried through because `unresolved` keys into the unfiltered array.
-    const fromLog = events
-      .map((event, index) => ({ event, index }))
-      .filter(({ event }) => WATCHDOG_TYPES.has(event.type));
-
-    // The watchdog's own restarts survive the reboot they cause, which the
-    // event ring does not always. A restart the ring still holds is not drawn
-    // twice. Index -1: a synthetic row is never "unresolved".
-    const fromReboots = recentReboots
-      .filter(
-        (epoch) =>
-          epoch > CLOCK_PLAUSIBLE_AFTER &&
-          !fromLog.some(({ event }) => isRebootEvent(event, epoch)),
-      )
-      .map((epoch) => ({
-        index: -1,
-        event: {
-          timestamp: epoch,
-          type: "watchcat_recovery",
-          message: t("watchdog.activity.tier4Reboot"),
-          severity: "error",
-        } satisfies NetworkEvent,
-      }));
-
-    const kept = [...fromLog, ...fromReboots]
-      .sort((a, b) => b.event.timestamp - a.event.timestamp)
-      .slice(0, LOG_LIMIT);
-
-    kept.forEach(({ event, index }) => {
-      const ms = event.timestamp * 1000;
-      const isUnresolved = unresolved.has(index);
-      const presentation = presentEvent(
-        event,
-        isUnresolved,
-        isFresh(event, nowSec),
-        "card",
-      );
-      const row: RowView = {
-        key: eventKey(event),
-        event,
-        presentation,
-        unresolved: isUnresolved,
-        typeLabel: t(TYPE_KEY[event.type] ?? "watchdog.activity.type.recovery"),
-        severityWord: t(presentation.srSeverityKey, { ns: "dashboard" }),
-        timeAgo: timeAgo(event.timestamp),
+    for (const row of buildActivityRows(events, recentReboots, fmt.t)) {
+      const ms = row.timestamp * 1000;
+      const view: RowView = {
+        row,
+        fresh: nowSec - row.timestamp < FRESH_WINDOW_SEC,
+        timeAgo: timeAgo(row.timestamp),
         clockTime: new Date(ms).toLocaleTimeString(i18n.language, {
           hour: "2-digit",
           minute: "2-digit",
         }),
       };
-
       const key = dayKey(ms);
       const last = out[out.length - 1];
-      if (last && last.key === key) last.rows.push(row);
-      else out.push({ key, label: dayLabel(ms), rows: [row] });
-    });
-
+      if (last && last.key === key) last.rows.push(view);
+      else out.push({ key, label: dayLabel(ms), rows: [view] });
+    }
     return out;
-  }, [events, recentReboots, nowSec, t, i18n.language, timeAgo, dayLabel]);
+  }, [events, recentReboots, epochMs, t, fmt.t, i18n.language, timeAgo]);
 
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   // One counter across every day block: assuming three rows per group ran the
@@ -247,7 +139,7 @@ export function RecoveryActivityCard({
   const order = React.useMemo(() => {
     const map = new Map<string, number>();
     let i = 0;
-    for (const g of groups) for (const r of g.rows) map.set(r.key, i++);
+    for (const g of groups) for (const r of g.rows) map.set(r.row.key, i++);
     return map;
   }, [groups]);
   const unreadable = !isLoading && error !== null && total === 0;
@@ -255,9 +147,7 @@ export function RecoveryActivityCard({
   return (
     <Card className={CARD_SHELL}>
       <CardHeader className={CARD_PAD}>
-        <CardTitle className={CARD_TITLE}>
-          {t("watchdog.activity.title")}
-        </CardTitle>
+        <CardTitle className={CARD_TITLE}>{t("watchdog.activity.title")}</CardTitle>
         <CardDescription className={CARD_DESC}>
           {t("watchdog.activity.description")}
         </CardDescription>
@@ -273,11 +163,13 @@ export function RecoveryActivityCard({
 
       <CardContent className={cn(CARD_PAD, "flex flex-col")}>
         {isLoading ? (
-          <ActivityRows aria-hidden>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className={SKELETON.ROW} />
-            ))}
-          </ActivityRows>
+          <div className={LOG_STACK} aria-hidden>
+            <div className={LOG}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className={SKELETON.ROW} />
+              ))}
+            </div>
+          </div>
         ) : unreadable ? (
           <ActivityCondition
             tone="destructive"
@@ -285,7 +177,7 @@ export function RecoveryActivityCard({
             title={t("watchdog.activity.error.title")}
             description={error ?? ""}
             actionLabel={t("watchdog.activity.error.retry")}
-            onAction={() => refresh()}
+            onAction={() => void refresh()}
           />
         ) : total === 0 ? (
           <ActivityCondition
@@ -302,15 +194,15 @@ export function RecoveryActivityCard({
                   <span className={DAY.LABEL}>{group.label}</span>
                   <span aria-hidden className={DAY.RULE} />
                 </div>
-                {group.rows.map((row) => (
+                {group.rows.map((view) => (
                   <motion.div
-                    key={row.key}
-                    custom={order.get(row.key) ?? 0}
+                    key={view.row.key}
+                    custom={order.get(view.row.key) ?? 0}
                     variants={rowItem}
                     initial="hidden"
                     animate="visible"
                   >
-                    <ActivityRow row={row} />
+                    <ActivityLine view={view} />
                   </motion.div>
                 ))}
               </div>
@@ -322,68 +214,51 @@ export function RecoveryActivityCard({
   );
 }
 
-function ActivityRows({
-  children,
-  ...rest
-}: React.ComponentProps<"div">) {
-  return (
-    <div className={LOG_STACK} {...rest}>
-      <div className={LOG}>{children}</div>
-    </div>
-  );
-}
-
-function ActivityRow({ row }: { row: RowView }) {
-  const { presentation } = row;
-  const Glyph = TONE_GLYPH[presentation.tone];
-  // The daemon writes these messages; they arrive as backend English and are
-  // the one untranslated text on this surface, as on every other event feed.
-  const { text, identifiers } = splitEventMessage(row.event.message);
-  const { chromatic } = presentation;
+function ActivityLine({ view }: { view: RowView }) {
+  const { t } = useTranslation("monitoring");
+  const { row, fresh } = view;
+  const tone = ACTIVITY_TONE[row.tone];
+  const Glyph = row.glyph;
+  // A recent row wears the tonal container for its first hour; after that the
+  // disc alone keeps the colour, so the list settles as it ages.
+  const tonal = fresh && row.tone !== "muted";
 
   return (
-    <div className={cn(ROW.ROOT, ROW.TRANSITION, presentation.containerClass)}>
-      <span
-        aria-hidden
-        className={cn(ROW.DISC, ROW.TRANSITION, presentation.discClass)}
-      >
+    <div
+      className={cn(
+        ROW.ROOT,
+        ROW.TRANSITION,
+        tonal && tone.fill,
+      )}
+    >
+      <span aria-hidden className={cn(ROW.DISC, ROW.TRANSITION, tone.disc)}>
         <Glyph className={ROW.GLYPH} />
       </span>
 
       <div className={ROW.BODY}>
-        <span className="sr-only">{row.severityWord}</span>
+        <span className="sr-only">{t(`watchdog.activity.sr.${row.tone}`)}</span>
         <span
-          className={cn(ROW.MESSAGE, presentation.messageClass)}
-          title={text}
+          className={cn(ROW.MESSAGE, !tonal && "text-on-surface")}
+          title={row.title}
         >
-          {text}
+          {row.title}
         </span>
         <div className={ROW.META}>
-          <Tag
-            variant="neutral"
-            className={cn(ROW.META_CHIP, chromatic && ROW.META_CHIP_ON_TONAL)}
+          <span
+            className={cn(ROW.DETAIL, tonal ? "opacity-80" : ABSOLUTE_INK)}
+            title={row.detail ?? undefined}
           >
-            {row.typeLabel}
-          </Tag>
-          {identifiers.map((id) => (
-            <span
-              key={id}
-              className={chromatic ? ROW.META_ID_ON_TONAL : ROW.META_ID}
-            >
-              {id}
-            </span>
-          ))}
+            {row.detail ?? row.category}
+          </span>
         </div>
       </div>
 
       <div className={ROW.WHEN}>
-        <span className={cn(ROW.RELATIVE, presentation.messageClass)}>
-          {row.timeAgo}
+        <span className={cn(ROW.RELATIVE, !tonal && "text-on-surface")}>
+          {view.timeAgo}
         </span>
-        <span
-          className={cn(ROW.ABSOLUTE, chromatic ? "opacity-80" : ABSOLUTE_INK)}
-        >
-          {row.clockTime}
+        <span className={cn(ROW.ABSOLUTE, tonal ? "opacity-80" : ABSOLUTE_INK)}>
+          {view.clockTime}
         </span>
       </div>
     </div>
