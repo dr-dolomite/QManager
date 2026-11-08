@@ -1,6 +1,6 @@
 # QMI Lane (`qmi`, QMI sidecars)
 
-The broker `qmanager_atd` (0.7.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Data Used is a third consumer: the poller's `data_used.sh` reads the `qmi_wds_*` keys of `qmi.env` ([`data-used.md`](data-used.md)). Since 0.7.0 the poller is also a `qmi` caller: it builds the LTE carrier list from the sidecar and skips `AT+QCAINFO` when that list is usable ([Carrier list from QMI](#carrier-list-from-qmi-broker-070)), and its boot fallbacks read `qmi rev ids` and `qmi bands`.
+The broker `qmanager_atd` (0.7.0; the lane arrived in 0.3.0) serves **read-only QMI over QRTR** next to its AT path. A QMI read never touches `/dev/smd11`, never takes the modem lock and never waits behind an AT job, so LTE identity, signal and carrier aggregation stay readable (in about a millisecond) while a scan, a SIM switch or a held lock keeps AT busy. A sampler thread inside the lane also publishes the bundle as sidecar files for the poller and CGIs. **Phase 2 consumers:** the poller gap-fills LTE serving signal from `qmi.env` (`qmi_merge.sh`, see [`adaptive-polling.md`](adaptive-polling.md#13-the-qmi-overlay-wraps-the-final-write_cache-only)), and the Antenna Alignment console and the dashboard read the broker's live file ([`live-signal.md`](live-signal.md)). Data Used is a third consumer: the poller's `data_used.sh` reads the `qmi_wds_*` keys of `qmi.env` ([`data-used.md`](data-used.md)). Since 0.7.0 the poller is also a `qmi` caller: it builds the LTE carrier list from the sidecar and skips `AT+QCAINFO` when that list is usable ([Carrier list from QMI](#carrier-list-from-qmi-broker-070)), and its boot fallbacks read `qmi rev ids` and `qmi bands`. Since 2026-11-08 `qmi opmode` gates the poller's Tier 1 `AT+CFUN?` and the watchdog's `wd_cfun_now`, and `qmi ids` backs the IMEI Settings and config-backup reads ([Device-service consumers](#device-service-consumers-2026-11-08)).
 
 Process model, wire format and AT invariants: [`at-broker.md`](at-broker.md). Field verdicts behind the table below: [`../research/qmi-phase0-results.md`](../research/qmi-phase0-results.md), corrected for NR by the full NAS sweep in [`../research/qmi-nr-sweep.md`](../research/qmi-nr-sweep.md) (2026-10-29). Design: [`../plans/2026-10-22-qmi-phase1-broker-architecture.md`](../plans/2026-10-22-qmi-phase1-broker-architecture.md).
 
@@ -106,7 +106,8 @@ Source file: `daemon/data_call.rs` (discovery), `qmi/codec/wds.rs` (codec), `qmi
 | WDS packet stats | GO (0.6.0, broker-only) | Needs a client bound to the data call; the broker binds its own (above). Matches `QCMAP_CLI` within one read. Not reachable by the `qmi` verb. |
 | WDS current settings | not available | Needs data-session ownership; `0x002D` stays excluded. |
 | LTE band capability | GO (0.7.0) | DMS `0x0045` TLVs `0x12` (LTE) and `0x13` (NR), read by `bands`. The LTE list equals AT `lte_band` (32 bands, 2026-11-06). Values are band numbers, not NAS enums. |
-| IDs, revision, op mode, time, card, slots, profiles, DSD | GO candidates | Answer in 0.1-0.6 ms; not compared field by field. |
+| Model, revision, IMEI, op mode | GO (2026-11-08) | `rev` (`0x0022` + `0x0023`), `ids` (`0x0025`), `opmode` (`0x002D`). Matched `AT+CGMM`, `AT+CGMR`, `AT+CGSN` and `AT+CFUN?` on the RM551E. Op mode: CFUN 1 = `online` (0); CFUN 0 and CFUN 4 both = `low_power` (1), so QMI cannot tell them apart. QMI has no `AT+QGMR` suffix. |
+| Time, card, slots, profiles, DSD | GO candidates | Answer in 0.1-0.6 ms; not compared field by field. |
 
 In NSA, QMI cannot replace `QENG servingcell`, and the NR row of `QCAINFO` stays AT (QMI has no NR bandwidth, and its NR signal disagrees with QCAINFO's NR values). Since 0.7.0 QMI supplies the LTE rows of `QCAINFO` (identity, per-carrier signal, PCC SINR); the NR row still comes from the last AT parse ([Carrier list from QMI](#carrier-list-from-qmi-broker-070)). Before 0.7.0 QMI only filled the gaps where AT was absent (idle and deep tiers, scan and SIM-switch suppression, busy streaks).
 
@@ -287,6 +288,20 @@ Run on the RM551E in NSA (B1 PCC at PCI 295, N41 SCC), broker 0.7.0 with the sig
 | LTE band list, DMS `0x0045` | Equals AT `lte_band` (32 bands). Values are band numbers. |
 | 3-carrier CA, B1 + B3 + B41 (all PCI 295, distinct EARFCNs) | Each SCC got its own signal through the poller. |
 | Poller carrier source, NSA, 4 min active | 109 cycles built from QMI (`mixed`), 11 read `AT+QCAINFO`. |
+
+## Device-service consumers (2026-11-08)
+
+Shared helpers in `scripts/usr/lib/qmanager/qmi_dms.sh` (sourced with `[ -f ] && .`; every miss falls back to AT). Plan: [`../plans/2026-11-08-qmi-dms-reads.md`](../plans/2026-11-08-qmi-dms-reads.md).
+
+| Helper | Read | Consumer |
+|---|---|---|
+| `qm_qmi_online` | `opmode`, rc 0 only on code 0 | Poller Tier 1 (skips `AT+CFUN?`, sets `t1_cfun=1`); watchdog `wd_cfun_now` (prints 1) |
+| `qm_qmi_imei` | `ids` | `qm_imei_running` fallback; config backup `collect_imei` before `AT+CGSN` |
+| `qm_imei_pending` / `qm_imei_effective` / `qm_imei_mark_written` | none (marker `/tmp/qmanager_imei_pending`) | `cellular/imei.sh`, config restore `apply_imei` |
+
+- **Online short-circuits, nothing else does.** `online` is exactly CFUN 1 (checked live with CFUN 0, 4 and 1). Any other mode, `modem_not_ready` (SSR) or a broker without `qmi=1` asks `AT+CFUN?` for the exact 0 or 4, which the airplane-mode event and the dashboard show. Never map `low_power` to a CFUN digit.
+- **The IMEI marker lives in `/tmp` on purpose.** `AT+EGMR=1,7` takes effect at the next reboot, and a reboot clears `/tmp`, so the marker never outlives the pending write. Writing back the running IMEI removes it. GET returns `pending_imei` (empty when none); POST compares against the pending value first, so writing X and then the original back really writes the original.
+- Not moved: the boot identity bundle (the compound AT also carries CIMI, QCCID, CNUM and the capability read; CVERSION gives the build date), `cellular/settings.sh` and `profiles/current_settings.sh` (their `CFUN?` / `CGSN` sit inside compounds), the profile apply's post-reboot `CGSN` verify, and the health check.
 
 ## Gotchas for Phase 2 consumers
 

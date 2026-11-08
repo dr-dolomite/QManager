@@ -442,6 +442,8 @@ fi
 # QMI gap-fill (optional). Missing lib = AT-only status.json; removing it is the
 # per-device off switch.
 [ -f /usr/lib/qmanager/qmi_merge.sh ] && . /usr/lib/qmanager/qmi_merge.sh
+# QMI device-service reads (optional): Tier 1 radio state skips AT+CFUN? while online.
+[ -f /usr/lib/qmanager/qmi_dms.sh ] && . /usr/lib/qmanager/qmi_dms.sh
 command -v qmi_load >/dev/null 2>&1 || qmi_load() { return 1; }
 command -v qmi_overlay_apply >/dev/null 2>&1 || qmi_overlay_apply() { lte_source="at"; return 1; }
 command -v qmi_overlay_restore >/dev/null 2>&1 || qmi_overlay_restore() { lte_source="at"; }
@@ -3056,11 +3058,17 @@ poll_cycle() {
             fi
 
             # CFUN — standalone query (compound commands timeout in CFUN=0).
-            # Active/idle only; deep tier skips this read.
-            local cfun_result
-            _qc_read 'AT+CFUN?'
-            _tap_at 'AT+CFUN?' "$?" "$_QRAW"
-            cfun_result="$_QRAW"
+            # Active/idle only; deep tier skips this read. QMI "online" is
+            # exactly CFUN=1, so it skips the AT round trip; any other mode
+            # (or a QMI miss) asks AT for the exact 0/4 digit.
+            local cfun_result=""
+            if command -v qm_qmi_online >/dev/null 2>&1 && qm_qmi_online; then
+                t1_cfun=1
+            else
+                _qc_read 'AT+CFUN?'
+                _tap_at 'AT+CFUN?' "$?" "$_QRAW"
+                cfun_result="$_QRAW"
+            fi
             if [ -n "$cfun_result" ]; then
                 # Value after the first ": " on the first +CFUN: line, CRs and
                 # spaces removed (awk -F': ' '{print $2}' | tr -d ' ').

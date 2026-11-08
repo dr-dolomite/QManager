@@ -170,7 +170,7 @@ This invariant has two layers, applied across two releases:
 
 - `AT+QENG="servingcell"` — serving-cell signal metrics
 - `AT+QCAINFO=1;+QCAINFO;+QCAINFO=0` — carrier-aggregation info, skipped on an AT-due cycle when the QMI carrier list is usable (Invariant 14). Extended reporting is switched on, read and switched off in one exchange (QuecManager's pattern); never leave `AT+QCAINFO=1` set at boot or between cycles, since a persistent `=1` drops the connection on RM551E R01A04 (confirmed by field test, fixed in v0.1.34).
-- `AT+CFUN?` — radio function state
+- `AT+CFUN?` — radio function state; skipped when `qmi opmode` reads `online` (`qm_qmi_online`, sets `t1_cfun=1`), asked only for the exact 0/4 digit otherwise ([`qmi-lane.md`](qmi-lane.md#device-service-consumers-2026-11-08))
 - `AT+QRSRP`; `AT+QRSRQ`; `AT+QSINR` — per-antenna RSRP/RSRQ/SINR
 
 **When the poller is Deep, only `AT+QENG="servingcell"` runs.** QCAINFO, CFUN?, and the per-antenna reads (`QRSRP`/`QRSRQ`/`QSINR`) are wrapped in an `if [ "$ap_tier" != "deep" ]; then ... fi` guard and do not execute. This is the minimum needed to keep `qmanager_tower_failover` operational (see Invariant 7 below); everything else holds last-known values via `write_cache`.
