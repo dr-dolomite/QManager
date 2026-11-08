@@ -1,0 +1,30 @@
+{
+  "name": "watchdog/get_carrier_defaults_empty_store",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".settings.carrier_enabled": "bool",
+      ".settings.carrier_after_min": "int",
+      ".effective.carrier_enabled": "bool",
+      ".effective.carrier_after_min": "int"
+    },
+    "equals": {
+      ".success": true,
+      ".settings.carrier_enabled": false,
+      ".settings.carrier_after_min": 15,
+      ".effective.carrier_enabled": false,
+      ".effective.carrier_after_min": 15
+    }
+  }
+}

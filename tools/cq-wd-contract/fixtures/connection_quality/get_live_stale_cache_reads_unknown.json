@@ -1,0 +1,80 @@
+{
+  "name": "connection_quality/get_live_stale_cache_reads_unknown",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null,
+      "ping": {
+        "timestamp": 1,
+        "mono": 0,
+        "sensitivity": "relaxed",
+        "targets": [
+          "1.1.1.1",
+          "8.8.8.8",
+          "2606:4700:4700::1111",
+          "cloudflare.com"
+        ],
+        "interval_sec": 5,
+        "fail_secs": 20,
+        "recover_secs": 10,
+        "last_rtt_ms": 12.5,
+        "reachable": true,
+        "streak_success": 3,
+        "streak_fail": 0,
+        "fail_elapsed_sec": 0,
+        "during_recovery": false,
+        "last_family": "ipv4",
+        "last_leg": 2,
+        "cycle_ms": 40
+      },
+      "slots": {
+        "mono": "__MONO__",
+        "slots": [
+          {
+            "state": "miss",
+            "rtt_ms": null
+          },
+          {
+            "state": "ok",
+            "rtt_ms": 9.5
+          },
+          {
+            "state": "standby",
+            "rtt_ms": null
+          },
+          {
+            "state": "standby",
+            "rtt_ms": null
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".live": "object",
+      ".live.reachable": "bool|null",
+      ".live.last_leg": "int",
+      ".live.slots": "array",
+      ".live.slots[0].state": "str",
+      ".live.slots[0].rtt_ms": "num|null",
+      ".live.slots[1].state": "str",
+      ".live.slots[2].state": "str",
+      ".live.slots[3].state": "str"
+    },
+    "equals": {
+      ".success": true,
+      ".live.reachable": null,
+      ".live.last_leg": 0,
+      ".live.slots[0].state": "standby",
+      ".live.slots[1].state": "standby",
+      ".live.slots[1].rtt_ms": null
+    }
+  }
+}

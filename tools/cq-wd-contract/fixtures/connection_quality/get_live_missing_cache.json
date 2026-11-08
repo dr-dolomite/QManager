@@ -1,0 +1,38 @@
+{
+  "name": "connection_quality/get_live_missing_cache",
+  "method": "GET",
+  "query": "",
+  "body": null,
+  "setup": {
+    "connection_quality": {},
+    "watchdog": {},
+    "files": {
+      "status": null,
+      "failover": null
+    }
+  },
+  "expect": {
+    "shape": {
+      ".success": "bool",
+      ".live": "object",
+      ".live.reachable": "bool|null",
+      ".live.last_leg": "int",
+      ".live.slots": "array",
+      ".live.slots[0].state": "str",
+      ".live.slots[0].rtt_ms": "num|null",
+      ".live.slots[1].state": "str",
+      ".live.slots[2].state": "str",
+      ".live.slots[3].state": "str"
+    },
+    "equals": {
+      ".success": true,
+      ".live.reachable": null,
+      ".live.last_leg": 0,
+      ".live.slots[0].state": "standby",
+      ".live.slots[0].rtt_ms": null,
+      ".live.slots[1].state": "standby",
+      ".live.slots[2].state": "standby",
+      ".live.slots[3].state": "standby"
+    }
+  }
+}
