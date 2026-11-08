@@ -61,3 +61,8 @@ seeded from `setup`, then checks `expect`.
 - `last_outage` is `null` when the outage file is absent, malformed, or its end stamp is ahead of the
   uptime (garbage reads as none); `live` degrades to `reachable: null`, `last_leg: 0` and four
   `standby` slots when the probe cache is stale, missing, or the slots file is older than the cache window.
+- A POST whose `CONTENT_LENGTH` is longer than 8192 or not a plain number is `payload_too_large`
+  (checked before the body is read; `post_body_too_large_8193`, with `post_body_at_limit_8192` as the
+  boundary). An absent or zero length stays `no_body`. The runner also asserts every rejected POST
+  fixture (`success: false`) leaves the config store, the staging copy, the flags and state files
+  and the service log untouched.

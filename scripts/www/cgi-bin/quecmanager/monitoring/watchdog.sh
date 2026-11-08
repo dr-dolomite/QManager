@@ -81,6 +81,20 @@ wd_int_in() {
     printf '%s' "$v"
 }
 
+# wd_body_ok: rc 0 when CONTENT_LENGTH is unset/empty (cgi_read_post then answers
+# no_body) or a plain number up to 8192; rc 1 for a longer or non-numeric length.
+# Checked before the body is read so a large POST never reaches dd.
+wd_body_ok() {
+    local n
+    n="$CONTENT_LENGTH"
+    [ -n "$n" ] || return 0
+    case "$n" in *[!0-9]*) return 1 ;; esac
+    while [ "${#n}" -gt 1 ] && [ "${n#0}" != "$n" ]; do
+        n="${n#0}"
+    done
+    [ "${#n}" -le 4 ] && [ "$n" -le 8192 ]
+}
+
 # wd_stored_int <key> <default> <lo> <hi>: the stored value clamped into lo..hi
 # like the daemon reads it; the default when absent or not a number.
 wd_stored_int() {
@@ -281,6 +295,10 @@ fi
 # POST
 # =============================================================================
 if [ "$REQUEST_METHOD" = "POST" ]; then
+    wd_body_ok || {
+        cgi_error "payload_too_large" "Request body is larger than 8192 bytes"
+        exit 0
+    }
     cgi_read_post
 
     if ! printf '%s' "$POST_DATA" | jq -e 'type == "object"' >/dev/null 2>&1; then

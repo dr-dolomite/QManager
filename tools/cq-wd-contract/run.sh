@@ -242,6 +242,17 @@ check_fixture() {
     jq -r "$DEFS [ $stmts ] | .[]" "$SB/out/body" 2>&1
 }
 
+# tmp_snapshot: names and checksums of every file under the sandbox /tmp (flags,
+# state files; the qlog file is the only legitimate write), to prove a rejected
+# POST left them alone.
+tmp_snapshot() {
+    local f
+    (cd "$SB/tmp" 2>/dev/null && find . -type f ! -name qmanager.log | sort | while read -r f; do
+        printf '%s ' "$f"
+        md5sum < "$f"
+    done)
+}
+
 # --- Fixtures ------------------------------------------------------------------
 for dir in connection_quality watchdog; do
     for fx in "$FIXDIR/$dir"/*.json; do
@@ -268,6 +279,7 @@ for dir in connection_quality watchdog; do
             bodyarg="$SB/in/body"
         fi
         cp "$SB/uci/db" "$SB/out/db.before" 2>/dev/null || : > "$SB/out/db.before"
+        tmp_snapshot > "$SB/out/tmp.before"
         cgi "$dir" "$method" "$query" "$bodyarg"
         errs=$(check_fixture "$fx")
         # A GET never writes: no store change, no staged copy, no reload flag.
@@ -279,6 +291,20 @@ GET changed the config store"
 GET left staged config"
             ls "$SB/tmp" 2>/dev/null | grep -q reload && errs="$errs
 GET raised a reload flag"
+        fi
+        # A rejected POST (success false) writes nothing: no store change, nothing
+        # staged, no flag or state file touched, no service call.
+        if [ "$method" = "POST" ] && [ "$(jq -r '.expect.equals.".success" == false' "$fx")" = "true" ]; then
+            cp "$SB/uci/db" "$SB/out/db.after" 2>/dev/null || : > "$SB/out/db.after"
+            cmp -s "$SB/out/db.before" "$SB/out/db.after" || errs="$errs
+rejected POST changed the config store"
+            [ -f "$SB/uci/stage" ] && errs="$errs
+rejected POST left staged config"
+            tmp_snapshot > "$SB/out/tmp.after"
+            cmp -s "$SB/out/tmp.before" "$SB/out/tmp.after" || errs="$errs
+rejected POST changed a flag or state file"
+            [ -s "$SB/svc.log" ] && errs="$errs
+rejected POST called a service"
         fi
         if [ -z "$errs" ]; then
             PASS=$((PASS + 1))
@@ -434,6 +460,31 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "behaviour" ]; then
     printf '{"detected":true,"dismissed":false}\n' > "$SB/tmp/qmanager_sim_swap_detected"
     post watchdog '{"action":"dismiss_sim_swap"}'
     expect "dismiss_sim_swap marks the flag dismissed" jq -e ".dismissed == true" "$SB/tmp/qmanager_sim_swap_detected" >/dev/null
+
+    # POST body cap: a CONTENT_LENGTH over 8192 or not a plain number is refused
+    # before the body is read; an absent or zero length is still no_body.
+    for cgi_name in connection_quality watchdog; do
+        printf '{"action":"nope"}' > "$SB/in/body"
+        for cl in 8193 9999 00008193 99999999999999999999 abc -1 "12 3" 1e3; do
+            reset_state
+            env -i PATH="$SB/bin" REQUEST_METHOD=POST QUERY_STRING="" CONTENT_LENGTH="$cl" \
+                "$SB/bin/sh" "$SB/cgi/$cgi_name.sh" < "$SB/in/body" > "$SB/out/raw" 2> "$SB/out/err"
+            sed '1,/^$/d' "$SB/out/raw" > "$SB/out/body"
+            expect "$cgi_name: CONTENT_LENGTH '$cl' is payload_too_large" resp '.success == false and .error == "payload_too_large"'
+        done
+        for cl in "" 0; do
+            reset_state
+            env -i PATH="$SB/bin" REQUEST_METHOD=POST QUERY_STRING="" CONTENT_LENGTH="$cl" \
+                "$SB/bin/sh" "$SB/cgi/$cgi_name.sh" < "$SB/in/body" > "$SB/out/raw" 2> "$SB/out/err"
+            sed '1,/^$/d' "$SB/out/raw" > "$SB/out/body"
+            expect "$cgi_name: CONTENT_LENGTH '$cl' is no_body" resp '.success == false and .error == "no_body"'
+        done
+        reset_state
+        env -i PATH="$SB/bin" REQUEST_METHOD=POST QUERY_STRING="" CONTENT_LENGTH=0000017 \
+            "$SB/bin/sh" "$SB/cgi/$cgi_name.sh" < "$SB/in/body" > "$SB/out/raw" 2> "$SB/out/err"
+        sed '1,/^$/d' "$SB/out/raw" > "$SB/out/body"
+        expect "$cgi_name: a zero-padded in-range CONTENT_LENGTH is read" resp '.error == "unknown_action"'
+    done
 
     # GET of a garbage state file degrades to {} instead of failing
     reset_state
