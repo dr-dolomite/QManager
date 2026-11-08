@@ -194,7 +194,10 @@ cqm_migrate_uci() {
     _cqm_has watchcat || uci set quecmanager.watchcat=watchcat
 
     # The sensitivity the old daemon ran: profile when set (unknown = relaxed,
-    # as conn_state_resolve did), else an existing sensitivity, else relaxed.
+    # as conn_state_resolve did), else relaxed. It is applied below only while
+    # ping_profile.sensitivity is absent: a stored sensitivity always wins over a
+    # leftover legacy profile key and is never overwritten (the else-branch read
+    # is empty in that case, so it lands on relaxed).
     _old=$(_cqm_get ping_profile.profile)
     if [ -n "$_old" ]; then
         _sens="$_old"
