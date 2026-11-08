@@ -115,9 +115,14 @@ owns the ping instance). Still no recovery decision on stale data. Clears on the
 
 ## R9. Remaining spec items (one commit each)
 - LOCKED union §5.8: + live config-restore PID, + manual SIM switch flag.
-- Tier 2 skip on NSA and band locks too (`plat_tower_locked`).
+- Tier 2 skip on NSA and band locks too (`plat_tower_locked`). **Dropped on RM551E** (owner 2026-11-08): no NSA lock and no file-based band-lock state; see Amendment 3, R9b disposition.
 - Tier 3 skip reasons (no slot / unreadable / already on backup / quality) and failback give-up
   after 3 failed tries until a reload or boot (`failback_failures`, event `sim_failback_giveup`);
   config keys `failback_enabled` / `failback_every_min`.
 - Remaining config renames read by the daemon (`step_wait_sec`, `quality_after_sec`,
   `ssr_grace_sec`, `failback_*`); `check_interval` becomes the internal constant 10.
+
+## R10-R11. Amendment 3 (`2026-11-08-cq-watchdog-amendment-3.md`)
+- R10: last successful recovery (`last_success_*`), in memory.
+- R11: stuck-on-one-carrier trigger (`carrier_enabled`, `carrier_after_min`, reason `carrier`,
+  Tiers 1-2), `plat_cc_count` (QMI sidecar; gated poller `QCAINFO` + `ca.env` for SA / NR-DC).
