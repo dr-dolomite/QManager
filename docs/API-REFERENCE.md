@@ -1258,7 +1258,7 @@ Connection Watchdog settings and live state (rewritten for the Connection Qualit
     "quality_limits": { "latency_ms": 250, "loss_pct": 30 },
     "carrier_enabled": false, "carrier_after_min": 15
   },
-  "status": { "timestamp": 1737158400, "state": "monitor", "recovery_reason": null, "total_recoveries": 0, "last_success_time": null, "carrier_cc": null, "mono": 5230, "stale_after": 60, "...": "..." },
+  "status": { "timestamp": 1737158400, "state": "monitor", "recovery_reason": null, "total_recoveries": 0, "last_success_time": null, "carrier_cc": null, "mono": 5230, "stale_after": 90, "...": "..." },
   "sim_failover": { "active": false },
   "recent_reboots": [1737158400, 1737150000],
   "sim_dual_capable": true,
@@ -1270,6 +1270,7 @@ Connection Watchdog settings and live state (rewritten for the Connection Qualit
 - `effective.act_after_sec = max(act_after_sec, fail_secs)` and `effective.step_wait_sec = max(step_wait_sec, recover_secs + 20)`, with `fail_secs` / `recover_secs` from the stored sensitivity. `effective.quality_limits` are the Connection Quality limits raised to the watchdog floors (50 ms, 10 %).
 - `status` is the raw daemon state file (`{}` when absent or unreadable): see the contract section 3 for every key, including `recovery_reason` / `holdoff_reason` (`outage|quality|carrier`), the last-success fields (`last_success_*`, in memory since the daemon started) and the carrier fields (`carrier_single_secs`, `carrier_cc`, `holdoff_carrier_level`).
 - `sim_failover` is the raw `/tmp/qmanager_sim_failover` record (`{ "active": false }` when absent); `recent_reboots` are the watchdog's Tier 4 epochs (newest first, at most 5); `auto_disabled` is true only while a pre-upgrade auto-disable flag file is present.
+- Stored booleans count as set only when they are exactly `1` or `0`; a stored value outside a numeric range is clamped to it (an absent or non-numeric one reads its default), so a hand-edited config cannot break the page. `status.mono` and the `*_until` / `failback_next_at` deadlines are on the daemon's monotonic clock: interpolate against `status.mono`.
 - GET never writes config.
 
 **POST** `{ "action": "save_settings" | "revert_sim" | "retry_failback" | "dismiss_sim_swap", ... }`.
@@ -1288,7 +1289,7 @@ A rejected request returns HTTP 200 with the shared envelope (`detail` is Englis
 { "success": false, "error": "invalid_field", "field": "act_after_sec", "detail": "must be an integer 15-600" }
 ```
 
-**Error codes:** `invalid_field`, `invalid_json`, `missing_action`, `unknown_action`, `method_not_allowed`, `save_failed`, `internal_error`.
+**Error codes:** `invalid_field`, `invalid_json`, `no_body`, `missing_action`, `unknown_action`, `method_not_allowed`, `payload_too_large` (a `CONTENT_LENGTH` over 8192 bytes or not a plain number, answered before the body is read), `save_failed`, `internal_error`.
 
 ---
 
@@ -1345,7 +1346,7 @@ Connection Quality settings in one endpoint; replaces the removed `/system/ping_
 
 A rejected request returns HTTP 200: `{ "success": false, "error": "invalid_field", "field": "targets[2]", "detail": "..." }` with `field` one of `sensitivity`, `targets`, `targets[0]` to `targets[3]`, `latency.preset`, `latency.custom_ms`, `loss.preset`, `loss.custom_pct`.
 
-**Error codes:** `invalid_field`, `invalid_json`, `missing_action`, `unknown_action`, `method_not_allowed`, `save_failed`, `internal_error`.
+**Error codes:** `invalid_field`, `invalid_json`, `no_body`, `missing_action`, `unknown_action`, `method_not_allowed`, `payload_too_large` (a `CONTENT_LENGTH` over 8192 bytes or not a plain number, answered before the body is read), `save_failed`, `internal_error`.
 
 ---
 
