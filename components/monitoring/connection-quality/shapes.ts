@@ -97,12 +97,12 @@ export const SLOT = {
   ROOT: "flex flex-col gap-1",
   ROW: "grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 rounded-tile p-1.5 transition-[background-color,color] duration-[var(--duration-standard)] ease-[var(--ease-standard)] @sm/card:grid-cols-[1.75rem_minmax(0,1fr)_auto]",
   /** The answering slot: a success tint under the row, the field stays a field. */
-  ROW_LIT: "bg-success-container text-on-success-container",
+  ROW_LIT: "bg-surface-container-high",
   DISC: "grid size-7 flex-none place-items-center rounded-pill text-[0.8125rem] leading-none font-semibold tabular-nums transition-[background-color,color] duration-[var(--duration-standard)] ease-[var(--ease-standard)]",
   VALUE:
     "col-start-2 min-w-0 text-[0.8125rem] leading-5 font-medium tabular-nums text-on-surface-variant @sm/card:col-start-3 @sm/card:min-w-[5.5rem] @sm/card:text-right",
   VALUE_MISS: "font-semibold text-destructive-on-surface",
-  VALUE_LIT: "font-semibold text-on-success-container",
+  VALUE_LIT: "font-semibold text-success-on-surface",
 } as const;
 
 export const SLOT_DISC: Record<SlotState, string> = {
@@ -150,17 +150,17 @@ export const ROW = {
  */
 export const SENS_GRID = {
   TABLE: "w-full table-fixed border-separate border-spacing-0 text-center",
-  KEY: "w-[5.25rem] pr-2 text-left text-xs font-semibold text-on-surface-variant @md/card:w-28 @md/card:text-[0.8125rem]",
-  HEAD: "px-1 pt-2 pb-1.5 text-xs font-semibold break-words text-on-surface-variant @md/card:text-[0.8125rem]",
+  KEY: "w-[4.5rem] pr-1.5 text-left text-xs font-semibold text-on-surface-variant @md/card:w-28 @md/card:text-[0.8125rem]",
+  HEAD: "px-0.5 pt-2 pb-1.5 text-[0.6875rem] font-semibold tracking-tight whitespace-nowrap text-on-surface-variant @md/card:text-[0.8125rem]",
   CELL: "px-1 py-2 text-xs font-medium tabular-nums text-on-surface-variant @md/card:text-[0.8125rem]",
-  SEL: "bg-primary-container font-semibold text-on-primary-container",
+  SEL: "bg-surface-container-high font-semibold text-primary-on-surface",
   SEL_FIRST: "rounded-t-tile",
   SEL_LAST: "rounded-b-tile",
 } as const;
 
 /** The preset pill takes the full row; its segments share the width. */
 export const PRESET_FIELD =
-  "@2xl/card:w-full [&_[data-slot=toggle-group]]:w-full [&_[data-slot=toggle-group-item]]:flex-1 [&_[data-slot=toggle-group-item]]:px-2.5";
+  "@lg/card:w-full [&_[data-slot=toggle-group]]:w-full [&_[data-slot=toggle-group-item]]:flex-1 [&_[data-slot=toggle-group-item]]:px-2.5";
 
 /** The custom limit field: a compact numeric input plus its unit. */
 export const CUSTOM_FIELD = {

@@ -716,8 +716,7 @@
         "standard": "Standard",
         "tolerant": "Tolerant",
         "very_tolerant": "Very tolerant",
-        "custom": "Custom",
-        "with_limit": "{{name}} ({{limit}})"
+        "custom": "Custom"
       },
       "value": {
         "latency": "{{n}} ms",

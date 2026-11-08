@@ -244,13 +244,9 @@ function MetricBlock({
 
   const options: SegmentedOption<QualityPreset>[] = QUALITY_PRESETS.map((preset) => ({
     value: preset,
-    label:
-      preset === "custom"
-        ? t(`${K}.preset.custom`)
-        : t(`${K}.preset.with_limit`, {
-            name: t(`${K}.preset.${PRESET_KEY[preset]}`),
-            limit: valueText(table[preset]),
-          }),
+    // Short names keep the pill on one row in a pair cell; the active limit
+    // reads beside the metric title.
+    label: t(`${K}.preset.${preset === "custom" ? "custom" : PRESET_KEY[preset]}`),
   }));
 
   const errorText = state.invalid
@@ -321,7 +317,7 @@ function MetricBlock({
         onValueChange={onPreset}
         options={options}
         ariaLabel={title}
-        breakpoint="2xl"
+        breakpoint="lg"
         glyph={renderCheckGlyph}
         className={PRESET_FIELD}
       />
@@ -472,7 +468,7 @@ function QualityForm({ cq, data }: QualityFormProps) {
             onValueChange={pickSensitivity}
             options={sensitivityOptions}
             ariaLabel={sensitivityLabel}
-            breakpoint="xl"
+            breakpoint="sm"
             glyph={renderCheckGlyph}
           />
         </div>
