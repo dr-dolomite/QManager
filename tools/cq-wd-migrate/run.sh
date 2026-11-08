@@ -520,7 +520,11 @@ eq ping_profile.targets 1.1.1.1
 apply connection_quality '{"targets":"1.1.1.1"}'
 eq ping_profile.targets 1.1.1.1
 apply connection_quality '{"targets":["8.8.8.8","9.9.9.9"]}'
-eq ping_profile.targets "8.8.8.8 9.9.9.9"
+eq ping_profile.targets 1.1.1.1
+apply connection_quality '{"targets":["8.8.8.8","9.9.9.9","a"]}'
+eq ping_profile.targets 1.1.1.1
+apply connection_quality '{"targets":["8.8.8.8","9.9.9.9","2620:fe::fe","example.org"]}'
+eq ping_profile.targets "8.8.8.8 9.9.9.9 2620:fe::fe example.org"
 
 db "old loss 0 -> 1" "quecmanager.ping_profile=ping_profile"
 P='{"schema":1,"sections":{"quality_thresholds":{"latency_preset":"standard","loss_preset":"custom","loss_custom_pct":0}}}'

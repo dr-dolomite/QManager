@@ -370,9 +370,10 @@ apply_connection_quality() {
     tlist=""
     case "$tcount" in
         absent) ;;
-        1|2|3|4)
-            # One line per item; a non-string becomes "-" (fails the rule) and an
-            # item holding a newline changes the line count, so both reject.
+        4)
+            # Exactly four slots, like the CGI. One line per item; a non-string
+            # becomes "-" (fails the rule) and an item holding a newline changes
+            # the line count, so both reject.
             titems=$(echo "$input" | jq -r '.targets[] | if type == "string" then . else "-" end')
             n=0
             while IFS= read -r t; do
