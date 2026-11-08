@@ -1,0 +1,28 @@
+=== pass 1 (t+30) ===
+-- state
+{"timestamp":1790000030,"enabled":true,"state":"monitor","current_tier":0,"tiers_tried":[],"recovery_reason":null,"last_recovery_time":null,"last_recovery_tier":null,"last_recovery_reason":"outage","total_recoveries":0,"last_success_time":null,"last_success_tier":null,"last_success_reason":null,"last_success_took_s":null,"failure_count":0,"failure_secs":0,"offline_secs":0,"cooldown_remaining":0,"step_wait_until":null,"holdoff_until":null,"holdoff_reason":null,"holdoff_quality_level":0,"holdoff_carrier_level":0,"reboots_this_hour":0,"reboot_limit":3,"reboot_budget_exhausted":false,"reboot_rest_reason":null,"reboot_rest_until":null,"ssr_hold":false,"ssr_hold_until":null,"last_ssr_mono":null,"quality_breach_secs":0,"carrier_single_secs":0,"carrier_cc":null,"failback_active":false,"failback_failures":0,"failback_next_at":null,"sim_failover_active":false,"original_sim_slot":null,"current_sim_slot":null,"ping_stale":false,"mono":5030,"stale_after":90}
+-- files
+etc/qmanager:
+
+tmp:
+qmanager_watchcat.pid
+
+var/run:
+qmanager
+-- failover
+(none)
+-- extra
+custom='0' -> latency=250ms loss=30%
+custom='00' -> latency=250ms loss=30%
+custom='00250' -> latency=250ms loss=30%
+custom='10001' -> latency=250ms loss=30%
+custom='101' -> latency=101ms loss=30%
+custom='99999999999999999999' -> latency=250ms loss=30%
+custom='' -> latency=250ms loss=30%
+custom='abc' -> latency=250ms loss=30%
+custom='12x' -> latency=250ms loss=30%
+custom='1' -> latency=50ms loss=10%
+custom='100' -> latency=100ms loss=100%
+custom='10000' -> latency=10000ms loss=30%
+custom='007' -> latency=50ms loss=10%
+custom absent -> latency=250ms loss=30%

@@ -1472,6 +1472,23 @@ PING_HISTORY_RAW="/tmp/qmanager_ping_history"   # flat-file ring buffer from pin
 # exist (cq_ring_stats).
 PING_MIN_SAMPLES=10
 
+# _qt_custom_or <lo> <hi> <default> <raw>: raw without leading zeros when it is
+# plain decimal digits within lo..hi, else the default (the CQ CGI and the
+# watchdog read a stored custom limit by the same rule).
+_qt_custom_or() {
+    local v
+    v="$4"
+    case "$v" in ''|*[!0-9]*) printf '%s' "$3"; return 0 ;; esac
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do
+        v="${v#0}"
+    done
+    if [ "${#v}" -gt "${#2}" ] || [ "$v" -lt "$1" ] || [ "$v" -gt "$2" ]; then
+        printf '%s' "$3"
+        return 0
+    fi
+    printf '%s' "$v"
+}
+
 # =============================================================================
 # CONNECTION-QUALITY THRESHOLDS (UCI presets -> event thresholds)
 # =============================================================================
@@ -1495,13 +1512,11 @@ resolve_quality_thresholds() {
         very-tolerant) QUALITY_LAT_THRESHOLD=500; QUALITY_LAT_VT=1 ;;
         custom)
             # latency_custom_ms drives the threshold; debounce mirrors tolerant.
-            # Non-numeric/empty custom value falls back to the tolerant default
-            # so a half-written UCI never yields an empty comparison value.
+            # Non-numeric, empty or out-of-range (1-10000) custom value falls back
+            # to the tolerant default so a half-written UCI never yields an empty
+            # or always-breaching comparison value.
             _lat_custom=$(uci -q get quecmanager.quality_thresholds.latency_custom_ms 2>/dev/null)
-            case "$_lat_custom" in
-                ''|*[!0-9]*) QUALITY_LAT_THRESHOLD=250 ;;
-                *)           QUALITY_LAT_THRESHOLD="$_lat_custom" ;;
-            esac
+            QUALITY_LAT_THRESHOLD=$(_qt_custom_or 1 10000 250 "$_lat_custom")
             QUALITY_LAT_VT=0
             ;;
         tolerant|*)    QUALITY_LAT_THRESHOLD=250; QUALITY_LAT_VT=0 ;;
@@ -1512,10 +1527,7 @@ resolve_quality_thresholds() {
         very-tolerant) QUALITY_LOSS_THRESHOLD=50; QUALITY_LOSS_VT=1 ;;
         custom)
             _loss_custom=$(uci -q get quecmanager.quality_thresholds.loss_custom_pct 2>/dev/null)
-            case "$_loss_custom" in
-                ''|*[!0-9]*) QUALITY_LOSS_THRESHOLD=30 ;;
-                *)           QUALITY_LOSS_THRESHOLD="$_loss_custom" ;;
-            esac
+            QUALITY_LOSS_THRESHOLD=$(_qt_custom_or 1 100 30 "$_loss_custom")
             QUALITY_LOSS_VT=0
             ;;
         tolerant|*)    QUALITY_LOSS_THRESHOLD=30; QUALITY_LOSS_VT=0 ;;

@@ -255,14 +255,32 @@ read_config() {
     qlog_info "  Failback: enabled=${CFG_FAILBACK_ENABLED} every=${CFG_FAILBACK_EVERY_MIN}min"
 }
 
+# _cq_custom_or <lo> <hi> <default> <raw>: raw without leading zeros when it is
+# plain decimal digits within lo..hi, else the default. The CQ CGI reads a stored
+# custom limit by the same rule, so a hand-edited 0 or 99999 never reaches a probe.
+_cq_custom_or() {
+    local v
+    v="$4"
+    case "$v" in ''|*[!0-9]*) printf '%s' "$3"; return 0 ;; esac
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do
+        v="${v#0}"
+    done
+    if [ "${#v}" -gt "${#2}" ] || [ "$v" -lt "$1" ] || [ "$v" -gt "$2" ]; then
+        printf '%s' "$3"
+        return 0
+    fi
+    printf '%s' "$v"
+}
+
 # Resolve the SHARED degraded thresholds from connection_quality latency/loss
 # into CFG_LATENCY_THRESHOLD_MS / CFG_LOSS_THRESHOLD_PCT. This is the watchdog's
 # local mirror of the poller's resolver (kept in-daemon rather than a new lib —
 # only two consumers, and the watchdog must not depend on poller globals). The
 # section's ABSENCE means "default" -> tolerant/tolerant (250ms / 30%), matching
 # the poller. `custom` reads the latency_custom_ms / loss_custom_pct keys; a
-# non-numeric/empty custom value falls back to the tolerant default so a
-# half-written config never yields an empty comparison value.
+# non-numeric, empty or out-of-range custom value (latency 1-10000, loss 1-100)
+# falls back to the tolerant default so a half-written config never yields an
+# empty or always-breaching comparison value.
 resolve_quality_thresholds() {
     local _lat_preset
     local _loss_preset
@@ -277,10 +295,7 @@ resolve_quality_thresholds() {
         very-tolerant) CFG_LATENCY_THRESHOLD_MS=500 ;;
         custom)
             _lat_custom=$(cfg_get connection_quality latency_custom_ms)
-            case "$_lat_custom" in
-                ''|*[!0-9]*) CFG_LATENCY_THRESHOLD_MS=250 ;;
-                *)           CFG_LATENCY_THRESHOLD_MS="$_lat_custom" ;;
-            esac
+            CFG_LATENCY_THRESHOLD_MS=$(_cq_custom_or 1 10000 250 "$_lat_custom")
             ;;
         tolerant|*)    CFG_LATENCY_THRESHOLD_MS=250 ;;
     esac
@@ -290,10 +305,7 @@ resolve_quality_thresholds() {
         very-tolerant) CFG_LOSS_THRESHOLD_PCT=50 ;;
         custom)
             _loss_custom=$(cfg_get connection_quality loss_custom_pct)
-            case "$_loss_custom" in
-                ''|*[!0-9]*) CFG_LOSS_THRESHOLD_PCT=30 ;;
-                *)           CFG_LOSS_THRESHOLD_PCT="$_loss_custom" ;;
-            esac
+            CFG_LOSS_THRESHOLD_PCT=$(_cq_custom_or 1 100 30 "$_loss_custom")
             ;;
         tolerant|*)    CFG_LOSS_THRESHOLD_PCT=30 ;;
     esac
