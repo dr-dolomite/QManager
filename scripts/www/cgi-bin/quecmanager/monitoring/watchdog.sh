@@ -437,7 +437,7 @@ EOF
                 rm -f "$DISABLED_FLAG"
                 svc_enable "$WD_SERVICE" >/dev/null 2>&1
                 if ! svc_running "$WD_SERVICE"; then
-                    ( svc_start "$WD_SERVICE" >/dev/null 2>&1 & )
+                    ( svc_start "$WD_SERVICE" </dev/null >/dev/null 2>&1 & )
                 fi
                 qlog_info "Watchdog settings saved, watchcat enabled"
             else
