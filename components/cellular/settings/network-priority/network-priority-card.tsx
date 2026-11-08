@@ -36,6 +36,11 @@ import {
 import { MaterialSymbol } from "@/components/ui/material-symbol";
 import { useSaveFlash } from "@/components/ui/save-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useModemStatus } from "@/hooks/use-modem-status";
 import { authFetch } from "@/lib/auth-fetch";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
@@ -214,13 +219,7 @@ function PriorityRow({ id, rank, total, serving, disabled }: PriorityRowProps) {
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      // `flex-wrap` + a text basis: on a phone the "Serving now" chip drops to
-      // its own line instead of crushing the consequence to a word per line.
-      className={cn(
-        REORDER_ROW.ROOT,
-        "flex-wrap",
-        isDragging && REORDER_ROW.DRAGGING,
-      )}
+      className={cn(REORDER_ROW.ROOT, isDragging && REORDER_ROW.DRAGGING)}
     >
       <button
         type="button"
@@ -248,30 +247,39 @@ function PriorityRow({ id, rank, total, serving, disabled }: PriorityRowProps) {
           already states the position, and announcing a bare "2" beside it would
           double up. `tabular-nums` in font-sans, not mono: it changes while the
           user drags it, which is the interface voice. */}
-      <span
-        aria-hidden="true"
-        className={cn(RANK_PILL.ROOT, RAT_RANK_TONE[id] ?? RANK_PILL.NEUTRAL)}
-      >
-        {rank}
-      </span>
+      {serving ? (
+        // The active row swaps its rank numeral for the green check badge (the
+        // same one IMEI Settings uses). `success`, not the LTE violet: violet is
+        // identity and must never read as "healthy" (DESIGN.md > The
+        // Identity-Never-Acts Rule). The tooltip carries the words the
+        // "Serving now" chip used to.
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="success"
+              role="img"
+              tabIndex={0}
+              aria-label={t(`${K}.serving_now`)}
+              className="size-[1.875rem] flex-none bg-success p-0 text-success-foreground"
+            >
+              <MaterialSymbol name="check" size={BADGE_GLYPH_SIZE} />
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent variant="info">{t(`${K}.serving_now`)}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <span
+          aria-hidden="true"
+          className={cn(RANK_PILL.ROOT, RAT_RANK_TONE[id] ?? RANK_PILL.NEUTRAL)}
+        >
+          {rank}
+        </span>
+      )}
 
       <div className={cn(REORDER_ROW.TEXT, "basis-36")}>
         <span className={REORDER_ROW.LABEL}>{name}</span>
         <span className={REORDER_ROW.CONSEQUENCE}>{consequence}</span>
       </div>
-
-      {serving ? (
-        <div className={cn(REORDER_ROW.META, "ml-auto")}>
-          {/* `success`, not the LTE violet the comp drew. Violet is the LTE
-              IDENTITY and must never be read as "healthy" — and this chip is
-              exactly a healthy/active state, so it takes the functional role.
-              (DESIGN.md > The Identity-Never-Acts Rule.) */}
-          <Badge variant="success">
-            <MaterialSymbol name="check_circle" size={BADGE_GLYPH_SIZE} />
-            {t(`${K}.serving_now`)}
-          </Badge>
-        </div>
-      ) : null}
     </div>
   );
 }
