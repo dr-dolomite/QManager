@@ -115,14 +115,14 @@ wd_stored_int() {
     printf '%s' "$v"
 }
 
-# wd_stored_bool <key> <default true|false>: true/false from a stored 1/0 (or
-# true/false); the default otherwise.
+# wd_stored_bool <key> <default true|false>: true/false from a stored 1/0 (the only
+# values the daemon honours); the default otherwise.
 wd_stored_bool() {
     local raw
     raw=$(cfg_get watchdog "$1")
     case "$raw" in
-        1|true) printf 'true' ;;
-        0|false) printf 'false' ;;
+        1) printf 'true' ;;
+        0) printf 'false' ;;
         *) printf '%s' "$2" ;;
     esac
 }
