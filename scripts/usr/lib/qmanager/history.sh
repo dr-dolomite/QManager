@@ -258,6 +258,7 @@ _hist_clock() {
         [ "$_d" -le "$HIST_STEP_TOL" ] && return 0
         _hist_close_all
         _hist_stepped=1
+        _s=$((_w - _m - _hist_off))
         if [ "$_w" -lt $((_hist_hwm - HIST_STEP_TOL)) ]; then
             _hist_trusted=0
             _hist_uoff=$((_w - _m))
@@ -267,6 +268,8 @@ _hist_clock() {
             _hist_off=$((_w - _m))
         fi
         _hist_save_clock
+        command -v append_event >/dev/null 2>&1 \
+            && append_event clock_stepped "Clock stepped by ${_s}s" info "" "step_s=$_s"
         return 0
     fi
     _uo=$((_w - _m))
@@ -450,8 +453,13 @@ hist_flush_queues() {
     _free=$(df -k "$HIST_STORE" 2>/dev/null | awk 'END { print $(NF-2) }')
     case "$_free" in ''|*[!0-9]*) _free=0 ;; esac
     if [ "$_free" -lt "$HIST_MIN_FREE_KB" ]; then
-        [ "$_hist_lowfree" = "1" ] || _hist_log warn "flush skipped, ${_free} KB free"
-        _hist_lowfree=1
+        if [ "$_hist_lowfree" != "1" ]; then
+            _hist_lowfree=1
+            _hist_log warn "flush skipped, ${_free} KB free"
+            command -v append_event >/dev/null 2>&1 \
+                && append_event storage_low "Storage low (${_free} KB free)" warning "" \
+                    "free_kb=$_free;min_kb=$HIST_MIN_FREE_KB"
+        fi
         return 0
     fi
     _hist_lowfree=0
