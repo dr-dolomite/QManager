@@ -35,16 +35,12 @@ export const CONNECTION_EVENT_TYPES = [
 
 export type ConnectionEventType = (typeof CONNECTION_EVENT_TYPES)[number];
 
-/**
- * An event row. Onset rows (`internet_lost`, `high_latency`, `high_packet_loss`)
- * may carry `end`: a number is when it recovered, `null` means it is ongoing.
- * Absent on older cores, in which case no "Lasted" is shown.
- */
-export type ConnectionEvent = HistoryEvent & { end?: number | null };
+/** Onset rows (`internet_lost`, `high_latency`, `high_packet_loss`) carry `end`
+ * (the series sets `HIST_connection_PAIRS`): a number is when it recovered,
+ * `null` means it is ongoing. */
+export type ConnectionEvent = HistoryEvent;
 
-export type ConnectionEventsResponse = Omit<HistoryEventsResponse, "events"> & {
-  events: ConnectionEvent[];
-};
+export type ConnectionEventsResponse = HistoryEventsResponse;
 
 /** The user's Connection Quality cuts the page grades against. */
 export interface ConnectionLimits {

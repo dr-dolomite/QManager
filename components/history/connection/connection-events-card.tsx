@@ -297,7 +297,7 @@ function Pager({
  * Outages, slow or lossy periods and what recovered them, newest first. Hovering
  * a row marks that moment on the shared cursor so every chart draws a crosshair.
  */
-export function ConnectionEventsCard({ range }: { range: HistoryRange }) {
+export function ConnectionEventsCard({ range, nowSec }: { range: HistoryRange; nowSec: number }) {
   const { t } = useTranslation("history");
   const cursor = useHistoryCursor();
 
@@ -314,7 +314,7 @@ export function ConnectionEventsCard({ range }: { range: HistoryRange }) {
     setPage(0);
   }
 
-  const { data, nowSec, isLoading, error, refresh } = useConnectionEvents(range, {
+  const { data, isLoading, error, refresh } = useConnectionEvents(range, {
     types: selected === null ? undefined : typesOf(selected),
     page,
     pageSize,

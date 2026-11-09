@@ -93,7 +93,7 @@ export default function ConnectionHistory() {
               <SitesCard range={range} latencyLimitMs={limits.latencyMs} />
             </motion.div>
             <motion.div variants={staggerItem}>
-              <ConnectionEventsCard range={range} />
+              <ConnectionEventsCard range={range} nowSec={history.now} />
             </motion.div>
           </>
         )}
