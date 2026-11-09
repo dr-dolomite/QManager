@@ -72,8 +72,11 @@ export function RangeControl({
             aria-label={t(`${keyPrefix}.${range}`)}
             className={cn(
               "relative h-auto rounded-pill px-3 py-1.5 text-xs font-semibold tabular-nums hover:bg-transparent disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-transparent",
+              // The on-state colour must ride data-[state=on]: the Toggle base
+              // sets data-[state=on]:text-accent-foreground, which outranks a
+              // plain class and painted the active label white.
               active
-                ? "text-primary-foreground"
+                ? "data-[state=on]:text-primary-foreground"
                 : "text-on-surface-variant hover:text-on-surface",
             )}
           >
