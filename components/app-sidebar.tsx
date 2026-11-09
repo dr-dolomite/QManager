@@ -119,11 +119,16 @@ const navLocalNetwork: NavItem[] = [
   },
 ];
 
-// History is a section of its own. The parent row expands to its pages; with a
-// single page today, the empty `items` list keeps it an expander (its own page
-// is the first sub-row), so the next History page is one entry here.
+// History is a section of its own. The parent row expands to its pages: its own
+// page (Cellular History) is the first sub-row, then each page listed in
+// `items`, so the next History page is one entry here.
 const navHistory: NavItem[] = [
-  { t_key: "history", url: "/history/cellular", icon: "history", items: [] },
+  {
+    t_key: "history",
+    url: "/history/cellular",
+    icon: "history",
+    items: [{ t_key: "history_connection", url: "/history/connection" }],
+  },
 ];
 
 // The Watchdog row's live status is injected at render (AppSidebar), so the
