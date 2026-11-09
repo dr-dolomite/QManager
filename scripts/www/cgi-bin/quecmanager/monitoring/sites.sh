@@ -3,7 +3,7 @@
 # =============================================================================
 # sites.sh — CGI Endpoint: Sites monitor (GET + POST)
 # =============================================================================
-# GET  ?range=now|1h|3h|6h|12h|24h|7d|30d|90d : latest result + history per site.
+# GET  ?range=now|5m|1h|3h|6h|12h|24h|7d|15d|30d|90d : latest result + history per site.
 #      range=now renews the live lease and returns no history (see qmanager_sites).
 # POST {"action":"check_now"}             : raise the sweep flag for the daemon.
 # POST {"action":"save","enabled":b,"interval_sec":n,"sites":[{"host","label"}]}
@@ -200,15 +200,17 @@ handle_get() {
     live_mode=false
     case "$range" in
         now) span=0;       bucket=0; live_mode=true ;;
-        1h)  span=3600;    bucket=0 ;;
+        5m)  span=300;     bucket=10 ;;
+        1h)  span=3600;    bucket=60 ;;
         3h)  span=10800;   bucket=0 ;;
         6h)  span=21600;   bucket=0 ;;
         12h) span=43200;   bucket=600 ;;
         24h) span=86400;   bucket=1800 ;;
         7d)  span=604800;  bucket=10800 ;;
+        15d) span=1296000; bucket=21600 ;;
         30d) span=2592000; bucket=43200 ;;
         90d) span=7776000; bucket=86400 ;;
-        *) cgi_error "invalid_range" "range must be now, 1h, 3h, 6h, 12h, 24h, 7d, 30d or 90d"; exit 0 ;;
+        *) cgi_error "invalid_range" "range must be now, 5m, 1h, 3h, 6h, 12h, 24h, 7d, 15d, 30d or 90d"; exit 0 ;;
     esac
     rawmode=false
     [ "$span" -le 86400 ] && rawmode=true
