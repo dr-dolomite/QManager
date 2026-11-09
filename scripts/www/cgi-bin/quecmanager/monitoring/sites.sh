@@ -164,6 +164,7 @@ def nul: if . == "null" then null else tonumber end;
    checked_at: ($latest.checked_at // null),
    next_check_at: (if $cfg.enabled then ($latest.next_check_at // null) else null end),
    checking: $checking,
+   now: $now,
    live_at: $live.at,
    wans: ["cellular"],
    summary: {answered: ([$sites[] | select(.latest != null and .latest.ok)] | length), total: ($sites | length)},
@@ -275,7 +276,7 @@ handle_get() {
         fi
     } | jq -nR \
             --argjson cfg "$cfg" --argjson latest "$latest" \
-            --argjson checking "$checking" --argjson live "$live" \
+            --argjson checking "$checking" --argjson live "$live" --argjson now "$now" \
             "$JQ_GET"
 }
 
