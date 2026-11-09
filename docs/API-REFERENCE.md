@@ -1423,6 +1423,71 @@ Settings for the scrape endpoint (cookie auth). Full contract: [`features/promet
 
 ---
 
+## History
+
+Generic time-series history behind the History pages (first series: `cellular`). Buckets and events are kept for 31 days. Both endpoints are authenticated, read-only GETs. Full model, storage and clock handling: [`docs/features/history.md`](features/history.md).
+
+### GET `/history/series.sh`
+
+**Query:** `series` (required; an id with a provider file, e.g. `cellular`), `range` (`24h`, `7d` or `30d`; default `24h`).
+
+| `range` | `bucket_sec` | Buckets |
+|---|---|---|
+| `24h` | 1800 | 48 |
+| `7d` | 10800 | 56 |
+| `30d` | 43200 | 60 |
+
+```json
+{
+  "success": true,
+  "series": "cellular",
+  "range": "24h",
+  "bucket_sec": 1800,
+  "now": 1794189410,
+  "clock_trusted": true,
+  "since": 1793580000,
+  "states": ["nr", "lte", "down", "off"],
+  "fault": ["down"],
+  "metrics": ["lte_rsrp", "lte_rsrq", "lte_sinr", "lte_rssi", "nr_rsrp", "nr_rsrq", "nr_sinr"],
+  "current": { "state": "nr", "since": 1794180000 },
+  "last_fault": { "start": 1794100000, "end": 1794100140 },
+  "buckets": [
+    { "t": 1794103200, "len": 1800, "st": { "nr": 1200, "lte": 540, "down": 20, "off": 0 }, "x": 1,
+      "m": { "lte_rsrp": { "n": 180, "avg": -99.0, "min": -104, "max": -95 } } }
+  ]
+}
+```
+
+`buckets` is oldest first and always has every bucket (an empty one has `st` zeros and `m: {}`); the last one contains now and is partial (`len` < `bucket_sec`). No data in a bucket is `len` minus the sum of `st`. `x` counts entries into a `fault` state. `m` omits metrics with no reading; `avg` has one decimal. `since` is when collecting began (`null` before the first sample); `current` is `null` while the collector is not running this boot; `last_fault` is `null` when no outage has been recorded.
+
+While the device clock is not trusted yet, the response is `"clock_trusted": false, "now": null, "current": null, "last_fault": null, "buckets": []` (`since`, `states`, `fault` and `metrics` are still present).
+
+**Error codes:** `invalid_series`, `invalid_range`, `method_not_allowed`, `internal_error` (the reader library is missing).
+
+### GET `/history/events.sh`
+
+**Query:** `series` (required), `range` (`24h`, `7d`, `30d`; default `24h`), `types` (optional comma list of event types of that series), `limit` (1-100, default 25), `offset` (0 or more, default 0).
+
+```json
+{
+  "success": true,
+  "series": "cellular",
+  "range": "24h",
+  "total": 132,
+  "counts": { "band_change": 12, "ca_change": 101, "nr_anchor": 9, "pci_change": 8, "scc_pci_change": 0, "signal_lost": 1, "signal_restored": 1 },
+  "events": [
+    { "timestamp": 1794187659, "type": "ca_change", "severity": "info", "radio": "lte", "message": "LTE CA activated: B1 + B41, 35 MHz (2 carriers)" },
+    { "timestamp": 1794100000, "type": "signal_lost", "severity": "warning", "radio": null, "message": "Modem became unreachable", "end": 1794100140 }
+  ]
+}
+```
+
+Newest first. `total` honours `types`; `counts` ignores it (so a filter menu can show every count). `radio` is `"lte"`, `"nr"` or `null`. Onset types that the series pairs (cellular: `signal_lost` with `signal_restored`) carry `end`: the timestamp of the next matching recovery, or `null` while it is ongoing. Pairing runs over the whole 31-day retention before the range, `types` filter and paging are applied, and other rows have no `end`. With an untrusted clock the response is `total: 0`, `counts: {}`, `events: []`.
+
+**Error codes:** `invalid_series`, `invalid_range`, `invalid_param` (an unknown entry in `types`, `limit` outside 1-100, or a non-numeric `limit` / `offset`), `method_not_allowed`, `internal_error`.
+
+---
+
 ## Device
 
 ### GET `/device/about.sh`
