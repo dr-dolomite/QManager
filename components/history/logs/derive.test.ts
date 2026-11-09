@@ -14,7 +14,10 @@ import {
   groupByDay,
   paginate,
   kernelWallSec,
+  modemNowSec,
+  parseLogTimestamp,
   qmanagerLines,
+  rowClockOffset,
   toneOfSyslog,
   type LogLineView,
 } from "./derive";
@@ -202,5 +205,30 @@ describe("systemCoverage", () => {
       spanSec: null,
       top: null,
     });
+  });
+});
+
+describe("rowClockOffset / modemNowSec", () => {
+  // A modem two hours ahead of the viewer: the stamp reads 2 h later than `t`.
+  const stamp = "2026-11-10 14:00:00";
+  const local = parseLogTimestamp(stamp) as number;
+  const timed: LogEntry = { ...entry(stamp, "x"), t: local - 7200 };
+
+  it("is the newest timed entry's stamp minus its epoch", () => {
+    expect(rowClockOffset([entry(stamp, "untimed"), timed])).toBe(7200);
+  });
+
+  it("is 0 when no entry carries an epoch", () => {
+    expect(rowClockOffset([entry(stamp, "untimed")])).toBe(0);
+  });
+
+  it("takes the journal's newest line on the rows' clock", () => {
+    const boots = [{ boot: 2, last: local - 7200 + 60 }, { boot: 1, last: local - 90_000 }];
+    expect(modemNowSec([timed], boots, 7200)).toBe(local + 60);
+  });
+
+  it("falls back to the newest line read, then null", () => {
+    expect(modemNowSec([timed], [], 7200)).toBe(local);
+    expect(modemNowSec([], [], 0)).toBeNull();
   });
 });

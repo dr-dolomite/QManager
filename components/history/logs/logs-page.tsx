@@ -47,8 +47,10 @@ import {
   filterByLevel,
   groupByDay,
   logLinesText,
+  modemNowSec,
   paginate,
   qmanagerLines,
+  rowClockOffset,
   visibleLogText,
 } from "./derive";
 import { BootSelect } from "./boot-select";
@@ -240,10 +242,15 @@ export function LogsPage() {
     tab === "qmanager" ? LINE_BUDGETS : DEVICE_LOG_LINES.map(String);
   const linesValue = tab === "qmanager" ? qm.lines : String(sysLines);
 
+  // Day words and the boot span read on the rows' clock: QManager rows are the
+  // modem's local stamps, kernel rows are epochs from the device's own `now`.
+  const qmOffset = React.useMemo(() => rowClockOffset(qm.entries), [qm.entries]);
+  const qmNow = React.useMemo(
+    () => modemNowSec(qm.entries, qm.boots, qmOffset),
+    [qm.entries, qm.boots, qmOffset],
+  );
   const nowSec =
-    tab === "qmanager"
-      ? (qm.lastReadAtSec ?? view.rows[0]?.sec ?? 0)
-      : (device?.now ?? 0);
+    tab === "qmanager" ? (qmNow ?? qm.lastReadAtSec ?? 0) : (device?.now ?? 0);
 
   return (
     <motion.div className={HISTORY_PAGE} variants={staggerContainer} initial="hidden" animate="visible">
@@ -366,6 +373,7 @@ export function LogsPage() {
                 value={bootView.value}
                 onValueChange={changeBoot}
                 nowSec={nowSec}
+                offsetSec={tab === "qmanager" ? qmOffset : 0}
               />
             ) : null}
 

@@ -2,7 +2,7 @@
 
 import { useTranslation } from "react-i18next";
 
-import { formatClock, formatSince, formatWhen } from "@/components/history/format";
+import { formatSince, formatSpan, formatWhen } from "@/components/history/format";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { MaterialSymbol } from "@/components/ui/material-symbol";
 import { SEGMENTED, SegmentedField } from "@/components/ui/segmented-field";
@@ -16,6 +16,7 @@ import {
 import { PREV_BOOT, THIS_BOOT, type BootChoice } from "@/hooks/use-system-logs";
 import type { LogBoot } from "@/types/system-logs";
 
+import { dayKeyOf } from "./derive";
 import { LOGS } from "./shapes";
 
 // =============================================================================
@@ -34,8 +35,13 @@ export interface BootSelectProps {
   thisBoot: string | null;
   value: BootChoice;
   onValueChange: (next: BootChoice) => void;
-  /** Epoch seconds the day words ("Today") are relative to. */
+  /** Seconds on the rows' clock the day words ("Today") are relative to. */
   nowSec: number;
+  /**
+   * Added to a boot's epoch stamps to put them on the rows' clock (the modem's
+   * local time on the QManager tab, 0 where rows are drawn from epochs).
+   */
+  offsetSec?: number;
 }
 
 const checkGlyph = (className: string) => (
@@ -55,7 +61,14 @@ function bootOf(
   return boots.find((b) => String(b.boot) === value);
 }
 
-export function BootSelect({ boots, thisBoot, value, onValueChange, nowSec }: BootSelectProps) {
+export function BootSelect({
+  boots,
+  thisBoot,
+  value,
+  onValueChange,
+  nowSec,
+  offsetSec = 0,
+}: BootSelectProps) {
   const { t, i18n } = useTranslation("history");
   const locale = i18n.language;
 
@@ -66,19 +79,24 @@ export function BootSelect({ boots, thisBoot, value, onValueChange, nowSec }: Bo
   const shown = bootOf(boots, thisBoot, value);
 
   const startedAt = (b: LogBoot) =>
-    typeof b.first === "number" ? formatWhen(b.first, nowSec, t, locale) : null;
+    typeof b.first === "number" ? formatWhen(b.first + offsetSec, nowSec, t, locale) : null;
 
-  // The chosen boot's span: "Since 14:40" while it runs, else first to last.
+  // The chosen boot's span on the rows' clock: "Since 14:40" while it runs,
+  // else first to last (the shared History span; both days when it crosses one).
   let span: string | null = null;
   if (shown && typeof shown.first === "number") {
+    const first = shown.first + offsetSec;
     if (value === THIS_BOOT) {
-      span = t("logs.boot.since", { when: formatSince(shown.first, nowSec, t, locale) });
+      span = t("logs.boot.since", { when: formatSince(first, nowSec, t, locale) });
     } else if (typeof shown.last === "number") {
-      const sameDay = new Date(shown.first * 1000).toDateString() === new Date(shown.last * 1000).toDateString();
-      span = t("logs.boot.span", {
-        from: formatWhen(shown.first, nowSec, t, locale),
-        to: sameDay ? formatClock(shown.last, locale) : formatWhen(shown.last, nowSec, t, locale),
-      });
+      const last = shown.last + offsetSec;
+      span =
+        dayKeyOf(first) === dayKeyOf(last)
+          ? formatSpan(first, last, nowSec, t, locale)
+          : t("logs.boot.span", {
+              from: formatWhen(first, nowSec, t, locale),
+              to: formatWhen(last, nowSec, t, locale),
+            });
     }
   }
 

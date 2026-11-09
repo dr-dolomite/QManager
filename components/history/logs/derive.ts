@@ -4,7 +4,7 @@ import type {
   DeviceLogResponse,
   DeviceSystemLogResponse,
 } from "@/types/device-syslog";
-import type { LevelFilter, LogEntry, LogLevel } from "@/types/system-logs";
+import type { LevelFilter, LogBoot, LogEntry, LogLevel } from "@/types/system-logs";
 
 // =============================================================================
 // Logs: pure helpers
@@ -348,6 +348,42 @@ export function parseLogTimestamp(raw: string): number | null {
     Number(m[6]),
   );
   return Number.isNaN(at.getTime()) ? null : Math.floor(at.getTime() / 1000);
+}
+
+/**
+ * What to add to an epoch to put it on the rows' clock. A QManager row is drawn
+ * from its own local-time text (`parseLogTimestamp`, so the modem's wall clock
+ * whatever the browser's zone), while `t` and a boot's span are true epochs.
+ * The newest entry carrying both gives the difference; 0 when none does.
+ */
+export function rowClockOffset(entries: readonly LogEntry[]): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (typeof e.t !== "number") continue;
+    const local = parseLogTimestamp(e.timestamp);
+    if (local !== null) return local - e.t;
+  }
+  return 0;
+}
+
+/**
+ * "Now" on the rows' clock: the newest line the journal holds in any boot (the
+ * running boot's last line), else the newest line read. Never the browser's
+ * clock, so day words and clocks share the rows' reference.
+ */
+export function modemNowSec(
+  entries: readonly LogEntry[],
+  boots: readonly LogBoot[],
+  offsetSec: number,
+): number | null {
+  let best: number | null = null;
+  for (const b of boots) {
+    if (typeof b.last === "number") best = Math.max(best ?? 0, b.last + offsetSec);
+  }
+  const newest = entries[entries.length - 1];
+  const local = newest ? parseLogTimestamp(newest.timestamp) : null;
+  if (local !== null) best = Math.max(best ?? 0, local);
+  return best;
 }
 
 export function filterByLevel(
