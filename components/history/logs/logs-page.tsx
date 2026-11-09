@@ -139,6 +139,8 @@ export function LogsPage() {
   };
   const changeSource = (next: DeviceLogSource) => {
     setSource(next);
+    // A boot chosen on the kernel log means nothing on the other source.
+    setKernelBoot(THIS_BOOT);
     resetPage();
   };
   const changeLines = (next: string) => {
@@ -188,6 +190,8 @@ export function LogsPage() {
     if (ok) {
       toast.success(ts("logs.toast.cleared"));
       setClearOpen(false);
+      // The cleared journal no longer holds the boot that was in view.
+      qm.setBoot(THIS_BOOT);
       resetPage();
     } else {
       toast.error(ts("logs.toast.clear_failed"));

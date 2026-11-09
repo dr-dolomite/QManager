@@ -264,6 +264,14 @@ export function useSystemLogs({
         }
         const held = Array.isArray(data.boots) ? data.boots : [];
         setBoots(held);
+        // A chosen boot the journal no longer holds (cleared, aged out, or the
+        // selector itself gone) would strand the view on an empty record.
+        if (
+          boot !== THIS_BOOT &&
+          (held.length < 2 || (boot !== PREV_BOOT && !held.some((b) => String(b.boot) === boot)))
+        ) {
+          setBoot(THIS_BOOT);
+        }
         setThisBoot(data.this_boot !== undefined ? bootKey(data.this_boot) : null);
         setLastReadAtSec(Math.floor(Date.now() / 1000));
         setError(null);
