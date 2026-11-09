@@ -8,9 +8,11 @@
 #      type, severity, radio, message[, end]}]} newest first.
 # counts ignore the type filter; total honours it. An onset type named in
 # HIST_<id>_PAIRS="onset:recovery ..." carries end = t of the next matching
-# recovery (null while ongoing), paired over the whole retention window
-# before the window, type filter and paging. Read-only. Contract:
-# docs/features/history.md §6.
+# recovery, unless a break comes first: the next onset of its type, a
+# restart row ("k":"r", observation stopped) or a device_reboot row of the
+# system series (at t - off). Then end = that break; null while ongoing.
+# Paired over the whole retention window before the window, type filter and
+# paging. Read-only. Contract: docs/features/history.md §6.
 #
 # Endpoint: GET /cgi-bin/quecmanager/history/events.sh
 # Install location: /www/cgi-bin/quecmanager/history/events.sh
@@ -44,7 +46,7 @@ if ! hr_range "$range"; then
     cgi_error "invalid_range" "range must be 24h, 7d or 30d"
     exit 0
 fi
-eval "evtypes=\$HIST_${series}_EVENTS; pairs=\${HIST_${series}_PAIRS:-}"
+eval "evtypes=\$HIST_${series}_EVENTS; pairs=\${HIST_${series}_PAIRS:-}; resume=\${HIST_${series}_RESUME:-}"
 
 hr_param types
 types=""
@@ -89,8 +91,15 @@ if [ -n "$pairs" ]; then
     [ "$scan" -lt "$first" ] || scan=$first
 fi
 
-body=$(hr_rows "$series" e "$scan" | awk -v first="$first" -v now="$now" \
-    -v evtypes="$evtypes" -v types="$types" -v pairs="$pairs" \
+# Rows: the series' events and restart rows, plus (paired series other than
+# system) the system series' device_reboot rows, marked X: breaks only.
+body=$( {
+    hr_rows "$series" '[er]' "$scan"
+    if [ -n "$pairs" ] && [ "$series" != "system" ]; then
+        hr_rows system e "$scan" | grep '"type":"device_reboot"' | sed 's/^/X/'
+    fi
+} | awk -v first="$first" -v now="$now" \
+    -v evtypes="$evtypes" -v types="$types" -v pairs="$pairs" -v resume="$resume" \
     -v limit="$limit" -v offset="$offset" '
 BEGIN {
     ne = split(evtypes, ET, " ")
@@ -100,13 +109,31 @@ BEGIN {
         if (split(PR[i], AB, ":") != 2) continue
         ON[AB[1]] = AB[2]
     }
-    n = 0
+    nk = split(resume, RS, " "); for (i = 1; i <= nk; i++) KEEP[RS[i]] = 1
+    n = 0; nb = 0
 }
 {
-    t = $0; sub(/^\{"k":"e","t":/, "", t); sub(/,.*/, "", t); t += 0
+    line = $0; ext = 0
+    if (substr(line, 1, 1) == "X") { ext = 1; line = substr(line, 2) }
+    t = line; sub(/^\{"k":"[er]","t":/, "", t); sub(/,.*/, "", t); t += 0
     if (t > now + 60) next
-    ty = $0; sub(/.*"type":"/, "", ty); sub(/".*/, "", ty)
-    row = $0; sub(/^\{"k":"e","t":/, "{\"timestamp\":", row)
+    # Breaks: BT = when observation stopped; BB = 1 for a new boot (ends
+    # every state), 0 for a same-boot poller restart (spares KEEP types).
+    if (substr(line, 1, 7) == "{\"k\":\"r") {
+        BT[++nb] = t; BB[nb] = (line ~ /"boot":1[,}]/) ? 1 : 0
+        next
+    }
+    ty = line; sub(/.*"type":"/, "", ty); sub(/".*/, "", ty)
+    if (ty == "device_reboot") {
+        # Down off seconds before the boot moment t; unknown off: at t.
+        o = line
+        if (sub(/.*"message":"[^"]*off=/, "", o) && o ~ /^[0-9]+/) {
+            sub(/[^0-9].*/, "", o); BT[++nb] = t - o
+        } else BT[++nb] = t
+        BB[nb] = 1
+    }
+    if (ext) next
+    row = line; sub(/^\{"k":"e","t":/, "{\"timestamp\":", row)
     R[++n] = row; RT[n] = t; RY[n] = ty
 }
 END {
@@ -119,13 +146,23 @@ END {
         }
         R[j + 1] = r; RT[j + 1] = rt; RY[j + 1] = ry
     }
-    # Newest to oldest: NEXT[rec] is the t of the next recovery after a row.
+    # Newest to oldest: NEXT[type] is the t of the next row of that type.
+    # An onset ends at its next recovery unless a break comes first: the
+    # next onset of its type, or a break at or after it (a recovery in the
+    # same second as the break still pairs).
     m = 0
     for (k = n; k >= 1; k--) {
         ty = RY[k]
         row = R[k]
         if (ty in ON) {
-            e = (ON[ty] in NEXT) ? NEXT[ON[ty]] : "null"
+            c = (ty in NEXT) ? NEXT[ty] : ""
+            for (i = 1; i <= nb; i++) {
+                if (BT[i] < RT[k] || (!BB[i] && (ty in KEEP))) continue
+                if (c == "" || BT[i] < c) c = BT[i]
+            }
+            e = (ON[ty] in NEXT) ? NEXT[ON[ty]] : ""
+            if (e == "" || (c != "" && e > c)) e = c
+            if (e == "") e = "null"
             sub(/\}$/, ",\"end\":" e "}", row)
         }
         NEXT[ty] = RT[k]

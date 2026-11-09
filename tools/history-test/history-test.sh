@@ -204,7 +204,7 @@ while [ $(( (MONO + WOFF) % 1800 )) -lt 60 ] || [ $(( (MONO + WOFF) % 1800 )) -g
 done
 cycles 5
 hist_flush
-LW=$((_hist_pm + _hist_off))
+LW=$((MONO + _hist_off))
 check 'read -r _lw < "$T/store/last_wall" && [ "$_lw" = "$LW" ]' "TERM flush writes last_wall (got $_lw, want $LW)"
 LWB=$((LW / 1800 * 1800))
 # 14a. A clock behind the last sample is still refused.
@@ -234,6 +234,65 @@ load; hist_init
 check '[ "$_hist_tfloor" = "$_hist_hwm" ]' "torn marker ignored"
 cycles 5
 hist_flush
+check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "^{\"k\":\"r\",\"t\":$LW,\"boot\":1}\$"' "new boot queues a restart row at last_wall"
+
+# 15. Onsets close at a restart (observation stopped) or at a newer onset.
+evq() { _SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h&types=signal_lost$1" sh "$SRC/events.sh" | sed -n '/^{/,$p'; }
+load; hist_init
+cycles 5
+# 15a. Onset on a non-sample cycle, TERM, same-boot restart, later recovery.
+cycles 2
+hist_event signal_lost "Signal lost (cut)" warning
+A15=$((MONO + WOFF))
+hist_flush
+load; hist_init
+check 'grep -q "^{\"k\":\"r\",\"t\":$A15,\"boot\":0}\$" "$T/run/cellular.queue"' "same-boot restart row at the last cycle"
+cycles 10
+hist_event signal_restored "Signal restored (late)" info
+C15=$((MONO + WOFF))
+cycles 5
+hist_flush
+printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
+E7=$(evq "&limit=1")
+echo "$E7" | jq -e '.events[0].timestamp=='"$A15"' and .events[0].end=='"$A15"'' >/dev/null 2>&1 && ok || bad "onset cut at the restart: $E7"
+E8=$(HIST_cellular_RESUME=signal_lost evq "&limit=1")
+echo "$E8" | jq -e '.events[0].end=='"$C15"'' >/dev/null 2>&1 && ok || bad "RESUME type survives a same-boot restart: $E8"
+E9=$(evq "")
+echo "$E9" | jq -e '[.events[]|select(.end==null)]|length==0' >/dev/null 2>&1 && ok || bad "older ongoing onsets closed by the restarts: $E9"
+# 15b. onset, onset, recovery: the first closes at the second.
+cycles 5
+hist_event signal_lost "Signal lost (1)" warning
+B1=$((MONO + WOFF))
+cycles 5
+hist_event signal_lost "Signal lost (2)" warning
+B2=$((MONO + WOFF))
+cycles 5
+hist_event signal_restored "Signal restored" info
+B3=$((MONO + WOFF))
+cycles 5
+hist_flush
+printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
+E10=$(evq "&limit=2")
+echo "$E10" | jq -e '.events[0].timestamp=='"$B2"' and .events[0].end=='"$B3"' and .events[1].timestamp=='"$B1"' and .events[1].end=='"$B2"'' >/dev/null 2>&1 && ok || bad "newer onset closes the older: $E10"
+# 15c. A device_reboot row in the system store closes an onset where the
+#      device went down (t - off); off "-" means at t. Never listed here.
+load; hist_init
+cycles 5
+hist_event signal_lost "Signal lost (reboot)" warning
+D15=$((MONO + WOFF))
+cycles 60
+hist_flush
+mkdir -p "$T/store/system"
+printf '{"k":"e","t":%s,"type":"device_reboot","severity":"info","radio":null,"message":"cause=user off=40"}\n' \
+    $((D15 + 100)) >> "$T/store/system/d$((D15 / 86400)).jsonl"
+printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
+E11=$(evq "&limit=1")
+echo "$E11" | jq -e '.events[0].timestamp=='"$D15"' and .events[0].end=='"$((D15 + 60))"' and .total==6' >/dev/null 2>&1 && ok || bad "device_reboot closes at t - off: $E11"
+printf '{"k":"e","t":%s,"type":"device_reboot","severity":"error","radio":null,"message":"cause=unexpected off=-"}\n' \
+    $((D15 + 30)) >> "$T/store/system/d$((D15 / 86400)).jsonl"
+E12=$(evq "&limit=1")
+echo "$E12" | jq -e '.events[0].end=='"$((D15 + 30))"'' >/dev/null 2>&1 && ok || bad "unknown off closes at t: $E12"
+rm -rf "$T/store/system"
 NOWW=$((MONO + WOFF))
 
 # 11. Torn last line is ignored by the reader.

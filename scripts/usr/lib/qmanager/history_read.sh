@@ -110,7 +110,8 @@ hr_clock() {
 }
 
 # hr_rows ID KIND FIRST_T: every stored + queued (+ open, for b) row of KIND
-# (b|e) whose day file can hold t >= FIRST_T, on stdout.
+# (b|e|r, or a grep bracket class such as [er]) whose day file can hold
+# t >= FIRST_T, on stdout.
 hr_rows() {
     local _d
     local _f
