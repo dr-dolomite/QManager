@@ -137,5 +137,185 @@
         "ca_change": "Agregasi carrier"
       }
     }
+  },
+  "system": {
+    "page": {
+      "title": "Kesehatan Sistem",
+      "description": "Bagaimana prosesor, memori, suhu, dan penyimpanan modem bertahan."
+    },
+    "range": {
+      "label": "Rentang waktu",
+      "24h": "24 jam",
+      "7d": "7 hari",
+      "30d": "30 hari"
+    },
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "mmWave",
+      "modem": "Modem",
+      "cpu": "CPU",
+      "ethernet": "Ethernet"
+    },
+    "summary": {
+      "collecting": "Mengumpulkan data",
+      "since": "Sejak {{when}}",
+      "up": {
+        "label": "Aktif selama"
+      },
+      "modem": {
+        "label": "Restart modem",
+        "live_label": "Modem",
+        "restarting": "Memulai ulang",
+        "for": "Selama {{duration}}",
+        "last": "Terakhir {{when}}",
+        "none": "Tidak ada",
+        "none_caption": "Dalam {{range}} terakhir"
+      },
+      "processor": {
+        "label": "Prosesor",
+        "unit": "% rata-rata",
+        "peak": "Puncak {{percent}}% ({{when}})"
+      },
+      "memory": {
+        "label": "Memori",
+        "in_use": "{{used}} dari {{total}} MB terpakai"
+      }
+    },
+    "storage": {
+      "title": "Penyimpanan",
+      "description": "Seberapa penuh setiap area penyimpanan saat ini.",
+      "areas": {
+        "sys": "Sistem",
+        "app": "Data aplikasi",
+        "tmp": "File sementara"
+      },
+      "of": "{{used}} dari {{total}} MB",
+      "now": "Sekarang",
+      "free": "Kosong",
+      "grew": "+{{amount}} MB",
+      "shrank": "-{{amount}} MB",
+      "in_range": "dalam {{range}}",
+      "unchanged": "Tidak ada perubahan dalam {{range}}",
+      "empty": {
+        "title": "Belum ada pembacaan penyimpanan",
+        "description": "Penyimpanan diukur sekali setiap jam."
+      }
+    },
+    "events": {
+      "title": "Peristiwa sistem",
+      "description": "Restart, modem mogok, dan pembatasan karena panas, terbaru lebih dulu.",
+      "showing": "Menampilkan {{shown}} dari {{total}}",
+      "more": "Tampilkan lebih banyak",
+      "fewer": "Tampilkan lebih sedikit",
+      "modem": {
+        "ongoing": "Modem mogok dan sedang memulai ulang",
+        "ongoing_sub": "Sedang memulai ulang",
+        "ended": "Modem mogok dan memulai ulang sendiri",
+        "ended_sub": "Kembali dalam {{duration}}"
+      },
+      "reboot": {
+        "unexpected": "Perangkat restart tanpa terduga",
+        "update": "Restart untuk menyelesaikan pembaruan perangkat lunak",
+        "scheduled": "Restart terjadwal",
+        "user": "Di-restart dari QManager",
+        "watchdog": "Di-restart oleh watchdog koneksi",
+        "off": "Offline selama {{duration}}",
+        "off_unknown": "Lama offline tidak diketahui"
+      },
+      "heat": {
+        "message": "{{parts}} dibatasi agar mendingin",
+        "message_unknown": "Dibatasi agar mendingin",
+        "ongoing": "Sedang dibatasi",
+        "ongoing_temp": "Sedang dibatasi ({{temp}} °C)",
+        "ended_sub": "{{duration}}, puncak {{temp}} °C"
+      },
+      "empty": {
+        "title": "Tidak ada restart atau pembatasan",
+        "description": "Semuanya berjalan tanpa gangguan dalam {{range}} terakhir."
+      },
+      "new": {
+        "title": "Belum ada yang tercatat",
+        "description": "Restart, modem mogok, dan pembatasan akan muncul di sini."
+      }
+    },
+    "states": {
+      "loading_sr": "Memuat kesehatan sistem",
+      "error": {
+        "title": "Riwayat tidak tersedia",
+        "description": "Modem tidak mengembalikan riwayat apa pun."
+      },
+      "retry": "Coba lagi",
+      "collecting": {
+        "title": "Mengumpulkan data",
+        "description": "Kesehatan sistem muncul di sini setelah modem mencatat beberapa menit pembacaan."
+      },
+      "clock": {
+        "title": "Menunggu jam",
+        "description": "Riwayat dimulai setelah modem mengetahui waktu."
+      }
+    },
+    "stability": {
+      "title": "Stabilitas",
+      "description": "Kapan perangkat atau modem mati, dan kapan panas memperlambatnya.",
+      "aria": "Linimasa stabilitas",
+      "legend": {
+        "running": "Berjalan",
+        "crash": "Crash",
+        "planned": "Restart terjadwal",
+        "throttled": "Diperlambat",
+        "no_data": "Tidak ada data"
+      },
+      "lanes": {
+        "device": "Perangkat",
+        "modem": "Modem",
+        "heat": "Suhu"
+      },
+      "counts": {
+        "rebooted": "Reboot {{n}}×",
+        "no_reboots": "Tidak ada reboot",
+        "restarted": "Restart {{n}}×",
+        "no_restarts": "Tidak ada restart",
+        "throttled": "Diperlambat {{n}}×",
+        "never_throttled": "Tidak pernah diperlambat",
+        "restarting_now": "Sedang restart",
+        "throttling_now": "Sedang diperlambat"
+      }
+    },
+    "charts": {
+      "cpu": {
+        "title": "Prosesor",
+        "description": "Seberapa sibuk prosesor."
+      },
+      "mem": {
+        "title": "Memori",
+        "description": "Terpakai, dari {{total}} MB.",
+        "description_unknown": "Seberapa banyak memori yang terpakai."
+      },
+      "temp": {
+        "title": "Suhu",
+        "description": "Sensor terpanas di dalam modem."
+      },
+      "throttles_at": "Diperlambat pada {{trip}} °C",
+      "chart_aria": "Grafik riwayat {{metric}}",
+      "collecting_since": "Mengumpulkan data sejak {{time}}",
+      "collecting": "Mengumpulkan data",
+      "tip": {
+        "modem_crashed": "Modem crash",
+        "restarting": "Sedang restart",
+        "back_in": "Pulih dalam {{duration}}",
+        "unexpected": "Restart tak terduga",
+        "planned": "Restart terjadwal",
+        "off_for": "Mati {{duration}}",
+        "throttled": "Diperlambat ({{parts}})",
+        "throttled_bare": "Diperlambat",
+        "throttling_now": "Sedang diperlambat",
+        "peak": "Puncak {{temp}} °C",
+        "running": "Berjalan normal",
+        "no_data": "Tidak ada data",
+        "device_off": "Perangkat mati",
+        "mem_value": "{{pct}}% ({{mb}} MB)"
+      }
+    }
   }
 }

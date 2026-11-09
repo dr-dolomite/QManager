@@ -139,5 +139,185 @@
         "ca_change": "Carrier aggregation"
       }
     }
+  },
+  "system": {
+    "page": {
+      "title": "System Health",
+      "description": "How the modem's processor, memory, heat and storage held up."
+    },
+    "range": {
+      "label": "Time range",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "mmWave",
+      "modem": "Modem",
+      "cpu": "CPU",
+      "ethernet": "Ethernet"
+    },
+    "summary": {
+      "collecting": "Collecting data",
+      "since": "Since {{when}}",
+      "up": {
+        "label": "Up for"
+      },
+      "modem": {
+        "label": "Modem restarts",
+        "live_label": "Modem",
+        "restarting": "Restarting",
+        "for": "For {{duration}}",
+        "last": "Last {{when}}",
+        "none": "None",
+        "none_caption": "In the last {{range}}"
+      },
+      "processor": {
+        "label": "Processor",
+        "unit": "% avg",
+        "peak": "Peak {{percent}}% ({{when}})"
+      },
+      "memory": {
+        "label": "Memory",
+        "in_use": "{{used}} of {{total}} MB in use"
+      }
+    },
+    "storage": {
+      "title": "Storage",
+      "description": "How full each storage area is now.",
+      "areas": {
+        "sys": "System",
+        "app": "App data",
+        "tmp": "Temporary files"
+      },
+      "of": "{{used}} of {{total}} MB",
+      "now": "Now",
+      "free": "Free",
+      "grew": "+{{amount}} MB",
+      "shrank": "-{{amount}} MB",
+      "in_range": "in {{range}}",
+      "unchanged": "No change in {{range}}",
+      "empty": {
+        "title": "No storage reading yet",
+        "description": "Storage is measured once an hour."
+      }
+    },
+    "events": {
+      "title": "System events",
+      "description": "Restarts, modem crashes and heat throttling, newest first.",
+      "showing": "Showing {{shown}} of {{total}}",
+      "more": "Show more",
+      "fewer": "Show fewer",
+      "modem": {
+        "ongoing": "Modem crashed and is restarting",
+        "ongoing_sub": "Restarting now",
+        "ended": "Modem crashed and restarted itself",
+        "ended_sub": "Back in {{duration}}"
+      },
+      "reboot": {
+        "unexpected": "Device restarted unexpectedly",
+        "update": "Restarted to finish a software update",
+        "scheduled": "Scheduled restart",
+        "user": "Restarted from QManager",
+        "watchdog": "Restarted by the connection watchdog",
+        "off": "Offline for {{duration}}",
+        "off_unknown": "Offline time unknown"
+      },
+      "heat": {
+        "message": "Throttled {{parts}} to cool down",
+        "message_unknown": "Throttled to cool down",
+        "ongoing": "Throttling now",
+        "ongoing_temp": "Throttling now ({{temp}} °C)",
+        "ended_sub": "{{duration}}, peak {{temp}} °C"
+      },
+      "empty": {
+        "title": "No restarts or throttling",
+        "description": "Everything ran without a break in the last {{range}}."
+      },
+      "new": {
+        "title": "Nothing recorded yet",
+        "description": "Restarts, modem crashes and throttling will appear here."
+      }
+    },
+    "states": {
+      "loading_sr": "Loading system health",
+      "error": {
+        "title": "History unavailable",
+        "description": "The modem didn't return any history."
+      },
+      "retry": "Try again",
+      "collecting": {
+        "title": "Collecting data",
+        "description": "System health appears here once the modem has recorded a few minutes of readings."
+      },
+      "clock": {
+        "title": "Waiting for the clock",
+        "description": "History starts once the modem knows the time."
+      }
+    },
+    "stability": {
+      "title": "Stability",
+      "description": "When the device or modem went down, and when heat slowed it.",
+      "aria": "Stability timeline",
+      "legend": {
+        "running": "Running",
+        "crash": "Crash",
+        "planned": "Planned restart",
+        "throttled": "Throttled",
+        "no_data": "No data"
+      },
+      "lanes": {
+        "device": "Device",
+        "modem": "Modem",
+        "heat": "Heat"
+      },
+      "counts": {
+        "rebooted": "Rebooted {{n}}×",
+        "no_reboots": "No reboots",
+        "restarted": "Restarted {{n}}×",
+        "no_restarts": "No restarts",
+        "throttled": "Throttled {{n}}×",
+        "never_throttled": "Never throttled",
+        "restarting_now": "Restarting now",
+        "throttling_now": "Throttling now"
+      }
+    },
+    "charts": {
+      "cpu": {
+        "title": "Processor",
+        "description": "How busy the processor was."
+      },
+      "mem": {
+        "title": "Memory",
+        "description": "In use, out of {{total}} MB.",
+        "description_unknown": "How much memory was in use."
+      },
+      "temp": {
+        "title": "Temperature",
+        "description": "The hottest sensor inside the modem."
+      },
+      "throttles_at": "Throttles at {{trip}} °C",
+      "chart_aria": "{{metric}} history chart",
+      "collecting_since": "Collecting since {{time}}",
+      "collecting": "Collecting data",
+      "tip": {
+        "modem_crashed": "Modem crashed",
+        "restarting": "Restarting",
+        "back_in": "Back in {{duration}}",
+        "unexpected": "Unexpected restart",
+        "planned": "Planned restart",
+        "off_for": "Off {{duration}}",
+        "throttled": "Throttled ({{parts}})",
+        "throttled_bare": "Throttled",
+        "throttling_now": "Throttling now",
+        "peak": "Peak {{temp}} °C",
+        "running": "Running normally",
+        "no_data": "No data",
+        "device_off": "Device off",
+        "mem_value": "{{pct}}% ({{mb}} MB)"
+      }
+    }
   }
 }

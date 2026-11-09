@@ -139,5 +139,185 @@
         "ca_change": "Aggregazione di portanti"
       }
     }
+  },
+  "system": {
+    "page": {
+      "title": "Stato del sistema",
+      "description": "Come hanno retto processore, memoria, temperatura e archiviazione del modem."
+    },
+    "range": {
+      "label": "Intervallo di tempo",
+      "24h": "24 ore",
+      "7d": "7 giorni",
+      "30d": "30 giorni"
+    },
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "mmWave",
+      "modem": "Modem",
+      "cpu": "CPU",
+      "ethernet": "Ethernet"
+    },
+    "summary": {
+      "collecting": "Raccolta dati",
+      "since": "Dalle {{when}}",
+      "up": {
+        "label": "Attivo da"
+      },
+      "modem": {
+        "label": "Riavvii del modem",
+        "live_label": "Modem",
+        "restarting": "Riavvio in corso",
+        "for": "Da {{duration}}",
+        "last": "Ultimo {{when}}",
+        "none": "Nessuno",
+        "none_caption": "Nelle ultime {{range}}"
+      },
+      "processor": {
+        "label": "Processore",
+        "unit": "% medio",
+        "peak": "Picco {{percent}}% ({{when}})"
+      },
+      "memory": {
+        "label": "Memoria",
+        "in_use": "{{used}} di {{total}} MB in uso"
+      }
+    },
+    "storage": {
+      "title": "Archiviazione",
+      "description": "Quanto è pieno ogni spazio di archiviazione ora.",
+      "areas": {
+        "sys": "Sistema",
+        "app": "Dati app",
+        "tmp": "File temporanei"
+      },
+      "of": "{{used}} di {{total}} MB",
+      "now": "Ora",
+      "free": "Libero",
+      "grew": "+{{amount}} MB",
+      "shrank": "-{{amount}} MB",
+      "in_range": "in {{range}}",
+      "unchanged": "Nessuna variazione in {{range}}",
+      "empty": {
+        "title": "Nessuna lettura dell'archiviazione",
+        "description": "L'archiviazione viene misurata una volta all'ora."
+      }
+    },
+    "events": {
+      "title": "Eventi di sistema",
+      "description": "Riavvii, arresti anomali del modem e riduzione per calore, dal più recente.",
+      "showing": "Mostrati {{shown}} di {{total}}",
+      "more": "Mostra altri",
+      "fewer": "Mostra meno",
+      "modem": {
+        "ongoing": "Il modem è andato in crash e si sta riavviando",
+        "ongoing_sub": "Riavvio in corso",
+        "ended": "Il modem è andato in crash e si è riavviato da solo",
+        "ended_sub": "Tornato dopo {{duration}}"
+      },
+      "reboot": {
+        "unexpected": "Il dispositivo si è riavviato inaspettatamente",
+        "update": "Riavviato per completare un aggiornamento software",
+        "scheduled": "Riavvio programmato",
+        "user": "Riavviato da QManager",
+        "watchdog": "Riavviato dal watchdog di connessione",
+        "off": "Offline per {{duration}}",
+        "off_unknown": "Durata offline sconosciuta"
+      },
+      "heat": {
+        "message": "Ridotte le prestazioni di {{parts}} per raffreddare",
+        "message_unknown": "Prestazioni ridotte per raffreddare",
+        "ongoing": "Riduzione in corso",
+        "ongoing_temp": "Riduzione in corso ({{temp}} °C)",
+        "ended_sub": "{{duration}}, picco {{temp}} °C"
+      },
+      "empty": {
+        "title": "Nessun riavvio né riduzione",
+        "description": "Tutto ha funzionato senza interruzioni nelle ultime {{range}}."
+      },
+      "new": {
+        "title": "Ancora nulla registrato",
+        "description": "Qui compariranno riavvii, crash del modem e riduzioni per calore."
+      }
+    },
+    "states": {
+      "loading_sr": "Caricamento dello stato del sistema",
+      "error": {
+        "title": "Cronologia non disponibile",
+        "description": "Il modem non ha restituito alcuna cronologia."
+      },
+      "retry": "Riprova",
+      "collecting": {
+        "title": "Raccolta dati",
+        "description": "Lo stato del sistema comparirà qui dopo qualche minuto di letture del modem."
+      },
+      "clock": {
+        "title": "In attesa dell'orologio",
+        "description": "La cronologia inizia quando il modem conosce l'ora."
+      }
+    },
+    "stability": {
+      "title": "Stabilità",
+      "description": "Quando il dispositivo o il modem si sono fermati e quando il calore ha rallentato il sistema.",
+      "aria": "Cronologia della stabilità",
+      "legend": {
+        "running": "In funzione",
+        "crash": "Arresto anomalo",
+        "planned": "Riavvio pianificato",
+        "throttled": "Rallentato",
+        "no_data": "Nessun dato"
+      },
+      "lanes": {
+        "device": "Dispositivo",
+        "modem": "Modem",
+        "heat": "Calore"
+      },
+      "counts": {
+        "rebooted": "Riavviato {{n}}×",
+        "no_reboots": "Nessun riavvio",
+        "restarted": "Riavviato {{n}}×",
+        "no_restarts": "Nessun riavvio",
+        "throttled": "Rallentato {{n}}×",
+        "never_throttled": "Mai rallentato",
+        "restarting_now": "Riavvio in corso",
+        "throttling_now": "Rallentamento in corso"
+      }
+    },
+    "charts": {
+      "cpu": {
+        "title": "Processore",
+        "description": "Quanto era occupato il processore."
+      },
+      "mem": {
+        "title": "Memoria",
+        "description": "In uso, su {{total}} MB.",
+        "description_unknown": "Quanta memoria era in uso."
+      },
+      "temp": {
+        "title": "Temperatura",
+        "description": "Il sensore più caldo all'interno del modem."
+      },
+      "throttles_at": "Rallenta a {{trip}} °C",
+      "chart_aria": "Grafico storico: {{metric}}",
+      "collecting_since": "Raccolta dati dalle {{time}}",
+      "collecting": "Raccolta dati in corso",
+      "tip": {
+        "modem_crashed": "Il modem si è bloccato",
+        "restarting": "Riavvio in corso",
+        "back_in": "Ripristinato in {{duration}}",
+        "unexpected": "Riavvio imprevisto",
+        "planned": "Riavvio pianificato",
+        "off_for": "Spento {{duration}}",
+        "throttled": "Rallentato ({{parts}})",
+        "throttled_bare": "Rallentato",
+        "throttling_now": "Rallentamento in corso",
+        "peak": "Picco {{temp}} °C",
+        "running": "Funzionamento regolare",
+        "no_data": "Nessun dato",
+        "device_off": "Dispositivo spento",
+        "mem_value": "{{pct}}% ({{mb}} MB)"
+      }
+    }
   }
 }

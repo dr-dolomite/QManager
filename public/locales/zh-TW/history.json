@@ -137,5 +137,185 @@
         "ca_change": "載波聚合"
       }
     }
+  },
+  "system": {
+    "page": {
+      "title": "系統健康",
+      "description": "數據機的處理器、記憶體、溫度和儲存表現如何。"
+    },
+    "range": {
+      "label": "時間範圍",
+      "24h": "24 小時",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "parts": {
+      "lte": "LTE",
+      "nr": "5G",
+      "mmwave": "毫米波",
+      "modem": "數據機",
+      "cpu": "CPU",
+      "ethernet": "乙太網路"
+    },
+    "summary": {
+      "collecting": "正在收集資料",
+      "since": "自 {{when}}",
+      "up": {
+        "label": "已運作"
+      },
+      "modem": {
+        "label": "數據機重新啟動",
+        "live_label": "數據機",
+        "restarting": "正在重新啟動",
+        "for": "已持續 {{duration}}",
+        "last": "最近 {{when}}",
+        "none": "無",
+        "none_caption": "最近 {{range}}內"
+      },
+      "processor": {
+        "label": "處理器",
+        "unit": "% 平均",
+        "peak": "峰值 {{percent}}%（{{when}}）"
+      },
+      "memory": {
+        "label": "記憶體",
+        "in_use": "已用 {{used}} / {{total}} MB"
+      }
+    },
+    "storage": {
+      "title": "儲存空間",
+      "description": "各儲存區域目前的使用情況。",
+      "areas": {
+        "sys": "系統",
+        "app": "應用程式資料",
+        "tmp": "暫存檔案"
+      },
+      "of": "{{used}} / {{total}} MB",
+      "now": "現在",
+      "free": "可用",
+      "grew": "+{{amount}} MB",
+      "shrank": "-{{amount}} MB",
+      "in_range": "（{{range}}內）",
+      "unchanged": "{{range}}內沒有變化",
+      "empty": {
+        "title": "尚無儲存讀數",
+        "description": "儲存用量每小時測量一次。"
+      }
+    },
+    "events": {
+      "title": "系統事件",
+      "description": "重新啟動、數據機當機和過熱降頻，最新的在前。",
+      "showing": "顯示 {{shown}} / {{total}}",
+      "more": "顯示更多",
+      "fewer": "顯示較少",
+      "modem": {
+        "ongoing": "數據機當機，正在重新啟動",
+        "ongoing_sub": "正在重新啟動",
+        "ended": "數據機當機並自行重新啟動",
+        "ended_sub": "{{duration}} 後恢復"
+      },
+      "reboot": {
+        "unexpected": "裝置意外重新啟動",
+        "update": "為完成軟體更新而重新啟動",
+        "scheduled": "排程重新啟動",
+        "user": "由 QManager 重新啟動",
+        "watchdog": "由連線看門狗重新啟動",
+        "off": "離線 {{duration}}",
+        "off_unknown": "離線時間未知"
+      },
+      "heat": {
+        "message": "已為 {{parts}} 降頻以散熱",
+        "message_unknown": "已降頻以散熱",
+        "ongoing": "正在降頻",
+        "ongoing_temp": "正在降頻（{{temp}} °C）",
+        "ended_sub": "{{duration}}，峰值 {{temp}} °C"
+      },
+      "empty": {
+        "title": "沒有重新啟動或降頻",
+        "description": "最近 {{range}}內一切運作正常，沒有中斷。"
+      },
+      "new": {
+        "title": "尚無紀錄",
+        "description": "重新啟動、數據機當機和降頻會顯示在這裡。"
+      }
+    },
+    "states": {
+      "loading_sr": "正在載入系統健康",
+      "error": {
+        "title": "歷史記錄無法使用",
+        "description": "數據機沒有回傳任何歷史記錄。"
+      },
+      "retry": "重試",
+      "collecting": {
+        "title": "正在收集資料",
+        "description": "數據機記錄幾分鐘的讀數後，系統健康會顯示在這裡。"
+      },
+      "clock": {
+        "title": "正在等待時鐘",
+        "description": "數據機取得時間後才會開始記錄歷史。"
+      }
+    },
+    "stability": {
+      "title": "穩定性",
+      "description": "裝置或數據機何時中斷，以及何時因過熱而降速。",
+      "aria": "穩定性時間線",
+      "legend": {
+        "running": "運作中",
+        "crash": "當機",
+        "planned": "計畫重新啟動",
+        "throttled": "已降速",
+        "no_data": "無資料"
+      },
+      "lanes": {
+        "device": "裝置",
+        "modem": "數據機",
+        "heat": "溫度"
+      },
+      "counts": {
+        "rebooted": "重新啟動 {{n}} 次",
+        "no_reboots": "未重新啟動",
+        "restarted": "重新啟動 {{n}} 次",
+        "no_restarts": "未重新啟動",
+        "throttled": "降速 {{n}} 次",
+        "never_throttled": "從未降速",
+        "restarting_now": "正在重新啟動",
+        "throttling_now": "正在降速"
+      }
+    },
+    "charts": {
+      "cpu": {
+        "title": "處理器",
+        "description": "處理器的忙碌程度。"
+      },
+      "mem": {
+        "title": "記憶體",
+        "description": "已使用，共 {{total}} MB。",
+        "description_unknown": "已使用的記憶體量。"
+      },
+      "temp": {
+        "title": "溫度",
+        "description": "數據機內部最熱的感測器。"
+      },
+      "throttles_at": "{{trip}} °C 時降速",
+      "chart_aria": "{{metric}}歷史圖表",
+      "collecting_since": "自 {{time}} 起收集",
+      "collecting": "正在收集資料",
+      "tip": {
+        "modem_crashed": "數據機當機",
+        "restarting": "正在重新啟動",
+        "back_in": "{{duration}} 後恢復",
+        "unexpected": "非預期重新啟動",
+        "planned": "計畫重新啟動",
+        "off_for": "關閉 {{duration}}",
+        "throttled": "已降速（{{parts}}）",
+        "throttled_bare": "已降速",
+        "throttling_now": "正在降速",
+        "peak": "峰值 {{temp}} °C",
+        "running": "運作正常",
+        "no_data": "無資料",
+        "device_off": "裝置已關閉",
+        "mem_value": "{{pct}}%（{{mb}} MB）"
+      }
+    }
   }
 }
