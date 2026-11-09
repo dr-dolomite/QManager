@@ -119,6 +119,10 @@ export function StepPassword({ onSuccess, onLoadingChange, onSubmitRef, onValidi
             // Non-fatal — hostname save is best-effort during onboarding
           }
         }
+        if (result.sshSynced === false) {
+          // The web password is set; only the SSH sign-in is still unset.
+          toast.warning(t("password.warn_ssh_not_synced"), { id: "onboarding-ssh-not-synced" });
+        }
         onSuccess();
       } else {
         // A failed write toasts (a step advance is the success signal); field
@@ -280,6 +284,8 @@ export function StepPassword({ onSuccess, onLoadingChange, onSubmitRef, onValidi
             onCheckedChange={setUseStrongPassword}
             disabled={isSubmitting}
           />
+
+          <FieldDescription>{t("password.hint_ssh")}</FieldDescription>
 
           {error && <FieldError>{error}</FieldError>}
         </FieldGroup>

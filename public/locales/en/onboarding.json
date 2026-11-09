@@ -50,7 +50,9 @@
     "error_strong_requirements": "Password must be at least 5 characters and include uppercase, lowercase, and a number.",
     "error_basic_requirements": "Password must be at least 5 characters.",
     "error_mismatch": "Passwords do not match.",
-    "error_setup_failed": "Setup failed. Please try again."
+    "error_setup_failed": "Setup failed. Please try again.",
+    "hint_ssh": "This password also signs you in over SSH.",
+    "warn_ssh_not_synced": "Password set for the web interface, but the SSH password could not be set. Change it in Settings > Passwords."
   },
   "network_mode": {
     "heading": "Preferred network",

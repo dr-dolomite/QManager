@@ -50,7 +50,9 @@
     "error_strong_requirements": "密碼至少需要 5 個字元，且包含大寫字母、小寫字母和數字。",
     "error_basic_requirements": "密碼至少需要 5 個字元。",
     "error_mismatch": "密碼不匹配。",
-    "error_setup_failed": "設定失敗，請重試。"
+    "error_setup_failed": "設定失敗，請重試。",
+    "hint_ssh": "此密碼同時用於 SSH 登入。",
+    "warn_ssh_not_synced": "網頁介面密碼已設定，但無法設定 SSH 密碼。請在「設定 > 密碼」中變更。"
   },
   "network_mode": {
     "heading": "首選網路",

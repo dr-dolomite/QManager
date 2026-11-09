@@ -222,7 +222,7 @@ export async function setupPassword(
   password: string,
   confirm: string,
   enforceStrong: boolean = true
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; sshSynced?: boolean }> {
   try {
     const resp = await fetch(LOGIN_ENDPOINT, {
       method: "POST",
@@ -232,7 +232,9 @@ export async function setupPassword(
     const data = await resp.json();
 
     if (data.success) {
-      return { success: true };
+      // `ssh_synced` is false when the device could not also set the SSH
+      // password; an older backend omits it, which reads as synced.
+      return { success: true, sshSynced: data.ssh_synced !== false };
     }
 
     return {
