@@ -212,6 +212,9 @@ section "pstore" sh -c '
 # QManager application log
 section "qmanager_log_tail_200" sh -c 'tail -n 200 /tmp/qmanager.log 2>/dev/null'
 
+# Journal daemon state (a socket read, never the modem); absent while logd is down.
+section "qlog_stat" sh -c 'command -v qlog >/dev/null 2>&1 && qlog stat 2>/dev/null; ls -la /var/run/qmanager/journal /usrdata/qmanager/journal 2>/dev/null'
+
 # Runtime JSON snapshots
 dump_runtime_json
 
