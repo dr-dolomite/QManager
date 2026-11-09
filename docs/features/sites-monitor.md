@@ -127,10 +127,12 @@ Default `24h`. Anything else → `{ "success": false, "error": "invalid_range", 
 | `now` | — | no history; `series` is `[]`. Renews the live lease and serves the live sample as `latest` |
 | `1h`, `3h`, `6h` | each sample | raw, plus rollups for any hour older than the first raw row |
 | `12h` | 10 min | as above |
-| `24h` | 20 min | as above |
-| `7d` | 2 h | rollups, plus raw rows newer than the rollup cursor |
-| `30d` | 8 h | as `7d` |
+| `24h` | 30 min | as above |
+| `7d` | 3 h | rollups, plus raw rows newer than the rollup cursor |
+| `30d` | 12 h | as `7d` |
 | `90d` | 1 day | as `7d` |
+
+The `24h`/`7d`/`30d` buckets match the History ranges (`docs/features/history.md`: 30 min, 3 h, 12 h, UTC-aligned), so the Sites card on Connection History lines up bar for bar with the page's other cards.
 
 ```json
 {

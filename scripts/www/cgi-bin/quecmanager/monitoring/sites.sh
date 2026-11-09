@@ -204,9 +204,9 @@ handle_get() {
         3h)  span=10800;   bucket=0 ;;
         6h)  span=21600;   bucket=0 ;;
         12h) span=43200;   bucket=600 ;;
-        24h) span=86400;   bucket=1200 ;;
-        7d)  span=604800;  bucket=7200 ;;
-        30d) span=2592000; bucket=28800 ;;
+        24h) span=86400;   bucket=1800 ;;
+        7d)  span=604800;  bucket=10800 ;;
+        30d) span=2592000; bucket=43200 ;;
         90d) span=7776000; bucket=86400 ;;
         *) cgi_error "invalid_range" "range must be now, 1h, 3h, 6h, 12h, 24h, 7d, 30d or 90d"; exit 0 ;;
     esac
