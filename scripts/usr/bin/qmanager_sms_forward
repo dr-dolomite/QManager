@@ -40,6 +40,7 @@ else
     qlog_warn() { :; }
     qlog_error() { :; }
     qlog_state_change() { :; }
+    mono_now_set() { _MONO=0; }
 fi
 qlog_init "sms_forward"
 
@@ -55,6 +56,11 @@ SF_INTERVAL=15
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
 PID_FILE="/var/run/qmanager/sms_forward.pid"
 RELOAD_FLAG="/tmp/qmanager_sms_forward_reload"
+# sf_read_inbox runs in a $( ) subshell, so it hands its failure reason to the
+# caller through this file; the caller owns the edge-only logging state.
+READERR_FILE="/tmp/qmanager_sms_forward_rderr"
+_sf_rd_fail_since=""     # mono of the first failed inbox read; "" = reads OK
+_sf_idle_logged=0        # 1 once the invalid-target idle line was logged
 SEEN_FILE="/var/run/qmanager/sms_forward_seen"
 FAILURES_FILE="/tmp/qmanager_sms_forward_failures.json"
 # SMS transport: the broker's SMS client (one JSON line on stdout, rc 0/1).
@@ -137,7 +143,7 @@ sf_read_inbox() {
     _lrc=$?
     if [ "$_lrc" -ne 0 ]; then
         _lerr=$(printf '%s' "$_list" | jq -r 'if .error == null then empty else (.error | tostring) end' 2>/dev/null)
-        qlog_warn "SMS forward: inbox read failed (${_lerr:-rc=$_lrc}); skipping cycle"
+        printf '%s' "${_lerr:-rc=$_lrc}" > "$READERR_FILE" 2>/dev/null
         return 1
     fi
 
@@ -304,7 +310,21 @@ sf_mark_seen() {
 process_cycle() {
     _seeding="$1"
 
-    _inbox=$(sf_read_inbox) || return 1
+    rm -f "$READERR_FILE"
+    _inbox=$(sf_read_inbox)
+    if [ $? -ne 0 ]; then
+        if [ -f "$READERR_FILE" ] && [ -z "$_sf_rd_fail_since" ]; then
+            mono_now_set
+            _sf_rd_fail_since="$_MONO"
+            qlog_warn "SMS forward: inbox read failed ($(cat "$READERR_FILE" 2>/dev/null)); skipping cycle"
+        fi
+        return 1
+    fi
+    if [ -n "$_sf_rd_fail_since" ]; then
+        mono_now_set
+        qlog_info "SMS forward: inbox read recovered after $((_MONO - _sf_rd_fail_since))s"
+        _sf_rd_fail_since=""
+    fi
     _count=$(printf '%s' "$_inbox" | jq 'length' 2>/dev/null)
     case "$_count" in
         ''|*[!0-9]*) _count=0 ;;
@@ -407,6 +427,7 @@ main() {
         fi
 
         if [ "$SF_ENABLED" != "1" ]; then
+            _sf_idle_logged=0
             sleep "$SF_INTERVAL"
             continue
         fi
