@@ -172,7 +172,9 @@ column on a phone) of two half-width cards; each owns its hook and internals, th
 Two tabs, **Web Password** (the QManager sign-in password, `auth/password.sh`) and **SSH Password**
 (the root password, `system/ssh_password.sh`), each a `PasswordPanel` driven by its hook
 (`useWebPassword` / `useSshPassword`, both `PasswordActions` from `types/password-change.ts`).
-Each tab asks for ITS OWN current password first:
+First-time onboarding seeds both: the password chosen there is also set as the root password
+(`auth/login.sh` > `qm_set_ssh_password`, see [auth-rate-limiting.md](auth-rate-limiting.md)). After
+that the two passwords are independent. Each tab asks for ITS OWN current password first:
 
 1. The panel shows one field and **Continue**. Continue calls the endpoint with `verify_only` and
    a wrong password stays on the card as an inline notice (the device's reason, e.g. `rate_limited`).

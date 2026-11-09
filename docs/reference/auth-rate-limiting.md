@@ -110,7 +110,7 @@ The target differs from the RM520N source here: uhttpd runs CGI as root, so the 
 
 `auth/password.sh` (the web-password change, including its `verify_only` mode) runs the same gate: `qm_check_rate_limit` first (a locked caller gets the same `429 rate_limited` body), `qm_record_failed_attempt` on a wrong current password, `qm_clear_attempts` once it is right. The counter is shared with sign-in, so wrong guesses typed into the Passwords card count toward locking the owner out of `/login`, and a correct one never clears a lock that has already engaged. `system/ssh_password.sh` is not part of the ladder.
 
-The target keeps its own password rules for first-time setup: `enforce_strong` from the request, a 5-character minimum plus upper, lower and digit when strong is on, and the `password_weak` error. The source's `password_too_short` code and `qm_set_ssh_password` were not ported.
+The target keeps its own password rules for first-time setup: `enforce_strong` from the request, a 5-character minimum plus upper, lower and digit when strong is on, and the `password_weak` error. The source's `password_too_short` code was not ported. First-time setup also makes the new password the SSH (root) password through `qm_set_ssh_password` (`cgi_auth.sh`: `passwd root` over stdin, CGIs run as root, no sudo helper and no seeded default password, unlike the RM520N fork). It is a soft fail: the web password is saved first, a failed `passwd` logs a warning and the success body carries `"ssh_synced":false` (otherwise `true`), and onboarding toasts a pointer to Settings > Passwords. Later web-password changes do not touch root; the two tabs stay independent.
 
 ### `GET auth/check.sh`
 
