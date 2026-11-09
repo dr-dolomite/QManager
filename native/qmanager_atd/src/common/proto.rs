@@ -53,6 +53,11 @@ pub const PROTO_PATH: &str = "/var/run/qmanager_atd.proto";
 ///    `qmi_nr_endc`) to `qmi.env`, the `sysinfo` / `bands` reads and DMS
 ///    0x0045 on the read-only allow-list (no wire change, no new capability
 ///    line: readers detect the keys in the sidecar).
+/// 0.8.0 adds the `qmanager_logd` journal daemon and its `qlog` client as
+///    argv0 roles of this binary. They speak their own socket protocol
+///    (`/var/run/qmanager_logd.sock`, `proto=1` in `qmanager_logd.proto`);
+///    the broker's wire is unchanged and stays 3. The broker's log lines go to
+///    the journal spool while logd is alive.
 pub const PROTO_VERSION: u32 = 3;
 
 pub fn version_line() -> String {
@@ -363,7 +368,7 @@ mod tests {
     fn capability_file_is_proto_version_then_qmi_and_live() {
         assert_eq!(PROTO_VERSION, 3, "live=1 is no wire change");
         assert_eq!(capability_body(), format!("proto=3\nversion={}\nqmi=1\nlive=1\n", env!("CARGO_PKG_VERSION")));
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.7.0");
+        assert_eq!(env!("CARGO_PKG_VERSION"), "0.8.0");
         assert_eq!(parse_capability(&capability_body()), Caps { proto: 3, qmi: true, live: true });
         assert!(!parse_capability("proto=3\nversion=0.3.0\nqmi=1\n").live, "0.3.0 has no live channel");
         // The shape every earlier reader saw is still the first two lines.

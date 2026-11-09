@@ -22,6 +22,11 @@
 //! Invoked as `qsms`: the SMS client (list / status / send / delete, JSON on
 //! stdout, see sms.rs), with the same socket-first, never-run-twice transport.
 //!
+//! Invoked as `qmanager_logd`: the journal daemon (logd/), a separate process
+//! from the broker; like the atd name it starts only with no arguments or
+//! `-d` / `--daemon`. Invoked as `qlog`: its fixed client (`stat`, `logq`,
+//! `evq`). Both answer `--version` with the logd version line.
+//!
 //! The AT path is the same `exec::Executor` in both the daemon and the
 //! fallback, so there is one behaviour, not two.
 
@@ -29,10 +34,12 @@ mod at;
 mod client;
 mod common;
 mod daemon;
+mod logd;
 mod qmi;
 mod sms;
 
 use client::qcmd::run_qcmd;
+use client::qlog::run_qlog;
 use client::qmi::run_qmi;
 use client::qsms::run_qsms;
 use common::proto;
@@ -52,6 +59,8 @@ fn main() {
     match fixed_client(&base) {
         Some(FixedClient::Qsms) => std::process::exit(run_qsms(&args[1..])),
         Some(FixedClient::Qmi) => std::process::exit(run_qmi(&args[1..])),
+        Some(FixedClient::Qlog) => std::process::exit(run_qlog(&args[1..])),
+        Some(FixedClient::Logd) => std::process::exit(logd::run_logd(&args[1..])),
         None => {}
     }
 
@@ -77,12 +86,19 @@ fn main() {
 enum FixedClient {
     Qsms,
     Qmi,
+    /// The journal client.
+    Qlog,
+    /// The journal daemon: its own role, never the broker (the name has no
+    /// "atd" in it, so `mode` must never see it).
+    Logd,
 }
 
 fn fixed_client(base: &str) -> Option<FixedClient> {
     match base {
         "qsms" => Some(FixedClient::Qsms),
         "qmi" => Some(FixedClient::Qmi),
+        "qlog" => Some(FixedClient::Qlog),
+        "qmanager_logd" => Some(FixedClient::Logd),
         _ => None,
     }
 }
@@ -152,7 +168,9 @@ mod tests {
         // link name, resolve as the code in main does.
         let base = |a0: &str| a0.rsplit('/').next().unwrap().to_string();
         assert_eq!(fixed_client(&base("/usr/bin/qmi")), Some(FixedClient::Qmi));
-        for other in ["qcmd", "qmanager_atd", "qmi2", "Qmi", "qmi.exe", ""] {
+        assert_eq!(fixed_client("qlog"), Some(FixedClient::Qlog));
+        assert_eq!(fixed_client(&base("/usr/bin/qmanager_logd")), Some(FixedClient::Logd));
+        for other in ["qcmd", "qmanager_atd", "qmi2", "Qmi", "qmi.exe", "", "qlogd", "qmanager_logd2"] {
             assert_eq!(fixed_client(other), None, "{other}");
         }
         // The daemon rule is untouched: an argument under the atd name is usage,
