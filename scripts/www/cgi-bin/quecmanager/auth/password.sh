@@ -11,6 +11,15 @@
 
 qlog_init "cgi_auth_password"
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
     cgi_headers
     exit 0
@@ -97,6 +106,7 @@ if ! qm_save_password "$_new"; then
     exit 0
 fi
 qlog_info "Password changed successfully"
+append_event "password_changed" "Admin password changed" "info" "" ""
 
 # Destroy current session and clear cookies
 _token=$(qm_get_cookie "$COOKIE_SESSION")

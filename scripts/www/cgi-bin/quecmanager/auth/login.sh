@@ -9,6 +9,15 @@ _SKIP_AUTH=1
 
 qlog_init "cgi_auth_login"
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # CORS preflight
 if [ "$REQUEST_METHOD" = "OPTIONS" ]; then
     cgi_headers
@@ -124,7 +133,12 @@ if ! qm_verify_password "$_password"; then
     # failure. A failure at ladder level >= 1 has just re-locked, so this
     # reads 0; the next request gets the 429 with retry_after.
     qm_get_rate_limit_status
+    _ev_locked=$?
     qlog_warn "Failed login attempt"
+    append_event "login_failed" "Failed login attempt" "warning" "" "remaining=${RATE_LIMIT_ATTEMPTS_REMAINING:-0}"
+    if [ "$_ev_locked" -ne 0 ] || [ "${RATE_LIMIT_ATTEMPTS_REMAINING:-0}" -eq 0 ]; then
+        append_event "login_locked" "Login locked after repeated failed attempts" "warning" "" "retry_after=${RATE_LIMIT_RETRY_AFTER:-0}"
+    fi
     cgi_headers
     jq -n --argjson remaining "${RATE_LIMIT_ATTEMPTS_REMAINING:-0}" \
         '{"success":false,"error":"invalid_password","detail":"Invalid password","attempts_remaining":$remaining}'
