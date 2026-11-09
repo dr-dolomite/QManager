@@ -2,13 +2,13 @@
 
 > **Status: APPROVED 2026-11-09.** This file is the canon for every History page.
 
-QManager keeps a small, flash-friendly history of things the poller already knows, rolled up into fixed 30-minute buckets and kept for 31 days. A History page asks one generic CGI for a series and a range and gets back merged buckets plus the series' events. **Cellular History** (`/history/cellular`) is the first series; **System Health** (`/history/system-health`, [`system-health-history.md`](system-health-history.md)) is the second (reboots, modem crashes, heat throttling, processor, memory, temperature, storage). Data usage and latency and connection quality are expected to follow; each is a new *provider* file, not a change to the core.
+QManager keeps a small, flash-friendly history of things the poller already knows, rolled up into fixed 30-minute buckets and kept for 31 days. A History page asks one generic CGI for a series and a range and gets back merged buckets plus the series' events. **Cellular History** (`/monitoring/history/cellular`) is the first series; **System Health** (`/monitoring/history/system-health`, [`system-health-history.md`](system-health-history.md)) is the second (reboots, modem crashes, heat throttling, processor, memory, temperature, storage). Data usage and latency and connection quality are expected to follow; each is a new *provider* file, not a change to the core.
 
 ## Quick Reference
 
 | Item | Value |
 |---|---|
-| Page | `/history/cellular` (sidebar group **History**); second series: System Health `/history/system-health`, see [`system-health-history.md`](system-health-history.md) |
+| Page | `/monitoring/history/cellular` (sidebar **Monitoring > History**); second series: System Health `/monitoring/history/system-health`, see [`system-health-history.md`](system-health-history.md) |
 | Core lib (sourced by the poller) | `scripts/usr/lib/qmanager/history.sh` (`hist_init`, `hist_tick`, `hist_event`, `hist_flush`) |
 | Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat; `history.sh` dot-sources every one) |
 | Read lib (sourced by CGIs) | `scripts/usr/lib/qmanager/history_read.sh` (awk merge, range math) |
@@ -23,7 +23,7 @@ QManager keeps a small, flash-friendly history of things the poller already know
 | Retention | 31 days by day file; 2 MB per series; flush skipped under 8 MB free |
 | Flash flush | every closed bucket (≤ 1 per 30 min, all series in one pass, one global `sync` pair) and on TERM |
 | AT cost | **none**: no new AT command, no lock, no `qcmd` |
-| Frontend | `types/history.ts`, `hooks/use-history.ts` (`useHistorySeries`, `useHistoryEvents`), `components/history/**`, `app/history/cellular/` |
+| Frontend | `types/history.ts`, `hooks/use-history.ts` (`useHistorySeries`, `useHistoryEvents`), `components/history/**`, `app/monitoring/history/cellular/` |
 | Dev test | `tools/history-test/history-test.sh` (runs on the device, §10) |
 
 ---
@@ -346,13 +346,13 @@ Real events, not simulated: 8 baseband SSRs (broker episodes 2 to 9) (dmesg `408
 
 ## Connection History
 
-`/history/connection` is the second History page and the home of what used to be the Latency Monitor (retired, see [`../reference/latency-monitor.md`](../reference/latency-monitor.md)). It answers "was the internet up, and how fast was it" over 24 h, 7 d or 30 d: a reachability strip, four metric charts, the per-site Sites card and the connection events. The series is a provider file only; the core, the two CGIs and the shared pieces in §1 to §8 are unchanged.
+`/monitoring/history/connection` is the second History page and the home of what used to be the Latency Monitor (retired, see [`../reference/latency-monitor.md`](../reference/latency-monitor.md)). It answers "was the internet up, and how fast was it" over 24 h, 7 d or 30 d: a reachability strip, four metric charts, the per-site Sites card and the connection events. The series is a provider file only; the core, the two CGIs and the shared pieces in §1 to §8 are unchanged.
 
 ### Quick Reference
 
 | Item | Value |
 |---|---|
-| Page | `/history/connection` (sidebar **History** group, sub-row `history_connection`); `app/history/connection/page.tsx` |
+| Page | `/monitoring/history/connection` (sidebar **Monitoring > History**, sub-row `history_connection`); `app/monitoring/history/connection/page.tsx` |
 | Provider | `scripts/usr/lib/qmanager/history_series_connection.sh` (series id `connection`) |
 | States | `up down off` (fault: `down`) |
 | Metrics | `lat_ms jit_ms loss_pct dns_ms` (integers, only sampled while `up`) |
@@ -451,4 +451,4 @@ The Sites card follows the page range. `useSites(range: HistoryRange, live: bool
 
 ### Retired route
 
-`app/monitoring/latency/page.tsx` is a client-side redirect to `/history/connection` (`router.replace`). QManager is a static export served off the modem, so a server redirect is impossible; a `Suspense`-wrapped client page keeps old bookmarks working. The `latency_monitor` sidebar row is gone.
+`app/monitoring/latency/page.tsx` is a client-side redirect to `/monitoring/history/connection` (`router.replace`). QManager is a static export served off the modem, so a server redirect is impossible; a `Suspense`-wrapped client page keeps old bookmarks working. The `latency_monitor` sidebar row is gone.

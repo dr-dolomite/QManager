@@ -1,6 +1,6 @@
 # Latency Monitor Page (retired)
 
-> **Retired 2026-11-09.** The Latency Monitor (`/monitoring/latency`) was replaced by **History > Connection History** (`/history/connection`). Nothing on this page is current. It is kept as a pointer so old links and ledger rows still resolve.
+> **Retired 2026-11-09.** The Latency Monitor (`/monitoring/latency`) was replaced by **History > Connection History** (`/monitoring/history/connection`). Nothing on this page is current. It is kept as a pointer so old links and ledger rows still resolve.
 
 ## What replaced it
 
@@ -12,7 +12,7 @@
 
 ## Route and redirect
 
-`app/monitoring/latency/page.tsx` is now a client-side redirect to `/history/connection` (`router.replace`). It has to be client-side because QManager is a static export with no server to send a redirect. The `latency_monitor` sidebar row is gone; Connection History is a sub-row of the History group.
+`app/monitoring/latency/page.tsx` is now a client-side redirect to `/monitoring/history/connection` (`router.replace`). It has to be client-side because QManager is a static export with no server to send a redirect. The `latency_monitor` sidebar row is gone; Connection History is a sub-row of the History group.
 
 ## Removed
 

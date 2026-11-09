@@ -36,7 +36,7 @@ git add app/fonts/MaterialSymbolsRounded-subset.woff2 \
 | Sidebar nav (`components/app-sidebar.tsx`, `nav-section.tsx`, `nav-user.tsx`) | Material Symbols |
 | Dashboard route (`components/dashboard/*`) | Material Symbols |
 | **Pre-auth routes `/` and `/login/`** (`components/public/*`, `components/auth/login-*.tsx`, `components/ui/tonal-banner.tsx`) | Material Symbols |
-| **All of `/history/`** (History pages: Cellular History and the pages that follow it) | Material Symbols |
+| **The History pages under `/monitoring/history/`** (Cellular History, Connection History, System Health and the history pages that follow them; Logs and Network Events, also listed there, stay lucide like the rest of `/monitoring/**`) | Material Symbols |
 | **All of `/cellular/`** (the index and every sub-route: Cell Scanner, Band Locking, Cell Locking, SMS, APN Management, Antenna Alignment, Antenna Statistics, Custom SIM Profiles, Connection Scenarios, ...) | Material Symbols |
 | `/setup/` (`components/onboarding/**`) | **lucide** — deliberately out of scope, see below |
 | Local Network (Traffic Engine, Custom DNS, IP Passthrough, ...), Monitoring (Watchdog, Alerts, Tailscale, Netbird, ...), System Settings (Config Backup, Adaptive Polling, ...), their dialogs | lucide |

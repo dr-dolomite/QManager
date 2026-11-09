@@ -58,10 +58,10 @@ app/                            # Next.js App Router
 │   ├── cellular/               # Cellular History
 │   └── connection/             # Connection History (reachability, charts, Sites, events)
 ├── monitoring/                 # Monitoring & alerts
-│   ├── page.tsx                # Redirect stub to /monitoring/events
+│   ├── page.tsx                # Redirect stub to /monitoring/history/events
 │   ├── connection-quality/     # Ping profile + quality thresholds
 │   ├── events/                 # Network events
-│   ├── latency/                # Redirect stub to /history/connection (retired Latency Monitor)
+│   ├── latency/                # Redirect stub to /monitoring/history/connection (retired Latency Monitor)
 │   ├── alerts/                 # Centralized SMS + email connection alerts
 │   ├── watchdog/               # Watchdog settings
 │   ├── prometheus/             # Prometheus metrics endpoint (token, scrape freshness, scrape config)
@@ -130,20 +130,22 @@ constants/                      # Static configuration data
 | `/local-network/custom-dns` | CustomDNS | DNS override |
 | `/local-network/traffic-engine` | TrafficEngine | Traffic Engine (hosts the DPI settings: Video Optimizer / Traffic Masquerade) |
 | `/local-network/dpi-masking` | (redirect) | Redirect to `/local-network/traffic-engine` |
-| `/monitoring` | (redirect) | Client-side redirect to `/monitoring/events` |
-| `/monitoring/events` | NetworkEvents | Event log |
-| `/monitoring/connection-quality` | ConnectionQuality | Ping profile + quality thresholds |
-| `/monitoring/latency` | (redirect) | Client-side redirect to `/history/connection` (retired Latency Monitor; see `docs/reference/latency-monitor.md`) |
+| `/monitoring` | (redirect) | Client-side redirect to `/monitoring/history/events` |
+| `/monitoring/history/events` | NetworkEvents | Event log |
+| `/monitoring/settings` | ConnectionQuality | Ping profile + quality thresholds |
+| `/monitoring/latency` | (redirect) | Client-side redirect to `/monitoring/history/connection` (retired Latency Monitor; see `docs/reference/latency-monitor.md`) |
 | `/monitoring/alerts` | Alerts | Centralized SMS + email connection alerts (routing matrix + capability, readiness status, merged log) |
 | `/monitoring/watchdog` | Watchdog | Connection health |
-| `/monitoring/prometheus` | Prometheus | Prometheus scrape endpoint settings (enable, scrape freshness, bearer token, scrape config); see `docs/features/prometheus-metrics.md` |
-| `/monitoring/tailscale` | Tailscale | VPN status |
-| `/monitoring/netbird` | (see page file) | NetBird VPN status |
-| `/history/cellular` | CellularHistory | Cellular History (signal, state and radio events over 24 h / 7 d / 30 d); see `docs/features/history.md` |
-| `/history/connection` | ConnectionHistory | Connection History: summary tiles, Reachability strip, Latency / Packet loss / Jitter / DNS charts, Sites card (per-site latency, Live values in Manage, detail panel), connection events; see `docs/features/history.md#connection-history` |
+| `/monitoring/extensions/prometheus` | Prometheus | Prometheus scrape endpoint settings (enable, scrape freshness, bearer token, scrape config); see `docs/features/prometheus-metrics.md` |
+| `/monitoring/extensions/tailscale` | Tailscale | VPN status |
+| `/monitoring/extensions/netbird` | (see page file) | NetBird VPN status |
+| `/monitoring/history/cellular` | CellularHistory | Cellular History (signal, state and radio events over 24 h / 7 d / 30 d); see `docs/features/history.md` |
+| `/monitoring/history/connection` | ConnectionHistory | Connection History: summary tiles, Reachability strip, Latency / Packet loss / Jitter / DNS charts, Sites card (per-site latency, Live values in Manage, detail panel), connection events; see `docs/features/history.md#connection-history` |
+| `/monitoring/history/system-health` | SystemHealth | System Health history; see `docs/features/system-health-history.md` |
+| `/history/*`, `/system-settings/logs`, `/monitoring/{events,tailscale,netbird,prometheus,connection-quality}` | (redirect) | Client-side redirects to the routes above (`components/route-redirect.tsx` keeps the query and hash) |
 | `/system-settings` | SystemSettings | System preferences, scheduled ops |
-| `/system-settings/connection-quality` | (redirect) | Client-side redirect to `/monitoring/connection-quality` |
-| `/system-settings/logs` | SystemLogs | Log viewer |
+| `/system-settings/connection-quality` | (redirect) | Client-side redirect to `/monitoring/settings` |
+| `/monitoring/history/logs` | SystemLogs | Log viewer |
 | `/system-settings/config-backup` | (see page file) | Configuration backup and restore |
 | `/system-settings/software-update` | (see page file) | Software update |
 | `/system-settings/at-terminal` | (see page file) | AT terminal |
@@ -497,13 +499,12 @@ The sidebar (`app-sidebar.tsx`) defines the full navigation structure:
 | **Main** | Home (Dashboard) |
 | **Cellular** | Cellular Info, SMS, Custom Profiles (+ Connection Scenarios), Band Locking (+ Tower, Frequency), Cell Scanner (+ Neighbor, Calculator), Settings (+ APN, Network Priority, IMEI, FPLMN) |
 | **Local Network** | Ethernet Status, Traffic Engine, Settings (TTL & MTU, Custom DNS) |
-| **Monitoring** | Connection Quality (+ Network Events), Alerts, Watchdog (live "acting" / "settling" pill), Tailscale, NetBird |
-| **History** | Cellular History (+ Connection History) |
-| **System** | System Settings (+ Logs, Languages, Configuration Backup, Adaptive Polling) |
+| **Monitoring** | History (Cellular History + Connection History, System Health, Logs, Network Events), Alerts, Watchdog (live "acting" / "settling" pill), Extensions (Tailscale + NetBird, Prometheus), Settings (Connection Quality) |
+| **System** | System Settings (+ Languages, Configuration Backup, Adaptive Polling) |
 | **Footer** (unlabelled) | About Device, Support, Donate |
 | **User menu** | Change Password, Theme, Animations, Reboot Device, Logout |
 
-The layout is shadcn's sidebar-07 (see DESIGN.md > Components > Navigation). `NavSection` renders every group and `NavMenu` draws one sliding `.nav-indicator` pill per group. A parent with sub-items is a pure expander: its old page is its first sub-row, at the same URL, labelled through `FIRST_SUB_T_KEY` in `lib/nav-tree.ts` and active only on an exact match. Any other sub-row is active on its own route prefix. Collapsed (`collapsible="icon"`, state in the `sidebar_state` cookie), parents open their rows as a flyout. `NAV_GROUPS` (exported from `app-sidebar.tsx`) is the one tree that both the sidebar and the header breadcrumb (`resolveNavCrumbs`) read. Network Events and Ethernet Status sit on `/monitoring/events` and `/local-network/ethernet` so no sub-row prefix-matches its siblings. The old `/system-settings/connection-quality`, `/monitoring` and `/local-network` routes are client-side redirect stubs (static export cannot do server redirects). The sidebar glyphs are Material Symbols; the user-menu action items are lucide.
+The layout is shadcn's sidebar-07 (see DESIGN.md > Components > Navigation). `NavSection` renders every group and `NavMenu` draws one sliding `.nav-indicator` pill per group. A parent with sub-items is a pure expander: its old page is its first sub-row, at the same URL, labelled through `FIRST_SUB_T_KEY` in `lib/nav-tree.ts` and active only on an exact match. Any other sub-row is active on its own route prefix. Collapsed (`collapsible="icon"`, state in the `sidebar_state` cookie), parents open their rows as a flyout. `NAV_GROUPS` (exported from `app-sidebar.tsx`) is the one tree that both the sidebar and the header breadcrumb (`resolveNavCrumbs`) read. Network Events and Ethernet Status sit on `/monitoring/history/events` and `/local-network/ethernet` so no sub-row prefix-matches its siblings. The old `/system-settings/connection-quality`, `/monitoring` and `/local-network` routes are client-side redirect stubs (static export cannot do server redirects). The sidebar glyphs are Material Symbols; the user-menu action items are lucide.
 
 ---
 

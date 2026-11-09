@@ -1,4 +1,4 @@
-# System Logs (`/system-settings/logs`)
+# System Logs (`/monitoring/history/logs`)
 
 > **Applies to:** RM520N-class modems (RM520N / RM551E / RM500Q) running QManager
 > Family: `components/system-settings/logs/**` · namespace `public/locales/*/system-settings.json`, `logs.*` subtree
@@ -24,7 +24,7 @@ payload at face value.
 
 | Thing | Where |
 | ----- | ----- |
-| Route | `app/system-settings/logs/page.tsx` (a three-line re-export) |
+| Route | `app/monitoring/history/logs/page.tsx` (a three-line re-export) |
 | Page shell | `components/system-settings/logs/system-logs.tsx` |
 | Status band | `components/system-settings/logs/status-band.tsx` |
 | Transcript card | `components/system-settings/logs/transcript-card.tsx` |

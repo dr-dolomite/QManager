@@ -8,7 +8,7 @@ Plan and decision log: [`../plans/prometheus-metrics.md`](../plans/prometheus-me
 
 | Item | Value |
 |---|---|
-| Page | `/monitoring/prometheus` (`app/monitoring/prometheus/page.tsx`, `components/monitoring/prometheus/{prometheus,prometheus-card,scrape-config}.tsx` + `shapes.ts`); sidebar entry is a sub-item of Connection Quality (beside Network Events), the route is unchanged |
+| Page | `/monitoring/extensions/prometheus` (`app/monitoring/extensions/prometheus/page.tsx`, `components/monitoring/prometheus/{prometheus,prometheus-card,scrape-config}.tsx` + `shapes.ts`); sidebar entry is a sub-item of Connection Quality (beside Network Events), the route is unchanged |
 | Hook / types | `hooks/use-prometheus-metrics.ts`, `types/prometheus-metrics.ts` |
 | Scrape CGI | `GET /cgi-bin/quecmanager/metrics/prometheus.sh` (bearer token, no session cookie) |
 | Settings CGI | `GET/POST /cgi-bin/quecmanager/monitoring/prometheus.sh` (session cookie via `cgi_base.sh`) |
@@ -25,7 +25,7 @@ Plan and decision log: [`../plans/prometheus-metrics.md`](../plans/prometheus-me
 
 ## UI
 
-Three elements on `/monitoring/prometheus`, under the page header:
+Three elements on `/monitoring/extensions/prometheus`, under the page header:
 
 - **Scrape status band** (`scrape-status.tsx`, full width, always mounted): "Last scrape N s ago" (info), "No scrapes yet" (muted) or "Endpoint off" (muted), plus a `Holding faster polling` info chip while a scrape is holding the poller. It reads the saved state, never the draft.
 - **Settings card** (`prometheus-card.tsx`; Card-Foot Apply Rule: Discard and Save in `CardFoot`):
@@ -303,4 +303,4 @@ The independent security review of `api_auth.sh` (2026-10-19) adds what a send s
 | `scripts/usr/bin/qmanager_poller` | Scrape hold, `.device.{serving_read_mono,ca_read_mono}` |
 | `scripts/usr/lib/qmanager/config_backup_sections.sh`, `scripts/usr/bin/qmanager_config_restore` | `metrics` backup section |
 | `scripts/install.sh` | UCI seed |
-| `hooks/use-prometheus-metrics.ts`, `types/prometheus-metrics.ts`, `components/monitoring/prometheus/*`, `app/monitoring/prometheus/page.tsx` | UI |
+| `hooks/use-prometheus-metrics.ts`, `types/prometheus-metrics.ts`, `components/monitoring/prometheus/*`, `app/monitoring/extensions/prometheus/page.tsx` | UI |

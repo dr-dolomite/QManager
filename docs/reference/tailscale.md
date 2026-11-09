@@ -1,6 +1,6 @@
 # Tailscale VPN (page anatomy)
 
-Frontend reference for `/monitoring/tailscale`. The backend (Official / Tiny install sources and in-app update, `tailscale up` double-fork, the `--accept-routes` ban, the marker file, uninstall) lives in [`docs/features/tailscale-vpn.md`](../features/tailscale-vpn.md); read that before touching the CGI.
+Frontend reference for `/monitoring/extensions/tailscale`. The backend (Official / Tiny install sources and in-app update, `tailscale up` double-fork, the `--accept-routes` ban, the marker file, uninstall) lives in [`docs/features/tailscale-vpn.md`](../features/tailscale-vpn.md); read that before touching the CGI.
 
 Tailscale is an optional, user-installed mesh VPN. Nothing in a stock install ships it, so the page's first job is to notice it is absent and offer to fetch it: the official build from Tailscale, or, where the firmware already trusts its feed, iamromulan's smaller Tiny build. Once installed it gives the modem a stable `100.x.y.z` address, which is the way back in when a change severs the LAN route (IP Passthrough, a gateway-IP edit).
 
@@ -12,7 +12,7 @@ Tailscale is an optional, user-installed mesh VPN. Nothing in a stock install sh
 
 | Item | Value |
 | --- | --- |
-| Route | `/monitoring/tailscale` (`app/monitoring/tailscale/page.tsx` renders `components/monitoring/tailscale/tailscale.tsx`) |
+| Route | `/monitoring/extensions/tailscale` (`app/monitoring/extensions/tailscale/page.tsx` renders `components/monitoring/tailscale/tailscale.tsx`) |
 | Hook | `hooks/use-tailscale.ts` (poll 10 s, 3 s while an auth URL is pending; one `check_update` per visit) |
 | CGI | `GET`/`POST` `/cgi-bin/quecmanager/vpn/tailscale.sh` |
 | i18n | `common.json` `tailscale.*`, all five locales |

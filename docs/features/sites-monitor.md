@@ -2,7 +2,7 @@
 
 The Sites monitor times a TCP handshake to each website in a list, over the cellular link, every few minutes, and keeps up to 90 days of history: the per-site latency view UniFi and WiFiman show. The one-host ICMP verdict in [Connection Quality](connection-quality.md) answers "is there internet?"; this answers "is YouTube slow right now?". It is a separate daemon, `qmanager_sites`, that never touches the AT port and does **not** feed the connectivity verdict, events, the watchdog or alerts.
 
-Ported from the RM520N fork (ledger B3.1; source `3af1cc15`, `c9d162a2`, `8e8806ec`, `33047f70`, plus the untrusted-pid fix from `ba4df3b3`). The UI is the Sites card on **History > Connection History** (`/history/connection`, [history.md](history.md#connection-history); ledger **U4.8** ported it onto the retired Latency Monitor, [latency-monitor.md](../reference/latency-monitor.md)), which consumes the [CGI contract](#cgi-contract--monitoringsitessh) below.
+Ported from the RM520N fork (ledger B3.1; source `3af1cc15`, `c9d162a2`, `8e8806ec`, `33047f70`, plus the untrusted-pid fix from `ba4df3b3`). The UI is the Sites card on **History > Connection History** (`/monitoring/history/connection`, [history.md](history.md#connection-history); ledger **U4.8** ported it onto the retired Latency Monitor, [latency-monitor.md](../reference/latency-monitor.md)), which consumes the [CGI contract](#cgi-contract--monitoringsitessh) below.
 
 ## Quick Reference
 
@@ -175,7 +175,7 @@ Also accepted as `?action=check_now`. Raises the flag → `{ "success": true }`.
 
 ### UI consumer (U4.8)
 
-- The Sites card on `/history/connection` ([history.md](history.md#connection-history)) reads this through `hooks/use-sites.ts`: `useSites(range: HistoryRange, live: boolean)` returns `data`, `dataRange`, `dataNow`, `liveData`, `isLoading`, `error`, `checkPending`, `refresh`, `checkNow` and `save`. The page range (`24h`, `7d` or `30d`) is the CGI `range`; Live values (set in the Manage dialog, not saved to the modem) runs a second loop on `range=now` whose result lands in `liveData` and never replaces `data`. All six error codes are in the five `errors.json` catalogs; toasts resolve the returned `code` through `resolveErrorMessage` (`invalid_field`'s `reason` is the detail fallback).
+- The Sites card on `/monitoring/history/connection` ([history.md](history.md#connection-history)) reads this through `hooks/use-sites.ts`: `useSites(range: HistoryRange, live: boolean)` returns `data`, `dataRange`, `dataNow`, `liveData`, `isLoading`, `error`, `checkPending`, `refresh`, `checkNow` and `save`. The page range (`24h`, `7d` or `30d`) is the CGI `range`; Live values (set in the Manage dialog, not saved to the modem) runs a second loop on `range=now` whose result lands in `liveData` and never replaces `data`. All six error codes are in the five `errors.json` catalogs; toasts resolve the returned `code` through `resolveErrorMessage` (`invalid_field`'s `reason` is the detail fallback).
 - Live (`range=now`) polls every 2 s only while the tab is visible **and** `enabled` is true (fork fix `8e8806ec`): a disabled monitor writes no lease, so 2 s polling would spend CGI time for nothing.
 
 ## Lifecycle

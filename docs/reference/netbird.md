@@ -1,6 +1,6 @@
 # NetBird VPN (page anatomy)
 
-Frontend reference for `/monitoring/netbird`. NetBird is an optional, user-installed mesh VPN, so the page's first job is to notice it is absent and offer to fetch it. The backend is a thin control layer over the `netbird` CLI (`scripts/www/cgi-bin/quecmanager/vpn/netbird.sh`); NetBird keeps its own config and there is no UCI section. The sibling page is [`docs/reference/tailscale.md`](tailscale.md); only one of the two VPNs may be installed at a time.
+Frontend reference for `/monitoring/extensions/netbird`. NetBird is an optional, user-installed mesh VPN, so the page's first job is to notice it is absent and offer to fetch it. The backend is a thin control layer over the `netbird` CLI (`scripts/www/cgi-bin/quecmanager/vpn/netbird.sh`); NetBird keeps its own config and there is no UCI section. The sibling page is [`docs/reference/tailscale.md`](tailscale.md); only one of the two VPNs may be installed at a time.
 
 ---
 
@@ -8,7 +8,7 @@ Frontend reference for `/monitoring/netbird`. NetBird is an optional, user-insta
 
 | Item | Value |
 | --- | --- |
-| Route | `/monitoring/netbird` (renders `components/monitoring/netbird/netbird.tsx`) |
+| Route | `/monitoring/extensions/netbird` (renders `components/monitoring/netbird/netbird.tsx`) |
 | Hook | `hooks/use-netbird.ts` (fixed 10 s poll; install progress polled every 2 s) |
 | CGI | `GET`/`POST` `/cgi-bin/quecmanager/vpn/netbird.sh` |
 | POST actions | `install`, `install_status`, `connect` (optional setup key), `disconnect`, `start_service`, `stop_service`, `set_boot_enabled`, `uninstall` |
