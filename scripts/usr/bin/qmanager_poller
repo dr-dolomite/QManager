@@ -1391,6 +1391,7 @@ poll_tier2() {
 
     if [ -n "$result" ]; then
         parse_carrier "$result"
+        detect_registration_event
         parse_sim_slot "$result"
 
         # Phone number refresh (may change on SIM swap): field 2 of the first
@@ -1825,6 +1826,7 @@ EOF
     if [ "$_ok" = "true" ]; then
         case "$_ms" in ''|*[!0-9]*) ;; *) dns_lookup_ms="$_ms" ;; esac
     fi
+    detect_dns_events "$_ok" "$_mono" "$dns_resolver" "$_ms"
     return 0
 }
 
@@ -3381,6 +3383,9 @@ poll_cycle() {
     # SIM-switch early return above), restored right after, so every AT
     # consumer keeps seeing AT samples.
     qmi_load
+    detect_datacall_events
+    detect_broker_restart
+    ev_identity_check
     qmi_overlay_apply
     write_cache
     # History records what status.json says this cycle (inside the overlay).

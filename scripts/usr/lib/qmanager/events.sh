@@ -1070,3 +1070,201 @@ detect_events() {
     # Update snapshot
     snapshot_event_state
 }
+
+# =============================================================================
+# Poller-side detectors added with the event catalogue (state vars are ev_ /
+# _ev_ so the poller-parity globals stay untouched). A first sighting after a
+# start is always silent. No forks on the steady-state path.
+# =============================================================================
+
+# _ev_clean <var-name>: strips ';' and control characters from the named
+# variable (field values must not contain them). The fork only happens when the
+# value actually contains one.
+_ev_clean() {
+    local _ec_v
+    eval "_ec_v=\"\$$1\""
+    case "$_ec_v" in
+        *\;*)
+            _ec_v=$(printf '%s' "$_ec_v" | tr -d ';[:cntrl:]')
+            eval "$1=\"\$_ec_v\""
+            ;;
+    esac
+}
+
+# --- Registration (carrier name) change --------------------------------------
+# Called from poll_tier2 right after parse_carrier. An empty name is no
+# observation (deregistered or an unparsable reply): the baseline is kept.
+_ev_reg_prev=""
+detect_registration_event() {
+    [ -n "$t2_carrier" ] || return 0
+    if [ -n "$_ev_reg_prev" ] && [ "$t2_carrier" != "$_ev_reg_prev" ]; then
+        local _rg_from
+        local _rg_to
+        _rg_from="$_ev_reg_prev"
+        _rg_to="$t2_carrier"
+        _ev_clean _rg_from
+        _ev_clean _rg_to
+        append_event "registration_changed" "Network registration changed from ${_rg_from} to ${_rg_to}" "info" "" "from=${_rg_from};to=${_rg_to}"
+    fi
+    _ev_reg_prev="$t2_carrier"
+}
+
+# --- Identity: IMEI and software version --------------------------------------
+# Last-known values live on flash and are rewritten only when they change. The
+# IMEI is never logged in full (last four digits only).
+EV_LAST_IMEI_FILE="/etc/qmanager/last_imei"
+EV_LAST_VERSION_FILE="/etc/qmanager/last_version"
+_ev_ident_ver_done=0
+_ev_ident_imei_done=0
+
+# _ev_ident_store <file> <value>
+_ev_ident_store() {
+    command -v qm_durable_write >/dev/null 2>&1 || return 0
+    printf '%s\n' "$2" | qm_durable_write "$1" 0644 2>/dev/null
+}
+
+# Runs from the poller loop until both checks have had a value to compare, then
+# costs one test per cycle. boot_imei can still be empty after a busy boot.
+ev_identity_check() {
+    [ "$_ev_ident_ver_done" = "1" ] && [ "$_ev_ident_imei_done" = "1" ] && return 0
+    local _id_old
+    local _id_new
+
+    if [ "$_ev_ident_ver_done" != "1" ]; then
+        _id_new="$boot_qmanager_version"
+        case "$_id_new" in
+            ''|unknown|*[!A-Za-z0-9._+-]*) ;;
+            *)
+                _ev_ident_ver_done=1
+                _id_old=""
+                { read -r _id_old < "$EV_LAST_VERSION_FILE"; } 2>/dev/null
+                if [ "$_id_old" != "$_id_new" ]; then
+                    case "$_id_old" in
+                        '') ;;
+                        *[!A-Za-z0-9._+-]*) ;;
+                        *) append_event "software_updated" "QManager updated from ${_id_old} to ${_id_new}" "info" "" "from=${_id_old};to=${_id_new}" ;;
+                    esac
+                    _ev_ident_store "$EV_LAST_VERSION_FILE" "$_id_new"
+                fi
+                ;;
+        esac
+    fi
+
+    if [ "$_ev_ident_imei_done" != "1" ]; then
+        _id_new="$boot_imei"
+        case "$_id_new" in
+            ???????????????)
+                case "$_id_new" in
+                    *[!0-9]*) ;;
+                    *)
+                        _ev_ident_imei_done=1
+                        _id_old=""
+                        { read -r _id_old < "$EV_LAST_IMEI_FILE"; } 2>/dev/null
+                        if [ "$_id_old" != "$_id_new" ]; then
+                            if [ -n "$_id_old" ]; then
+                                append_event "imei_changed" "Modem IMEI changed (now ending ${_id_new#???????????})" "warning" "" "from=${_id_old#???????????};to=${_id_new#???????????}"
+                            fi
+                            _ev_ident_store "$EV_LAST_IMEI_FILE" "$_id_new"
+                        fi
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+}
+
+# --- Data call (QMI WDS mux) dropped / restored ---------------------------------
+# Called after qmi_load. Reads qmi_wds_mux from the sidecar the loader already
+# evaluated: a bound mux means the data call is up. Only fresh sidecar samples
+# count (a new qmi_mono), three empty ones in a row after the call was seen up
+# make a drop. Nothing is reported while the QMI lane is not up and registered
+# (SSR, airplane mode, no sidecar): that is the modem-crash events' domain.
+_ev_dc_mono=""
+_ev_dc_n=0
+_ev_dc_state=""
+_ev_dc_since=0
+detect_datacall_events() {
+    if [ "$_QMI_OK" != "1" ] || [ "$_QMI_STATE" != "up" ] || [ "$qmi_registered" != "1" ]; then
+        _ev_dc_n=0
+        return 0
+    fi
+    [ "$_QMI_READ_MONO" -gt 0 ] || return 0
+    [ "$_QMI_READ_MONO" = "$_ev_dc_mono" ] && return 0
+    _ev_dc_mono="$_QMI_READ_MONO"
+
+    if [ -n "$qmi_wds_mux" ]; then
+        _ev_dc_n=0
+        if [ "$_ev_dc_state" = "dropped" ]; then
+            local _dc_down
+            _dc_down=$(( _QMI_READ_MONO - _ev_dc_since ))
+            [ "$_dc_down" -lt 0 ] && _dc_down=0
+            append_event "data_call_restored" "Mobile data call restored after ${_dc_down}s" "info" "" "down_s=${_dc_down}"
+        fi
+        _ev_dc_state="up"
+    else
+        _ev_dc_n=$(( _ev_dc_n + 1 ))
+        if [ "$_ev_dc_n" -ge 3 ] && [ "$_ev_dc_state" = "up" ]; then
+            _ev_dc_state="dropped"
+            _ev_dc_since="$_QMI_READ_MONO"
+            append_event "data_call_dropped" "Mobile data call dropped while the modem is still registered" "warning" "" ""
+        fi
+    fi
+}
+
+# --- DNS lookup failing / recovered -------------------------------------------
+# detect_dns_events <ok> <mono> <resolver> <ms>: <mono> is the ping daemon's
+# sample time, so only a new sample counts. Three failed samples in a row after
+# a good one make "failing"; the next good sample is "recovered".
+_ev_dns_mono=""
+_ev_dns_n=0
+_ev_dns_state=""
+detect_dns_events() {
+    [ "$2" = "$_ev_dns_mono" ] && return 0
+    _ev_dns_mono="$2"
+    local _dn_res
+    local _dn_ms
+    _dn_res="$3"
+    case "$_dn_res" in *[!A-Za-z0-9.:_-]*) _dn_res="" ;; esac
+    _dn_ms="$4"
+    case "$_dn_ms" in ''|*[!0-9]*) _dn_ms="" ;; esac
+    case "$1" in
+        false)
+            _ev_dns_n=$(( _ev_dns_n + 1 ))
+            if [ "$_ev_dns_n" -ge 3 ] && [ "$_ev_dns_state" = "ok" ]; then
+                _ev_dns_state="failing"
+                append_event "dns_failing" "DNS lookups are failing" "warning" "" "resolver=${_dn_res}"
+            fi
+            ;;
+        true)
+            _ev_dns_n=0
+            if [ "$_ev_dns_state" = "failing" ]; then
+                append_event "dns_recovered" "DNS lookups recovered" "info" "" "resolver=${_dn_res};ms=${_dn_ms}"
+            fi
+            _ev_dns_state="ok"
+            ;;
+    esac
+}
+
+# --- Broker restarted ---------------------------------------------------------
+# The broker rewrites its capability file on every start. A marker in the run
+# dir records the last time it was looked at; a capability file newer than the
+# marker means a restart. No marker = first sighting, silent. Checked once a
+# minute; test(1) and a builtin redirect only.
+EV_BROKER_PROTO="/var/run/qmanager_atd.proto"
+EV_BROKER_SEEN="/var/run/qmanager/broker.seen"
+_ev_broker_chk=0
+detect_broker_restart() {
+    [ "$_MONO_TOP" -gt 0 ] 2>/dev/null || return 0
+    [ $(( _MONO_TOP - _ev_broker_chk )) -ge 60 ] || return 0
+    _ev_broker_chk="$_MONO_TOP"
+    [ -f "$EV_BROKER_PROTO" ] || return 0
+    [ -d /var/run/qmanager ] || return 0
+    if [ -f "$EV_BROKER_SEEN" ]; then
+        if [ "$EV_BROKER_PROTO" -nt "$EV_BROKER_SEEN" ]; then
+            append_event "broker_restarted" "AT broker restarted" "warning" "" ""
+            true 2>/dev/null > "$EV_BROKER_SEEN"
+        fi
+    else
+        true 2>/dev/null > "$EV_BROKER_SEEN"
+    fi
+}
