@@ -66,7 +66,11 @@ export function ConnectionCard({ history }: { history: CellularHistory }) {
   const { buckets, now, range } = history;
   const spec = HISTORY_RANGES[range];
 
-  const kinds = React.useMemo(() => buckets.map(bucketKind), [buckets]);
+  const since = history.since;
+  const kinds = React.useMemo(
+    () => buckets.map((b) => bucketKind(b, since)),
+    [buckets, since],
+  );
   const present = React.useMemo(() => new Set(kinds), [kinds]);
 
   // The window the bars span: first bucket start to the end of the last bucket.

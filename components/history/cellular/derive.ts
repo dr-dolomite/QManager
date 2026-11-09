@@ -33,10 +33,14 @@ export function bucketDurations(b: CellularBucket): BucketDurations {
  * visible in a 12-hour bucket); otherwise the majority radio; a bucket the
  * collector barely saw is no data.
  */
-export function bucketKind(b: CellularBucket): StripKind {
+export function bucketKind(b: CellularBucket, since: number | null = null): StripKind {
   const { nr, lte, down } = bucketDurations(b);
   if (b.x > 0 || down > 0) return "down";
-  if (nr + lte <= 0 || (b.len > 0 && (nr + lte) / b.len < MIN_COVERAGE)) return "nodata";
+  // Coverage counts from when collecting began, so the bucket a new install
+  // starts in (up to 12 h on 30d) is not blanked for its uncollected head.
+  const head = since !== null && since > b.t ? since - b.t : 0;
+  const span = head > 0 && head < b.len ? b.len - head : b.len;
+  if (nr + lte <= 0 || (span > 0 && (nr + lte) / span < MIN_COVERAGE)) return "nodata";
   return nr >= lte ? "nr" : "lte";
 }
 

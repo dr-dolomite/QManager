@@ -44,6 +44,13 @@ describe("bucketKind", () => {
     expect(bucketKind(bucket({ st: { off: 1800 } }))).toBe("nodata");
     expect(bucketKind(bucket({ st: { nr: 400 } }))).toBe("nodata");
   });
+  it("coverage counts from when collecting began", () => {
+    const b = bucket({ t: 0, len: 9504, st: { nr: 1094 } });
+    expect(bucketKind(b)).toBe("nodata");
+    expect(bucketKind(b, 8400)).toBe("nr");
+    expect(bucketKind(b, 0)).toBe("nodata");
+    expect(bucketKind(b, 20000)).toBe("nodata");
+  });
 });
 
 describe("bucketDurations", () => {

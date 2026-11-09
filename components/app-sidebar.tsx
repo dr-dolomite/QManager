@@ -127,7 +127,10 @@ const navHistory: NavItem[] = [
     t_key: "history",
     url: "/history/cellular",
     icon: "history",
-    items: [{ t_key: "history_connection", url: "/history/connection" }],
+    items: [
+      { t_key: "history_connection", url: "/history/connection" },
+      { t_key: "history_system", url: "/history/system-health" },
+    ],
   },
 ];
 
