@@ -5,6 +5,9 @@
 #   series.sh, events.sh (flat), plus optionally events_lib.sh (the lib
 #   events.sh renamed, for the spool writer cases). Uses a scratch dir under /tmp; touches no
 #   live state. CGIs run with _SKIP_AUTH=1 and HIST_* overrides.
+#   HIST_TEST_MODE=logd runs the same cases against the event journal:
+#   logd-stub.sh (next to this script) stands in for qmanager_logd, the
+#   writers spool to it and the events CGI reads it back through a stub qlog.
 
 SRC="${1:?usage: history-test.sh <dir>}"
 T=/tmp/qm_hist_test.$$
@@ -14,6 +17,12 @@ printf 'boot-A\n' > "$T/boot"
 
 export HIST_LIB_DIR="$SRC" HIST_STORE="$T/store" HIST_RUN="$T/run" \
     HIST_BOOT_ID_FILE="$T/boot" HIST_SYNC=true HIST_UPTIME_FILE="$T/uptime"
+
+MODE="${HIST_TEST_MODE:-legacy}"
+if [ "$MODE" = logd ]; then
+    . "$(dirname "$0")/logd-stub.sh"
+    jsetup "$T/j"
+fi
 
 PASS=0
 FAIL=0
@@ -47,6 +56,18 @@ cycles() {
         _i=$((_i + 1))
     done
     printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
+    [ "$MODE" = logd ] && jingest "$WOFF"
+    return 0
+}
+
+# erows: the cellular series' stored events (queue + day files, or the journal).
+erows() {
+    if [ "$MODE" = logd ]; then
+        jingest "$WOFF"
+        cat "$J/rows"
+    else
+        cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null
+    fi
 }
 
 load
@@ -61,7 +82,11 @@ check '[ -s "$T/run/cellular.pending" ]' "pending written before trust"
 check '[ ! -s "$T/run/cellular.queue" ]' "nothing queued before trust"
 check '[ "$_hist_trusted" = 0 ]' "untrusted at 1970"
 hist_event band_change "LTE band settled on B3 (was B1)" info
-check 'grep -q "^e|" "$T/run/cellular.pending"' "pre-trust event pending"
+if [ "$MODE" = logd ]; then
+    check 'cat "$J/run/spool" "$J/pend" 2>/dev/null | grep -q band_change' "pre-trust event spooled"
+else
+    check 'grep -q "^e|" "$T/run/cellular.pending"' "pre-trust event pending"
+fi
 
 # 2. NITZ step to real time at mono 100 (< settle, but a step was seen).
 WOFF=$((W0 - 40))
@@ -70,8 +95,8 @@ check '[ "$_hist_trusted" = 1 ]' "trusted after step"
 check '[ "$_hist_off" = "$WOFF" ]' "offset = wall - mono"
 check '[ ! -f "$T/run/cellular.pending" ]' "pending consumed"
 check 'grep -q "\"t\":$((W0 - 1800))," "$T/run/cellular.queue" || grep -q "\"t\":$((W0 - 1800))," "$T/store/cellular/"*.jsonl' "back-dated row before W0"
-check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "^{\"k\":\"e\",\"t\":$((W0 + 60)),\"type\":\"band_change\""' "back-dated event at its real time"
-check 'grep -q "\"radio\":\"lte\"" "$T/store/cellular/"*.jsonl "$T/run/cellular.queue" 2>/dev/null' "event radio lte"
+check 'erows | grep -q "^{\"k\":\"e\",\"t\":$((W0 + 60)),\"type\":\"band_change\""' "back-dated event at its real time"
+check 'erows | grep -q "\"radio\":\"lte\""' "event radio lte"
 
 # 3. Run two buckets; closes flush to flash. W0+1800 is accumulated whole.
 cycles 1800
@@ -99,9 +124,13 @@ check '[ "$_hist_off" = "$OFF0" ]' "wobble ignored"
 
 # 6. Event outside the series is ignored; the series' event is queued.
 hist_event internet_lost "Internet connectivity lost" warning
-check '! grep -q internet_lost "$T/run/cellular.queue" 2>/dev/null' "foreign event ignored"
+if [ "$MODE" = logd ]; then
+    check '! cat "$J/run/spool" "$J/rows" 2>/dev/null | grep internet_lost | grep -q "radio=\|\"radio\":\""' "foreign event gets no radio"
+else
+    check '! grep -q internet_lost "$T/run/cellular.queue" 2>/dev/null' "foreign event ignored"
+fi
 hist_event nr_anchor "5G NR anchor lost (was N41)" warning
-check 'grep -q "\"type\":\"nr_anchor\",\"severity\":\"warning\",\"radio\":\"nr\"" "$T/run/cellular.queue"' "nr_anchor queued"
+check 'erows | grep -q "\"type\":\"nr_anchor\",\"severity\":\"warning\",\"radio\":\"nr\""' "nr_anchor queued"
 
 # 7. Poller restart (same boot): TERM flush, re-source, resume; no double count.
 hist_flush
@@ -162,8 +191,8 @@ cycles 5
 check '[ -f "$T/run/ext.spool.work" ] && [ ! -f "$T/run/ext.spool" ]' "spool renamed on a sample tick"
 cycles 5
 check '[ ! -f "$T/run/ext.spool.work" ]' "spool drained"
-check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "^{\"k\":\"e\",\"t\":$((EM1 + WOFF)),\"type\":\"signal_lost\""' "spooled event at its own mono"
-check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "\"message\":\"Signal restored | ext\""' "message keeps a pipe"
+check 'erows | grep -q "^{\"k\":\"e\",\"t\":$((EM1 + WOFF)),\"type\":\"signal_lost\""' "spooled event at its own mono"
+check 'erows | grep -q "\"message\":\"Signal restored | ext\""' "message keeps a pipe"
 if [ -f "$SRC/events_lib.sh" ]; then
     (
         unset -f hist_event
@@ -173,7 +202,12 @@ if [ -f "$SRC/events_lib.sh" ]; then
         . "$SRC/events_lib.sh"
         append_event watchcat_recovery "Recovery step 1" warning
     )
-    check 'grep -qx "$MONO|watchcat_recovery|warning|Recovery step 1" "$T/run/ext.spool"' "events.sh writes the spool"
+    if [ "$MODE" = logd ]; then
+        check '[ ! -f "$T/run/ext.spool" ] && grep -q "^E	[0-9.]*	watchcat_recovery	warning			Recovery step 1\$" "$J/run/spool"' "events.sh writes the journal spool"
+        rm -f "$J/run/spool"
+    else
+        check 'grep -qx "$MONO|watchcat_recovery|warning|Recovery step 1" "$T/run/ext.spool"' "events.sh writes the spool"
+    fi
     rm -f "$T/run/ext.spool"
     rm -rf "$T/run_absent"
     (
@@ -185,6 +219,7 @@ if [ -f "$SRC/events_lib.sh" ]; then
         append_event watchcat_recovery "x" warning
     )
     check '[ ! -d "$T/run_absent" ]' "writer never creates the run dir"
+    [ "$MODE" = logd ] && rm -f "$J/run/spool"
 else
     echo "skip: events_lib.sh not in $SRC (lib events.sh renamed)"
 fi
@@ -284,16 +319,25 @@ D15=$((MONO + WOFF))
 cycles 60
 hist_flush
 mkdir -p "$T/store/system"
-printf '{"k":"e","t":%s,"type":"device_reboot","severity":"info","radio":null,"message":"cause=user off=40"}\n' \
-    $((D15 + 100)) >> "$T/store/system/d$((D15 / 86400)).jsonl"
+# put_ev ROW: a stored system event (day file, or the journal in logd mode).
+put_ev() {
+    if [ "$MODE" = logd ]; then
+        printf '%s\n' "$1" >> "$J/rows"
+    else
+        printf '%s\n' "$1" >> "$T/store/system/d$((D15 / 86400)).jsonl"
+    fi
+}
+put_ev "$(printf '{"k":"e","t":%s,"type":"device_reboot","severity":"info","radio":null,"message":"cause=user off=40"}' $((D15 + 100)))"
 printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
 E11=$(evq "&limit=1")
 echo "$E11" | jq -e '.events[0].timestamp=='"$D15"' and .events[0].end=='"$((D15 + 60))"' and .total==6' >/dev/null 2>&1 && ok || bad "device_reboot closes at t - off: $E11"
-printf '{"k":"e","t":%s,"type":"device_reboot","severity":"error","radio":null,"message":"cause=unexpected off=-"}\n' \
-    $((D15 + 30)) >> "$T/store/system/d$((D15 / 86400)).jsonl"
+put_ev "$(printf '{"k":"e","t":%s,"type":"device_reboot","severity":"error","radio":null,"message":"cause=unexpected off=-"}' $((D15 + 30)))"
 E12=$(evq "&limit=1")
 echo "$E12" | jq -e '.events[0].end=='"$((D15 + 30))"'' >/dev/null 2>&1 && ok || bad "unknown off closes at t: $E12"
 rm -rf "$T/store/system"
+if [ "$MODE" = logd ]; then
+    grep -v '"type":"device_reboot"' "$J/rows" > "$J/rows.tmp"; mv -f "$J/rows.tmp" "$J/rows"
+fi
 NOWW=$((MONO + WOFF))
 
 # 11. Torn last line is ignored by the reader.
@@ -377,6 +421,6 @@ while [ "$_k" -le 66 ]; do _hist_fine cellular $((FN + _k)) 1 0; _k=$((_k + 1));
 check '[ "$(wc -l < "$F")" -eq 5 ] && tail -n 1 "$F" | grep -q "\"t\":$((FN + 66)),"' "ring trimmed to the newest rows (got $(wc -l < "$F"))"
 HIST_FINE_MAX=$_fmax
 
-echo "history-test: $PASS passed, $FAIL failed"
+echo "history-test ($MODE): $PASS passed, $FAIL failed"
 [ "$KEEP" = 1 ] || rm -rf "$T"
 [ "$FAIL" -eq 0 ]

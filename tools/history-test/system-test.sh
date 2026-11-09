@@ -6,6 +6,8 @@
 #   optionally parse_at.sh for the t1_temperature_max case. Only those files
 #   are copied into a scratch dir, so other providers are not loaded. df and
 #   dmesg are shell-function stubs; touches no live state.
+#   HIST_TEST_MODE=logd: the provider's events go to the journal stand-in
+#   (logd-stub.sh next to this script) and the checks read them back there.
 
 SRC="${1:?usage: system-test.sh <dir>}"
 T="${TMPDIR:-/tmp}/qm_hist_sys_test.$$"
@@ -17,6 +19,12 @@ printf 'boot-A\n' > "$T/boot"
 export HIST_LIB_DIR="$T/lib" HIST_STORE="$T/store" HIST_RUN="$T/run" \
     HIST_BOOT_ID_FILE="$T/boot" HIST_SYNC=true \
     HIST_SYS_CRASH_LOG="$T/crash.log"
+
+MODE="${HIST_TEST_MODE:-legacy}"
+if [ "$MODE" = logd ]; then
+    . "$(dirname "$0")/logd-stub.sh"
+    jsetup "$T/j"
+fi
 
 PASS=0
 FAIL=0
@@ -70,10 +78,19 @@ cycles() {
         hist_tick
         _i=$((_i + 1))
     done
+    [ "$MODE" = logd ] && jingest "$WOFF"
+    return 0
 }
 # samples N: N provider samples (5 poller cycles each).
 samples() { cycles $(($1 * 5)); }
-evs() { cat "$T/run/system.queue" "$T/store/system/"d*.jsonl 2>/dev/null | grep '^{"k":"e"'; }
+evs() {
+    if [ "$MODE" = logd ]; then
+        jingest "$WOFF"
+        cat "$J/rows"
+    else
+        cat "$T/run/system.queue" "$T/store/system/"d*.jsonl 2>/dev/null | grep '^{"k":"e"'
+    fi
+}
 evn() { evs | grep -c "$1"; }
 
 # newboot ID GAP: the device was down GAP s after the last sample, then booted.
@@ -266,6 +283,6 @@ else
     echo "skip: parse_at.sh not in $SRC"
 fi
 
-echo "system-test: $PASS passed, $FAIL failed"
+echo "system-test ($MODE): $PASS passed, $FAIL failed"
 [ "$KEEP" = 1 ] || rm -rf "$T"
 [ "$FAIL" -eq 0 ]
