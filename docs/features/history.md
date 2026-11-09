@@ -301,11 +301,12 @@ sh history-test.sh <flat dir>
 | `hist_tick` cost | micro-benchmark about 1.5 ms per poller cycle averaged (about 0.08 % of one core at the 2 s period), with the cellular and connection providers loaded |
 | Whole-poller CPU | 4.74 % (idle tier 12/12) against a 4.17 % baseline (idle 3 / deep 9). The delta is the tier mix, not history |
 | UI (dev server, captured live responses) | 24h/7d/30d switch refetches both endpoints at once; error state and retry verified |
+| Reboot survival | passed. Day files, `since` and events survived. The TERM flush stored the open buckets and the last events. After boot the clock stayed untrusted (`hist_trusted=0`, samples in `.pending`) until uptime about 344 s, then re-trusted and back-dated both series. No row is dated before 2023 in the day files or queues. The reboot gap reads as no data, not an outage. The on-device test was rerun after the reboot: 50 passed, 0 failed |
+| Poller restart with a third series loaded | `[cellular connection system]` loaded; the cellular run resumed without a gap |
 
 **Open (not yet done):**
 
-- Reboot survival: pending (needs the user's OK).
-- Outage observed live: pending.
+- Outage observed live: not yet observed (none occurred during validation; forcing one with `AT+CFUN=4` needs the user's OK).
 
 ---
 
