@@ -121,9 +121,18 @@ export function SummaryTiles({
             };
   }
 
-  // Tile 2: the newest completed outage.
+  // Tile 2: the newest completed outage. An untrusted clock answers
+  // last_fault:null whatever the store holds, so it is not "none".
   const fault = history.last_fault;
-  const lastOutage: TileProps = fault
+  const lastOutage: TileProps = !history.clock_trusted
+    ? {
+        glyph: "history",
+        disc: "neutral",
+        eyebrow: t("connection.tiles.last_outage.label"),
+        value: dash,
+        caption: collecting,
+      }
+    : fault
     ? {
         glyph: "history",
         disc: "neutral",

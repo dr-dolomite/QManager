@@ -120,9 +120,18 @@ export function SummaryTiles({ history }: { history: CellularHistory }) {
     };
   }
 
-  // Tile 2: the newest completed outage.
+  // Tile 2: the newest completed outage. An untrusted clock answers
+  // last_fault:null whatever the store holds, so it is not "none".
   const fault = history.last_fault;
-  const lastOutage: React.ComponentProps<typeof Tile> = fault
+  const lastOutage: React.ComponentProps<typeof Tile> = !history.clock_trusted
+    ? {
+        glyph: "history",
+        disc: "neutral",
+        eyebrow: t("cellular.summary.last_outage.label"),
+        value: dash,
+        caption: t("cellular.summary.collecting"),
+      }
+    : fault
     ? {
         glyph: "history",
         disc: "neutral",

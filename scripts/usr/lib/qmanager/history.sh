@@ -61,6 +61,9 @@ _hist_uoff=""
 _hist_stepped=0
 _hist_pm=""
 _hist_hwm=0
+# Trust floor: wall time of the newest record. hwm (a bucket END) by default;
+# the TERM flush's last_wall marker when it is at least as new (hist_init).
+_hist_tfloor=0
 _hist_mc=0
 _hist_closed=0
 _hist_wall=0
@@ -271,7 +274,7 @@ _hist_clock() {
     fi
     _hist_uoff="$_uo"
     [ "$_w" -ge "$HIST_SANE_EPOCH" ] || return 0
-    [ "$_w" -ge $((_hist_hwm - HIST_STEP_TOL)) ] || return 0
+    [ "$_w" -ge $((_hist_tfloor - HIST_STEP_TOL)) ] || return 0
     [ "$_m" -ge "$HIST_SETTLE" ] || [ "$_hist_stepped" = "1" ] || return 0
     _hist_trusted=1
     _hist_off="$_uo"
@@ -565,6 +568,18 @@ hist_init() {
         fi
         _hist_ev_count "$_s"
     done
+    # The TERM flush keys its partial rows to the bucket START, so hwm (that
+    # bucket's END) can be up to 30 min after the last real sample; trusting
+    # only past hwm left every page empty that long after a planned reboot.
+    # last_wall is the newest sample's wall time, written by that flush. A
+    # marker older than the newest bucket is an earlier stop's: hwm stands.
+    _hist_tfloor="$_hist_hwm"
+    _b=""
+    { read -r _b < "$HIST_STORE/last_wall"; } 2>/dev/null
+    case "$_b" in
+        ''|*[!0-9]*|0*|???????????*) ;;
+        *) [ "$_b" -ge $((_hist_hwm - HIST_BUCKET)) ] && _hist_tfloor="$_b" ;;
+    esac
     _hist_save_clock
     _hist_ready=1
     _hist_log info "ready: series [${HIST_SERIES# }] trusted=$_hist_trusted"
@@ -720,5 +735,13 @@ hist_flush() {
         _hist_close "$_s"
         rm -f "$HIST_RUN/$_s.open"
     done
+    # The newest sample's wall time, for the next boot's trust floor
+    # (hist_init). Written before the flush so its sync covers it.
+    if [ "$_hist_trusted" = "1" ]; then
+        case "$_hist_pm" in
+            ''|*[!0-9]*) ;;
+            *) printf '%s\n' "$((_hist_pm + _hist_off))" > "$HIST_STORE/last_wall" 2>/dev/null ;;
+        esac
+    fi
     hist_flush_queues
 }

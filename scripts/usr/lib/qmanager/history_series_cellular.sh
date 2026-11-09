@@ -12,6 +12,8 @@ HIST_cellular_METRICS="lte_rsrp lte_rsrq lte_sinr lte_rssi nr_rsrp nr_rsrq nr_si
 HIST_cellular_EVENTS="signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change"
 HIST_cellular_EVENTS_KEEP="signal_lost signal_restored"
 HIST_cellular_PAIRS="signal_lost:signal_restored"
+# Max age (s) of a QMI read that may mark the series down (SSR window).
+HIST_CL_QMI_MAX_AGE="${HIST_CL_QMI_MAX_AGE:-10}"
 
 # _hcl_v VALUE LO HI -> _HI = integer within LO..HI, else empty (no reading).
 _hcl_v() {
@@ -33,6 +35,21 @@ hist_cellular_sample() {
     case "$t1_cfun" in
         0|4) _HS="off"; return 0 ;;
     esac
+    # QMI lane says the baseband is down (SSR window). The AT state lags up to
+    # 60 s in Deep, so a 15 s SSR would never show. Only a fresh read (<= 10 s
+    # on the uptime clock) counts: a dead broker leaves its last sidecar behind.
+    if [ "${_QMI_OK:-0}" = "1" ] && [ "$_QMI_STATE" = "down" ]; then
+        case "${_MONO_TOP:-x}/${_QMI_READ_MONO:-x}" in
+            *[!0-9/]*) ;;
+            *)
+                if [ "$_MONO_TOP" -ge "$_QMI_READ_MONO" ] \
+                    && [ $((_MONO_TOP - _QMI_READ_MONO)) -le "$HIST_CL_QMI_MAX_AGE" ]; then
+                    _HS="down"
+                    return 0
+                fi
+                ;;
+        esac
+    fi
     if [ "$modem_reachable" != "true" ]; then
         _HS="down"
         return 0
