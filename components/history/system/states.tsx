@@ -6,6 +6,7 @@ import { ConditionScreen } from "@/components/cellular/condition-screen";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { LogsCardSkeleton } from "./logs-card";
 import { MetricChartCardSkeleton } from "./metric-chart-card";
 import { CardHeaderSkeleton } from "./parts";
 import { EVENTS, HISTORY_CARD, METRICS_GRID } from "./shapes";
@@ -59,6 +60,7 @@ export function SystemHealthSkeleton({ label }: { label: string }) {
         <StorageCardSkeleton />
       </div>
       <EventsCardSkeleton />
+      <LogsCardSkeleton />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   throttleParts,
   type LiveStatus,
 } from "./derive";
+import { LogsCard } from "./logs-card";
 import { MetricChartCard } from "./metric-chart-card";
 import { HISTORY_PAGE, METRICS_GRID } from "./shapes";
 import { StabilityCard } from "./stability-card";
@@ -106,6 +107,9 @@ function Loaded({
           covered={coversRange(history)}
           tempC={tempC}
         />
+      </motion.div>
+      <motion.div variants={staggerItem}>
+        <LogsCard />
       </motion.div>
     </>
   );

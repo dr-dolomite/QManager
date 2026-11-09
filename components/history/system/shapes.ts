@@ -49,3 +49,34 @@ export const EVENTS = {
   SKELETON_ROWS: 5,
   EMPTY_H: "min-h-44",
 } as const;
+
+/** Logs card: a toolbar, a scrolling list of one-line-ish rows, a quiet foot. */
+export const LOGS = {
+  /** Rows kept on screen; the scroller does the rest. */
+  MAX_ROWS: 100,
+  /** The scroller bleeds to the card edge so row hover reaches it. */
+  SCROLLER:
+    "-mx-6 max-h-[26rem] overflow-y-auto overscroll-contain [scrollbar-width:thin]",
+  /** Tab switch, filter and trailing action share one wrapping row. */
+  TOOLBAR: "flex flex-wrap items-center gap-x-3 gap-y-3",
+  /**
+   * A row: time, then level and tag, then the raw line. Stacks on a narrow card
+   * (time + chips over the message) and becomes one line at the 2xl step.
+   * `contents` on the meta group puts the chips straight into the grid columns.
+   */
+  ROW_FULL:
+    "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-6 py-2 transition-colors duration-[var(--duration-quick)] ease-out hover:bg-surface-container @2xl/card:grid-cols-[4.5rem_6.5rem_8rem_minmax(0,1fr)] @2xl/card:items-baseline",
+  ROW_PLAIN:
+    "grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 px-6 py-2 transition-colors duration-[var(--duration-quick)] ease-out hover:bg-surface-container",
+  META: "flex min-w-0 items-center gap-2 @2xl/card:contents",
+  TIME: "text-on-surface-variant truncate text-[0.8125rem] tabular-nums",
+  MESSAGE:
+    "text-on-surface col-span-2 min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] @2xl/card:col-span-1",
+  MESSAGE_PLAIN:
+    "text-on-surface min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]",
+  DAY: "bg-surface text-on-surface-variant sticky top-0 z-10 px-6 pt-3 pb-1 text-xs font-semibold first:pt-1",
+  FOOT: "text-on-surface-variant border-border flex items-center justify-between gap-3 border-t pt-4 text-[0.8125rem]",
+  SKELETON_ROWS: 6,
+  /** Keeps the empty and error states as tall as the list they replace. */
+  STATE_H: "min-h-52",
+} as const;

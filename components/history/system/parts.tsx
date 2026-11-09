@@ -1,7 +1,15 @@
 "use client";
 
+import type * as React from "react";
+
 import { CardHeader } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { MaterialSymbol, type MaterialSymbolName } from "@/components/ui/material-symbol";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -24,6 +32,7 @@ export function CardHeaderSkeleton() {
 const NOTICE_DISC = {
   neutral: "bg-surface-container-high text-on-surface-variant",
   success: "bg-success text-success-foreground",
+  destructive: "bg-destructive text-destructive-foreground",
 } as const;
 
 /** An in-card empty state: a disc, a title and one line. */
@@ -32,12 +41,15 @@ export function Notice({
   tone = "neutral",
   title,
   description,
+  action,
   className,
 }: {
   glyph: MaterialSymbolName;
   tone?: keyof typeof NOTICE_DISC;
   title: string;
   description: string;
+  /** A button under the text, for a state the reader can act on. */
+  action?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -56,6 +68,7 @@ export function Notice({
           {description}
         </EmptyDescription>
       </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
     </Empty>
   );
 }
