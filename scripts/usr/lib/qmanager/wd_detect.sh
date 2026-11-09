@@ -101,16 +101,22 @@ read_ping() {
     # on the monotonic clock). On failure the ping_* vars keep their previous
     # values; every caller treats a non-zero return as "unknown, skip".
     if ! conn_state_read; then
-        if [ "$CQ_STALE_REASON" = "missing" ]; then
-            qlog_warn "Ping cache missing"
-        else
-            qlog_warn "Ping data stale ($(conn_state_why)), skipping cycle"
-        fi
+        # Edge-only: log on the first stale read of an episode (wd_stale_since
+        # is 0 until then), recovery is logged below.
         if [ "$wd_stale_since" -eq 0 ]; then
+            if [ "$CQ_STALE_REASON" = "missing" ]; then
+                qlog_warn "Ping cache missing"
+            else
+                qlog_warn "Ping data stale ($(conn_state_why)), skipping cycle"
+            fi
             wd_stale_since=$(mono_now)
             case "$wd_stale_since" in ''|*[!0-9]*) wd_stale_since=0 ;; esac
         fi
         return 1
+    fi
+    if [ "$wd_stale_since" -gt 0 ] && [ "$wd_ping_stale" != "true" ]; then
+        mono_now_set
+        qlog_info "Ping data fresh again after $((_MONO - wd_stale_since))s"
     fi
     wd_stale_clear
 
