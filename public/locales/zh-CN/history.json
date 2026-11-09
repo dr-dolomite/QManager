@@ -598,6 +598,26 @@
         "eyebrow": "最近的问题",
         "none": "无",
         "caption_none_other": "已读取的 {{count}} 行中没有错误或警告"
+      },
+      "device": {
+        "head": "设备日志状况",
+        "kernel": {
+          "caption_errors_other": "已读取的 {{lines}} 行内核日志中有 {{count}} 条警告",
+          "caption_warnings_other": "已读取的 {{count}} 行内核日志中没有错误",
+          "caption_clean_other": "已读取的 {{count}} 行内核日志中没有警告",
+          "caption_none_other": "已读取的 {{count}} 行内核日志中没有错误或警告"
+        },
+        "cover": {
+          "eyebrow": "覆盖时长",
+          "caption_untimed": "带时间的行不足",
+          "caption_lines_other": "已读取 {{count}} 行",
+          "caption_top_other": "{{count}} 行，主要来自 {{proc}}（{{share}}%）",
+          "caption_busy": "{{proc}} 正在占满日志（{{share}}%）"
+        },
+        "boot": {
+          "eyebrow": "开机以来",
+          "caption_other": "内核日志中有 {{count}} 行"
+        }
       }
     }
   }

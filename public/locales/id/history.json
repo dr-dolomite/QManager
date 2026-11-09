@@ -598,6 +598,26 @@
         "eyebrow": "Masalah terbaru",
         "none": "Tidak ada",
         "caption_none_other": "Tidak ada galat atau peringatan dalam {{count}} baris yang dibaca"
+      },
+      "device": {
+        "head": "Kesehatan log perangkat",
+        "kernel": {
+          "caption_errors_other": "{{count}} peringatan dalam {{lines}} baris kernel yang dibaca",
+          "caption_warnings_other": "Tidak ada galat dalam {{count}} baris kernel yang dibaca",
+          "caption_clean_other": "Tidak ada peringatan dalam {{count}} baris kernel yang dibaca",
+          "caption_none_other": "Tidak ada galat atau peringatan dalam {{count}} baris kernel yang dibaca"
+        },
+        "cover": {
+          "eyebrow": "Mencakup",
+          "caption_untimed": "Baris bertanda waktu belum cukup",
+          "caption_lines_other": "{{count}} baris dibaca",
+          "caption_top_other": "{{count}} baris, sebagian besar dari {{proc}} ({{share}}%)",
+          "caption_busy": "{{proc}} memenuhi log ({{share}}%)"
+        },
+        "boot": {
+          "eyebrow": "Sejak boot",
+          "caption_other": "{{count}} baris di log kernel"
+        }
       }
     }
   }

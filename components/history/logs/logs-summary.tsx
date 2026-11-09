@@ -1,15 +1,26 @@
 "use client";
 
+import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TILE_SHAPE } from "@/components/cellular/tile-shape";
+import { formatDuration } from "@/components/history/format";
 import { MaterialSymbol, type MaterialSymbolName } from "@/components/ui/material-symbol";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UseSystemLogsReturn } from "@/hooks/use-system-logs";
 import { cn } from "@/lib/utils";
+import type { DeviceLogResponse } from "@/types/device-syslog";
 import type { LogEntry } from "@/types/system-logs";
 
-import { dayKeyOf, formatClockSeconds, isNearRotation, parseLogTimestamp } from "./derive";
+import {
+  BUSY_SPAN_SEC,
+  dayKeyOf,
+  deviceProblems,
+  formatClockSeconds,
+  isNearRotation,
+  parseLogTimestamp,
+  systemCoverage,
+} from "./derive";
 import { LOGS_SUMMARY } from "./shapes";
 
 // =============================================================================
@@ -26,6 +37,14 @@ import { LOGS_SUMMARY } from "./shapes";
 // Latest problem shows the line's clock time, not "12m ago": the stamp is the
 // modem's local time, and the browser's clock or timezone may differ. The date
 // is added only when the line is from an earlier day than the newest line read.
+//
+// The System tab gets the same strip (DeviceLogsSummary), following the System /
+// Kernel switch: Severity and Latest problem over the device lines read, then
+// Covers (system: how much time the lines read span, warning under a minute,
+// when one process is pushing older lines out of the ring) or Since boot
+// (kernel: uptime and the ring's line count). The kernel tiles count only the
+// kernel's own lines: QCMAP writes user-facility warnings into the ring every
+// few seconds. That copy lives in history `logs.summary.device.*`.
 // =============================================================================
 
 const NEUTRAL_TILE = "bg-surface-container text-on-surface";
@@ -69,6 +88,19 @@ const FILE_FACE = {
   filling: { disc: "warning", glyph: "priority_high" },
   resting: { disc: "neutral", glyph: "storage" },
 } satisfies Record<FileState, Face>;
+
+type CoverState = "unread" | "busy" | "resting";
+const COVER_FACE = {
+  unread: { disc: "neutral", glyph: "hourglass_top" },
+  busy: { disc: "warning", glyph: "speed" },
+  resting: { disc: "neutral", glyph: "schedule" },
+} satisfies Record<CoverState, Face>;
+
+type BootState = "unread" | "read";
+const BOOT_FACE = {
+  unread: { disc: "neutral", glyph: "hourglass_top" },
+  read: { disc: "neutral", glyph: "timer" },
+} satisfies Record<BootState, Face>;
 
 /** The newest ERROR or WARN line in an oldest-first window. */
 function latestProblem(entries: LogEntry[]): LogEntry | null {
@@ -233,6 +265,128 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
             : t(`${K}.file.caption_unread`)
         }
       />
+    </div>
+  );
+}
+
+/** "14:40:12", with the date in front when the line is from an earlier day than `refSec`. */
+function clockOrDate(sec: number, refSec: number, locale: string): string {
+  const clock = formatClockSeconds(sec, locale);
+  if (dayKeyOf(sec) === dayKeyOf(refSec)) return clock;
+  const day = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(sec * 1000);
+  return `${day}, ${clock}`;
+}
+
+/**
+ * The System tab's strip. `device` is the response for the source in view, or
+ * null when none has landed (the tiles then read as unread).
+ */
+export function DeviceLogsSummary({ device }: { device: DeviceLogResponse | null }) {
+  const { t } = useTranslation("system-settings");
+  const { t: th, i18n } = useTranslation("history");
+  const locale = i18n.language;
+  const K = "logs.band";
+  const D = "logs.summary.device";
+  const unreadCaption = t(`${K}.severity.caption_unread`);
+
+  if (!device) {
+    return (
+      <div className={LOGS_SUMMARY.GRID} aria-label={th(`${D}.head`)} role="group">
+        <Tile face={SEVERITY_FACE.unread} eyebrow={t(`${K}.severity.eyebrow`)} value={DASH} caption={unreadCaption} />
+        <Tile face={LATEST_FACE.unread} eyebrow={th("logs.summary.latest.eyebrow")} value={DASH} caption={unreadCaption} />
+        <Tile face={COVER_FACE.unread} eyebrow={th(`${D}.cover.eyebrow`)} value={DASH} caption={unreadCaption} />
+      </div>
+    );
+  }
+
+  const kernel = device.source === "kernel";
+  const { counted, errors, warnings, latest: problem } = deviceProblems(device);
+
+  // ── Severity ────────────────────────────────────────────────────────────
+  const severity: SeverityState = errors > 0 ? "errors" : warnings > 0 ? "warnings" : "clean";
+  const severityValue = {
+    errors: t(`${K}.severity.errors`, { count: errors }),
+    warnings: t(`${K}.severity.warnings`, { count: warnings }),
+    clean: t(`${K}.severity.clean`),
+  }[severity];
+  // The kernel counts its own lines only, so its captions say "kernel lines".
+  const severityCaption = kernel
+    ? {
+        errors: th(`${D}.kernel.caption_errors`, { count: warnings, lines: counted }),
+        warnings: th(`${D}.kernel.caption_warnings`, { count: counted }),
+        clean: th(`${D}.kernel.caption_clean`, { count: counted }),
+      }[severity]
+    : {
+        errors: t(`${K}.severity.caption_errors`, { count: warnings, lines: counted }),
+        warnings: t(`${K}.severity.caption_warnings`, { count: counted }),
+        clean: t(`${K}.severity.caption_clean`, { count: counted }),
+      }[severity];
+
+  // ── Latest problem ──────────────────────────────────────────────────────
+  const latest: LatestState = problem === null ? "none" : problem.tone;
+  let latestValue = th("logs.summary.latest.none");
+  let latestCaption = kernel
+    ? th(`${D}.kernel.caption_none`, { count: counted })
+    : th("logs.summary.latest.caption_none", { count: counted });
+  if (problem) {
+    latestValue =
+      problem.sec === null
+        ? problem.rawTime || DASH
+        : clockOrDate(problem.sec, device.now, locale);
+    latestCaption = problem.tag ? `${problem.tag}: ${problem.message}` : problem.message;
+  }
+
+  // ── Covers (system) / Since boot (kernel) ───────────────────────────────
+  let third: ReactElement;
+  if (kernel) {
+    third = (
+      <Tile
+        face={BOOT_FACE.read}
+        eyebrow={th(`${D}.boot.eyebrow`)}
+        value={formatDuration(device.uptime, th)}
+        caption={th(`${D}.boot.caption`, { count: device.total })}
+      />
+    );
+  } else {
+    const { spanSec, top } = systemCoverage(device);
+    const cover: CoverState =
+      spanSec === null ? "unread" : spanSec < BUSY_SPAN_SEC ? "busy" : "resting";
+    const lines = device.entries.length;
+    const caption =
+      cover === "unread"
+        ? th(`${D}.cover.caption_untimed`)
+        : top === null
+          ? th(`${D}.cover.caption_lines`, { count: lines })
+          : cover === "busy"
+            ? th(`${D}.cover.caption_busy`, { proc: top.proc, share: top.share })
+            : th(`${D}.cover.caption_top`, { count: lines, proc: top.proc, share: top.share });
+    third = (
+      <Tile
+        face={COVER_FACE[cover]}
+        eyebrow={th(`${D}.cover.eyebrow`)}
+        value={spanSec === null ? DASH : formatDuration(spanSec, th)}
+        caption={caption}
+        title={caption}
+      />
+    );
+  }
+
+  return (
+    <div className={LOGS_SUMMARY.GRID} aria-label={th(`${D}.head`)} role="group">
+      <Tile
+        face={SEVERITY_FACE[severity]}
+        eyebrow={t(`${K}.severity.eyebrow`)}
+        value={severityValue}
+        caption={severityCaption}
+      />
+      <Tile
+        face={LATEST_FACE[latest]}
+        eyebrow={th("logs.summary.latest.eyebrow")}
+        value={latestValue}
+        caption={latestCaption}
+        title={problem ? latestCaption : undefined}
+      />
+      {third}
     </div>
   );
 }

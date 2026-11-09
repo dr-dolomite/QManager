@@ -1,9 +1,16 @@
 // Run with: bun test components/history/logs
 import { describe, expect, it } from "bun:test";
 
+import type {
+  DeviceKernelLogResponse,
+  DeviceSystemLogEntry,
+  DeviceSystemLogResponse,
+} from "@/types/device-syslog";
 import type { LogEntry } from "@/types/system-logs";
 
 import {
+  deviceProblems,
+  systemCoverage,
   groupByDay,
   paginate,
   kernelWallSec,
@@ -107,5 +114,93 @@ describe("paginate", () => {
   it("reads an empty list as page 1 of 1", () => {
     const v = paginate([], 4, 10);
     expect([v.page, v.pageCount, v.from, v.to]).toEqual([0, 1, 0, 0]);
+  });
+});
+
+const sysEntry = (
+  t: number | null,
+  level: DeviceSystemLogEntry["level"],
+  proc: string | null,
+  msg: string,
+): DeviceSystemLogEntry => ({ t, ts: t === null ? "" : "stamp", facility: "user", level, proc, pid: null, msg });
+
+const sysLog = (entries: DeviceSystemLogEntry[]): DeviceSystemLogResponse => ({
+  success: true,
+  source: "system",
+  now: 2000,
+  uptime: 500,
+  total: entries.length,
+  entries,
+});
+
+describe("deviceProblems", () => {
+  it("counts errors and warnings and keeps the newest problem", () => {
+    const p = deviceProblems(
+      sysLog([
+        sysEntry(1010, "debug", "qms", "tick"),
+        sysEntry(1009, "warning", "netifd", "newest warning"),
+        sysEntry(1008, "crit", "procd", "older crit"),
+        sysEntry(1007, "err", "procd", "oldest err"),
+      ]),
+    );
+    expect(p).toMatchObject({ counted: 4, errors: 2, warnings: 1 });
+    expect(p.latest).toEqual({
+      tone: "warn",
+      sec: 1009,
+      rawTime: "stamp",
+      tag: "netifd",
+      message: "newest warning",
+    });
+  });
+
+  it("has no latest problem in a clean window", () => {
+    const p = deviceProblems(sysLog([sysEntry(1, "info", "qms", "a")]));
+    expect(p).toEqual({ counted: 1, errors: 0, warnings: 0, latest: null });
+  });
+
+  it("counts only the kernel's own lines in the kernel ring", () => {
+    const kernel: DeviceKernelLogResponse = {
+      success: true,
+      source: "kernel",
+      now: 2000,
+      uptime: 500,
+      total: 4,
+      entries: [
+        { up: 400, facility: "user", level: "warning", msg: "QCMAP:bringup v6" },
+        { up: 300, facility: "kern", level: "info", msg: "link up" },
+        { up: 46, facility: "kern", level: "err", msg: "probe failed" },
+        { up: 1, msg: "older backend line" },
+      ],
+    };
+    const p = deviceProblems(kernel);
+    expect(p).toMatchObject({ counted: 3, errors: 1, warnings: 0 });
+    expect(p.latest).toEqual({
+      tone: "error",
+      sec: 1546,
+      rawTime: "",
+      tag: null,
+      message: "probe failed",
+    });
+  });
+});
+
+describe("systemCoverage", () => {
+  it("spans the stamped lines and names the busiest process", () => {
+    const c = systemCoverage(
+      sysLog([
+        sysEntry(1010, "debug", "qms", "a"),
+        sysEntry(null, null, null, "continuation"),
+        sysEntry(1004, "debug", "qms", "b"),
+        sysEntry(1000, "notice", "procd", "c"),
+      ]),
+    );
+    expect(c).toEqual({ spanSec: 10, top: { proc: "qms", share: 50 } });
+  });
+
+  it("has no span under two stamps", () => {
+    expect(systemCoverage(sysLog([sysEntry(5, "info", null, "x")]))).toEqual({
+      spanSec: null,
+      top: null,
+    });
   });
 });

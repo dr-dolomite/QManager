@@ -27,7 +27,7 @@ pruned, and the old `/system-settings/logs` route redirects here. The backend wa
 | ----- | ----- |
 | Route | `app/monitoring/history/logs/page.tsx` (renders `LogsPage`) |
 | Page | `components/history/logs/logs-page.tsx` (header actions, tabs, filters, states, clear dialog) |
-| Summary tiles | `components/history/logs/logs-summary.tsx` (QManager tab only; copy in `system-settings.json` `logs.band.*` and `history.json` `logs.summary.*`) |
+| Summary tiles | `components/history/logs/logs-summary.tsx` (`LogsSummary` on the QManager tab, `DeviceLogsSummary` on the System tab; copy in `system-settings.json` `logs.band.*` and `history.json` `logs.summary.*`, the System tab's own in `logs.summary.device.*`) |
 | Footer | `components/history/logs/logs-pagination.tsx` (range, rows per page, page count, first/prev/next/last) |
 | Rows | `components/history/logs/logs-list.tsx` (`LogList`, `LogRowsSkeleton`) |
 | Derivations | `components/history/logs/derive.ts` (`qmanagerLines`, `deviceLines`, `groupByDay`, `paginate`, `logLinesText`, `filterByLevel`, `parseLogTimestamp`, `isNearRotation`, `visibleLogText`; tests in `derive.test.ts`) |
@@ -215,6 +215,21 @@ poll adds a line at the top, which remounts the whole list.
   lines and archived files; the disc turns warning at `ROTATION_WARN_KB` (80 % of the 256 KB
   rotation default, a client-side mirror of `QLOG_MAX_SIZE_KB` with no wire representation).
   Every state of a tile has its own glyph; the disc is the only colour.
+- **Summary tiles (System tab).** The same strip (`DeviceLogsSummary`), following the System /
+  Kernel switch and drawn from the response for the source in view (`deviceProblems`,
+  `systemCoverage` in `derive.ts`). **Severity** and **Latest problem** work like the QManager
+  tiles over the device lines read, with syslog priorities folded by `toneOfSyslog` (emerg to err
+  are errors). The time is the line's own (`t`, or kernel wall time); the date is added when it is
+  from an earlier day than the device's `now`. On the kernel log they count **only the kernel's own
+  lines** (`facility` `kern`, or no facility from an older backend): QCMAP writes user-facility
+  warnings into the ring every few seconds (341 of 500 lines on the test RM551E), and counting them
+  would keep the tile on "warnings" all the time. Their captions say "kernel lines". The third tile is
+  **Covers** on the system log: the time between the oldest and newest stamped line read, with the
+  busiest process and its share. Its disc turns warning (`speed`) under `BUSY_SPAN_SEC` (60 s),
+  which means one process is pushing older lines out of the 64 KB ring (on the RM551E, `qms` debug
+  output fills it in about 10 s). On the kernel log it is **Since boot**: `uptime`, and `total`
+  lines in the ring. Skeleton while the first response for the source loads; unread faces (dashes)
+  when that read failed.
 - **Rows.** Time (24-hour, `tabular-nums`), a filled level `Badge` with one glyph per level,
   the component or process as a `Tag`, and the raw line in mono. Kernel rows are time and
   message only. Syslog priorities fold onto the same four levels (`toneOfSyslog`); a line with no
@@ -316,7 +331,12 @@ responses).
   a proc (`[12006]:`), or neither (the whole text is `msg`). A line with no parseable stamp
   (continuation) is kept with `t: null`, `ts: ""`.
 - **Kernel entries.** `up` is the kernel stamp in seconds since boot; the caller field
-  (`[ T4474]`, `[    C0]`) is stripped from `msg`. Wall time is `now - uptime + up`.
+  (`[ T4474]`, `[    C0]`) is stripped from `msg`. Wall time is `now - uptime + up`. The ring is
+  read with `dmesg -r` (falling back to plain `dmesg`), and the `<n>` priority prefix becomes
+  `level` (`n % 8`, named like the system log's levels) and `facility` (`n / 8`: `kern`, `user`,
+  ..., `local0`-`local7`). Both are `null` on a line without the prefix. User-space writers to
+  `/dev/kmsg` (QCMAP's `<12>` lines) come through as `user`. Kernel rows still
+  draw as time and message only; the levels feed the summary tiles.
 - **Escaping.** Built char by char in awk (no `sub`/`gsub` replacement strings, whose backslash
   rules differ between awks): `\` and `"` escaped, tab becomes a space, other control
   characters are dropped.

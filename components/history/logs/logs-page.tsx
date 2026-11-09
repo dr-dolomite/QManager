@@ -52,7 +52,7 @@ import {
 } from "./derive";
 import { LogList, LogRowsSkeleton } from "./logs-list";
 import { LogsPagination } from "./logs-pagination";
-import { LogsSummary } from "./logs-summary";
+import { DeviceLogsSummary, LogsSummary, LogsSummarySkeleton } from "./logs-summary";
 import { HISTORY_CARD, HISTORY_PAGE, LOGS, PAGE_SIZES, type PageSize } from "./shapes";
 
 // =============================================================================
@@ -60,11 +60,11 @@ import { HISTORY_CARD, HISTORY_PAGE, LOGS, PAGE_SIZES, type PageSize } from "./s
 // =============================================================================
 // One card, two tabs. QManager is the app's own transcript (level-filtered on
 // the client); System is the modem's system log or its kernel ring. Only the
-// tab in view polls, so the hidden feed costs the modem nothing. The QManager
-// tab adds three summary tiles (severity, feed, log file) above the card. Rows
-// are paged (10 by default); a tab, filter or line-budget change returns to page
-// 1. The
-// header's Refresh and Copy act on the tab in view; Clear empties QManager's
+// tab in view polls, so the hidden feed costs the modem nothing. Both tabs put
+// three summary tiles above the card: QManager (severity, latest problem, log
+// file) and System (severity, latest problem, then coverage or time since boot).
+// Rows are paged (10 by default); a tab, filter or line-budget change returns to
+// page 1. The header's Refresh and Copy act on the tab in view; Clear empties QManager's
 // own log and is only offered on that tab.
 // =============================================================================
 
@@ -254,12 +254,16 @@ export function LogsPage() {
         />
       </motion.div>
 
-      {/* The summary tiles describe QManager's own log, so they show on that tab only. */}
-      {tab === "qmanager" ? (
-        <motion.div variants={staggerItem}>
+      {/* Each tab's tiles describe its own log; the System strip follows the source. */}
+      <motion.div variants={staggerItem}>
+        {tab === "qmanager" ? (
           <LogsSummary logs={qm} />
-        </motion.div>
-      ) : null}
+        ) : loading ? (
+          <LogsSummarySkeleton />
+        ) : (
+          <DeviceLogsSummary device={device} />
+        )}
+      </motion.div>
 
       <motion.div variants={staggerItem}>
         <Card className={HISTORY_CARD} aria-label={t("logs.page.title")}>

@@ -604,6 +604,33 @@
         "none": "None",
         "caption_none_one": "No errors or warnings in {{count}} line read",
         "caption_none_other": "No errors or warnings in {{count}} lines read"
+      },
+      "device": {
+        "head": "Device log health",
+        "kernel": {
+          "caption_errors_one": "{{count}} warning in {{lines}} kernel lines read",
+          "caption_errors_other": "{{count}} warnings in {{lines}} kernel lines read",
+          "caption_warnings_one": "No errors in {{count}} kernel line read",
+          "caption_warnings_other": "No errors in {{count}} kernel lines read",
+          "caption_clean_one": "No warnings in {{count}} kernel line read",
+          "caption_clean_other": "No warnings in {{count}} kernel lines read",
+          "caption_none_one": "No errors or warnings in {{count}} kernel line read",
+          "caption_none_other": "No errors or warnings in {{count}} kernel lines read"
+        },
+        "cover": {
+          "eyebrow": "Covers",
+          "caption_untimed": "Not enough timed lines",
+          "caption_lines_one": "{{count}} line read",
+          "caption_lines_other": "{{count}} lines read",
+          "caption_top_one": "{{count}} line, mostly {{proc}} ({{share}}%)",
+          "caption_top_other": "{{count}} lines, mostly {{proc}} ({{share}}%)",
+          "caption_busy": "{{proc}} is filling the log ({{share}}%)"
+        },
+        "boot": {
+          "eyebrow": "Since boot",
+          "caption_one": "{{count}} line in the kernel log",
+          "caption_other": "{{count}} lines in the kernel log"
+        }
       }
     }
   }

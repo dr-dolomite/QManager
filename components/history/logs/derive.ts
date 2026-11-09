@@ -2,6 +2,7 @@ import type {
   DeviceKernelLogEntry,
   DeviceLogLevel,
   DeviceLogResponse,
+  DeviceSystemLogResponse,
 } from "@/types/device-syslog";
 import type { LevelFilter, LogEntry, LogLevel } from "@/types/system-logs";
 
@@ -157,6 +158,106 @@ export function deviceLines(device: DeviceLogResponse): LogLineView[] {
     tag: e.proc,
     message: e.msg,
   }));
+}
+
+// -----------------------------------------------------------------------------
+// Device logs: the System tab's summary tiles
+// -----------------------------------------------------------------------------
+
+/** The newest error or warning a device window holds. */
+export interface DeviceProblem {
+  tone: "error" | "warn";
+  /** Epoch seconds, or null when the line's time could not be read. */
+  sec: number | null;
+  /** The device's own time text, shown when `sec` is null. */
+  rawTime: string;
+  tag: string | null;
+  message: string;
+}
+
+export interface DeviceProblems {
+  /** Lines the counts are taken over (kernel: the kernel's own lines only). */
+  counted: number;
+  errors: number;
+  warnings: number;
+  latest: DeviceProblem | null;
+}
+
+/**
+ * A kernel line counts as the kernel's own unless its priority says another
+ * facility wrote it. User-space daemons (QCMAP) log warnings into the ring
+ * every few seconds, and counting those would pin the tile on "warnings".
+ */
+function isKernelOwn(e: DeviceKernelLogEntry): boolean {
+  return e.facility === undefined || e.facility === null || e.facility === "kern";
+}
+
+/** Errors and warnings in the lines read, and the newest of them (entries are newest first). */
+export function deviceProblems(device: DeviceLogResponse): DeviceProblems {
+  const out: DeviceProblems = { counted: 0, errors: 0, warnings: 0, latest: null };
+  const note = (tone: LogTone | null, problem: () => Omit<DeviceProblem, "tone">) => {
+    out.counted++;
+    if (tone !== "error" && tone !== "warn") return;
+    if (tone === "error") out.errors++;
+    else out.warnings++;
+    out.latest ??= { tone, ...problem() };
+  };
+  if (device.source === "kernel") {
+    for (const e of device.entries) {
+      if (!isKernelOwn(e)) continue;
+      note(toneOfSyslog(e.level ?? null), () => ({
+        sec: kernelWallSec(e, device.now, device.uptime),
+        rawTime: "",
+        tag: null,
+        message: e.msg,
+      }));
+    }
+  } else {
+    for (const e of device.entries) {
+      note(toneOfSyslog(e.level), () => ({
+        sec: e.t,
+        rawTime: e.ts,
+        tag: e.proc,
+        message: e.msg,
+      }));
+    }
+  }
+  return out;
+}
+
+/** Below this, the system log is being pushed out faster than a person can read it. */
+export const BUSY_SPAN_SEC = 60;
+
+export interface SystemCoverage {
+  /** Seconds from the oldest to the newest stamped line read; null under two stamps. */
+  spanSec: number | null;
+  /** The process that wrote the most lines read, and its share in whole percent. */
+  top: { proc: string; share: number } | null;
+}
+
+/** How much time the system log's lines read cover, and who wrote most of them. */
+export function systemCoverage(device: DeviceSystemLogResponse): SystemCoverage {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let stamped = 0;
+  const counts = new Map<string, number>();
+  for (const e of device.entries) {
+    if (e.t !== null) {
+      stamped++;
+      if (e.t < min) min = e.t;
+      if (e.t > max) max = e.t;
+    }
+    if (e.proc) counts.set(e.proc, (counts.get(e.proc) ?? 0) + 1);
+  }
+  let top: SystemCoverage["top"] = null;
+  let best = 0;
+  for (const [proc, n] of counts) {
+    if (n > best) {
+      best = n;
+      top = { proc, share: Math.round((n / device.entries.length) * 100) };
+    }
+  }
+  return { spanSec: stamped >= 2 ? max - min : null, top };
 }
 
 export interface LogPage {

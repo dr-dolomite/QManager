@@ -604,6 +604,33 @@
         "none": "Nessuno",
         "caption_none_one": "Nessun errore o avviso nella {{count}} riga letta",
         "caption_none_other": "Nessun errore o avviso nelle {{count}} righe lette"
+      },
+      "device": {
+        "head": "Stato dei log del dispositivo",
+        "kernel": {
+          "caption_errors_one": "{{count}} avviso in {{lines}} righe del kernel lette",
+          "caption_errors_other": "{{count}} avvisi in {{lines}} righe del kernel lette",
+          "caption_warnings_one": "Nessun errore nella {{count}} riga del kernel letta",
+          "caption_warnings_other": "Nessun errore in {{count}} righe del kernel lette",
+          "caption_clean_one": "Nessun avviso nella {{count}} riga del kernel letta",
+          "caption_clean_other": "Nessun avviso in {{count}} righe del kernel lette",
+          "caption_none_one": "Nessun errore o avviso nella {{count}} riga del kernel letta",
+          "caption_none_other": "Nessun errore o avviso nelle {{count}} righe del kernel lette"
+        },
+        "cover": {
+          "eyebrow": "Copre",
+          "caption_untimed": "Troppe poche righe con orario",
+          "caption_lines_one": "{{count}} riga letta",
+          "caption_lines_other": "{{count}} righe lette",
+          "caption_top_one": "{{count}} riga, quasi tutte di {{proc}} ({{share}}%)",
+          "caption_top_other": "{{count}} righe, quasi tutte di {{proc}} ({{share}}%)",
+          "caption_busy": "{{proc}} sta riempiendo il log ({{share}}%)"
+        },
+        "boot": {
+          "eyebrow": "Dall'avvio",
+          "caption_one": "{{count}} riga nel log del kernel",
+          "caption_other": "{{count}} righe nel log del kernel"
+        }
       }
     }
   }
