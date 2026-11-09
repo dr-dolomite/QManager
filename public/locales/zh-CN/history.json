@@ -668,7 +668,7 @@
       "hint": "QManager 会在重启后保留日志，因此可以查看上次重启前发生了什么。"
     },
     "debug": {
-      "start": "调试日志",
+      "start": "调试日志（{{minutes}} 分钟）",
       "stop": "停止调试日志",
       "start_aria": "开启调试日志 {{minutes}} 分钟",
       "stop_aria": "停止调试日志，剩余 {{left}}",

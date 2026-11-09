@@ -685,7 +685,7 @@
       "hint": "QManager keeps its log across restarts, so you can read what happened before the last one."
     },
     "debug": {
-      "start": "Debug logging",
+      "start": "Debug logging ({{minutes}} min)",
       "stop": "Stop debug logging",
       "start_aria": "Turn on debug logging for {{minutes}} minutes",
       "stop_aria": "Stop debug logging, {{left}} left",

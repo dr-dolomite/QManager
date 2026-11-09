@@ -668,7 +668,7 @@
       "hint": "QManager 會在重新啟動後保留日誌，因此可以查看上次重新啟動前發生了什麼。"
     },
     "debug": {
-      "start": "除錯日誌",
+      "start": "除錯日誌（{{minutes}} 分鐘）",
       "stop": "停止除錯日誌",
       "start_aria": "開啟除錯日誌 {{minutes}} 分鐘",
       "stop_aria": "停止除錯日誌，剩餘 {{left}}",

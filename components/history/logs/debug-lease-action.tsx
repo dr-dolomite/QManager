@@ -76,7 +76,7 @@ export function DebugLeaseAction() {
         aria-hidden="true"
         className={cn(debug.isBusy && "motion-safe:animate-spin")}
       />
-      {debug.active ? t("logs.debug.stop") : t("logs.debug.start")}
+      {debug.active ? t("logs.debug.stop") : t("logs.debug.start", { minutes: DEBUG_LEASE_MIN })}
       {debug.active ? (
         <span className="font-medium tabular-nums">
           {left}

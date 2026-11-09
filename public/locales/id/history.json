@@ -668,7 +668,7 @@
       "hint": "QManager menyimpan log-nya setelah restart, jadi Anda bisa membaca apa yang terjadi sebelum restart terakhir."
     },
     "debug": {
-      "start": "Log debug",
+      "start": "Log debug ({{minutes}} menit)",
       "stop": "Hentikan log debug",
       "start_aria": "Aktifkan log debug selama {{minutes}} menit",
       "stop_aria": "Hentikan log debug, tersisa {{left}}",

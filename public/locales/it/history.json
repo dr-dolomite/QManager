@@ -685,7 +685,7 @@
       "hint": "QManager conserva il registro dopo un riavvio, così puoi leggere cosa è successo prima dell'ultimo."
     },
     "debug": {
-      "start": "Log di debug",
+      "start": "Log di debug ({{minutes}} min)",
       "stop": "Interrompi log di debug",
       "start_aria": "Attiva il log di debug per {{minutes}} minuti",
       "stop_aria": "Interrompi il log di debug, {{left}} rimanenti",
