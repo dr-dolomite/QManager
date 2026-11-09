@@ -87,6 +87,8 @@ esac
 emit() {
     awk -v mode="$SOURCE" -v max="$LINES" -v now="$NOW" -v up_s="$UPTIME" '
     function esc(s,   out, n, k, c) {
+        # Fast path: most lines hold nothing to escape.
+        if (index(s, "\\") == 0 && index(s, "\"") == 0 && s !~ /[[:cntrl:]]/) return s
         out = ""
         n = length(s)
         for (k = 1; k <= n; k++) {
