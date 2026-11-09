@@ -17,6 +17,11 @@
 #   (kernel facility/level from dmesg -r, null when a line has no priority
 #   prefix; user-space writers such as QCMAP log into the ring as "user")
 #
+# With kmsg=1 the kernel response also carries boot, this_boot and boots[]
+# (LogBoot shape) from logd; a previous boot's response maps the kept kernel
+# records into the same entry shape (oldest-first logq answer reversed), with
+# `uptime` chosen so now - uptime + up lands on each record's own wall time.
+#
 # Endpoint: GET /cgi-bin/quecmanager/system/syslog.sh
 # Install location: /www/cgi-bin/quecmanager/system/syslog.sh
 # =============================================================================
@@ -73,6 +78,27 @@ if [ "$LINES" -lt 50 ]; then
 elif [ "$LINES" -gt 500 ]; then
     LINES=500
 fi
+
+qs_get boot
+BOOT="${QS_VAL:-this}"
+case "$BOOT" in
+    this|prev) ;;
+    ''|*[!0-9]*) cgi_error "invalid_param" "boot must be this, prev or a number"; exit 0 ;;
+    ??????????*) cgi_error "invalid_param" "boot must be this, prev or a number"; exit 0 ;;
+esac
+
+QLOG_BIN="${QLOG_BIN:-/usr/bin/qlog}"
+LOGD_PROTO="${LOGD_PROTO:-/var/run/qmanager_logd.proto}"
+
+# kmsg_on -> 0 when logd captures kernel records (capability line kmsg=1).
+kmsg_on() {
+    local _l
+    [ -x "$QLOG_BIN" ] && [ -f "$LOGD_PROTO" ] || return 1
+    while IFS= read -r _l; do
+        [ "$_l" = "kmsg=1" ] && return 0
+    done < "$LOGD_PROTO" 2>/dev/null
+    return 1
+}
 
 NOW=$(date +%s)
 UPTIME=0
@@ -206,9 +232,42 @@ emit() {
     }'
 }
 
+if [ "$SOURCE" = "kernel" ] && [ "$BOOT" != "this" ] && kmsg_on; then
+    # A boot other than the running one (or the running one by number) comes
+    # from the kept kernel records, never the live ring.
+    ANS=$("$QLOG_BIN" logq source=kernel "boot=$BOOT" "limit=$LINES" 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$ANS" ]; then
+        cgi_error "unavailable" "The kept kernel log could not be read"
+        exit 0
+    fi
+    printf '%s
+' "$ANS" | jq -c --argjson now "$NOW" --argjson up "$UPTIME" '
+        (.entries // []) as $e
+        | ([$e[] | select(.t != null) | (.t - .up)] | first) as $base
+        | {success: true, source: "kernel", now: $now,
+           uptime: (if $base == null then $up else ($now - $base) end),
+           total: (.total // ($e | length)),
+           boot: .boot, this_boot: .this_boot, boots: (.boots // []),
+           entries: ($e | reverse | map({up: .up, facility: .facility, level: .priority,
+                                         msg: .message, t: .t, tag: .tag}))}' 2>/dev/null || cgi_error "unavailable" "The kept kernel log could not be read"
+    exit 0
+fi
+
 if [ "$SOURCE" = "kernel" ]; then
     # -r adds the priority prefix; a dmesg without -r falls back to plain lines.
-    { dmesg -r 2>/dev/null || dmesg 2>/dev/null; } | emit
+    OUT=$({ dmesg -r 2>/dev/null || dmesg 2>/dev/null; } | emit)
+    # Boot selector for the Logs tab: one cheap logd call when kmsg=1.
+    FRAG=""
+    if kmsg_on; then
+        FRAG=$("$QLOG_BIN" logq source=kernel limit=1 2>/dev/null | jq -r '"\"boot\":\(.boot),\"this_boot\":\(.this_boot),\"boots\":\(.boots | tojson)"' 2>/dev/null)
+    fi
+    if [ -n "$FRAG" ] && [ -n "$OUT" ]; then
+        printf '%s,%s}
+' "${OUT%\}}" "$FRAG"
+    else
+        printf '%s
+' "$OUT"
+    fi
 else
     logread 2>/dev/null | emit
 fi
