@@ -290,6 +290,10 @@ _sa_log_event() {
         '{timestamp: $ts, trigger: $trigger, status: $status, recipient: $recipient}' \
         >> "$_SA_LOG_FILE"
 
+    if [ "$status" = "failed" ] && command -v append_event >/dev/null 2>&1; then
+        append_event "alert_send_failed" "SMS alert could not be sent (${trigger})" "warning" "" "channel=sms;trigger=${trigger}"
+    fi
+
     count=$(wc -l < "$_SA_LOG_FILE" 2>/dev/null || echo 0)
     if [ "$count" -gt "$_SA_MAX_LOG" ]; then
         # The poller and a CGI test send can both trim: a per-process temp, then copy

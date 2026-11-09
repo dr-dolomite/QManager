@@ -249,6 +249,10 @@ _ea_log_event() {
         '{timestamp: $ts, trigger: $trigger, status: $status, recipient: $recipient}' \
         >> "$_EA_LOG_FILE"
 
+    if [ "$status" = "failed" ] && command -v append_event >/dev/null 2>&1; then
+        append_event "alert_send_failed" "Email alert could not be sent (${trigger})" "warning" "" "channel=email;trigger=${trigger}"
+    fi
+
     # Trim to max entries
     local count
     count=$(wc -l < "$_EA_LOG_FILE" 2>/dev/null || echo 0)
