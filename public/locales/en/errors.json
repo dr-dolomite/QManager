@@ -187,6 +187,8 @@
   "bundle_not_found": "This run's support bundle is no longer on the device",
   "clear_failed": "Couldn't remove the diagnostic results",
   "invalid_range": "Unknown time range",
+  "invalid_series": "Unknown history series",
+  "invalid_param": "Invalid request parameter",
   "disabled": "The monitor is turned off",
   "flag_failed": "Couldn't start the check",
   "invalid_field": "A setting has an invalid value",

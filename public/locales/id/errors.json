@@ -187,6 +187,8 @@
   "bundle_not_found": "Paket dukungan dari proses ini sudah tidak ada di perangkat",
   "clear_failed": "Tidak dapat menghapus hasil diagnostik",
   "invalid_range": "Rentang waktu tidak dikenal",
+  "invalid_series": "Seri riwayat tidak dikenal",
+  "invalid_param": "Parameter permintaan tidak valid",
   "disabled": "Pemantauan dimatikan",
   "flag_failed": "Tidak dapat memulai pemeriksaan",
   "invalid_field": "Ada pengaturan dengan nilai tidak valid",

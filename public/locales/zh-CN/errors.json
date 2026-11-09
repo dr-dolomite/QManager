@@ -187,6 +187,8 @@
   "bundle_not_found": "本次运行的支持包已不在设备上",
   "clear_failed": "无法删除诊断结果",
   "invalid_range": "未知的时间范围",
+  "invalid_series": "未知的历史数据序列",
+  "invalid_param": "无效的请求参数",
   "disabled": "监控已关闭",
   "flag_failed": "无法开始检查",
   "invalid_field": "某项设置的值无效",
