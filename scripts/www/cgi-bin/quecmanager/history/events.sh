@@ -5,8 +5,11 @@
 # =============================================================================
 # GET ?series=<id>&range=24h|7d|30d[&types=a,b][&limit=1..100][&offset=N]
 #   → {success, series, range, total, counts:{type:N}, events:[{timestamp,
-#      type, severity, radio, message}]} newest first.
-# counts ignore the type filter; total honours it. Read-only. Contract:
+#      type, severity, radio, message[, end]}]} newest first.
+# counts ignore the type filter; total honours it. An onset type named in
+# HIST_<id>_PAIRS="onset:recovery ..." carries end = t of the next matching
+# recovery (null while ongoing), paired over the whole retention window
+# before the window, type filter and paging. Read-only. Contract:
 # docs/features/history.md §6.
 #
 # Endpoint: GET /cgi-bin/quecmanager/history/events.sh
@@ -41,7 +44,7 @@ if ! hr_range "$range"; then
     cgi_error "invalid_range" "range must be 24h, 7d or 30d"
     exit 0
 fi
-eval "evtypes=\$HIST_${series}_EVENTS"
+eval "evtypes=\$HIST_${series}_EVENTS; pairs=\${HIST_${series}_PAIRS:-}"
 
 hr_param types
 types=""
@@ -79,37 +82,64 @@ fi
 now="$HR_NOW"
 last=$((now / HR_B * HR_B))
 first=$((last - (HR_N - 1) * HR_B))
+# Pairing looks at every retained row, not just the range window.
+scan=$first
+if [ -n "$pairs" ]; then
+    scan=$(( (now / 86400 - ${HIST_RETAIN_DAYS:-31}) * 86400 ))
+    [ "$scan" -lt "$first" ] || scan=$first
+fi
 
-body=$(hr_rows "$series" e "$first" | awk -v first="$first" -v now="$now" \
-    -v evtypes="$evtypes" -v types="$types" -v limit="$limit" -v offset="$offset" '
+body=$(hr_rows "$series" e "$scan" | awk -v first="$first" -v now="$now" \
+    -v evtypes="$evtypes" -v types="$types" -v pairs="$pairs" \
+    -v limit="$limit" -v offset="$offset" '
 BEGIN {
     ne = split(evtypes, ET, " ")
     nt = split(types, T, " "); for (i = 1; i <= nt; i++) WANT[T[i]] = 1
+    np = split(pairs, PR, " ")
+    for (i = 1; i <= np; i++) {
+        if (split(PR[i], AB, ":") != 2) continue
+        ON[AB[1]] = AB[2]
+    }
     n = 0
 }
 {
     t = $0; sub(/^\{"k":"e","t":/, "", t); sub(/,.*/, "", t); t += 0
-    if (t < first || t > now + 60) next
+    if (t > now + 60) next
     ty = $0; sub(/.*"type":"/, "", ty); sub(/".*/, "", ty)
-    C[ty]++
-    if (nt && !(ty in WANT)) next
     row = $0; sub(/^\{"k":"e","t":/, "{\"timestamp\":", row)
-    R[++n] = row; RT[n] = t
+    R[++n] = row; RT[n] = t; RY[n] = ty
 }
 END {
-    # Newest first: rows arrive in record order; a stable insertion pass on
-    # t keeps that order for ties (a backward clock step can interleave).
+    # Ascending on t: rows arrive in record order; a stable insertion pass
+    # keeps that order for ties (a backward clock step can interleave).
     for (i = 2; i <= n; i++) {
-        r = R[i]; rt = RT[i]; j = i - 1
-        while (j >= 1 && RT[j] > rt) { R[j + 1] = R[j]; RT[j + 1] = RT[j]; j-- }
-        R[j + 1] = r; RT[j + 1] = rt
+        r = R[i]; rt = RT[i]; ry = RY[i]; j = i - 1
+        while (j >= 1 && RT[j] > rt) {
+            R[j + 1] = R[j]; RT[j + 1] = RT[j]; RY[j + 1] = RY[j]; j--
+        }
+        R[j + 1] = r; RT[j + 1] = rt; RY[j + 1] = ry
     }
-    printf "\"total\":%d,\"counts\":{", n
+    # Newest to oldest: NEXT[rec] is the t of the next recovery after a row.
+    m = 0
+    for (k = n; k >= 1; k--) {
+        ty = RY[k]
+        row = R[k]
+        if (ty in ON) {
+            e = (ON[ty] in NEXT) ? NEXT[ON[ty]] : "null"
+            sub(/\}$/, ",\"end\":" e "}", row)
+        }
+        NEXT[ty] = RT[k]
+        if (RT[k] < first) continue
+        C[ty]++
+        if (nt && !(ty in WANT)) continue
+        O[++m] = row
+    }
+    printf "\"total\":%d,\"counts\":{", m
     sep = ""
     for (i = 1; i <= ne; i++) { printf "%s\"%s\":%d", sep, ET[i], C[ET[i]] + 0; sep = "," }
     printf "},\"events\":["
     sep = ""
-    for (k = n - offset; k >= 1 && k > n - offset - limit; k--) { printf "%s%s", sep, R[k]; sep = "," }
+    for (k = offset + 1; k <= m && k <= offset + limit; k++) { printf "%s%s", sep, O[k]; sep = "," }
     printf "]"
 }')
 

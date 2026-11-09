@@ -75,6 +75,67 @@
         "description": "调制解调器未返回任何历史记录。"
       },
       "retry": "重试"
+    },
+    "signal": {
+      "rsrp": {
+        "title": "RSRP",
+        "description": "参考信号接收功率，dBm"
+      },
+      "sinr": {
+        "title": "SINR",
+        "description": "信号与干扰加噪声比，dB"
+      },
+      "rsrq": {
+        "title": "RSRQ",
+        "description": "参考信号接收质量，dB"
+      },
+      "rssi": {
+        "title": "RSSI",
+        "description": "总接收功率，dBm"
+      },
+      "chart_aria": "{{metric}} 历史图表",
+      "no_service": "无服务",
+      "no_data": "无数据",
+      "collecting_since": "自 {{time}} 起采集",
+      "collecting": "正在采集数据"
+    },
+    "events": {
+      "title": "无线事件",
+      "description": "小区切换、频段与载波变化，以及信号丢失。",
+      "col_event": "事件",
+      "col_radio": "制式",
+      "col_time": "时间",
+      "filter_all": "全部事件",
+      "filter_some": "{{count}} / {{total}} 种类型",
+      "filter_aria": "按事件类型筛选",
+      "show_all": "显示全部",
+      "show_all_events": "显示全部事件",
+      "rows_per_page": "每页行数",
+      "page_of": "第 {{page}} 页，共 {{pages}} 页",
+      "first_page": "第一页",
+      "prev_page": "上一页",
+      "next_page": "下一页",
+      "last_page": "最后一页",
+      "count_other": "{{count}} 个事件",
+      "shown_other": "显示 {{count}} 个事件",
+      "empty_title": "暂无无线事件",
+      "empty_description": "小区切换、频段变化和中断将显示在这里。",
+      "no_match_title": "没有匹配的事件",
+      "no_match_description": "此时间范围内没有所选类型的事件。",
+      "error_title": "历史记录不可用",
+      "error_description": "调制解调器未返回任何事件。",
+      "retry": "重试",
+      "ongoing": "持续中",
+      "restored_after": "{{duration}}后恢复",
+      "types": {
+        "signal_lost": "信号丢失",
+        "signal_restored": "信号恢复",
+        "nr_anchor": "5G 锚点",
+        "pci_change": "小区切换",
+        "scc_pci_change": "辅载波切换",
+        "band_change": "频段变化",
+        "ca_change": "载波聚合"
+      }
     }
   },
   "connection": {

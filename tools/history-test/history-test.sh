@@ -2,7 +2,8 @@
 # history-test.sh — dev test for the history collector + reader.
 # Run on the device (BusyBox): sh history-test.sh <dir-with-libs-and-cgis>
 #   <dir> holds history.sh, history_series_cellular.sh, history_read.sh,
-#   series.sh, events.sh (flat). Uses a scratch dir under /tmp; touches no
+#   series.sh, events.sh (flat), plus optionally events_lib.sh (the lib
+#   events.sh renamed, for the spool writer cases). Uses a scratch dir under /tmp; touches no
 #   live state. CGIs run with _SKIP_AUTH=1 and HIST_* overrides.
 
 SRC="${1:?usage: history-test.sh <dir>}"
@@ -146,6 +147,56 @@ E2=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h&typ
 echo "$E2" | jq -e '.total==1 and .events[0].timestamp > 0 and .events[0].radio=="lte"' >/dev/null 2>&1 && ok || bad "events filter: $E2"
 E3=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h&types=internet_lost" sh "$SRC/events.sh" | sed -n '/^{/,$p')
 echo "$E3" | jq -e '.error=="invalid_param"' >/dev/null 2>&1 && ok || bad "events bad type"
+E4=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h" sh "$SRC/events.sh" | sed -n '/^{/,$p')
+echo "$E4" | jq -e '[.events[]|has("end")]|any|not' >/dev/null 2>&1 && ok || bad "unpaired types carry no end: $E4"
+
+# 12. External spool (watchcat/CGI writers) + onset/recovery pairing.
+load
+hist_init
+cycles 5
+EM1=$((MONO - 30)); EM2=$((MONO - 20))
+printf '%s|signal_lost|warning|Signal lost (ext)\n%s|signal_restored|info|Signal restored | ext\nbad|x|y|z\n' \
+    "$EM1" "$EM2" > "$T/run/ext.spool"
+cycles 5
+check '[ -f "$T/run/ext.spool.work" ] && [ ! -f "$T/run/ext.spool" ]' "spool renamed on a sample tick"
+cycles 5
+check '[ ! -f "$T/run/ext.spool.work" ]' "spool drained"
+check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "^{\"k\":\"e\",\"t\":$((EM1 + WOFF)),\"type\":\"signal_lost\""' "spooled event at its own mono"
+check 'cat "$T/run/cellular.queue" "$T/store/cellular/"*.jsonl 2>/dev/null | grep -q "\"message\":\"Signal restored | ext\""' "message keeps a pipe"
+if [ -f "$SRC/events_lib.sh" ]; then
+    (
+        unset -f hist_event
+        EVENTS_FILE="$T/ev.ndjson"; MAX_EVENTS=50
+        qlog_info() { :; }
+        _EVENTS_LOADED=""
+        . "$SRC/events_lib.sh"
+        append_event watchcat_recovery "Recovery step 1" warning
+    )
+    check 'grep -qx "$MONO|watchcat_recovery|warning|Recovery step 1" "$T/run/ext.spool"' "events.sh writes the spool"
+    rm -f "$T/run/ext.spool"
+    rm -rf "$T/run_absent"
+    (
+        unset -f hist_event
+        HIST_RUN="$T/run_absent"; EVENTS_FILE="$T/ev.ndjson"; MAX_EVENTS=50
+        qlog_info() { :; }
+        _EVENTS_LOADED=""
+        . "$SRC/events_lib.sh"
+        append_event watchcat_recovery "x" warning
+    )
+    check '[ ! -d "$T/run_absent" ]' "writer never creates the run dir"
+else
+    echo "skip: events_lib.sh not in $SRC (lib events.sh renamed)"
+fi
+cycles 10
+hist_event signal_lost "Signal lost (ongoing)" warning
+cycles 5
+hist_flush
+printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
+E5=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h&types=signal_lost" sh "$SRC/events.sh" | sed -n '/^{/,$p')
+echo "$E5" | jq -e '.total==2 and .events[0].end==null and .events[1].end=='"$((EM2 + WOFF))"' and .counts.signal_restored==1' >/dev/null 2>&1 && ok || bad "pairing: $E5"
+E6=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h&types=signal_lost&limit=1&offset=1" sh "$SRC/events.sh" | sed -n '/^{/,$p')
+echo "$E6" | jq -e '(.events|length)==1 and .events[0].end=='"$((EM2 + WOFF))"' and .events[0].timestamp=='"$((EM1 + WOFF))"'' >/dev/null 2>&1 && ok || bad "pairing survives paging: $E6"
+NOWW=$((MONO + WOFF))
 
 # 11. Torn last line is ignored by the reader.
 printf '{"k":"b","t":%s,"st":{"nr":5' "$((NOWW / 1800 * 1800))" >> "$T/store/cellular/d$((NOWW / 86400)).jsonl"

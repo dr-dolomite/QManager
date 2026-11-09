@@ -187,6 +187,8 @@
   "bundle_not_found": "Il pacchetto di supporto di questa esecuzione non è più sul dispositivo",
   "clear_failed": "Impossibile rimuovere i risultati della diagnostica",
   "invalid_range": "Intervallo di tempo sconosciuto",
+  "invalid_series": "Serie storica sconosciuta",
+  "invalid_param": "Parametro della richiesta non valido",
   "disabled": "Il monitoraggio è disattivato",
   "flag_failed": "Impossibile avviare il controllo",
   "invalid_field": "Un'impostazione ha un valore non valido",

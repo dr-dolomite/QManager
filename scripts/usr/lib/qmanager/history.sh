@@ -632,11 +632,39 @@ hist_tick() {
     if [ $((_hist_mc % HIST_MIRROR_EVERY)) -eq 0 ]; then
         _hist_mirror
     fi
+    _hist_spool
     [ "$_hist_closed" = "1" ] && hist_flush_queues
     return 0
 }
 
-# hist_event TYPE MESSAGE SEVERITY — called by events.sh append_event.
+# _hist_spool: events from processes without history.sh (watchcat, CGIs).
+# events.sh appends "mono|type|severity|message" to ext.spool. Rename, then
+# read on the next sample tick, so an append still in flight lands in the
+# file before it is read; t comes from the stored mono, not the read time.
+_hist_spool() {
+    local _w
+    local _sm
+    local _sy
+    local _ss
+    local _sx
+    _w="$HIST_RUN/ext.spool.work"
+    if [ -f "$_w" ]; then
+        while IFS='|' read -r _sm _sy _ss _sx; do
+            case "$_sm" in ''|*[!0-9]*) continue ;; esac
+            case "$_sy" in ''|*[!a-z0-9_]*) continue ;; esac
+            case "$_ss" in info|warning|error|critical) ;; *) _ss=info ;; esac
+            hist_event "$_sy" "$_sx" "$_ss" "$_sm"
+        done < "$_w"
+        rm -f "$_w"
+    fi
+    if [ -s "$HIST_RUN/ext.spool" ]; then
+        mv -f "$HIST_RUN/ext.spool" "$_w" 2>/dev/null
+    fi
+    return 0
+}
+
+# hist_event TYPE MESSAGE SEVERITY [MONO] — called by events.sh append_event
+# (this cycle's mono) and by _hist_spool (the mono the writer recorded).
 hist_event() {
     local _s
     local _evs
@@ -649,7 +677,7 @@ hist_event() {
     local _day
     local _n
     [ "$_hist_ready" = "1" ] || return 0
-    _m="${_MONO_TOP:-}"
+    _m="${4:-${_MONO_TOP:-}}"
     case "$_m" in ''|*[!0-9]*) _m=""; { read -r _m _r < /proc/uptime; } 2>/dev/null; _m="${_m%%.*}" ;; esac
     case "$_m" in ''|*[!0-9]*) return 0 ;; esac
     for _s in $HIST_SERIES; do
