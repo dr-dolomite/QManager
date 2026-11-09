@@ -1,6 +1,6 @@
 # History (generic time-series store) and Cellular History
 
-> **Status: PROPOSED, awaiting approval (2026-11-09).** Nothing below is built yet. Once approved, this file is the canon for every History page.
+> **Status: APPROVED 2026-11-09.** This file is the canon for every History page.
 
 QManager keeps a small, flash-friendly history of things the poller already knows, rolled up into fixed 30-minute buckets and kept for 31 days. A History page asks one generic CGI for a series and a range and gets back merged buckets plus the series' events. **Cellular History** (`/history/cellular`) is the first series. Data usage, latency and connection quality, and thermals are expected to follow; each is a new *provider* file, not a change to the core.
 
@@ -10,7 +10,7 @@ QManager keeps a small, flash-friendly history of things the poller already know
 |---|---|
 | Page | `/history/cellular` (sidebar group **History**) |
 | Core lib (sourced by the poller) | `scripts/usr/lib/qmanager/history.sh` (`hist_init`, `hist_tick`, `hist_event`, `hist_flush`) |
-| Providers | `scripts/usr/lib/qmanager/history.d/<series>.sh` (first: `cellular.sh`) |
+| Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat) |
 | Read lib (sourced by CGIs) | `scripts/usr/lib/qmanager/history_read.sh` (awk merge, range math) |
 | CGIs | `GET history/series.sh?series=&range=`, `GET history/events.sh?series=&range=&types=&limit=&offset=` |
 | Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only |
@@ -79,7 +79,7 @@ Event row (`k:"e"`), the same shape as `NetworkEvent` in `types/modem-status.ts`
 
 ### Registering a new series (no core change)
 
-Add `scripts/usr/lib/qmanager/history.d/<id>.sh`:
+Add `scripts/usr/lib/qmanager/history_series_<id>.sh`:
 
 ```sh
 HIST_SERIES="$HIST_SERIES thermal"          # register the id
@@ -93,7 +93,7 @@ hist_thermal_sample() {                      # builtins only, no forks
 }
 ```
 
-The core dot-sources every file in `history.d/` (each guarded with `[ -f ]`, BusyBox aborts on a missing dot-source), calls `hist_<id>_sample` each tick, and the CGIs accept any id whose provider file exists. The page, its i18n and the series' presentation (state colours, metric domains) are the feature's own.
+The core dot-sources every `history_series_*.sh` in the lib dir (each guarded with `[ -f ]`, BusyBox aborts on a missing dot-source), calls `hist_<id>_sample` each tick, and the CGIs accept any id whose provider file exists. The page, its i18n and the series' presentation (state colours, metric domains) are the feature's own.
 
 ## 2. Collection: a poller hook, not a daemon
 
@@ -212,14 +212,14 @@ Newest first. `types` (optional) is a comma list checked against the series' `ev
 
 - `types/history.ts`: `HistoryRange`, `HistoryBucket<S, M>`, `HistorySeriesResponse<S, M>`, `HistoryEventsResponse`, and `CellularState` / `CellularMetric` aliases. Exported constants `HISTORY_RANGES` (bucket counts and sizes) mirror the table above.
 - `hooks/use-history.ts`: `useHistorySeries<S, M>(series, range)` and `useHistoryEvents(series, range, { types, page, pageSize })`. Both return `{ data, isLoading, error, refresh }`, refetch every 30 s through `startVisibleInterval` (`lib/visible-interval.ts`, so a hidden tab stops polling and refetches on show), refetch at once on a range or page change, and keep the previous data while a new range loads (no skeleton flash on a range switch).
-- A new History page = a provider file + its page under `app/history/<id>/` + `components/history/<id>/**`. Shared, series-agnostic pieces live in `components/history/` (range control, state strip, bucket-axis ticks, metric chart, shared cursor context, events table shell).
+- A new History page = a `history_series_<id>.sh` provider + its page under `app/history/<id>/` + `components/history/<id>/**`. Shared, series-agnostic pieces live in `components/history/` (range control, state strip, bucket-axis ticks, metric chart, shared cursor context, events table shell).
 - The page shows `clock_trusted:false` and `since:null` as the empty "Collecting" state.
 
 ## 8. Lifecycle lockstep
 
 | Step | `install.sh` (fresh + Software Update) | `uninstall.sh` | ipk |
 |---|---|---|---|
-| Files | `history.sh`, `history_read.sh`, `history.d/*.sh` go with the lib tree; `history/*.sh` with the CGI tree (`install_tree`) | removed with the trees | listed in the package manifest by the existing tree globs (`scripts-dev/ipk/`) |
+| Files | `history.sh`, `history_read.sh`, `history_series_*.sh` go with the flat lib copy; `history/*.sh` with the CGI tree (`install_tree`) | removed with the trees | listed in the package manifest by the existing tree globs (`scripts-dev/ipk/`) |
 | Store | `install_backend` makes `/usrdata/qmanager/history` (`mkdir -p`, `chown root:root`, `chmod 0755`; no `install` applet) | `--purge` removes `/usrdata/qmanager/history`; `--keep-config` keeps it | `QM_INSTALL_ENTRY=ipk_preinst` path runs the same `install_backend` step |
 | Runtime | none (the poller restart creates `/var/run/qmanager/history` via `qm_run_dir`) | `remove_runtime_state` already removes `/var/run/qmanager` | same |
 | Daemon | none new; the existing poller restart picks the hook up | n/a | n/a |
