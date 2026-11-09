@@ -10,7 +10,7 @@ HIST_SERIES="$HIST_SERIES system"
 HIST_system_STATES="normal throttled"
 HIST_system_FAULT=""
 HIST_system_METRICS="cpu mem_pct mem_mb temp_c st_sys_used st_sys_size st_app_used st_app_size st_tmp_used st_tmp_size"
-HIST_system_EVENTS="device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered"
+HIST_system_EVENTS="device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered software_updated clock_stepped storage_low broker_restarted oom_kill imei_changed"
 HIST_system_EVENTS_KEEP="device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered"
 HIST_system_PAIRS="modem_crash:modem_recovered thermal_throttled:thermal_recovered"
 # Crash state survives a same-boot poller restart (system.ssr), so its

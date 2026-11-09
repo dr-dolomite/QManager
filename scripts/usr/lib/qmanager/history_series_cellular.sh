@@ -9,7 +9,7 @@ HIST_SERIES="$HIST_SERIES cellular"
 HIST_cellular_STATES="nr lte down off"
 HIST_cellular_FAULT="down"
 HIST_cellular_METRICS="lte_rsrp lte_rsrq lte_sinr lte_rssi nr_rsrp nr_rsrq nr_sinr"
-HIST_cellular_EVENTS="signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change"
+HIST_cellular_EVENTS="signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change band_lock_changed tower_lock_changed band_failover tower_failover sim_switched registration_changed apn_changed"
 HIST_cellular_EVENTS_KEEP="signal_lost signal_restored"
 HIST_cellular_PAIRS="signal_lost:signal_restored"
 # Max age (s) of a QMI read that may mark the series down (SSR window).

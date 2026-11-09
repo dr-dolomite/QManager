@@ -15,9 +15,11 @@ HIST_SERIES="$HIST_SERIES connection"
 HIST_connection_STATES="up down off"
 HIST_connection_FAULT="down"
 HIST_connection_METRICS="lat_ms jit_ms loss_pct dns_ms"
-HIST_connection_EVENTS="internet_lost internet_restored high_latency latency_recovered high_packet_loss packet_loss_recovered watchcat_recovery sim_failover"
-HIST_connection_EVENTS_KEEP="internet_lost internet_restored sim_failover"
-HIST_connection_PAIRS="internet_lost:internet_restored high_latency:latency_recovered high_packet_loss:packet_loss_recovered"
+HIST_connection_EVENTS="internet_lost internet_restored high_latency latency_recovered high_packet_loss packet_loss_recovered watchcat_recovery sim_failover data_call_dropped data_call_restored dns_failing dns_recovered site_down site_up wan_address_changed broker_restarted"
+HIST_connection_EVENTS_KEEP="internet_lost internet_restored sim_failover data_call_dropped data_call_restored"
+# site_down / site_up are not paired: the events CGI pairs by type only, so a
+# site_up of one site would close another site's site_down.
+HIST_connection_PAIRS="internet_lost:internet_restored high_latency:latency_recovered high_packet_loss:packet_loss_recovered data_call_dropped:data_call_restored dns_failing:dns_recovered"
 
 # _hcn_v VALUE HI -> _HI = VALUE rounded to a whole number within 0..HI,
 # else empty (no reading). Accepts "62", "62.4", "62.50".
