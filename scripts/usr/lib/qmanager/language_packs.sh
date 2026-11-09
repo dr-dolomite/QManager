@@ -28,9 +28,11 @@ LP_PID_FILE="/var/run/qmanager_language_install.pid"
 LP_CANCEL_FILE="/tmp/qmanager_language_install.cancel"
 LP_INPUT_FILE="/tmp/qmanager_language_install_input.json"
 
-# Namespace files a valid pack must contain. Match ALL_NAMESPACES in
-# lib/i18n/resources.ts so i18next-http-backend finds every namespace.
-LP_REQUIRED_NS="common sidebar dashboard onboarding system-settings local-network monitoring events cellular"
+# Namespace files a valid pack must contain. Every ALL_NAMESPACES entry in
+# lib/i18n/resources.ts except errors and at-commands, which stay optional
+# (a pack without them falls back to English). Packs built before a namespace
+# was added here are rejected until they are republished with it.
+LP_REQUIRED_NS="common sidebar dashboard onboarding system-settings local-network monitoring events cellular history"
 
 # -----------------------------------------------------------------------------
 # lp_pack_is_code_safe <code>

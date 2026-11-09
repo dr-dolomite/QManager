@@ -25,6 +25,7 @@ v0.1.36 adds a History section that shows how your connection and your modem hav
 - **The password you choose at setup now also signs you in over SSH.** Setup used to leave SSH on the modem's factory password, so a fresh install could not be reached over SSH with the password you just created. If SSH cannot be set, setup still finishes and tells you to change it in Device Access.
 - **New browser-tab icon.** The tab icon now matches the QManager logo used across the interface, in place of the old one.
 - **Cleaner Network Priority page.** The technology the modem is currently using now shows the same green check as IMEI Settings in place of its rank number, replacing the separate "Serving now" badge.
+- **Language packs now include the History pages.** A downloadable language pack must carry translations for the new History pages, so they are never left in English. Packs published before this release are updated to include them; reinstall yours from the Languages page after updating.
 
 ## 📥 Installation
 
