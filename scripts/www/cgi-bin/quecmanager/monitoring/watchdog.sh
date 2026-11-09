@@ -177,7 +177,7 @@ wd_quality_limits() {
 # GET
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
-    qlog_info "Fetching watchdog settings"
+    qlog_debug "Fetching watchdog settings"
 
     enabled=$(wd_stored_bool enabled false)
     act_after=$(wd_stored_int act_after_sec 30 15 600)

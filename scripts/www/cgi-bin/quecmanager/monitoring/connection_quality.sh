@@ -109,7 +109,7 @@ cq_uptime() {
 # GET
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
-    qlog_info "Fetching connection quality settings"
+    qlog_debug "Fetching connection quality settings"
 
     # --- Sensitivity + cadence (stored value; unknown reads relaxed) ---
     conn_state_cadence

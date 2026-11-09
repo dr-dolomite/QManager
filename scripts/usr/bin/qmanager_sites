@@ -43,6 +43,7 @@ RAW_FILE="$TMP_DIR/qmanager_sites_raw.ndjson"
 FLUSHED_FILE="$TMP_DIR/qmanager_sites_flushed"
 NOW_FLAG="$TMP_DIR/qmanager_sites_now"
 CHECKING_FILE="$TMP_DIR/qmanager_sites_checking"
+_sweep_last_nrows=""   # previous sweep's "N of M" answered; INFO only on change
 PID_FILE="$TMP_DIR/qmanager_sites.pid"
 LIVE_LEASE="$TMP_DIR/qmanager_sites_live"       # CGI-owned: only ever read here
 LIVE_FILE="$TMP_DIR/qmanager_sites_live.json"
@@ -342,7 +343,13 @@ EOF
          results: ($r | map({host, kind, ts: $ts, ms, ok}))}' | atomic_put "$LATEST_FILE"
 
     nrows=$(printf '%s' "$results" | jq -r '"\([.[] | select(.ok)] | length) of \(length)"')
-    qlog_info "sweep: ${nrows:-0} answered in $(( $(mono_now) - start_mono ))s"
+    # INFO only when the answered count changes between sweeps.
+    if [ "${nrows:-0}" != "$_sweep_last_nrows" ]; then
+        qlog_info "sweep: ${nrows:-0} answered in $(( $(mono_now) - start_mono ))s"
+        _sweep_last_nrows="${nrows:-0}"
+    else
+        qlog_debug "sweep: ${nrows:-0} answered in $(( $(mono_now) - start_mono ))s"
+    fi
 
     if [ "$ts" -ge "$SANE_EPOCH" ]; then
         own_or_rm "$RAW_FILE"

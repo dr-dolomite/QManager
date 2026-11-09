@@ -44,7 +44,7 @@ FAILOVER_ENABLED_FILE="/etc/qmanager/band_failover_enabled"
 FAILOVER_ACTIVATED_FLAG="/tmp/qmanager_band_failover"
 
 # --- Query modem for current band configuration ------------------------------
-qlog_info "Querying current band registers (lte/nsa/sa/nrdc)"
+qlog_debug "Querying current band registers (lte/nsa/sa/nrdc)"
 
 result=$(qcmd 'AT+QNWPREFCFG="lte_band";+QNWPREFCFG="nsa_nr5g_band";+QNWPREFCFG="nr5g_band";+QNWPREFCFG="nrdc_nr5g_band"' 2>/dev/null)
 rc=$?

@@ -111,7 +111,7 @@ _write_json_atomic() {
 # GET — channels + routing + capabilities
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
-    qlog_info "Fetching centralized alert settings"
+    qlog_debug "Fetching centralized alert settings"
 
     # --- SMS channel ---
     sms_enabled="false"

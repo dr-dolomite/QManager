@@ -51,7 +51,7 @@ strip_leading_zero() {
 # GET — Fetch all system settings
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
-    qlog_info "Fetching system settings"
+    qlog_debug "Fetching system settings"
     ensure_settings_config
 
     # --- Unit preferences ---

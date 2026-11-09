@@ -105,7 +105,7 @@ if [ "$valid" != "1" ]; then
         && chmod 600 "$LIVE_RUN/qmi_live.token.$$" 2>/dev/null \
         && mv -f "$LIVE_RUN/qmi_live.token.$$" "$LIVE_RUN/qmi_live.token" 2>/dev/null \
         || { rm -f "$LIVE_RUN/qmi_live.token.$$"; lease_failed "token write failed"; }
-    qlog_info "minted live token (tier=$tier)"
+    qlog_debug "minted live token (tier=$tier)"
 fi
 
 printf '{"success":true,"available":true,"url":"/qmlive/%s.json","period_ms":%s,"renew_s":5,"ttl_s":10}\n' \
