@@ -1,17 +1,17 @@
 {
   "manifest_version": 1,
-  "generated_at": "2026-07-18T10:43:28Z",
+  "generated_at": "2026-11-09T04:52:02Z",
   "packs": [
     {
       "code": "id",
       "native_name": "Indonesia",
       "english_name": "Indonesian",
       "rtl": false,
-      "version": "2026.07.18",
-      "completeness": 0.998,
-      "size_bytes": 49588,
-      "sha256": "00c045fc05b59fbd0c65601232e132cf0e01093ad4a528ed08e9a88b61bcfac1",
-      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-id-2026.07.18.tar.gz",
+      "version": "2026.11.09",
+      "completeness": 0.999,
+      "size_bytes": 83419,
+      "sha256": "a22853d64f793b64433b5b3d4a607df72fa44b7ad5ca064a057445915b395c44",
+      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-id-2026.11.09.tar.gz",
       "contributors": [
         "@ikhsanh"
       ]
@@ -21,11 +21,11 @@
       "native_name": "Italiano",
       "english_name": "Italian",
       "rtl": false,
-      "version": "2026.07.18",
-      "completeness": 0.998,
-      "size_bytes": 53107,
-      "sha256": "c772223bfa34536cbbf4966611bed52a90354fc96f96615d78ac28d6de7b61d2",
-      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-it-2026.07.18.tar.gz",
+      "version": "2026.11.09",
+      "completeness": 1,
+      "size_bytes": 88556,
+      "sha256": "dae5d4bfd6d7d22453fc403da7c802485b02a70a89a3104f12d05348fde2c5f8",
+      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-it-2026.11.09.tar.gz",
       "contributors": [
         "@fmase"
       ]
@@ -35,11 +35,11 @@
       "native_name": "繁體中文",
       "english_name": "Traditional Chinese",
       "rtl": false,
-      "version": "2026.07.18",
-      "completeness": 0.998,
-      "size_bytes": 51228,
-      "sha256": "463bfe15470039d7c004c578ecc5456a4a4c31ec81c271cd41009e61d1cde690",
-      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-zh-TW-2026.07.18.tar.gz",
+      "version": "2026.11.09",
+      "completeness": 0.999,
+      "size_bytes": 87920,
+      "sha256": "8d16d605bcd3575d05f59c0711dd42a8c7a5f231b045cbb598bc4cb21ed9f8f8",
+      "url": "https://github.com/dr-dolomite/QManager/releases/download/language-packs/qmanager-lang-zh-TW-2026.11.09.tar.gz",
       "contributors": [
         "@po1son7"
       ]
