@@ -127,6 +127,8 @@
       "error_title": "Cronologia non disponibile",
       "error_description": "Il modem non ha restituito alcun evento.",
       "retry": "Riprova",
+      "ongoing": "In corso",
+      "restored_after": "Ripristinato dopo {{duration}}",
       "types": {
         "signal_lost": "Segnale perso",
         "signal_restored": "Segnale ripristinato",

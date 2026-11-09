@@ -125,6 +125,8 @@
       "error_title": "Riwayat tidak tersedia",
       "error_description": "Modem tidak mengembalikan peristiwa apa pun.",
       "retry": "Coba lagi",
+      "ongoing": "Berlangsung",
+      "restored_after": "Pulih setelah {{duration}}",
       "types": {
         "signal_lost": "Sinyal hilang",
         "signal_restored": "Sinyal pulih",

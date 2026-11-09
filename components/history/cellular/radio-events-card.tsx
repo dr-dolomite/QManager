@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { formatWhen } from "@/components/history/format";
+import { formatDuration, formatWhen } from "@/components/history/format";
 import { useHistoryCursor } from "@/components/history/history-cursor";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
+import { useHistoryEvents } from "@/hooks/use-history";
 import { presentEvent } from "@/lib/event-presentation";
 import { cn } from "@/lib/utils";
 import {
@@ -41,10 +42,8 @@ import {
   type HistoryRange,
 } from "@/types/history";
 
-import { useCellularEventsMock } from "./events-data";
 import { eventGlyph } from "./events-glyphs";
 import { PageSizeMenu, TypeFilterMenu } from "./events-menus";
-import type { MockScenario } from "./mock-fixture";
 import { HEADER_SHAPE, HISTORY_CARD } from "./shapes";
 import {
   CARD_DESC,
@@ -110,6 +109,16 @@ function EventRow({ event, nowSec, onHover }: EventRowProps) {
   const when = formatWhen(event.timestamp, nowSec, t, i18n.language);
   const type = event.type as CellularEventType;
   const view = presentEvent(event, false, false, "card");
+  // Paired outage onsets say how it ended: null = still ongoing.
+  let fact: string | null = null;
+  if (event.type === "signal_lost" && event.end !== undefined) {
+    fact =
+      event.end === null
+        ? t("cellular.events.ongoing")
+        : t("cellular.events.restored_after", {
+            duration: formatDuration(Math.max(0, event.end - event.timestamp), t),
+          });
+  }
 
   return (
     <TableRow
@@ -125,8 +134,13 @@ function EventRow({ event, nowSec, onHover }: EventRowProps) {
               {event.message}
             </div>
             <div className={cn("text-on-surface-variant text-xs tabular-nums", NARROW_ONLY)}>
-              {when}
+              {fact ? `${when} (${fact})` : when}
             </div>
+            {fact ? (
+              <div className="text-on-surface-variant hidden truncate text-xs @[34rem]/card:block">
+                {fact}
+              </div>
+            ) : null}
           </div>
         </div>
       </TableCell>
@@ -301,14 +315,15 @@ function Pager({ page, pages, pageSize, onPage, onPageSize }: PagerProps) {
 
 export interface RadioEventsCardProps {
   range: HistoryRange;
-  scenario: MockScenario;
+  /** Collector's now, epoch seconds, for Today / Yesterday labels. */
+  nowSec: number;
 }
 
 /**
  * Handovers, band and carrier changes, and signal loss, newest first. Hovering
  * a row marks that moment on the shared cursor so every chart draws a crosshair.
  */
-export function RadioEventsCard({ range, scenario }: RadioEventsCardProps) {
+export function RadioEventsCard({ range, nowSec }: RadioEventsCardProps) {
   const { t } = useTranslation("history");
   const cursor = useHistoryCursor();
 
@@ -325,11 +340,15 @@ export function RadioEventsCard({ range, scenario }: RadioEventsCardProps) {
     setPage(0);
   }
 
-  const { data, nowSec, isLoading, error, refresh } = useCellularEventsMock(
-    range,
-    { types: selected ?? undefined, page, pageSize },
-    scenario,
-  );
+  const {
+    data,
+    isLoading: fetching,
+    error,
+    refresh,
+  } = useHistoryEvents("cellular", range, { types: selected ?? undefined, page, pageSize });
+  // The hook keeps the previous page up while the next one loads: only a first
+  // load (or a retry after a failure) shows the skeleton.
+  const isLoading = fetching && data === null;
 
   const options = CELLULAR_EVENT_TYPES.flatMap((type) => {
     const count = data?.counts[type] ?? 0;
@@ -404,7 +423,7 @@ export function RadioEventsCard({ range, scenario }: RadioEventsCardProps) {
             action={{ label: t("cellular.events.show_all_events"), onClick: showAll }}
           />
         ) : (
-          <div className="-mx-6" aria-busy={isLoading}>
+          <div className="-mx-6" aria-busy={fetching}>
             <Table className="table-fixed">
               <EventsHead />
               {isLoading ? (

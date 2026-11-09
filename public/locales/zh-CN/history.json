@@ -125,6 +125,8 @@
       "error_title": "历史记录不可用",
       "error_description": "调制解调器未返回任何事件。",
       "retry": "重试",
+      "ongoing": "持续中",
+      "restored_after": "{{duration}}后恢复",
       "types": {
         "signal_lost": "信号丢失",
         "signal_restored": "信号恢复",

@@ -125,6 +125,8 @@
       "error_title": "歷史記錄無法使用",
       "error_description": "數據機未傳回任何事件。",
       "retry": "重試",
+      "ongoing": "持續中",
+      "restored_after": "{{duration}}後恢復",
       "types": {
         "signal_lost": "訊號中斷",
         "signal_restored": "訊號恢復",

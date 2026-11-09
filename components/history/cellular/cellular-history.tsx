@@ -2,18 +2,17 @@
 
 import * as React from "react";
 import { motion } from "motion/react";
-import { useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
 import { CellularPageHeader } from "@/components/cellular/page-header";
 import { HistoryCursorProvider } from "@/components/history/history-cursor";
 import { RangeControl } from "@/components/history/range-control";
+import { useHistorySeries } from "@/hooks/use-history";
 import { staggerContainer, staggerItem } from "@/lib/motion";
-import type { CellularHistory as CellularHistoryData, HistoryRange } from "@/types/history";
+import type { CellularMetric, CellularState, HistoryRange } from "@/types/history";
 
 import { ConnectionCard } from "./connection-card";
 import { summarise } from "./derive";
-import { mockCellularHistory, type MockScenario } from "./mock-fixture";
 import { RadioEventsCard } from "./radio-events-card";
 import { HISTORY_PAGE } from "./shapes";
 import { SignalCharts } from "./signal-charts";
@@ -27,59 +26,23 @@ import { SummaryTiles } from "./summary-tiles";
 // the four signal charts and the radio events table. The range and the shared
 // cursor are the only page-level state; every card follows them.
 //
-// DATA ACCESS LIVES IN ONE PLACE: `useCellularHistoryMock`. It returns the same
-// `{ data, isLoading, error, refresh }` as the real `useHistorySeries`, so the
-// swap is one line. The mock scenario is read from `?mock=` so every state can
-// be previewed (normal | empty | lte_only | error | loading).
+// Data: `useHistorySeries` for the series; the events card reads its own page
+// through `useHistoryEvents`. A new install or an untrusted clock answers with
+// no buckets and `since: null`, which every card renders as "Collecting", not
+// as an error. The hook keeps the previous range on screen while the next one
+// loads, so the skeleton only shows on the first fetch.
 // =============================================================================
-
-const SCENARIOS: readonly MockScenario[] = ["normal", "empty", "lte_only", "error", "loading"];
-
-function useMockScenario(): MockScenario {
-  const param = useSearchParams().get("mock");
-  return SCENARIOS.find((s) => s === param) ?? "normal";
-}
-
-interface HistoryResult {
-  data: CellularHistoryData | null;
-  isLoading: boolean;
-  error: boolean;
-  refresh: () => void;
-}
-
-/** TEMPORARY: stands in for `useHistorySeries<CellularState, CellularMetric>("cellular", range)`. */
-function useCellularHistoryMock(range: HistoryRange, scenario: MockScenario): HistoryResult {
-  const [nowSec] = React.useState(() => Math.floor(Date.now() / 1000));
-  // An "error" scenario recovers after a retry, like a real transient failure.
-  const [phase, setPhase] = React.useState<"idle" | "retrying" | "recovered">("idle");
-  const timer = React.useRef<number | undefined>(undefined);
-  React.useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  const failing = scenario === "error" && phase === "idle";
-  const loading = scenario === "loading" || phase === "retrying";
-  const effective: MockScenario = scenario === "error" ? "normal" : scenario;
-
-  const data = React.useMemo(
-    () => (failing || loading ? null : mockCellularHistory(range, effective, nowSec)),
-    [failing, loading, range, effective, nowSec],
-  );
-
-  const refresh = React.useCallback(() => {
-    setPhase("retrying");
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setPhase("recovered"), 1100);
-  }, []);
-
-  return { data, isLoading: loading, error: failing, refresh };
-}
 
 export default function CellularHistory() {
   const { t } = useTranslation("history");
   const [range, setRange] = React.useState<HistoryRange>("24h");
-  const scenario = useMockScenario();
-  const { data, isLoading, error, refresh } = useCellularHistoryMock(range, scenario);
+  const { data, error, refresh } = useHistorySeries<CellularState, CellularMetric>(
+    "cellular",
+    range,
+  );
 
-  const lteOnly = data ? summarise(data).lteOnly : false;
+  // An empty window (collecting) is not "LTE only": keep every chart.
+  const lteOnly = data && data.buckets.length > 0 ? summarise(data).lteOnly : false;
 
   return (
     <HistoryCursorProvider>
@@ -99,10 +62,10 @@ export default function CellularHistory() {
           />
         </motion.div>
 
-        {isLoading ? (
-          <CellularHistorySkeleton range={range} label={t("cellular.states.loading_sr")} />
-        ) : error || !data ? (
+        {error ? (
           <CellularHistoryError onRetry={refresh} />
+        ) : !data ? (
+          <CellularHistorySkeleton range={range} label={t("cellular.states.loading_sr")} />
         ) : (
           <>
             <motion.div variants={staggerItem}>
@@ -115,7 +78,7 @@ export default function CellularHistory() {
               <SignalCharts history={data} lteOnly={lteOnly} />
             </motion.div>
             <motion.div variants={staggerItem}>
-              <RadioEventsCard range={range} scenario={scenario} />
+              <RadioEventsCard range={range} nowSec={data.now} />
             </motion.div>
           </>
         )}

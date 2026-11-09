@@ -127,6 +127,8 @@
       "error_title": "History unavailable",
       "error_description": "The modem didn't return any events.",
       "retry": "Try again",
+      "ongoing": "Ongoing",
+      "restored_after": "Restored after {{duration}}",
       "types": {
         "signal_lost": "Signal lost",
         "signal_restored": "Signal restored",
