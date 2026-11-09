@@ -210,10 +210,12 @@ The page (`app/cellular/sms/page.tsx`) renders `SmsCenterComponent`; the forward
 |---|---|
 | `sms-center.tsx` | Page header plus **one card with two panes**: thread list left, conversation right. Owns routing, dialogs and the poll consumers. |
 | `sms-thread-list.tsx` | Search, All/Unread filter, thread rows with identity disc, preview ("You: ..." for outbound), unread pill |
-| `sms-conversation.tsx` | Day-grouped bubbles, reply composer, phishing warning under inbound messages with links, one-time-code detection |
+| `sms-conversation.tsx` | Day-grouped bubbles (the shadcn `Bubble` primitive, `components/ui/bubble.tsx`), reply composer, phishing warning under inbound messages with links, one-time-code detection, reaction chips and the pinned strip |
+| `sms-reactions.tsx` | The four reaction emoji: hover/focus add button with popover picker, the context-menu row, the chips on a bubble, and the per-emoji highlight colours |
+| `sms-pinned-strip.tsx` | Pinned messages lifted above the thread (Messenger-style): newest pin as one row, a count control for the rest, jump and unpin |
 | `sms-composer.tsx`, `sms-compose-dialog.tsx` | Reply box; new-message dialog |
 | `sms-forward-dialog.tsx` | Forward a message to another number (sent as a new message) |
-| `sms-message-menu.tsx` | Per-bubble context menu (right-click, long-press, Shift+F10): Copy text, Copy code, Forward, Mark as unread, Details, Delete. Items a message cannot support are omitted, never disabled; pending optimistic sends get Copy text only. |
+| `sms-message-menu.tsx` | Per-bubble context menu (right-click, long-press, Shift+F10): the four-emoji reaction row, Copy text, Copy code, Forward, Mark as unread, Details, Delete. Items a message cannot support are omitted, never disabled; pending optimistic sends get Copy text only. |
 | `sms-message-details-dialog.tsx`, `sms-states.tsx` | Details dialog; loading, empty and error panels |
 | `sms-threads.ts`, `sms-format.ts` | Thread view models and skeleton geometry; timestamp and text helpers (`parseSmsTimestamp`, `smsEpochMs`, `isOutbound`) |
 | `sms-settings-dialog.tsx` | Header three-dot menu, **SMS settings**: Provider number (SMSC) and Message storage |
@@ -246,6 +248,30 @@ The modem cannot be the source of truth for per-message read state: every list u
 **Self-pruning:** the persisted set is filtered to the fingerprints of currently present messages on every write, so deleted messages cannot grow it without bound. Only **inbound** messages are passed in.
 
 **Trade-offs:** read state is per-browser and resets if site data is cleared; new messages default to unread; opening a thread marks it read, and a message arriving in an already-open thread is marked read after an 800 ms debounce.
+
+## Reactions and Pinned Messages (Client-Side)
+
+A stored message can carry any of four reactions: heart, star, memo and pushpin (real emoji, by decision; every other glyph on the surface stays Material Symbols). The pushpin is a reaction like the others, with one extra effect: the message is also lifted into the pinned strip above the thread. Like read state, this is browser-only, because the modem has no concept of either.
+
+| Piece | Role |
+|---|---|
+| `lib/sms-reactions.ts` (+ `.test.ts`, `bun test lib/sms-reactions.test.ts`) | Pure model: `toggleReaction`, `forgetReactions`, `parseReactions` / `serializeReactions`. No React, no storage. |
+| `hooks/use-sms-reactions.ts` | `localStorage` key `qmanager.sms.reactions.v1` behind a module-level store read with `useSyncExternalStore` (another tab's change arrives through the `storage` event). Exports `reactionsOf`, `pinnedAtOf`, `toggle`, `forget`. |
+
+**Keying.** Entries use `smsFingerprint` (`hooks/use-sms-read-state.ts`), the same identity as read state. Do not change its inputs: reactions and pins would detach from their messages.
+
+**Shape.** The store is an ordered `Map<fingerprint, { r: kinds[], p?: pinnedAtMs }>`, serialised as an array of pairs (a plain object would sort integer-looking base-36 keys). `r` is canonical-ordered (heart, star, memo, pin), never empty (an empty entry is deleted). `p` exists exactly while `pin` is in `r`, so the strip can list the newest pin first. A touched entry moves to the end and the map is capped at 500 entries, dropping the least recently touched one that is **not pinned** (a pin is never evicted). Unlike read state it is **not** pruned against the present message list: a thread's detail can hold messages the flat list does not.
+
+**Cleanup.** Deleting a message or a thread calls `forget` for the deleted messages (`sms-center.tsx`). Anything left behind ages out through the cap.
+
+**Surfaces.**
+- Add: a hover/focus button beside each stored bubble (hidden on a coarse pointer) opens a popover picker; the same four options are the first row of the context menu, which is the touch path (long-press). A pending optimistic send has neither.
+- Chips: reactions hang off the bubble's bottom edge (`BubbleReactions`); each chip is a button that removes its reaction.
+- Highlight: a reacted bubble gets a 2px ring hugging its edge in the **emoji's own colour** (`--reaction-heart|star|memo|pin` in `globals.css`, authored per theme). With several reactions the colour comes from `dominantReaction`: pin, then heart, star, memo. The jump flash (3px ring with a 2px gap, on the outer bubble) uses the pin colour.
+- Pinned strip: newest pin first; tapping a row scrolls the thread to that message (the thread scroller only, never the page) and flashes it for 1.6 s; with more than one pin a count control opens the rest in place; every row has an unpin. The strip fades in and leaves instantly (Enter-Only Rule), and the thread re-pins to the bottom when the strip changes the well's height while the reader was at the bottom.
+- Toasts: one `sonner` success per toggle (pin, unpin, reaction added, reaction removed) with the stable id `sms-reaction`, so rapid toggling replaces instead of stacking.
+
+**Trade-offs (accepted):** per-browser, resets with site data, identical messages (same storage, sender, second and body) share one entry.
 
 ## Sender Identity and Logos
 
