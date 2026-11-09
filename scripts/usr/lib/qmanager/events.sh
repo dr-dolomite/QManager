@@ -55,8 +55,9 @@ append_event() {
         case "$message" in
             *"$_EV_NL"*) message=$(printf '%s' "$message" | tr '\n' ' ') ;;
         esac
-        if printf 'E\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_evmono" "$etype" "$severity" "$code" "$fields" "$message" >> "$_evd/spool" 2>/dev/null; then
-            _ev_history_tap "$etype" "$severity" "$message"
+        _ev_radio_field "$etype" "$message" "$fields"
+        # History reads logd's journal (history/events.sh), so no tap here.
+        if printf 'E\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_evmono" "$etype" "$severity" "$code" "$_EVF" "$message" >> "$_evd/spool" 2>/dev/null; then
             return 0
         fi
     fi
@@ -123,7 +124,33 @@ _ev_append_legacy() {
     }
 }
 
-# _ev_history_tap TYPE SEVERITY MESSAGE
+# _ev_radio_field TYPE MESSAGE FIELDS -> _EVF = FIELDS plus radio=lte|nr for
+# a Cellular History type, by the rule History used when it stored the row
+# itself (hist_cellular_radio: message prefix, nr_anchor, then the live state
+# for signal_restored). logd cannot see the live state, so the writer says.
+# Builtins only; a FIELDS that already has radio= is kept as is.
+_ev_radio_field() {
+    local _ty
+    _EVF="$3"
+    case ";$3" in *";radio="*) return 0 ;; esac
+    # Outside the poller (CGIs) the provider is not loaded: its list, by hand.
+    _ty="${HIST_cellular_EVENTS:-signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change band_lock_changed tower_lock_changed band_failover tower_failover sim_switched registration_changed apn_changed}"
+    case " $_ty " in *" $1 "*) ;; *) return 0 ;; esac
+    _HR=""
+    if command -v hist_cellular_radio >/dev/null 2>&1; then
+        hist_cellular_radio "$1" "$2"
+    else
+        case "$2" in
+            LTE*) _HR="lte" ;;
+            NR*|5G*) _HR="nr" ;;
+            *) [ "$1" = "nr_anchor" ] && _HR="nr" ;;
+        esac
+    fi
+    case "$_HR" in lte|nr) _EVF="${_EVF:+$_EVF;}radio=$_HR" ;; esac
+    return 0
+}
+
+# _ev_history_tap TYPE SEVERITY MESSAGE (legacy path only: logd not alive)
 # History tap: the poller records directly; other callers (watchcat,
 # CGIs) have no history.sh loaded and hand the event over the spool.
 _ev_history_tap() {
