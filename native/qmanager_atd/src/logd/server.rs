@@ -298,6 +298,49 @@ enum Phase {
     Grace(u64),
 }
 
+/// Opens the kernel log non-blocking (reads start at the oldest record the
+/// kernel still holds). None when it is absent or not configured.
+fn open_kmsg(path: &str) -> Option<RawFd> {
+    if path.is_empty() {
+        return None;
+    }
+    let c = std::ffi::CString::new(path).ok()?;
+    let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+    (fd >= 0).then_some(fd)
+}
+
+/// Drains the kernel log: one record per read on the device. EPIPE (the
+/// reader was overrun) is counted and reading continues; EOF (a test file or
+/// FIFO) or a hard error closes it.
+fn read_kmsg(kfd: &mut Option<RawFd>, kbuf: &mut [u8], lines: &mut super::kmsg::Lines, e: &mut Engine, now: &Now) {
+    let fd = match *kfd {
+        Some(fd) => fd,
+        None => return,
+    };
+    loop {
+        let n = unsafe { libc::read(fd, kbuf.as_mut_ptr() as *mut libc::c_void, kbuf.len()) };
+        if n > 0 {
+            lines.feed(&kbuf[..n as usize], |l| e.ingest_kmsg(l, now));
+            continue;
+        }
+        let err = if n < 0 { std::io::Error::last_os_error().raw_os_error().unwrap_or(0) } else { 0 };
+        match (n, err) {
+            (_, libc::EAGAIN) => return,
+            (_, libc::EINTR) => continue,
+            (_, libc::EPIPE) => {
+                e.stats.kmsg_overruns += 1;
+                continue;
+            }
+            _ => {
+                unsafe { libc::close(fd) };
+                *kfd = None;
+                e.kmsg_open = false;
+                return;
+            }
+        }
+    }
+}
+
 /// Reads every queued inotify event.
 fn drain_inotify(ino: RawFd, buf: &mut [u8]) -> Wakes {
     let mut w = Wakes::default();
@@ -368,7 +411,9 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
         Err(x) => return err(format!("cannot bind {}: {x}", cfg.sock)),
     };
     let _ = listener.set_nonblocking(true);
-    let _ = safefs::write_atomic(&cfg.proto, super::capability_body().as_bytes());
+    let mut kfd = open_kmsg(&cfg.kmsg);
+    e.kmsg_open = kfd.is_some();
+    let _ = safefs::write_atomic(&cfg.proto, super::capability_body(kfd.is_some()).as_bytes());
     write_alive(&cfg);
     let now = real_now(&cfg);
     let up = format!("journal up (boot {}, seq {}, version {})", e.boot, e.head(), env!("CARGO_PKG_VERSION"));
@@ -377,6 +422,8 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
 
     let mut phase = Phase::Idle;
     let mut buf = vec![0u8; 4096];
+    let mut kbuf = vec![0u8; 8192];
+    let mut klines = super::kmsg::Lines::default();
     loop {
         let now = real_now(&cfg);
         e.tick(&now);
@@ -411,8 +458,10 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
             libc::pollfd { fd: stop_fd, events: libc::POLLIN, revents: 0 },
             libc::pollfd { fd: ino, events: ino_events, revents: 0 },
             libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
+            // A negative fd is ignored by poll.
+            libc::pollfd { fd: kfd.unwrap_or(-1), events: libc::POLLIN, revents: 0 },
         ];
-        let r = unsafe { libc::poll(fds.as_mut_ptr(), 3, timeout) };
+        let r = unsafe { libc::poll(fds.as_mut_ptr(), 4, timeout) };
         if r < 0 {
             continue;
         }
@@ -426,6 +475,10 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
             if w.spool && phase == Phase::Idle {
                 phase = Phase::Wait(now.ms() + INGEST_DELAY_MS);
             }
+        }
+        if fds[3].revents != 0 {
+            let now = real_now(&cfg);
+            read_kmsg(&mut kfd, &mut kbuf, &mut klines, &mut e, &now);
         }
         if fds[2].revents & libc::POLLIN != 0 {
             while let Ok((s, _)) = listener.accept() {
@@ -443,6 +496,9 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
     let _ = std::fs::remove_file(&cfg.sock);
     let _ = std::fs::remove_file(&cfg.proto);
     unsafe { libc::close(ino) };
+    if let Some(fd) = kfd {
+        unsafe { libc::close(fd) };
+    }
     0
 }
 

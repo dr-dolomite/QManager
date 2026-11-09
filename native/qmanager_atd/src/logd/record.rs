@@ -212,7 +212,12 @@ impl Row {
 
     /// True for a kernel row with this filter tag.
     pub fn tag_is(&self, tag: &str) -> bool {
-        self.kind == RKind::K && self.tail.contains(&format!("\"tag\":\"{tag}\""))
+        if self.kind != RKind::K {
+            return false;
+        }
+        // The tag is a plain word written right before the message.
+        let head = &self.tail[..self.msg_at as usize];
+        head.strip_suffix("\",\"msg\":\"").and_then(|h| h.rsplit_once("\"tag\":\"")).map_or(false, |(_, t)| t == tag)
     }
 
     pub fn is_event(&self) -> bool {

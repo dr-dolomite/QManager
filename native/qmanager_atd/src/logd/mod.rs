@@ -18,6 +18,7 @@ pub mod clock;
 pub mod collapse;
 pub mod core;
 pub mod journal;
+pub mod kmsg;
 pub mod mirror;
 pub mod query;
 pub mod record;
@@ -34,8 +35,9 @@ pub fn version_line() -> String {
 }
 
 /// The capability file, written after the socket is bound.
-pub fn capability_body() -> String {
-    format!("proto={}\nversion={}\nlogq=1\nevq=1\n", PROTO, env!("CARGO_PKG_VERSION"))
+pub fn capability_body(kmsg: bool) -> String {
+    let k = if kmsg { "kmsg=1\n" } else { "" };
+    format!("proto={}\nversion={}\nlogq=1\nevq=1\n{k}", PROTO, env!("CARGO_PKG_VERSION"))
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,7 +93,8 @@ mod tests {
             assert_eq!(logd_mode(&sv(bad)), LogdMode::Usage, "{bad:?}");
         }
         assert!(version_line().starts_with("qmanager_logd ") && version_line().ends_with(" proto=1"));
-        assert_eq!(capability_body(), format!("proto=1\nversion={}\nlogq=1\nevq=1\n", env!("CARGO_PKG_VERSION")));
+        assert_eq!(capability_body(false), format!("proto=1\nversion={}\nlogq=1\nevq=1\n", env!("CARGO_PKG_VERSION")));
+        assert!(capability_body(true).ends_with("evq=1\nkmsg=1\n"));
     }
 
     fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
@@ -174,6 +177,29 @@ mod tests {
             _ => panic!(),
         };
         assert!(head2 > head1, "{head2} > {head1}");
+        stop(p[1], h);
+    }
+
+    #[test]
+    fn the_daemon_reads_a_kernel_log_once_and_advertises_it() {
+        let mut c = cfg("kmsg-daemon");
+        let k = format!("{}/kmsg", c.run_dir.trim_end_matches("/run"));
+        std::fs::write(&k, crate::logd::kmsg::tests::FIXTURE).unwrap();
+        c.kmsg = k;
+        let mut p = [0i32; 2];
+        assert_eq!(unsafe { libc::pipe(p.as_mut_ptr()) }, 0);
+        let c2 = c.clone();
+        let h = std::thread::spawn(move || server::run(c2, Some(p[0])));
+        wait_for("alive", || std::path::Path::new(&format!("{}/alive", c.run_dir)).exists());
+        assert!(std::fs::read_to_string(&c.proto).unwrap().ends_with("kmsg=1\n"));
+        wait_for("kernel rows", || match crate::client::qlog::call(&c.sock, "STAT", &[]) {
+            Ok(server::Answer::Res(true, j)) => j.contains("\"kept\":13"),
+            _ => false,
+        });
+        match crate::client::qlog::call(&c.sock, "LOGQ", &["kind=K".into(), "tag=ssr".into(), "limit=1".into(), "fmt=mono".into()]).unwrap() {
+            server::Answer::Res(true, j) => assert_eq!(j, "812"),
+            other => panic!("{other:?}"),
+        }
         stop(p[1], h);
     }
 

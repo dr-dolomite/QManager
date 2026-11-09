@@ -55,6 +55,10 @@ pub struct State {
     pub last_wall: i64,
     /// The previous run stopped through the TERM path (all rows flushed).
     pub clean: bool,
+    /// Highest `/dev/kmsg` seq read in `boot_id` (a restart skips up to it).
+    pub kmsg_seq: u64,
+    /// Kernel SSR records seen in `boot_id`.
+    pub kmsg_ssr: u64,
 }
 
 impl State {
@@ -67,6 +71,8 @@ impl State {
                 Some(("boot_id", v)) => s.boot_id = v.trim().to_string(),
                 Some(("last_wall", v)) => s.last_wall = v.trim().parse().unwrap_or(0),
                 Some(("clean", v)) => s.clean = v.trim() == "1",
+                Some(("kmsg_seq", v)) => s.kmsg_seq = v.trim().parse().unwrap_or(0),
+                Some(("kmsg_ssr", v)) => s.kmsg_ssr = v.trim().parse().unwrap_or(0),
                 _ => {}
             }
         }
@@ -74,12 +80,14 @@ impl State {
     }
     pub fn render(&self) -> String {
         format!(
-            "seq={}\nboot={}\nboot_id={}\nlast_wall={}\nclean={}\n",
+            "seq={}\nboot={}\nboot_id={}\nlast_wall={}\nclean={}\nkmsg_seq={}\nkmsg_ssr={}\n",
             self.seq,
             self.boot,
             safefs::one_line(&self.boot_id),
             self.last_wall,
-            if self.clean { 1 } else { 0 }
+            if self.clean { 1 } else { 0 },
+            self.kmsg_seq,
+            self.kmsg_ssr
         )
     }
 }
@@ -527,7 +535,7 @@ mod tests {
         let d = tmpdir("state");
         let j = Journal::new(d.clone());
         assert!(j.load_state().is_none());
-        let st = State { seq: 42, boot: 7, boot_id: "abc-def".into(), last_wall: 1_794_199_490, clean: true };
+        let st = State { seq: 42, boot: 7, boot_id: "abc-def".into(), last_wall: 1_794_199_490, clean: true, kmsg_seq: 1501, kmsg_ssr: 2 };
         j.save_state(&st).unwrap();
         assert_eq!(j.load_state().unwrap(), st);
         assert!(!std::path::Path::new(&format!("{d}/state.new")).exists());
@@ -572,12 +580,14 @@ mod tests {
             ev(5003, t, "internet_restored", Sev::Info),
             ev(5004, t, "profile_failed", Sev::Error),
             ev(5005, t, "pci_change", Sev::Warning),
+            ev(5006, t, "data_call_dropped", Sev::Info),
+            ev(5007, t, "modem_crash", Sev::Info),
         ];
         // A fresh Journal counts the file from flash.
         let mut j = Journal::new(j.dir.clone());
         let mut st = FlushStats::default();
         app(&mut j, &more.iter().collect::<Vec<_>>(), 0, &mut st, &mut BootIndex::default());
-        assert_eq!((st.rows, st.cap_drops), (3, 2));
+        assert_eq!((st.rows, st.cap_drops), (5, 2));
         // The next day starts a fresh count.
         let mut st = FlushStats::default();
         app(&mut j, &[&ev(6000, Some((day + 1) * 86400), "band_change", Sev::Info)], 0, &mut st, &mut BootIndex::default());

@@ -42,6 +42,13 @@ impl Engine {
             .num("bad_lines", self.stats.bad_lines)
             .num("level", self.stats.level_drops)
             .num("cap", self.stats.cap_drops);
+        let mut kmsg = J::obj();
+        kmsg.boolean("open", self.kmsg_open)
+            .num("read", self.stats.kmsg_read)
+            .num("kept", self.stats.kernel)
+            .num("overruns", self.stats.kmsg_overruns)
+            .num("seq", self.kmsg_hw)
+            .num("ssr_this_boot", self.kmsg_ssr);
         let mut clock = J::obj();
         clock.boolean("trusted", self.clock.trusted).opt_num("offset", self.clock.trusted.then_some(self.clock.off));
         let today = self.clock.trusted.then(|| epochday(now.wall));
@@ -70,7 +77,8 @@ impl Engine {
             .str("persist_level", self.cfg.persist_level.name())
             .boolean("forward_syslog", self.cfg.forward_syslog)
             .num("syslog_forwarded", self.stats.syslog)
-            .num("boots", self.index.len());
+            .num("boots", self.index.len())
+            .raw("kmsg", &kmsg.done());
         j.done()
     }
 
@@ -540,16 +548,16 @@ pub fn hist_row(r: &Row, out: &mut String) {
         None => return,
     };
     if let Body::Ev { ty, sev, f, msg, .. } = r.decode() {
-        let radio = if registry::hist_cellular(&ty) {
-            match f.iter().find(|(k, _)| k == "radio").map(|(_, v)| v.as_str()) {
-                Some(v @ ("lte" | "nr")) => Some(if v == "lte" { "lte" } else { "nr" }),
-                _ if msg.starts_with("LTE") => Some("lte"),
-                _ if msg.starts_with("NR") || msg.starts_with("5G") => Some("nr"),
-                _ if ty == "nr_anchor" => Some("nr"),
-                _ => None,
-            }
-        } else {
-            None
+        // The writer's `radio` field wins for any type; the cellular series'
+        // types fall back to the message prefix, then `nr_anchor`.
+        let radio = match f.iter().find(|(k, _)| k == "radio").map(|(_, v)| v.as_str()) {
+            Some("lte") => Some("lte"),
+            Some("nr") => Some("nr"),
+            _ if !registry::hist_cellular(&ty) => None,
+            _ if msg.starts_with("LTE") => Some("lte"),
+            _ if msg.starts_with("NR") || msg.starts_with("5G") => Some("nr"),
+            _ if ty == "nr_anchor" => Some("nr"),
+            _ => None,
         };
         out.push_str("{\"k\":\"e\",\"t\":");
         out.push_str(&t.to_string());
@@ -769,6 +777,16 @@ mod tests {
         assert_eq!(lines[0], format!("{{\"k\":\"e\",\"t\":{},\"type\":\"band_change\",\"severity\":\"info\",\"radio\":\"lte\",\"message\":\"LTE band B3 -> B7\"}}", W - 10));
         assert!(lines[1].contains("\"type\":\"internet_lost\",\"severity\":\"warning\",\"radio\":null,"));
         assert!(lines[2].contains("\"radio\":\"nr\""), "writer field wins");
+        // The writer's radio for any type; the prefix rule for all 14 cellular types.
+        let mut e3 = Engine::open(cfg("evq-radio"), &now).unwrap();
+        feed(
+            &mut e3,
+            &now,
+            "E\t490\tinternet_lost\twarning\t\tradio=lte\tInternet lost\nE\t491\tapn_changed\tinfo\t\t\tNR APN set\nE\t492\ttower_failover\tinfo\t\t\tLTE tower back\nE\t493\tsite_down\twarning\t\t\tLTE site\nE\t494\tnr_anchor\twarning\t\t\tanchor lost\nE\t495\tsim_switched\tinfo\t\tradio=bogus\tSIM 2\n",
+        );
+        let h3 = e3.evq(&kv(&[("fmt", "hist")]), &now).unwrap();
+        let radios: Vec<&str> = h3.lines().map(|l| l.split("\"radio\":").nth(1).unwrap().split(',').next().unwrap()).collect();
+        assert_eq!(radios, ["\"lte\"", "\"nr\"", "\"lte\"", "null", "\"nr\"", "null"], "{h3}");
         // Older events come from flash once the ring no longer holds them.
         e.shutdown(&now);
         drop(e);
@@ -809,6 +827,62 @@ mod tests {
         }
         eprintln!("LOGQ over a full ring: worst {worst:?}");
         assert!(worst < std::time::Duration::from_millis(30), "{worst:?}");
+    }
+
+    #[test]
+    fn kernel_records_become_k_rows_events_and_a_kernel_logq() {
+        use crate::logd::kmsg::tests::FIXTURE;
+        let c = cfg("kmsg");
+        let now = Now::at(1000.0, W);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        for l in FIXTURE.lines() {
+            e.ingest_kmsg(l.as_bytes(), &now);
+        }
+        let st = e.stat(&now);
+        assert!(st.contains("\"kmsg\":{\"open\":false,\"read\":16,\"kept\":13,\"overruns\":0,\"seq\":1805,\"ssr_this_boot\":2}"), "{st}");
+        let k = e.logq(&kv(&[("kind", "K")]), &now).unwrap();
+        let en = entries(&k);
+        assert_eq!(en.len(), 13, "{k}");
+        assert!(en[0].contains("\"level\":\"INFO\",\"component\":\"kernel\",\"pid\":\"\",\"message\":\"remoteproc remoteproc0: powering up 4080000.remoteproc-mss\",\"facility\":\"kern\",\"priority\":\"info\",\"up\":15.23,\"kseq\":812,\"tag\":\"remoteproc\""), "{}", en[0]);
+        assert!(en[1].contains("\"level\":\"ERROR\"") && en[1].contains("\"priority\":\"err\""), "{}", en[1]);
+        assert!(k.contains("\"available_components\":[\"kernel\"]"));
+        assert_eq!(e.logq(&kv(&[("source", "kernel"), ("tag", "eth")]), &now).unwrap().matches("\"kseq\"").count(), 3);
+        // The transcript (default) has the derived events, not the K rows.
+        let d = e.logq(&[], &now).unwrap();
+        assert!(d.contains("EVENT [oom_kill] Out of memory: killed stress (pid 4321)") && !d.contains("powering up"), "{d}");
+        // The History system series' newest fatal-error stamp, as one call.
+        let ssr = e.logq(&kv(&[("kind", "K"), ("tag", "ssr"), ("search", "4080000.remoteproc-mss: fatal error received"), ("limit", "1"), ("fmt", "mono")]), &now).unwrap();
+        assert_eq!(ssr, "812");
+        assert_eq!(e.logq(&kv(&[("kind", "K"), ("tag", "panic"), ("search", "nothing like it"), ("fmt", "mono")]), &now).unwrap(), "");
+        let ev = e.evq(&kv(&[("types", "oom_kill,eth_link_up,eth_link_down")]), &now).unwrap();
+        assert_eq!(ev.matches("\"seq\"").count(), 4, "{ev}");
+        assert!(ev.contains("\"type\":\"oom_kill\",\"message\":\"Out of memory: killed stress (pid 4321)\",\"severity\":\"warning\",\"seq\":"));
+        assert!(ev.contains("\"cat\":\"system\",\"f\":{\"proc\":\"stress\",\"pid\":\"4321\"}"));
+        assert!(ev.contains("\"cat\":\"lan\",\"f\":{\"iface\":\"eth0\",\"speed\":\"1Gbps\",\"duplex\":\"full\"}"));
+        assert!(ev.contains("\"type\":\"eth_link_down\",\"message\":\"eth0 link down\",\"severity\":\"warning\""));
+        assert!(e.logq(&kv(&[("kind", "X")]), &now).is_err());
+        // A restart in the same boot skips what it already read.
+        e.shutdown(&now);
+        drop(e);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        let h = e.head();
+        for l in FIXTURE.lines() {
+            e.ingest_kmsg(l.as_bytes(), &now);
+        }
+        assert_eq!(e.head(), h, "no duplicates after a restart");
+        assert!(e.stat(&now).contains("\"ssr_this_boot\":2"));
+        // K rows are on flash with the logs: the next boot reads them back.
+        e.shutdown(&now);
+        drop(e);
+        std::fs::write(&c.boot_id, "boot-B\n").unwrap();
+        let mut e = Engine::open(c.clone(), &Now::at(400.0, W + 2000)).unwrap();
+        let prev = e.logq(&kv(&[("kind", "K"), ("boot", "prev")]), &Now::at(400.0, W + 2000)).unwrap();
+        assert_eq!(entries(&prev).len(), 13, "{prev}");
+        // A new boot reads the ring from the start again.
+        for l in FIXTURE.lines().take(4) {
+            e.ingest_kmsg(l.as_bytes(), &Now::at(1000.0, W + 2000));
+        }
+        assert!(e.stat(&Now::at(1000.0, W + 2000)).contains("\"ssr_this_boot\":1"));
     }
 
     #[test]

@@ -38,6 +38,8 @@ pub struct Config {
     pub events_mirror: String,
     pub uptime: String,
     pub boot_id: String,
+    /// The kernel log device (`QLOGD_KMSG`; empty disables kernel capture).
+    pub kmsg: String,
     pub level: Level,
     pub persist_level: Level,
     pub forward_syslog: bool,
@@ -55,6 +57,7 @@ impl Config {
             events_mirror: v("QLOGD_EVENTS_MIRROR", "/tmp/qmanager_events.json"),
             uptime: v("QLOGD_UPTIME", "/proc/uptime"),
             boot_id: v("QLOGD_BOOT_ID", "/proc/sys/kernel/random/boot_id"),
+            kmsg: std::env::var("QLOGD_KMSG").unwrap_or_else(|_| "/dev/kmsg".into()),
             level: Level::parse(&v("QLOGD_LEVEL", "INFO")),
             persist_level: Level::parse(&v("QLOGD_PERSIST_LEVEL", "INFO")),
             forward_syslog: v("QLOGD_FORWARD_SYSLOG", "0") == "1",
@@ -99,6 +102,8 @@ pub struct Stats {
     pub last_flush_ms: Option<u64>,
     pub syslog: u64,
     pub kernel: u64,
+    pub kmsg_read: u64,
+    pub kmsg_overruns: u64,
 }
 
 pub struct Engine {
@@ -131,6 +136,12 @@ pub struct Engine {
     syslog_sock: Option<std::os::unix::net::UnixDatagram>,
     /// Flash flushes are skipped below this much free space.
     pub(super) min_free: u64,
+    /// Highest kmsg seq read this boot (persisted per boot_id).
+    pub(super) kmsg_hw: u64,
+    /// Kernel SSR records this boot.
+    pub(super) kmsg_ssr: u64,
+    /// The kmsg reader is open.
+    pub(super) kmsg_open: bool,
 }
 
 /// Reads the first field of an uptime file as centiseconds.
@@ -153,6 +164,7 @@ impl Engine {
             Some(s) if s.boot_id == boot_id && !boot_id.is_empty() => s.boot.max(1),
             Some(s) => s.boot.max(index.last_boot().unwrap_or(0)) + 1,
         };
+        let same_boot = st.as_ref().map_or(false, |s| s.boot_id == boot_id && !boot_id.is_empty());
         let mut seq = prev.seq.max(flash_max);
         if st.is_some() && !prev.clean {
             seq += UNCLEAN_SEQ_GAP;
@@ -187,6 +199,9 @@ impl Engine {
             stats: Stats::default(),
             syslog_sock: None,
             min_free: MIN_FREE,
+            kmsg_hw: if same_boot { prev.kmsg_seq } else { 0 },
+            kmsg_ssr: if same_boot { prev.kmsg_ssr } else { 0 },
+            kmsg_open: false,
             cfg,
         };
         e.index.entry(boot);
@@ -266,6 +281,34 @@ impl Engine {
         }
     }
 
+    /// One `/dev/kmsg` record: skipped when already read this boot, kept as a
+    /// `K` row when the filter tags it, plus the event it implies.
+    pub fn ingest_kmsg(&mut self, line: &[u8], now: &Now) {
+        let rec = match super::kmsg::parse_record(line) {
+            Some(r) => r,
+            None => return,
+        };
+        if rec.seq <= self.kmsg_hw && self.kmsg_hw > 0 {
+            return;
+        }
+        self.kmsg_hw = rec.seq;
+        self.stats.kmsg_read += 1;
+        let tag = match super::kmsg::classify(&rec.msg) {
+            Some(t) => t,
+            None => return,
+        };
+        let m = Self::mono_of(Some(rec.usec / 10_000), now);
+        if tag == "ssr" {
+            self.kmsg_ssr += 1;
+        }
+        let ev = super::kmsg::event_of(tag, &rec.msg);
+        self.store(Body::Kern { pri: rec.pri, fac: rec.fac, kseq: rec.seq, tag: tag.into(), msg: rec.msg }, m, now);
+        if let Some((ty, sev, f, msg)) = ev {
+            let cat = registry::category(ty);
+            self.store(Body::Ev { ty: ty.into(), sev, cat, code: String::new(), f, msg }, m, now);
+        }
+    }
+
     /// A row logd writes about itself (no collapse, no rate limit).
     pub fn self_log(&mut self, lv: Level, msg: &str, now: &Now) {
         if lv < self.min_level(now) {
@@ -300,9 +343,9 @@ impl Engine {
                 self.stats.events += 1;
                 *sev != Sev::Info
             }
-            Body::Kern { .. } => {
+            Body::Kern { pri, .. } => {
                 self.stats.kernel += 1;
-                false
+                super::record::kern_level(*pri) == Level::Error
             }
         };
         self.text.add(&body, t, now.wall, self.pid, now.ms());
@@ -544,6 +587,8 @@ impl Engine {
             boot_id: self.boot_id.clone(),
             last_wall: self.clock.floor,
             clean,
+            kmsg_seq: self.kmsg_hw,
+            kmsg_ssr: self.kmsg_ssr,
         };
         if self.journal.save_state(&st).is_ok() {
             self.stats.fsyncs += 1;
@@ -602,6 +647,7 @@ pub(crate) mod tests {
             events_mirror: p("events.json"),
             uptime: p("uptime"),
             boot_id: p("boot_id"),
+            kmsg: String::new(),
             level: Level::Info,
             persist_level: Level::Info,
             forward_syslog: false,

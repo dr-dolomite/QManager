@@ -100,15 +100,43 @@ pub fn category(ty: &str) -> &'static str {
 /// Types kept past the event day cap (History's keep-list rule), besides
 /// every `error` severity event.
 pub fn kept_past_cap(ty: &str) -> bool {
-    matches!(ty, "signal_lost" | "signal_restored" | "internet_lost" | "internet_restored")
+    matches!(
+        ty,
+        "signal_lost"
+            | "signal_restored"
+            | "internet_lost"
+            | "internet_restored"
+            | "sim_failover"
+            | "data_call_dropped"
+            | "data_call_restored"
+            | "device_reboot"
+            | "modem_crash"
+            | "modem_recovered"
+            | "thermal_throttled"
+            | "thermal_recovered"
+    )
 }
 
-/// History's cellular series event types: the only ones whose `k:"e"` row
-/// carries a radio (`hist_cellular_radio`); every other series writes null.
+/// History's cellular series event types: the ones whose `k:"e"` radio is
+/// derived from the message prefix and `nr_anchor` (`hist_cellular_radio`)
+/// when the writer gave no `radio` field.
 pub fn hist_cellular(ty: &str) -> bool {
     matches!(
         ty,
-        "signal_lost" | "signal_restored" | "nr_anchor" | "pci_change" | "scc_pci_change" | "band_change" | "ca_change"
+        "signal_lost"
+            | "signal_restored"
+            | "nr_anchor"
+            | "pci_change"
+            | "scc_pci_change"
+            | "band_change"
+            | "ca_change"
+            | "band_lock_changed"
+            | "tower_lock_changed"
+            | "band_failover"
+            | "tower_failover"
+            | "sim_switched"
+            | "registration_changed"
+            | "apn_changed"
     )
 }
 
@@ -137,6 +165,11 @@ mod tests {
         assert_eq!(category("lan_address_changed"), "lan");
         assert_eq!(category("config_restore_whatever"), "config");
         assert_eq!(category("brand_new"), "other");
+        for t in ["signal_lost", "signal_restored", "internet_lost", "internet_restored", "sim_failover", "data_call_dropped", "data_call_restored", "device_reboot", "modem_crash", "modem_recovered", "thermal_throttled", "thermal_recovered"] {
+            assert!(kept_past_cap(t), "{t}");
+        }
+        assert!(!kept_past_cap("band_change") && !kept_past_cap("pci_change"));
+        assert!(hist_cellular("apn_changed") && hist_cellular("tower_failover") && !hist_cellular("internet_lost"));
         for (_, c) in TABLE {
             assert!(CATEGORIES.contains(c));
         }
