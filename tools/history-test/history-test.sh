@@ -133,10 +133,11 @@ echo "$OUT" | jq -e '.since == '"$((W0 - 40 + 10))"'' >/dev/null 2>&1 && ok || b
 echo "$OUT" | jq -e '.last_fault.end - .last_fault.start == 60' >/dev/null 2>&1 && ok || bad "last_fault in CGI"
 echo "$OUT" | jq -e '[.buckets[].x]|add >= 1' >/dev/null 2>&1 && ok || bad "outage count x"
 echo "$OUT" | jq -e '.buckets|map(select(.t=='"$W0"'))|.[0].m.lte_rsrp.avg == -99' >/dev/null 2>&1 && ok || bad "avg merged"
-for R in 7d 30d; do
+for R in 5m 1h 7d 15d 30d; do
     O2=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=$R" sh "$SRC/series.sh" | sed -n '/^{/,$p')
-    echo "$O2" | jq -e '.success and (.buckets|length) == (if .range=="7d" then 56 else 60 end)' >/dev/null 2>&1 && ok || bad "series $R"
+    echo "$O2" | jq -e '.success and (.buckets|length) == ({"5m":30,"1h":60,"7d":56,"15d":60,"30d":60}[.range]) and .bucket_sec == ({"5m":10,"1h":60,"7d":10800,"15d":21600,"30d":43200}[.range])' >/dev/null 2>&1 && ok || bad "series $R"
 done
+check 'grep -q "^{\"k\":\"f\",\"t\":[0-9]*,\"dt\":[0-9]*,\"s\":\"[a-z]*\",\"x\":[01],\"m\":{" "$T/run/cellular.fine"' "sample ring written"
 O3=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=nope&range=24h" sh "$SRC/series.sh" | sed -n '/^{/,$p')
 echo "$O3" | jq -e '.error=="invalid_series"' >/dev/null 2>&1 && ok || bad "invalid_series"
 O4=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=2h" sh "$SRC/series.sh" | sed -n '/^{/,$p')
@@ -324,6 +325,48 @@ _QMI_READ_MONO=4995; t1_cfun=4
 hist_cellular_sample
 check '[ "$_HS" = off ]' "CFUN 4 wins over QMI down (got $_HS)"
 t1_cfun=1; _QMI_OK=0; _QMI_STATE=""
+
+# 14. Fine ranges (5m, 1h): RAM sample ring spread over the buckets.
+printf '%s.00 0.00
+' "$MONO" > "$T/uptime"
+FN=$((MONO + WOFF))
+F="$T/run/cellular.fine"
+: > "$F"
+_k=1
+_pt=$((FN - 400))
+while [ "$_k" -le 40 ]; do
+    # Jitter: odd samples land 3 s late, so dt alternates 13 / 7.
+    _t=$((FN - 400 + _k * 10))
+    [ $((_k % 2)) -eq 1 ] && _t=$((_t + 3))
+    _x=0
+    [ "$_k" -eq 20 ] && _x=1
+    printf '{"k":"f","t":%s,"dt":%s,"s":"nr","x":%s,"m":{"lte_rsrp":-90,"nr_sinr":12}}
+' "$_t" $((_t - _pt)) "$_x" >> "$F"
+    _pt=$_t
+    _k=$((_k + 1))
+done
+printf '{"k":"f","t":12' >> "$F"
+O6=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=5m" sh "$SRC/series.sh" | sed -n '/^{/,$p')
+echo "$O6" | jq -e '(.buckets|length) == 30' >/dev/null 2>&1 && ok || bad "5m shape: $(echo "$O6" | head -c 300)"
+echo "$O6" | jq -e '[.buckets[:-1][] | .st.nr == 10] | all' >/dev/null 2>&1 && ok || bad "5m every full bucket covered despite jitter: $(echo "$O6" | jq -c '[.buckets[].st.nr]')"
+echo "$O6" | jq -e '[.buckets[:-1][] | .m.lte_rsrp.avg == -90 and .m.nr_sinr.max == 12] | all' >/dev/null 2>&1 && ok || bad "5m metrics in every bucket"
+echo "$O6" | jq -e '[.buckets[] | (.st|add) <= .len] | all' >/dev/null 2>&1 && ok || bad "5m st clamped to len"
+O7=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=1h" sh "$SRC/series.sh" | sed -n '/^{/,$p')
+echo "$O7" | jq -e '(.buckets|length) == 60 and ([.buckets[].x] | add) == 1' >/dev/null 2>&1 && ok || bad "1h shape + one fault entry: $(echo "$O7" | jq -c '[.buckets[].x]|add')"
+echo "$O7" | jq -e '([.buckets[].st.nr] | add) == 400' >/dev/null 2>&1 && ok || bad "1h covers the ring span: $(echo "$O7" | jq -c '[.buckets[].st.nr]|add')"
+echo "$O7" | jq -e '[.buckets[:-8][] | .st.nr == 0 and (.m|length) == 0] | all' >/dev/null 2>&1 && ok || bad "1h empty before the ring"
+E5=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=5m" sh "$SRC/events.sh" | sed -n '/^{/,$p')
+echo "$E5" | jq -e '.success' >/dev/null 2>&1 && ok || bad "events 5m"
+# Ring trim: past HIST_FINE_MAX + 60 rows it keeps the newest HIST_FINE_MAX.
+_fmax=$HIST_FINE_MAX
+HIST_FINE_MAX=5
+: > "$F"
+_hfn_cellular=0
+_HS=nr
+_k=1
+while [ "$_k" -le 66 ]; do _hist_fine cellular $((FN + _k)) 1 0; _k=$((_k + 1)); done
+check '[ "$(wc -l < "$F")" -eq 5 ] && tail -n 1 "$F" | grep -q "\"t\":$((FN + 66)),"' "ring trimmed to the newest rows (got $(wc -l < "$F"))"
+HIST_FINE_MAX=$_fmax
 
 echo "history-test: $PASS passed, $FAIL failed"
 [ "$KEEP" = 1 ] || rm -rf "$T"
