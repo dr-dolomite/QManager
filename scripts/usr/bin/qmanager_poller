@@ -3041,6 +3041,20 @@ refresh_sim_identity() {
 # POLL CYCLE
 # =============================================================================
 
+_SPOOL_CHECK_MONO=0
+_spool_backstop() {
+    local _sp
+    local _sz
+    _sp="${QLOGD_RUN_DIR:-/var/run/qmanager/journal}/spool"
+    [ -f "$_sp" ] || return 0
+    _sz=$(wc -c < "$_sp" 2>/dev/null)
+    case "$_sz" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$_sz" -gt 1048576 ]; then
+        : > "$_sp"
+        qlog_warn "logd spool over 1 MB and unread (${_sz} bytes); truncated"
+    fi
+}
+
 poll_cycle() {
     # The cycle's ONE wall-clock read; everything below (tier decision, flag
     # age, conn uptime, history timestamps, write_cache) reuses it.
@@ -3048,6 +3062,13 @@ poll_cycle() {
     mono_now_set
     _MONO_TOP="$_MONO"
     _QENG_PARSED=0
+
+    # Once a minute: cap an unread logd spool (daemon down or hung while the
+    # alive marker is stale). One wc fork per minute, only when the file exists.
+    if [ "$_MONO_TOP" -gt 0 ] && [ $((_MONO_TOP - _SPOOL_CHECK_MONO)) -ge 60 ]; then
+        _SPOOL_CHECK_MONO="$_MONO_TOP"
+        _spool_backstop
+    fi
 
     # Live reload of connection-quality thresholds when the CGI drops the flag.
     if [ -f "$QUALITY_RELOAD_FLAG" ]; then
