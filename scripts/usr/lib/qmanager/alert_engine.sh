@@ -628,7 +628,7 @@ _ae_classify_reboot() {
 
     case "$_reason" in
         tier4_escalation) echo "watchdog" ;;
-        user)             echo "user" ;;
+        user|scheduled|update) echo "user" ;;
         *)                echo "unplanned" ;;
     esac
 }

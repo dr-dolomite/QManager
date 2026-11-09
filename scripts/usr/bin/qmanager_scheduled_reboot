@@ -60,8 +60,8 @@ if ! mkdir "${_sr_run}/sched_reboot.$(date +%Y%m%d%H%M)" 2>/dev/null; then
 fi
 
 qlog_info "Scheduled system reboot triggered"
-# Scheduled reboots fold into the single "user" (planned) class per the reboot-
-# alert routing model — drop the breadcrumb before rebooting so the next boot
-# classifies this as planned, not an unplanned power loss.
-record_planned_reboot "user"
+# Drop the breadcrumb before rebooting so the next boot classifies this as
+# planned, not an unplanned power loss. Alerts fold "scheduled" into the
+# "user" class; System Health history keeps it apart.
+record_planned_reboot "scheduled"
 reboot
