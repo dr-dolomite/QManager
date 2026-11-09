@@ -389,6 +389,18 @@ responses).
   ..., `local0`-`local7`). Both are `null` on a line without the prefix. User-space writers to
   `/dev/kmsg` (QCMAP's `<12>` lines) come through as `user`. Kernel rows still
   draw as time and message only; the levels feed the summary tiles.
+- **Kernel boot history (logd `kmsg=1`).** When `/var/run/qmanager_logd.proto` carries `kmsg=1`,
+  logd keeps a filtered set of kernel records (SSR/remoteproc, OOM, thermal trip, panic,
+  watchdog, BUG/Oops, eth link) across boots. `source=kernel&boot=prev|<n>` (`this` or no `boot`
+  is the live ring) is then answered from `qlog logq source=kernel boot=<b> limit=<lines>` in the
+  same entry shape (`up`, `facility`, `level` from the record's priority, `msg`, plus additive `t`
+  and `tag`), newest first. `uptime` is derived so `now - uptime + up` lands on each record's own
+  wall time; `total` is the entries returned. The response carries `boot`, `this_boot` and
+  `boots[]` (the `LogBoot` shape), which is what shows the tab's boot selector. The live kernel
+  response gets the same three fields from one extra `qlog logq source=kernel limit=1` call. A
+  past boot is not the whole ring, only the kept set; without `kmsg=1` the `boot` parameter is
+  ignored, and an unreachable logd on a past boot is `unavailable`. `boot` is `this`, `prev` or
+  digits (at most 9), anything else is `invalid_param`.
 - **Escaping.** Built char by char in awk (no `sub`/`gsub` replacement strings, whose backslash
   rules differ between awks): `\` and `"` escaped, tab becomes a space, other control
   characters are dropped.
