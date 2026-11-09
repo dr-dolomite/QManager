@@ -71,10 +71,37 @@ append_event() {
 
     qlog_info "EVENT [${etype}] ${message}"
 
-    # History tap (poller only: other callers have no history.sh loaded).
+    # History tap: the poller records directly; other callers (watchcat,
+    # CGIs) have no history.sh loaded and hand the event over the spool.
     if command -v hist_event >/dev/null 2>&1; then
         hist_event "$etype" "$message" "$severity"
+    else
+        _ev_hist_spool "$etype" "$severity" "$message"
     fi
+}
+
+# _ev_hist_spool TYPE SEVERITY MESSAGE: append "mono|type|severity|message"
+# for the poller's history collector (history.sh _hist_spool). Only when the
+# poller has made its run dir; never creates it. Capped at 200 lines (new
+# lines are dropped when full, so no rewrite races the poller's rename).
+_ev_hist_spool() {
+    local _d
+    local _f
+    local _n
+    local _up
+    local _r
+    _d="${HIST_RUN:-/var/run/qmanager/history}"
+    [ -d "$_d" ] || return 0
+    _f="$_d/ext.spool"
+    _n=0
+    [ -s "$_f" ] && _n=$(wc -l < "$_f" 2>/dev/null)
+    case "$_n" in ''|*[!0-9]*) _n=0 ;; esac
+    [ "$_n" -lt 200 ] || return 0
+    _up=""
+    { read -r _up _r < "${HIST_UPTIME_FILE:-/proc/uptime}"; } 2>/dev/null
+    _up="${_up%%.*}"
+    case "$_up" in ''|*[!0-9]*) return 0 ;; esac
+    printf '%s|%s|%s|%s\n' "$_up" "$1" "$2" "$3" >> "$_f" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
