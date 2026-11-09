@@ -430,12 +430,16 @@ main() {
 
         if [ "$SF_ENABLED" != "1" ]; then
             _sf_idle_logged=0
+            _sf_rd_fail_since=""
             sleep "$SF_INTERVAL"
             continue
         fi
 
         if ! sf_target_valid; then
-            qlog_warn "SMS forward: enabled but target_phone is invalid/empty — idling"
+            if [ "$_sf_idle_logged" != "1" ]; then
+                qlog_warn "SMS forward: enabled but target_phone is invalid/empty — idling"
+                _sf_idle_logged=1
+            fi
             sleep "$SF_INTERVAL"
             continue
         fi

@@ -1381,7 +1381,11 @@ _PCA_EOF
                 # Already NR — nothing to do
                 ;;
             *)
-                qlog_warn "parse_ca_info: network_type reconciled ${network_type}→5G-SA based on NR PCC in QCAINFO"
+                if [ -z "$_pa_reconcile_since" ]; then
+                    _pa_up
+                    _pa_reconcile_since="$_PA_NOW"
+                    qlog_warn "parse_ca_info: network_type reconciled ${network_type}→5G-SA based on NR PCC in QCAINFO"
+                fi
                 network_type="5G-SA"
                 case "$nr_state" in
                     "unknown"|"inactive") nr_state="connected" ;;
