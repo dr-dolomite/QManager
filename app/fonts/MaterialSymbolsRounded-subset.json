@@ -14,6 +14,7 @@
     "badge",
     "block",
     "bolt",
+    "bug_report",
     "call",
     "cancel",
     "cell_tower",
@@ -136,6 +137,6 @@
     "wifi_tethering_off",
     "work"
   ],
-  "bytes": 47984,
-  "sha256": "ad8baadfe308c9198b04c10a1b047081514f16858fabbc2d87523fb56ad319ba"
+  "bytes": 49320,
+  "sha256": "384c5c7d6f5c088308c1f36ee6b164a951755e616ef070ca62972f11c0a3c5b7"
 }

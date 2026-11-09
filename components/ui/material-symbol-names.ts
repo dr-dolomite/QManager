@@ -59,6 +59,7 @@ export const MATERIAL_SYMBOL_NAMES = [
   "badge",
   "block",
   "bolt",
+  "bug_report",
   "call",
   "cancel",
   "cell_tower",
