@@ -128,6 +128,7 @@ printf '%s.00 0.00\n' "$MONO" > "$T/uptime"
 OUT=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=24h" sh "$SRC/series.sh" | sed -n '/^{/,$p')
 echo "$OUT" | jq -e '.success and .clock_trusted and (.buckets|length)==48' >/dev/null 2>&1 && ok || bad "series 24h shape: $(echo "$OUT" | head -c 300)"
 echo "$OUT" | jq -e '[.buckets[]|(.st|add) <= .len]|all' >/dev/null 2>&1 && ok || bad "st clamped to len"
+echo "$OUT" | jq -e '.since == '"$((W0 - 40 + 10))"'' >/dev/null 2>&1 && ok || bad "since = first trusted sample: $(echo "$OUT" | jq -c .since)"
 echo "$OUT" | jq -e '.last_fault.end - .last_fault.start == 60' >/dev/null 2>&1 && ok || bad "last_fault in CGI"
 echo "$OUT" | jq -e '[.buckets[].x]|add >= 1' >/dev/null 2>&1 && ok || bad "outage count x"
 echo "$OUT" | jq -e '.buckets|map(select(.t=='"$W0"'))|.[0].m.lte_rsrp.avg == -99' >/dev/null 2>&1 && ok || bad "avg merged"
