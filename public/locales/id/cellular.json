@@ -915,6 +915,24 @@
         "copy": "Salin kode",
         "copied": "Tersalin"
       },
+      "reactions": {
+        "add": "Tambah reaksi",
+        "group": "Reaksi",
+        "names": {
+          "heart": "Hati",
+          "star": "Bintang",
+          "memo": "Catatan",
+          "pin": "Pin"
+        },
+        "set": "Beri reaksi {{reaction}}",
+        "remove": "Hapus {{reaction}}"
+      },
+      "pins": {
+        "label": "Pesan tersemat",
+        "you": "Anda",
+        "unpin": "Lepas sematan",
+        "count": "{{count}} tersemat"
+      },
       "phishing": {
         "with_logo": "Berisi tautan. Nama pengirim bisa dipalsukan, sehingga {{name}} mungkin bukan yang mengirim pesan ini.",
         "generic": "Berisi tautan. Buka hanya jika Anda memang mengharapkan pesan ini."
@@ -934,7 +952,11 @@
         "message_deleted": "Pesan dihapus",
         "message_delete_failed": "Tidak dapat menghapus pesan",
         "message_marked_unread": "Ditandai belum dibaca",
-        "mark_unread_failed": "Tidak dapat menandai pesan sebagai belum dibaca"
+        "mark_unread_failed": "Tidak dapat menandai pesan sebagai belum dibaca",
+        "reaction_added": "Reaksi ditambahkan",
+        "reaction_removed": "Reaksi dihapus",
+        "message_pinned": "Pesan disematkan",
+        "message_unpinned": "Sematan dilepas"
       },
       "a11y": {
         "unread_count_one": "{{count}} pesan belum dibaca",

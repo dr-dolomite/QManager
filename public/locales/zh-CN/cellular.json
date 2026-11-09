@@ -915,6 +915,24 @@
         "copy": "复制验证码",
         "copied": "已复制"
       },
+      "reactions": {
+        "add": "添加表情回应",
+        "group": "表情回应",
+        "names": {
+          "heart": "爱心",
+          "star": "星标",
+          "memo": "备忘",
+          "pin": "图钉"
+        },
+        "set": "用{{reaction}}回应",
+        "remove": "移除{{reaction}}"
+      },
+      "pins": {
+        "label": "置顶消息",
+        "you": "你",
+        "unpin": "取消置顶",
+        "count": "{{count}} 条置顶"
+      },
       "phishing": {
         "with_logo": "含有链接。发件人名称可能被伪造，{{name}} 未必发送了此消息。",
         "generic": "含有链接。仅在您预期收到此消息时才打开。"
@@ -934,7 +952,11 @@
         "message_deleted": "消息已删除",
         "message_delete_failed": "无法删除消息",
         "message_marked_unread": "已标为未读",
-        "mark_unread_failed": "无法将消息标为未读"
+        "mark_unread_failed": "无法将消息标为未读",
+        "reaction_added": "已添加回应",
+        "reaction_removed": "已移除回应",
+        "message_pinned": "消息已置顶",
+        "message_unpinned": "已取消置顶"
       },
       "a11y": {
         "unread_count_one": "{{count}} 条未读消息",

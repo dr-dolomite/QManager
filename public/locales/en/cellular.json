@@ -915,6 +915,24 @@
         "copy": "Copy code",
         "copied": "Copied"
       },
+      "reactions": {
+        "add": "Add reaction",
+        "group": "Reactions",
+        "names": {
+          "heart": "Heart",
+          "star": "Star",
+          "memo": "Memo",
+          "pin": "Pin"
+        },
+        "set": "React with {{reaction}}",
+        "remove": "Remove {{reaction}}"
+      },
+      "pins": {
+        "label": "Pinned messages",
+        "you": "You",
+        "unpin": "Unpin",
+        "count": "{{count}} pinned"
+      },
       "phishing": {
         "with_logo": "Contains a link. Sender names can be faked, so {{name}} may not have sent this.",
         "generic": "Contains a link. Only open it if you expected this message."
@@ -934,7 +952,11 @@
         "message_deleted": "Message deleted",
         "message_delete_failed": "Couldn't delete the message",
         "message_marked_unread": "Marked as unread",
-        "mark_unread_failed": "Couldn't mark the message as unread"
+        "mark_unread_failed": "Couldn't mark the message as unread",
+        "reaction_added": "Reaction added",
+        "reaction_removed": "Reaction removed",
+        "message_pinned": "Message pinned",
+        "message_unpinned": "Message unpinned"
       },
       "a11y": {
         "unread_count_one": "{{count}} unread message",

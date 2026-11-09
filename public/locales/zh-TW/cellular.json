@@ -915,6 +915,24 @@
         "copy": "複製驗證碼",
         "copied": "已複製"
       },
+      "reactions": {
+        "add": "新增表情回應",
+        "group": "表情回應",
+        "names": {
+          "heart": "愛心",
+          "star": "星號",
+          "memo": "備忘",
+          "pin": "圖釘"
+        },
+        "set": "以{{reaction}}回應",
+        "remove": "移除{{reaction}}"
+      },
+      "pins": {
+        "label": "置頂訊息",
+        "you": "你",
+        "unpin": "取消置頂",
+        "count": "{{count}} 則置頂"
+      },
       "phishing": {
         "with_logo": "含有連結。發件人名稱可能被偽造，{{name}} 未必傳送了此訊息。",
         "generic": "含有連結。僅在您預期收到此訊息時才開啟。"
@@ -934,7 +952,11 @@
         "message_deleted": "訊息已刪除",
         "message_delete_failed": "無法刪除訊息",
         "message_marked_unread": "已標為未讀",
-        "mark_unread_failed": "無法將訊息標為未讀"
+        "mark_unread_failed": "無法將訊息標為未讀",
+        "reaction_added": "已新增回應",
+        "reaction_removed": "已移除回應",
+        "message_pinned": "訊息已置頂",
+        "message_unpinned": "已取消置頂"
       },
       "a11y": {
         "unread_count_one": "{{count}} 條未讀訊息",

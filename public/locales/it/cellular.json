@@ -915,6 +915,24 @@
         "copy": "Copia codice",
         "copied": "Copiato"
       },
+      "reactions": {
+        "add": "Aggiungi reazione",
+        "group": "Reazioni",
+        "names": {
+          "heart": "Cuore",
+          "star": "Stella",
+          "memo": "Nota",
+          "pin": "Puntina"
+        },
+        "set": "Reagisci con {{reaction}}",
+        "remove": "Rimuovi {{reaction}}"
+      },
+      "pins": {
+        "label": "Messaggi fissati",
+        "you": "Tu",
+        "unpin": "Rimuovi dai fissati",
+        "count": "{{count}} fissati"
+      },
       "phishing": {
         "with_logo": "Contiene un link. I nomi dei mittenti possono essere falsificati, quindi {{name}} potrebbe non aver inviato questo messaggio.",
         "generic": "Contiene un link. Aprilo solo se aspettavi questo messaggio."
@@ -934,7 +952,11 @@
         "message_deleted": "Messaggio eliminato",
         "message_delete_failed": "Impossibile eliminare il messaggio",
         "message_marked_unread": "Segnato come non letto",
-        "mark_unread_failed": "Impossibile segnare il messaggio come non letto"
+        "mark_unread_failed": "Impossibile segnare il messaggio come non letto",
+        "reaction_added": "Reazione aggiunta",
+        "reaction_removed": "Reazione rimossa",
+        "message_pinned": "Messaggio fissato",
+        "message_unpinned": "Messaggio non più fissato"
       },
       "a11y": {
         "unread_count_one": "{{count}} messaggio non letto",

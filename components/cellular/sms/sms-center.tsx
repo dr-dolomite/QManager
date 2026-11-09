@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MaterialSymbol } from "@/components/ui/material-symbol";
 import { smsErrorMessage, useSms } from "@/hooks/use-sms";
+import { useSmsReactions } from "@/hooks/use-sms-reactions";
 import {
   DUR,
   EASE_EMPHASIZED,
@@ -124,6 +125,8 @@ export default function SmsCenterComponent() {
     markMessageUnread,
     refresh,
   } = useSms();
+
+  const { forget: forgetReactions } = useSmsReactions();
 
   const messages = React.useMemo(() => data?.messages ?? [], [data?.messages]);
 
@@ -416,6 +419,7 @@ export default function SmsCenterComponent() {
     const deleted = deleteMessageTarget;
     setDeleteMessageTarget(null);
     if (result.ok) {
+      forgetReactions(deleted);
       // The open thread unions the polled list with `detail`, which is fetched
       // once per open; drop the message here too or the union keeps it.
       setDetailState((prev) => ({
@@ -440,6 +444,12 @@ export default function SmsCenterComponent() {
     const deletedAddr = deleteTarget;
     setDeleteTarget(null);
     if (result.ok) {
+      allViews
+        .find((v) => v.addr === deletedAddr)
+        ?.messages.forEach(forgetReactions);
+      if (detailState.addr === deletedAddr) {
+        detailState.messages.forEach(forgetReactions);
+      }
       toast.success(t("sms.center.toast.thread_deleted"));
       if (openAddr === deletedAddr) closeThread();
     } else {

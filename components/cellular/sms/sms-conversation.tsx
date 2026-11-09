@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { Bubble, BubbleContent, BubbleReactions } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,10 +14,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useMotionReduced } from "@/components/motion-preference";
 import { MaterialSymbol } from "@/components/ui/material-symbol";
 import { Tag } from "@/components/ui/tag";
 import { copyText } from "@/lib/clipboard";
 import { DUR, EASE_QUICK, EASE_STANDARD } from "@/lib/motion";
+import { useSmsReactions } from "@/hooks/use-sms-reactions";
+import type { SmsReactionKind } from "@/lib/sms-reactions";
 import { cn } from "@/lib/utils";
 import type { PendingSmsSend } from "@/hooks/use-sms";
 import type { SmsMessage } from "@/types/sms";
@@ -35,6 +39,13 @@ import {
 } from "./sms-format";
 import { SmsIdentityDisc } from "./sms-identity-disc";
 import { SmsMessageContextMenu } from "./sms-message-menu";
+import { SmsPinnedStrip, type PinnedItem } from "./sms-pinned-strip";
+import {
+  ReactionAddButton,
+  ReactionChips,
+  REACTION_RING,
+  dominantReaction,
+} from "./sms-reactions";
 import { SmsConversationSkeleton, SmsStatePanel } from "./sms-states";
 import type { SmsThreadView } from "./sms-threads";
 
@@ -56,13 +67,26 @@ const BUBBLE_RADIUS = "rounded-[1.125rem]";
 const TAIL_IN = "rounded-bl-[0.375rem]";
 const TAIL_OUT = "rounded-br-[0.375rem]";
 
+/**
+ * A reacted bubble wears a 2px ring hugging its edge in the reaction's OWN
+ * colour (`dominantReaction`: a pin, then heart, star, memo), so the emoji and
+ * the highlight say the same thing. It hugs the edge with no offset so the jump
+ * flash (a 3px ring with a 2px gap, on the outer bubble) can sit around it
+ * without the two merging.
+ */
+
+/** How long a pinned-message jump keeps its flash ring. */
+const FLASH_MS = 1600;
+
+const NO_REACTIONS: readonly SmsReactionKind[] = [];
+
 /** The provenance marker's type step: 10px, uppercase, wide-tracked. */
 const PROVENANCE_TAG =
   "flex-none px-1.5 py-0 text-[0.625rem] font-bold tracking-[0.03em] uppercase";
 
 type Side = "in" | "out";
 
-interface Bubble {
+interface ThreadBubble {
   key: string;
   side: Side;
   text: string;
@@ -82,12 +106,12 @@ interface Bubble {
   message?: SmsMessage;
 }
 
-interface BubbleGroup {
+interface ThreadBubbleGroup {
   key: string;
   side: Side;
   dayKey: number;
   epochMs: number;
-  bubbles: Bubble[];
+  bubbles: ThreadBubble[];
   pending?: PendingSmsSend;
   serverFailed?: boolean;
 }
@@ -140,10 +164,10 @@ function isPendingDuplicateOfServerFailure(
 function buildGroups(
   messages: SmsMessage[],
   pending: PendingSmsSend[],
-): BubbleGroup[] {
-  const groups: BubbleGroup[] = [];
+): ThreadBubbleGroup[] {
+  const groups: ThreadBubbleGroup[] = [];
 
-  const pushBubble = (b: Bubble, ownGroup: boolean, pend?: PendingSmsSend) => {
+  const pushBubble = (b: ThreadBubble, ownGroup: boolean, pend?: PendingSmsSend) => {
     const dayKey = smsDayKey(b.epochMs || Date.now());
     const last = groups[groups.length - 1];
     if (
@@ -445,7 +469,7 @@ type RenderItem =
     }
   | { kind: "code"; key: string; code: string; side: Side }
   | { kind: "link"; key: string }
-  | { kind: "footer"; key: string; group: BubbleGroup };
+  | { kind: "footer"; key: string; group: ThreadBubbleGroup };
 
 function ConversationBody({
   groups,
@@ -459,7 +483,7 @@ function ConversationBody({
   onShowMessageDetails,
   onDeleteMessage,
 }: {
-  groups: BubbleGroup[];
+  groups: ThreadBubbleGroup[];
   locale: string;
   /** The resolved sender title, for the phishing warning's copy. */
   senderTitle: string;
@@ -473,7 +497,85 @@ function ConversationBody({
   onDeleteMessage: (message: SmsMessage) => void;
 }) {
   const { t } = useTranslation("cellular");
+  const reduceMotion = useMotionReduced();
+  const reactions = useSmsReactions();
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  // ---- pins ---------------------------------------------------------------
+  // Newest pin first. A pin whose message is not in this thread's merged
+  // history simply is not listed; the reaction itself stays in storage.
+  const pins = React.useMemo<PinnedItem[]>(() => {
+    const found: { at: number; item: PinnedItem }[] = [];
+    for (const group of groups) {
+      for (const b of group.bubbles) {
+        if (!b.message) continue;
+        const at = reactions.pinnedAtOf(b.message);
+        if (at === undefined) continue;
+        found.push({
+          at,
+          item: {
+            key: b.key,
+            message: b.message,
+            text: b.text,
+            out: b.side === "out",
+            epochMs: b.epochMs,
+          },
+        });
+      }
+    }
+    return found.sort((a, b) => b.at - a.at).map((f) => f.item);
+  }, [groups, reactions]);
+  const hasPins = pins.length > 0;
+
+  /** One confirmation toast per finished reaction; a stable id replaces rather than stacks. */
+  const toggleReaction = React.useCallback(
+    (message: SmsMessage, kind: SmsReactionKind) => {
+      const on = reactions.toggle(message, kind);
+      toast.success(
+        kind === "pin"
+          ? t(on ? "sms.center.toast.message_pinned" : "sms.center.toast.message_unpinned")
+          : t(on ? "sms.center.toast.reaction_added" : "sms.center.toast.reaction_removed"),
+        { id: "sms-reaction" },
+      );
+    },
+    [reactions, t],
+  );
+
+  // ---- jump to a pinned message -------------------------------------------
+  const [flashKey, setFlashKey] = React.useState<string | null>(null);
+  const flashTimerRef = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => () => window.clearTimeout(flashTimerRef.current), []);
+
+  const jumpTo = React.useCallback(
+    (key: string) => {
+      const scroller = scrollRef.current;
+      const el = scroller?.querySelector<HTMLElement>(
+        `[data-bubble-key="${CSS.escape(key)}"]`,
+      );
+      if (!scroller || !el) return;
+      // Scrolls the thread only: `scrollIntoView` would also walk the page.
+      const box = scroller.getBoundingClientRect();
+      const at = el.getBoundingClientRect();
+      scroller.scrollTo({
+        top: Math.max(
+          0,
+          scroller.scrollTop + (at.top - box.top) - (box.height - at.height) / 2,
+        ),
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+      // Keyboard and screen-reader users get no flash, so focus follows.
+      el.querySelector<HTMLElement>('[tabindex="0"]')?.focus({
+        preventScroll: true,
+      });
+      window.clearTimeout(flashTimerRef.current);
+      setFlashKey(key);
+      flashTimerRef.current = window.setTimeout(
+        () => setFlashKey(null),
+        FLASH_MS,
+      );
+    },
+    [reduceMotion],
+  );
 
   const tailKey = groups[groups.length - 1]?.bubbles.at(-1)?.key ?? "";
 
@@ -509,7 +611,19 @@ function ConversationBody({
       el.scrollTop = el.scrollHeight;
       atBottomRef.current = true;
     }
-  }, [tailKey, bubbleCount]);
+  }, [tailKey, bubbleCount, hasPins]);
+
+  // Expanding or collapsing the pinned strip resizes the well without any
+  // message changing: a reader resting at the bottom stays on the newest one.
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (atBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const items: RenderItem[] = [];
   groups.forEach((group, index) => {
@@ -560,130 +674,114 @@ function ConversationBody({
   // switch is a fresh mount). Opacity only: the header and composer swap in
   // place, and the messages settle into them rather than sliding.
   return (
-    <motion.div
-      ref={scrollRef}
-      onScroll={handleScroll}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: DUR.quick, ease: EASE_QUICK }}
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-4 pb-5 @2xl/pane:px-7"
-    >
-      {/* `mt-auto` rather than `justify-end` on the scroller: a flex-end scroll
-          container clips its own overflow at the START edge, which would make
-          the oldest messages unreachable. */}
-      <div className="mt-auto flex flex-col gap-0.5">
-        <AnimatePresence initial={false}>
-          {items.map((item) => {
-            if (item.kind === "divider") {
-              return (
-                <motion.div
-                  key={item.key}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
-                  className="bg-surface-container-high text-on-surface-variant rounded-pill my-3 self-center px-2.5 py-1 text-[0.65625rem] font-bold tracking-[0.04em] uppercase"
-                >
-                  {item.label}
-                </motion.div>
-              );
-            }
+    <>
+      <SmsPinnedStrip
+        pins={pins}
+        senderTitle={senderTitle}
+        locale={locale}
+        onJump={jumpTo}
+        onUnpin={(message) => toggleReaction(message, "pin")}
+      />
+      <motion.div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: DUR.quick, ease: EASE_QUICK }}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-4 pb-5 @2xl/pane:px-7"
+      >
+        {/* `mt-auto` rather than `justify-end` on the scroller: a flex-end scroll
+            container clips its own overflow at the START edge, which would make
+            the oldest messages unreachable. */}
+        <div className="mt-auto flex flex-col gap-0.5">
+          <AnimatePresence initial={false}>
+            {items.map((item) => {
+              if (item.kind === "divider") {
+                return (
+                  <motion.div
+                    key={item.key}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
+                    className="bg-surface-container-high text-on-surface-variant rounded-pill my-3 self-center px-2.5 py-1 text-[0.65625rem] font-bold tracking-[0.04em] uppercase"
+                  >
+                    {item.label}
+                  </motion.div>
+                );
+              }
 
-            if (item.kind === "code") {
-              return (
-                <motion.div
-                  key={item.key}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
-                  className={item.side === "out" ? "self-end" : "self-start"}
-                >
-                  <CodeChip code={item.code} />
-                </motion.div>
-              );
-            }
+              if (item.kind === "code") {
+                return (
+                  <motion.div
+                    key={item.key}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
+                    className={item.side === "out" ? "self-end" : "self-start"}
+                  >
+                    <CodeChip code={item.code} />
+                  </motion.div>
+                );
+              }
 
-            if (item.kind === "link") {
-              return (
-                <motion.div
-                  key={item.key}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
-                  className="self-start"
-                >
-                  <LinkWarning senderTitle={senderTitle} hasLogo={hasLogo} />
-                </motion.div>
-              );
-            }
+              if (item.kind === "link") {
+                return (
+                  <motion.div
+                    key={item.key}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: DUR.standard, ease: EASE_STANDARD }}
+                    className="self-start"
+                  >
+                    <LinkWarning senderTitle={senderTitle} hasLogo={hasLogo} />
+                  </motion.div>
+                );
+              }
 
-            if (item.kind === "footer") {
+              if (item.kind === "footer") {
+                return (
+                  <motion.div
+                    key={item.key}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: DUR.quick, ease: EASE_QUICK }}
+                    className={cn(
+                      "mt-1.5 mb-5 flex",
+                      item.group.side === "out"
+                        ? "justify-end pr-1"
+                        : "justify-start pl-1",
+                    )}
+                  >
+                    <GroupFooter
+                      group={item.group}
+                      locale={locale}
+                      onRetrySend={onRetrySend}
+                      onDismissSend={onDismissSend}
+                    />
+                  </motion.div>
+                );
+              }
+
+              const out = item.side === "out";
+              const failed = item.pending?.state === "failed" || item.serverFailed;
+              const message = item.message;
+              const kinds = message ? reactions.reactionsOf(message) : NO_REACTIONS;
+              const highlight = dominantReaction(kinds);
               return (
+                // The row is the keyed child AnimatePresence tracks (one keyed
+                // item per bubble, the flattening rule above). The bubble is the
+                // context-menu trigger, so a right-click in the empty space beside
+                // it does nothing; the add-reaction button sits in that space.
                 <motion.div
                   key={item.key}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: DUR.quick, ease: EASE_QUICK }}
+                  data-bubble-key={item.key}
                   className={cn(
-                    "mt-1.5 mb-5 flex",
-                    item.group.side === "out"
-                      ? "justify-end pr-1"
-                      : "justify-start pl-1",
-                  )}
-                >
-                  <GroupFooter
-                    group={item.group}
-                    locale={locale}
-                    onRetrySend={onRetrySend}
-                    onDismissSend={onDismissSend}
-                  />
-                </motion.div>
-              );
-            }
-
-            const out = item.side === "out";
-            const failed = item.pending?.state === "failed" || item.serverFailed;
-            return (
-              <SmsMessageContextMenu
-                key={item.key}
-                message={item.message}
-                pending={item.pending}
-                code={item.code}
-                onForward={onForwardMessage}
-                onMarkUnread={onMarkMessageUnread}
-                onShowDetails={onShowMessageDetails}
-                onDelete={onDeleteMessage}
-              >
-                <motion.div
-                  // Keyboard access to the menu: Shift+F10 / the Menu key
-                  // dispatch a native `contextmenu` event at the FOCUSED
-                  // element, so the bubble has to be focusable to receive it.
-                  tabIndex={0}
-                  // `pan-y`, not `none`: a long-press still has to leave
-                  // vertical scroll working while it decides whether this is
-                  // a press-and-hold (menu) or a swipe (scroll).
-                  className={cn(
-                    "touch-pan-y max-w-[80%] px-3.5 py-2.5 text-[0.84375rem] leading-[1.45] break-words select-text outline-none @2xl/pane:max-w-[66%]",
-                    "focus-visible:ring-ring focus-visible:ring-offset-surface-container focus-visible:ring-[3px] focus-visible:ring-offset-2",
-                    BUBBLE_RADIUS,
-                    out ? "self-end" : "self-start",
-                    item.isLast && (out ? TAIL_OUT : TAIL_IN),
-                    failed
-                      ? "bg-destructive-container text-on-destructive-container"
-                      : out
-                        ? "bg-primary-container text-on-primary-container"
-                        : // One tonal step above the well, in BOTH themes: light
-                          // steps up to `surface` (1.000), dark steps up to
-                          // `surface-container-high` (0.235). No single token
-                          // is "one step up" in both directions.
-                          "bg-surface dark:bg-surface-container-high text-on-surface",
+                    "group/row flex w-full items-center gap-1.5",
+                    out ? "flex-row-reverse" : "flex-row",
                   )}
                   // The one bubble entrance in the system: 6px rise + fade on
-                  // `standard`. Transform and opacity only, no overshoot. The
-                  // keyed context-menu wrapper is the direct child that
-                  // AnimatePresence tracks (the flattening rule above still
-                  // holds: one keyed item per bubble); this motion.div only
-                  // reads the `initial={false}` skip through context. No bubble
-                  // uses `exit`, so presence never has to wait on it.
+                  // `standard`. Transform and opacity only, no overshoot. No
+                  // bubble uses `exit`, so presence never has to wait on it.
                   initial={{ opacity: 0, y: 6 }}
                   animate={{
                     opacity: item.pending?.state === "sending" ? 0.6 : 1,
@@ -694,14 +792,77 @@ function ConversationBody({
                     ease: item.pending ? EASE_QUICK : EASE_STANDARD,
                   }}
                 >
-                  {item.text}
+                  <SmsMessageContextMenu
+                    message={message}
+                    pending={item.pending}
+                    code={item.code}
+                    reactions={kinds}
+                    onToggleReaction={toggleReaction}
+                    onForward={onForwardMessage}
+                    onMarkUnread={onMarkMessageUnread}
+                    onShowDetails={onShowMessageDetails}
+                    onDelete={onDeleteMessage}
+                  >
+                    <Bubble
+                      // Keyboard access to the menu: Shift+F10 / the Menu key
+                      // dispatch a native `contextmenu` event at the FOCUSED
+                      // element, so the bubble has to be focusable to receive it.
+                      tabIndex={0}
+                      variant={failed ? "failed" : out ? "outbound" : "inbound"}
+                      align={out ? "end" : "start"}
+                      data-flash={flashKey === item.key ? "" : undefined}
+                      className={cn(
+                        // `pan-y`, not `none`: a long-press still has to leave
+                        // vertical scroll working while it decides whether this
+                        // is a press-and-hold (menu) or a swipe (scroll).
+                        "touch-pan-y select-text outline-none @2xl/pane:max-w-[66%]",
+                        BUBBLE_RADIUS,
+                        "focus-visible:ring-ring focus-visible:ring-offset-surface-container focus-visible:ring-[3px] focus-visible:ring-offset-2",
+                        "data-[flash]:ring-reaction-pin data-[flash]:ring-offset-surface-container data-[flash]:ring-[3px] data-[flash]:ring-offset-2",
+                        "transition-shadow duration-[var(--duration-standard)] ease-standard",
+                        // The chips hang half below the bubble: leave room.
+                        kinds.length > 0 && "mb-5",
+                      )}
+                    >
+                      <BubbleContent
+                        className={cn(
+                          BUBBLE_RADIUS,
+                          "px-3.5 py-2.5 text-[0.84375rem] leading-[1.45]",
+                          item.isLast && (out ? TAIL_OUT : TAIL_IN),
+                          highlight && ["ring-2", REACTION_RING[highlight]],
+                          "transition-shadow duration-[var(--duration-standard)] ease-standard",
+                        )}
+                      >
+                        {item.text}
+                      </BubbleContent>
+                      {message && kinds.length > 0 ? (
+                        <BubbleReactions
+                          side="bottom"
+                          align={out ? "end" : "start"}
+                          className="ring-surface-container"
+                        >
+                          <ReactionChips
+                            kinds={kinds}
+                            onToggle={(kind) => toggleReaction(message, kind)}
+                          />
+                        </BubbleReactions>
+                      ) : null}
+                    </Bubble>
+                  </SmsMessageContextMenu>
+                  {message ? (
+                    <ReactionAddButton
+                      active={kinds}
+                      onToggle={(kind) => toggleReaction(message, kind)}
+                      align={out ? "end" : "start"}
+                    />
+                  ) : null}
                 </motion.div>
-              </SmsMessageContextMenu>
-            );
-          })}
-        </AnimatePresence>
-      </div>
-    </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -715,7 +876,7 @@ function GroupFooter({
   onRetrySend,
   onDismissSend,
 }: {
-  group: BubbleGroup;
+  group: ThreadBubbleGroup;
   locale: string;
   onRetrySend: (clientId: string) => void;
   onDismissSend: (clientId: string) => void;

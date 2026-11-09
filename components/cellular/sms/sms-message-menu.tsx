@@ -17,7 +17,10 @@ import { copyText } from "@/lib/clipboard";
 import type { PendingSmsSend } from "@/hooks/use-sms";
 import type { SmsMessage } from "@/types/sms";
 
+import type { SmsReactionKind } from "@/lib/sms-reactions";
+
 import { isOutbound } from "./sms-format";
+import { ReactionMenuRow } from "./sms-reactions";
 
 // =============================================================================
 // SmsMessageContextMenu — the per-bubble menu
@@ -29,6 +32,8 @@ import { isOutbound } from "./sms-format";
 //   * Not yet stored (a pending optimistic send, `queued` / `sending` /
 //     `failed`): Copy text only. Everything else here reads a field the
 //     backend hasn't recorded yet.
+//   * Every stored message opens with the four-emoji reaction row; a pending
+//     one has nothing to react to yet.
 //   * Received: Copy text, Copy code (only when one was detected), Forward,
 //     Mark as unread, Details, then Delete.
 //   * Sent: Copy text, Forward, Details, then Delete.
@@ -44,6 +49,9 @@ export interface SmsMessageContextMenuProps {
   pending?: PendingSmsSend;
   /** One-time code detected in a received body, or null. */
   code: string | null;
+  /** Reactions already on the message, for the row's pressed state. */
+  reactions: readonly SmsReactionKind[];
+  onToggleReaction: (message: SmsMessage, kind: SmsReactionKind) => void;
   onForward: (message: SmsMessage) => void;
   onMarkUnread: (message: SmsMessage) => void;
   onShowDetails: (message: SmsMessage) => void;
@@ -55,6 +63,8 @@ export function SmsMessageContextMenu({
   message,
   pending,
   code,
+  reactions,
+  onToggleReaction,
   onForward,
   onMarkUnread,
   onShowDetails,
@@ -102,6 +112,11 @@ export function SmsMessageContextMenu({
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent>
+        <ReactionMenuRow
+          active={reactions}
+          onToggle={(kind) => onToggleReaction(message, kind)}
+        />
+        <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => void copyMessageText()}>
           <MaterialSymbol name="content_copy" size={16} />
           {t("sms.center.actions.copy_text")}
