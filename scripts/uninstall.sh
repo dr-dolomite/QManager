@@ -13,7 +13,7 @@
 # What it removes:
 #   - All init.d qmanager* services (stops, disables, deletes)
 #   - All qmanager_* daemons (incl. the qmanager_atd AT broker) + the qcmd
-#     qsms and qmi symlinks to it + sms_tool + nfqws
+#     qsms, qmi, qmanager_logd and qlog symlinks to it + sms_tool + nfqws
 #     + legacy cleanup of the retired shell AT engine (qcmd.sh, atcli_smd11)
 #       and of the retired WebSocket bandwidth monitor
 #       (bridge_traffic_monitor_rm551 binary, websocat process) on older devices
@@ -200,7 +200,7 @@ confirm_uninstall() {
     printf "    ${DIM}${ICO_STEP}${NC}  Frontend files in %s\n" "$WWW_ROOT"
     printf "    ${DIM}${ICO_STEP}${NC}  CGI endpoints in %s\n" "$CGI_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Libraries in %s\n" "$LIB_DIR"
-    printf "    ${DIM}${ICO_STEP}${NC}  Daemons: %s/qmanager_*, qcmd, qsms, qmi, sms_tool\n" "$BIN_DIR"
+    printf "    ${DIM}${ICO_STEP}${NC}  Daemons: %s/qmanager_*, qcmd, qsms, qmi, qlog, sms_tool\n" "$BIN_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Init.d services: %s/qmanager*\n" "$INITD_DIR"
     printf "    ${DIM}${ICO_STEP}${NC}  Runtime state in /tmp\n"
     printf "    ${DIM}${ICO_STEP}${NC}  UCI config (quecmanager.*)\n"
@@ -322,12 +322,17 @@ remove_backend() {
 
     # /usr/bin/qcmd + qsms + qmi are symlinks to qmanager_atd; -L also catches a dangling
     # link whose target is already gone.
-    for link in qcmd qsms qmi; do
+    for link in qcmd qsms qmi qlog qmanager_logd; do
         if [ -f "$BIN_DIR/$link" ] || [ -L "$BIN_DIR/$link" ]; then
             rm -f "$BIN_DIR/$link"
             bin_count=$(( bin_count + 1 ))
         fi
     done
+    # Journal daemon: its links are in the loop above (-L: the qmanager_*
+    # loop below skips them once qmanager_atd is gone); here its run dir (spool included),
+    # socket and capability files.
+    rm -rf /var/run/qmanager/journal
+    rm -f /var/run/qmanager_logd.sock /var/run/qmanager_logd.proto /var/run/qmanager_logd.proto.new         "$BIN_DIR"/.qlog.* "$BIN_DIR"/.qmanager_logd.* 2>/dev/null || true
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
         /var/run/qmanager_atd.restart /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
         /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live \
@@ -693,6 +698,11 @@ remove_config() {
         rm -f /usrdata/qmanager/data_used.json /usrdata/qmanager/data_used.json.*
         info "Removed Data Used counter"
     fi
+    # Journal store (written by qmanager_logd).
+    if [ -d /usrdata/qmanager/journal ]; then
+        rm -rf /usrdata/qmanager/journal
+        info "Removed journal data"
+    fi
     # History store (written by the poller's history.sh lib).
     if [ -d /usrdata/qmanager/history ]; then
         rm -rf /usrdata/qmanager/history
@@ -779,7 +789,7 @@ What is removed:
   /www/              Frontend files (original index.html restored if backed up)
   /www/cgi-bin/      QManager CGI endpoints
   /usr/lib/qmanager/ Shared libraries
-  /usr/bin/          qcmd, qsms, qmi, sms_tool, qmanager_* daemons
+  /usr/bin/          qcmd, qsms, qmi, qlog, sms_tool, qmanager_* daemons
   /etc/init.d/       qmanager* service scripts (stopped + disabled)
   /tmp/              Runtime JSON, logs, sessions, lock/PID files
   UCI                quecmanager.* config namespace
