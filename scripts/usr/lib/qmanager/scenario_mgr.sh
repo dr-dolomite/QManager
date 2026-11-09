@@ -152,6 +152,9 @@ scenario_apply() {
 
     qlog_info "Applying scenario: $id (mode=$mode, lte=$lte, nsa=$nsa, sa=$sa)" 2>/dev/null
 
+    local ev_from=""
+    { read -r ev_from < "$ACTIVE_SCENARIO_FILE"; } 2>/dev/null
+
     if ! _scenario_send_at "AT+QNWPREFCFG=\"mode_pref\",${mode}" "mode_pref"; then
         return 1
     fi
@@ -175,6 +178,20 @@ scenario_apply() {
         printf '%s' "$id" | qm_durable_write "$ACTIVE_SCENARIO_FILE" || failed=1
     else
         printf '%s' "$id" > "$ACTIVE_SCENARIO_FILE"
+    fi
+
+    if [ "$ev_from" != "$id" ]; then
+        if ! command -v append_event >/dev/null 2>&1 && [ -f /usr/lib/qmanager/events.sh ]; then
+            EVENTS_FILE="${EVENTS_FILE:-/tmp/qmanager_events.json}"
+            MAX_EVENTS="${MAX_EVENTS:-50}"
+            . /usr/lib/qmanager/events.sh
+        fi
+        if command -v append_event >/dev/null 2>&1; then
+            local ev_to
+            ev_to=$(printf '%s' "$id" | tr -d ';[:cntrl:]')
+            ev_from=$(printf '%s' "$ev_from" | tr -d ';[:cntrl:]')
+            append_event "scenario_switched" "Connection scenario switched to ${ev_to}" "info" "" "from=${ev_from};to=${ev_to}"
+        fi
     fi
 
     [ "$failed" -eq 1 ] && return 2
