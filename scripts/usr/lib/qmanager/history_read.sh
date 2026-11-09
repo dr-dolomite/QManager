@@ -14,6 +14,7 @@ _QM_HISTORY_READ_LOADED=1
 : "${HIST_BOOT_ID_FILE:=/proc/sys/kernel/random/boot_id}"
 : "${HIST_BUCKET:=1800}"
 : "${HIST_ALIVE_SEC:=90}"
+: "${HIST_UPTIME_FILE:=/proc/uptime}"
 
 # hr_param NAME -> _HP = the query value (only %2C is decoded; values are
 # validated by the caller against fixed sets).
@@ -92,7 +93,7 @@ hr_clock() {
     _boot=""
     { read -r _boot < "$HIST_BOOT_ID_FILE"; } 2>/dev/null
     _up=""
-    { read -r _up _r < /proc/uptime; } 2>/dev/null
+    { read -r _up _r < "$HIST_UPTIME_FILE"; } 2>/dev/null
     _up="${_up%%.*}"
     case "$_up" in ''|*[!0-9]*) return 0 ;; esac
     HR_UP="$_up"

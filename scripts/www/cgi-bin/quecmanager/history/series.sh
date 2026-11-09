@@ -22,11 +22,12 @@ if [ "$REQUEST_METHOD" != "GET" ]; then
     exit 0
 fi
 
-if [ ! -f /usr/lib/qmanager/history_read.sh ]; then
+HIST_READ_LIB="${HIST_LIB_DIR:-/usr/lib/qmanager}/history_read.sh"
+if [ ! -f "$HIST_READ_LIB" ]; then
     cgi_error "internal_error" "history reader missing"
     exit 0
 fi
-. /usr/lib/qmanager/history_read.sh
+. "$HIST_READ_LIB"
 
 hr_param series
 series="$_HP"
