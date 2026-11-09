@@ -196,6 +196,42 @@ _QMI_OK=1; _QMI_SSR=0; _QMI_STATE=up
 samples 1
 check '[ "$(evn modem_crash)" = 3 ]' "lane absent changes nothing"
 
+# logd kernel capture (kmsg=1): the onset comes from `qlog logq`, not dmesg;
+# an empty answer or an unreachable logd falls back to dmesg.
+if [ "$MODE" = logd ]; then
+    printf 'kmsg=1
+' >> "$J/proto"
+    printf '%s
+' $((MONO + 10 - 6)) > "$J/kmsg_ts"
+    DMESG_TS=$((MONO + 10 - 2))
+    _QMI_SSR=1; _QMI_STATE=up
+    samples 1
+    check '[ "$(evn modem_crash)" = 4 ]' "crash recorded with kmsg=1"
+    check 'evs | grep -q "\"t\":$((MONO - 6 + WOFF)),\"type\":\"modem_crash\""' "crash onset from logq, not dmesg"
+    : > "$J/kmsg_ts"
+    DMESG_TS=$((MONO + 10 - 3))
+    _QMI_SSR=2
+    samples 1
+    check 'evs | grep -q "\"t\":$((MONO - 3 + WOFF)),\"type\":\"modem_crash\""' "empty logq answer falls back to dmesg"
+    printf '%s
+' $((MONO + 10 - 6)) > "$J/kmsg_ts"
+    DMESG_TS=$((MONO + 10 - 1))
+    touch "$J/down"
+    _QMI_SSR=3
+    samples 1
+    rm -f "$J/down"
+    check 'evs | grep -q "\"t\":$((MONO - 1 + WOFF)),\"type\":\"modem_crash\""' "logd unreachable falls back to dmesg"
+    printf 'proto=1
+version=stub
+logq=1
+evq=1
+' > "$J/proto"
+    : > "$J/kmsg_ts"
+    DMESG_TS=""
+    _QMI_SSR=0
+    samples 1
+fi
+
 # 4. Reboot classification.
 # The newest device_reboot row by t (queue and day files are not in t order).
 rbmsg() {

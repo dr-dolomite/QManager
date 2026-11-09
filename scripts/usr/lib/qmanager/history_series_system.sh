@@ -113,6 +113,18 @@ _hsy_ssr_load() {
     [ "$_o" = "1" ] && _hsy_crash=1
 }
 
+# _hsy_kmsg -> 0 when logd captures kernel records (capability line kmsg=1).
+# Builtins only.
+_hsy_kmsg() {
+    local _l
+    [ -x "${HIST_QLOG:-/usr/bin/qlog}" ] || return 1
+    [ -f "${HIST_LOGD_PROTO:-/var/run/qmanager_logd.proto}" ] || return 1
+    while IFS= read -r _l; do
+        [ "$_l" = "kmsg=1" ] && return 0
+    done < "${HIST_LOGD_PROTO:-/var/run/qmanager_logd.proto}" 2>/dev/null
+    return 1
+}
+
 # _hsy_ssr_check MONO: modem crash onset / recovery from the QMI lane's SSR
 # episode counter and lane state (qmi_merge.sh qmi_load, run this cycle).
 _hsy_ssr_check() {
@@ -136,11 +148,18 @@ _hsy_ssr_check() {
             # Onset: the newest kernel fatal-error stamp (seconds since boot,
             # the mono clock) when it falls in this sample's window.
             _on="$_m"
-            _ts=$(dmesg 2>/dev/null | grep -F '4080000.remoteproc-mss: fatal error received' | tail -n 1)
-            _ts="${_ts#*\[}"
-            _ts="${_ts%%\]*}"
-            _ts="${_ts#"${_ts%%[! ]*}"}"
-            _ts="${_ts%%.*}"
+            _ts=""
+            if _hsy_kmsg; then
+                _ts=$("${HIST_QLOG:-/usr/bin/qlog}" logq kind=K tag=ssr 'search=4080000.remoteproc-mss: fatal error received' limit=1 fmt=mono 2>/dev/null)
+                [ $? -eq 0 ] || _ts=""
+            fi
+            if [ -z "$_ts" ]; then
+                _ts=$(dmesg 2>/dev/null | grep -F '4080000.remoteproc-mss: fatal error received' | tail -n 1)
+                _ts="${_ts#*\[}"
+                _ts="${_ts%%\]*}"
+                _ts="${_ts#"${_ts%%[! ]*}"}"
+                _ts="${_ts%%.*}"
+            fi
             case "$_ts" in
                 ''|*[!0-9]*|0?*|???????????*) ;;
                 *)

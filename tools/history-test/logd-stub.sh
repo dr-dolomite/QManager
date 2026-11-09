@@ -9,6 +9,9 @@
 #                   mono + WOFF once WOFF is a real clock; before that the row
 #                   waits and is back-dated with the first real offset
 #
+# `qlog logq kind=K ... fmt=mono` answers the last line of DIR/kmsg_ts (the
+# kernel SSR stamp); the proto file only advertises kmsg=1 when a test adds it.
+#
 # The stub serves `qlog evq fmt=hist [types=] [since=] [until=] [limit=]`
 # from the ingested rows: the newest `limit` matches in record order, oldest
 # first, one k:"e" row per line with logd's radio rule (writer radio= field,
@@ -71,6 +74,13 @@ EOF
 #!/bin/sh
 J="${QLOG_STUB_DIR:?}"
 [ -e "$J/down" ] && exit 3
+if [ "$1" = "logq" ]; then
+    # kind=K ... fmt=mono: the newest SSR stamp, from $J/kmsg_ts (one uptime
+    # second per line, oldest first); empty answer when the file is empty.
+    echo "$*" >> "$J/calls"
+    [ -s "$J/kmsg_ts" ] && tail -n 1 "$J/kmsg_ts"
+    exit 0
+fi
 [ "$1" = "evq" ] || exit 2
 shift
 types=""; since=""; until=""; limit=50; fmt=json
