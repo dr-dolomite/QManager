@@ -90,8 +90,6 @@ const LEVEL_KEY: Record<LevelFilter, string> = {
 const TAB_TRIGGER =
   "h-8 flex-none rounded-pill border-transparent px-3.5 text-[0.84375rem] text-on-surface-variant data-[state=active]:bg-surface-container-high data-[state=active]:text-on-surface data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-surface-container-high dark:data-[state=active]:text-on-surface";
 
-const ACTION_GLYPH = 18;
-
 const renderCheckGlyph = (className: string) => (
   <MaterialSymbol name="check" filled size={SEGMENTED.GLYPH} aria-hidden="true" className={className} />
 );
@@ -264,7 +262,7 @@ export function LogsPage() {
               >
                 <MaterialSymbol
                   name="refresh"
-                  size={ACTION_GLYPH}
+                  size={LOGS.ACTION_GLYPH}
                   aria-hidden="true"
                   className={cn(refreshing && "motion-safe:animate-spin")}
                 />
@@ -277,7 +275,7 @@ export function LogsPage() {
                 onClick={() => void handleCopy()}
                 disabled={rows.length === 0}
               >
-                <MaterialSymbol name="content_copy" size={ACTION_GLYPH} aria-hidden="true" />
+                <MaterialSymbol name="content_copy" size={LOGS.ACTION_GLYPH} aria-hidden="true" />
                 {ts("logs.page.copy")}
               </Button>
               {tab === "qmanager" ? <DebugLeaseAction debug={debug} onToggle={toggleDebug} /> : null}
@@ -288,7 +286,7 @@ export function LogsPage() {
                   size="action"
                   onClick={() => setClearOpen(true)}
                 >
-                  <MaterialSymbol name="delete" size={ACTION_GLYPH} aria-hidden="true" />
+                  <MaterialSymbol name="delete" size={LOGS.ACTION_GLYPH} aria-hidden="true" />
                   {ts("logs.page.clear")}
                 </Button>
               ) : null}
@@ -465,7 +463,7 @@ export function LogsPage() {
               {qm.isClearing ? (
                 <MaterialSymbol
                   name="progress_activity"
-                  size={ACTION_GLYPH}
+                  size={LOGS.ACTION_GLYPH}
                   aria-hidden="true"
                   className="motion-safe:animate-spin"
                 />

@@ -16,6 +16,11 @@ export type PageSize = (typeof PAGE_SIZES)[number];
 export const LOGS = {
   /** The list bleeds to the card edge so row hover reaches it. Paging keeps it short. */
   SCROLLER: "-mx-6",
+  /** Header action glyphs (Refresh, Copy, Debug logging, Clear). */
+  ACTION_GLYPH: 18,
+  /** The boot selector and the chosen boot's span, under the toolbar. */
+  BOOT_ROW: "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2",
+  BOOT_SPAN: "text-on-surface-variant flex min-w-0 items-center gap-1.5 text-xs tabular-nums",
   /** Tab switch, filter and the line budget share one wrapping row. */
   TOOLBAR: "flex flex-wrap items-center gap-x-3 gap-y-3",
   /**

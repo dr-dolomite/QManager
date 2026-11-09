@@ -11,6 +11,8 @@ import { DEBUG_LEASE_MIN, type UseLogDebugReturn } from "@/hooks/use-log-debug";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
 import { cn } from "@/lib/utils";
 
+import { LOGS } from "./shapes";
+
 // =============================================================================
 // Logs: the "Debug logging" page action, and the chip that says it is on
 // =============================================================================
@@ -27,8 +29,6 @@ import { cn } from "@/lib/utils";
 // both the action and the DEBUG filter's empty state turn it on through
 // `useDebugLeaseToggle`, so they share one set of toasts.
 // =============================================================================
-
-const ACTION_GLYPH = 18;
 
 /** "29:41" — minutes and seconds left, two-digit seconds. */
 function formatLeft(sec: number): string {
@@ -91,7 +91,7 @@ export function DebugLeaseAction({
     >
       <MaterialSymbol
         name={debug.isBusy ? "progress_activity" : debug.active ? "close" : "bug_report"}
-        size={ACTION_GLYPH}
+        size={LOGS.ACTION_GLYPH}
         aria-hidden="true"
         className={cn(debug.isBusy && "motion-safe:animate-spin")}
       />

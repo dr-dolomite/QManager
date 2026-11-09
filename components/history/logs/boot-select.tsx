@@ -16,6 +16,8 @@ import {
 import { PREV_BOOT, THIS_BOOT, type BootChoice } from "@/hooks/use-system-logs";
 import type { LogBoot } from "@/types/system-logs";
 
+import { LOGS } from "./shapes";
+
 // =============================================================================
 // Logs: which boot the transcript reads
 // =============================================================================
@@ -81,7 +83,7 @@ export function BootSelect({ boots, thisBoot, value, onValueChange, nowSec }: Bo
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+    <div className={LOGS.BOOT_ROW}>
       {boots.length === 2 ? (
         <SegmentedField
           value={value}
@@ -120,7 +122,7 @@ export function BootSelect({ boots, thisBoot, value, onValueChange, nowSec }: Bo
           </SelectContent>
         </Select>
       )}
-      <span className="text-on-surface-variant flex min-w-0 items-center gap-1.5 text-[0.8125rem] tabular-nums">
+      <span className={LOGS.BOOT_SPAN}>
         {span ? <span className="truncate">{span}</span> : null}
         <HintIcon label={t("logs.boot.hint_label")}>{t("logs.boot.hint")}</HintIcon>
       </span>
