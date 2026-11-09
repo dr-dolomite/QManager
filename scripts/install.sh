@@ -1442,7 +1442,8 @@ start_services() {
     # broker's and poller's first lines already reach the journal. Writers fall
     # back to /tmp/qmanager.log without it.
     if [ -x "$INITD_DIR/qmanager_logd" ]; then
-        "$INITD_DIR/qmanager_logd" start >>"$LOG_FILE" 2>&1             || warn "Failed to start journal daemon (logs fall back to /tmp/qmanager.log)"
+        "$INITD_DIR/qmanager_logd" start >>"$LOG_FILE" 2>&1 \
+            || warn "Failed to start journal daemon (logs fall back to /tmp/qmanager.log)"
         info "Started journal daemon"
     fi
 

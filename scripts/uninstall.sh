@@ -332,7 +332,8 @@ remove_backend() {
     # loop below skips them once qmanager_atd is gone); here its run dir (spool included),
     # socket and capability files.
     rm -rf /var/run/qmanager/journal
-    rm -f /var/run/qmanager_logd.sock /var/run/qmanager_logd.proto /var/run/qmanager_logd.proto.new         "$BIN_DIR"/.qlog.* "$BIN_DIR"/.qmanager_logd.* 2>/dev/null || true
+    rm -f /var/run/qmanager_logd.sock /var/run/qmanager_logd.proto /var/run/qmanager_logd.proto.new \
+        "$BIN_DIR"/.qlog.* "$BIN_DIR"/.qmanager_logd.* 2>/dev/null || true
     rm -f /var/run/qmanager_atd.sock /var/run/qmanager_atd.proto /var/run/qmanager_atd.proto.new \
         /var/run/qmanager_atd.restart /var/run/qmanager/qmi.env /var/run/qmanager/qmi.env.new \
         /tmp/qmanager_qmi.json /tmp/qmanager_qmi.json.new /tmp/qmanager_qmi_live \
