@@ -201,7 +201,7 @@ Both endpoints are authenticated GETs (`cgi_base.sh`), read-only, and use the st
 | `15d` | 21600 | 60 |
 | `30d` | 43200 | 60 |
 
-`5m` and `1h` read `<series>.fine` (`hr_fine_rows`, flag `HR_FINE` from `hr_range`). Each sample row is **spread over the buckets its interval `[t - dt, t)` overlaps**: state seconds by overlap, each metric counted once in every overlapped bucket, `x` in the bucket that holds `t - 1`. **Why:** samples land every ~10 s but drift against the 10 s grid; keyed by `t` alone, two samples would fall in one bucket and leave its neighbour empty, a zig-zag of "no data" bars. Output shape is the same as for the other ranges. `events.sh` accepts the same six ranges.
+`5m` and `1h` read `<series>.fine` (`hr_fine_rows`, flag `HR_FINE` from `hr_range`). Each sample row is **spread over the buckets its interval `[t - dt, t)` overlaps**: state seconds by overlap, each metric counted once in every overlapped bucket, `x` in the bucket that holds `t - 1`. **Why:** samples land every ~10 s but drift against the 10 s grid; keyed by `t` alone, two samples would fall in one bucket and leave its neighbour empty, a zig-zag of "no data" bars. While the collector is alive (`HR_ALIVE`), the newest sample's state is held from its `t` to now (at most 30 s, state seconds only, no metrics), because that sample is up to 10 s old and the last bars would otherwise always read as no data. Output shape is the same as for the other ranges. `events.sh` accepts the same six ranges.
 
 Buckets are aligned to UTC multiples of `bucket_sec`; the last one contains now and is partial (`len` < `bucket_sec`). Every bucket is present even with no data.
 
