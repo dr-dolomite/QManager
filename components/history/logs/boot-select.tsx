@@ -25,7 +25,7 @@ import { LOGS } from "./shapes";
 // Shown only when the journal holds two or more boots. Two boots are a This /
 // Previous switch; more become a Select whose older entries are named by when
 // they started. Beside it, the chosen boot's time span (the running boot reads
-// "Since ..."), and one tip saying the log now outlives a restart.
+// "Since ..."), and one tip on how long boots are kept.
 // =============================================================================
 
 export interface BootSelectProps {

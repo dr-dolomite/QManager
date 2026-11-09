@@ -682,7 +682,7 @@
       "since": "Since {{when}}",
       "span": "{{from}} – {{to}}",
       "hint_label": "About boots",
-      "hint": "QManager keeps its log across restarts, so you can read what happened before the last one."
+      "hint": "Logs are kept for 7 days; the oldest restarts are dropped first."
     },
     "debug": {
       "start": "Debug logging ({{minutes}} min)",

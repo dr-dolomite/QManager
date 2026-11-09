@@ -665,7 +665,7 @@
       "since": "Sejak {{when}}",
       "span": "{{from}} – {{to}}",
       "hint_label": "Tentang boot",
-      "hint": "QManager menyimpan log-nya setelah restart, jadi Anda bisa membaca apa yang terjadi sebelum restart terakhir."
+      "hint": "Log disimpan selama 7 hari; boot yang paling lama dihapus lebih dulu."
     },
     "debug": {
       "start": "Log debug ({{minutes}} menit)",

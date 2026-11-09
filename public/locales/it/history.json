@@ -682,7 +682,7 @@
       "since": "Da {{when}}",
       "span": "{{from}} – {{to}}",
       "hint_label": "Informazioni sugli avvii",
-      "hint": "QManager conserva il registro dopo un riavvio, così puoi leggere cosa è successo prima dell'ultimo."
+      "hint": "I log vengono conservati per 7 giorni; gli avvii più vecchi vengono eliminati per primi."
     },
     "debug": {
       "start": "Log di debug ({{minutes}} min)",

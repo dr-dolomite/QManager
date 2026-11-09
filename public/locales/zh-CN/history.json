@@ -665,7 +665,7 @@
       "since": "自 {{when}} 起",
       "span": "{{from}} – {{to}}",
       "hint_label": "关于启动记录",
-      "hint": "QManager 会在重启后保留日志，因此可以查看上次重启前发生了什么。"
+      "hint": "日志保留 7 天；最早的启动记录会最先被删除。"
     },
     "debug": {
       "start": "调试日志（{{minutes}} 分钟）",
