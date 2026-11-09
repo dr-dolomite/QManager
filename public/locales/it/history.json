@@ -1,0 +1,80 @@
+{
+  "shared": {
+    "today": "Oggi",
+    "yesterday": "Ieri",
+    "now": "Ora",
+    "duration": {
+      "d": "{{value}}g",
+      "h": "{{value}}h",
+      "m": "{{value}}min",
+      "s": "{{value}}s"
+    },
+    "range_ago": {
+      "24h": "24 ore fa",
+      "7d": "7 giorni fa",
+      "30d": "30 giorni fa"
+    }
+  },
+  "cellular": {
+    "page": {
+      "title": "Cronologia rete mobile",
+      "description": "Come si sono comportati la radio e la connessione nel tempo."
+    },
+    "range": {
+      "label": "Intervallo di tempo",
+      "24h": "24 ore",
+      "7d": "7 giorni",
+      "30d": "30 giorni"
+    },
+    "summary": {
+      "collecting": "Raccolta dati in corso",
+      "since": "Dalle {{when}}",
+      "connected": {
+        "label": "Connesso da"
+      },
+      "disconnected": {
+        "label": "Disconnesso da"
+      },
+      "off": {
+        "label": "Radio spenta da"
+      },
+      "last_outage": {
+        "label": "Ultima interruzione",
+        "none": "Nessuna",
+        "none_caption": "Nessuna interruzione registrata"
+      },
+      "availability": {
+        "label": "Disponibilità",
+        "outages_one": "{{count}} interruzione",
+        "outages_other": "{{count}} interruzioni",
+        "none": "Nessuna interruzione"
+      },
+      "nr": {
+        "label": "Tempo su 5G",
+        "lte_only": "Solo LTE",
+        "lte_share": "LTE {{percent}}%"
+      }
+    },
+    "connection": {
+      "title": "Connessione",
+      "description": "Quale radio ha portato il collegamento e quando è caduto.",
+      "aria": "Cronologia della connessione",
+      "collecting": "Raccolta dalle {{time}}",
+      "collecting_plain": "Raccolta dati in corso",
+      "legend": {
+        "nr": "5G NR",
+        "lte": "LTE",
+        "down": "Nessun servizio",
+        "nodata": "Nessun dato"
+      }
+    },
+    "states": {
+      "loading_sr": "Caricamento della cronologia della rete mobile",
+      "error": {
+        "title": "Cronologia non disponibile",
+        "description": "Il modem non ha restituito alcuna cronologia."
+      },
+      "retry": "Riprova"
+    }
+  }
+}

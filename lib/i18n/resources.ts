@@ -9,6 +9,7 @@ import enEvents from "@/public/locales/en/events.json";
 import enCellular from "@/public/locales/en/cellular.json";
 import enErrors from "@/public/locales/en/errors.json";
 import enAtCommands from "@/public/locales/en/at-commands.json";
+import enHistory from "@/public/locales/en/history.json";
 import zhCNCommon from "@/public/locales/zh-CN/common.json";
 import zhCNSidebar from "@/public/locales/zh-CN/sidebar.json";
 import zhCNDashboard from "@/public/locales/zh-CN/dashboard.json";
@@ -20,6 +21,7 @@ import zhCNEvents from "@/public/locales/zh-CN/events.json";
 import zhCNCellular from "@/public/locales/zh-CN/cellular.json";
 import zhCNErrors from "@/public/locales/zh-CN/errors.json";
 import zhCNAtCommands from "@/public/locales/zh-CN/at-commands.json";
+import zhCNHistory from "@/public/locales/zh-CN/history.json";
 
 // Resources for i18next. Every bundled language must declare every namespace.
 export const resources = {
@@ -35,6 +37,7 @@ export const resources = {
     cellular: enCellular,
     errors: enErrors,
     "at-commands": enAtCommands,
+    history: enHistory,
   },
   "zh-CN": {
     common: zhCNCommon,
@@ -48,6 +51,7 @@ export const resources = {
     cellular: zhCNCellular,
     errors: zhCNErrors,
     "at-commands": zhCNAtCommands,
+    history: zhCNHistory,
   },
 } as const;
 
@@ -64,4 +68,5 @@ export const ALL_NAMESPACES = [
   "cellular",
   "errors",
   "at-commands",
+  "history",
 ] as const;
