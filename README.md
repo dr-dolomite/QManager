@@ -35,7 +35,7 @@
 ### Signal & Network Monitoring
 - **Live Signal Dashboard** — Real-time RSRP, RSRQ, SINR with per-antenna values (4x4 MIMO) and 30-minute historical charts
 - **Network Events** — Automatic detection of band changes, cell handoffs, carrier aggregation changes, and connectivity events
-- **Latency Monitoring** — Real-time ping with 24-hour history, jitter, packet loss, and aggregated views (hourly/12h/daily)
+- **Connection History** — Uptime, outages, latency, packet loss, jitter and DNS lookup time over 24 hours, 7 days or 30 days, plus per-site response times
 - **Traffic Statistics** — Cumulative data usage
 
 ### Cellular Configuration
