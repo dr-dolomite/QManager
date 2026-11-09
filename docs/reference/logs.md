@@ -521,6 +521,34 @@ Notable shapes:
 
 ---
 
+## Device logs (`system/syslog.sh`)
+
+A second, separate read: the modem's own logs, not QManager's transcript. Read-only, no locks,
+no clear action. Contract in `types/device-syslog.ts`; hook `hooks/use-device-syslog.ts`
+(`useDeviceSyslog(source, lines, { paused })` returns `{ data, isLoading, error, refresh }`,
+10 s visible-only poll, previous data kept across a param change, `AbortController` drops stale
+responses).
+
+- **Params.** `source=system|kernel` (default `system`; anything else is `invalid_param`) and
+  `lines`, a number clamped to 50..500 (default 200; non-numeric is `invalid_param`). GET only.
+- **Sources.** `system` is one `logread` run (the `logd -S 64` ring); `kernel` is one `dmesg`
+  run. One `awk` pass counts every line (`total`, before the limit), keeps the last `lines` in a
+  circular buffer and prints the whole JSON document, **newest first**. No `jq` is involved.
+- **System entries.** `t` is `mktime()` of the line's own stamp (local time, which is what
+  `logread` stamps with; device BusyBox awk has `mktime`), `null` when it cannot be computed.
+  `ts` is the stamp as logged (`Mon Nov  9 11:25:58 2026`). `facility`/`level` split
+  `user.notice`; `warn` becomes `warning`, an unknown level is `null`. `proc`/`pid` come from the
+  `proc[pid]: ` tag; a line may carry a proc without a pid (`QCMAP:`, `qm_ping:`), a pid without
+  a proc (`[12006]:`), or neither (the whole text is `msg`). A line with no parseable stamp
+  (continuation) is kept with `t: null`, `ts: ""`.
+- **Kernel entries.** `up` is the kernel stamp in seconds since boot; the caller field
+  (`[ T4474]`, `[    C0]`) is stripped from `msg`. Wall time is `now - uptime + up`.
+- **Escaping.** Built char by char in awk (no `sub`/`gsub` replacement strings, whose backslash
+  rules differ between awks): `\` and `"` escaped, tab becomes a space, other control
+  characters are dropped.
+
+---
+
 ## Known debt
 
 - **No request cancellation.** `fetchLogs` has no `AbortController`. Rapid filter changes can

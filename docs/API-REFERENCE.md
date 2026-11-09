@@ -1502,6 +1502,29 @@ Device hardware and firmware information.
 
 System log output.
 
+### GET `/system/syslog.sh`
+
+The modem's own logs (system log ring via `logread`, kernel ring via `dmesg`). Read-only. See [`docs/reference/logs.md`](./reference/logs.md#device-logs-systemsyslogsh).
+
+**Query:** `source=system|kernel` (default `system`), `lines=50..500` (default 200, clamped).
+
+**Response (`source=system`), entries newest first:**
+```json
+{
+  "success": true, "source": "system", "now": 1794194800, "uptime": 2115.93, "total": 529,
+  "entries": [
+    { "t": 1794195274, "ts": "Mon Nov  9 11:34:34 2026", "facility": "user", "level": "debug",
+      "proc": "qms", "pid": 11579, "msg": "..." }
+  ]
+}
+```
+`t` is `null` when the stamp cannot be computed; `facility`, `level`, `proc` and `pid` are `null` when absent. `source=kernel` entries are `{ "up": 1956.374857, "msg": "..." }` (seconds since boot; wall time = `now - uptime + up`). `total` is the ring length before the `lines` limit.
+
+**Error response (bad `source` or non-numeric `lines`):**
+```json
+{ "success": false, "error": "invalid_param", "detail": "source must be system or kernel" }
+```
+
 ### GET/POST `/system/known_sims.sh`
 
 Read or manage the persistent known-SIMs set. The poller fires the "New SIM detected" banner when the inserted SIM's ICCID is **not** in this set. See [`docs/features/known-sims.md`](../features/known-sims.md) for full invariants.
