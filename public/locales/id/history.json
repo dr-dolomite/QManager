@@ -10,9 +10,28 @@
       "s": "{{value}}d"
     },
     "range_ago": {
+      "5m": "5 menit lalu",
+      "1h": "1 jam lalu",
       "24h": "24 jam lalu",
       "7d": "7 hari lalu",
+      "15d": "15 hari lalu",
       "30d": "30 hari lalu"
+    },
+    "range_short": {
+      "5m": "5m",
+      "1h": "1j",
+      "24h": "1h",
+      "7d": "1mg",
+      "15d": "15h",
+      "30d": "1b"
+    },
+    "range_span": {
+      "5m": "5 menit",
+      "1h": "1 jam",
+      "24h": "24 jam",
+      "7d": "7 hari",
+      "15d": "15 hari",
+      "30d": "30 hari"
     }
   },
   "cellular": {
@@ -22,9 +41,12 @@
     },
     "range": {
       "label": "Rentang waktu",
-      "24h": "24 jam",
-      "7d": "7 hari",
-      "30d": "30 hari"
+      "5m": "5 menit",
+      "1h": "1 jam",
+      "24h": "Hari",
+      "7d": "Minggu",
+      "15d": "15 hari",
+      "30d": "Bulan"
     },
     "summary": {
       "collecting": "Mengumpulkan data",
@@ -145,9 +167,12 @@
     },
     "range": {
       "label": "Rentang waktu",
-      "24h": "24 jam",
-      "7d": "7 hari",
-      "30d": "30 hari"
+      "5m": "5 menit",
+      "1h": "1 jam",
+      "24h": "Hari",
+      "7d": "Minggu",
+      "15d": "15 hari",
+      "30d": "Bulan"
     },
     "parts": {
       "lte": "LTE",
@@ -200,6 +225,10 @@
       "empty": {
         "title": "Belum ada pembacaan penyimpanan",
         "description": "Penyimpanan diukur sekali setiap jam."
+      },
+      "empty_short": {
+        "title": "Belum ada pembacaan penyimpanan di rentang ini",
+        "description": "Penyimpanan diukur sekali setiap jam. Pilih Hari atau rentang lebih panjang untuk melihatnya."
       }
     },
     "events": {
@@ -365,9 +394,12 @@
     },
     "range": {
       "label": "Rentang waktu",
-      "24h": "24 jam",
-      "7d": "7 hari",
-      "30d": "30 hari"
+      "5m": "5 menit",
+      "1h": "1 jam",
+      "24h": "Hari",
+      "7d": "Minggu",
+      "15d": "15 hari",
+      "30d": "Bulan"
     },
     "tiles": {
       "collecting": "Mengumpulkan data",

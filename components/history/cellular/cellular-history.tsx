@@ -35,7 +35,7 @@ import { SummaryTiles } from "./summary-tiles";
 
 export default function CellularHistory() {
   const { t } = useTranslation("history");
-  const [range, setRange] = React.useState<HistoryRange>("24h");
+  const [range, setRange] = React.useState<HistoryRange>("5m");
   const { data, error, refresh } = useHistorySeries<CellularState, CellularMetric>(
     "cellular",
     range,

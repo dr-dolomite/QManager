@@ -336,7 +336,7 @@ export function StabilityCard({
     return (
       <>
         <p className="mb-1.5 font-semibold tabular-nums">
-          {formatWhen(hover.t, nowSec, t, locale)}
+          {formatWhen(hover.t, nowSec, t, locale, range === "5m")}
         </p>
         <ul className="flex flex-col gap-0.5">
           {beforeData ? (

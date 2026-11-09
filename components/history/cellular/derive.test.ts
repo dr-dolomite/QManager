@@ -100,3 +100,20 @@ describe("bucketIndexAt and collectingSince", () => {
     expect(collectingSince(history(buckets, null))).toBeNull();
   });
 });
+
+describe("short ranges (10 s and 60 s buckets)", () => {
+  it("classifies a 10 s bucket by the same coverage rule", () => {
+    expect(bucketKind(bucket({ t: 100, len: 10, st: { nr: 10 } }))).toBe("nr");
+    expect(bucketKind(bucket({ t: 100, len: 10, st: { lte: 4 } }))).toBe("nodata");
+    expect(bucketKind(bucket({ t: 100, len: 10, st: { nr: 6, down: 4 } }))).toBe("down");
+  });
+  it("counts coverage from when collecting began inside a short bucket", () => {
+    // Collecting began 8 s into a 10 s bucket; its 2 s of LTE is full coverage.
+    expect(bucketKind(bucket({ t: 100, len: 10, st: { lte: 2 } }), 108)).toBe("lte");
+  });
+  it("finds the containing 60 s bucket and the collecting head", () => {
+    const minute = [bucket({ t: 0, len: 60 }), bucket({ t: 60, len: 60 }), bucket({ t: 120, len: 60 })];
+    expect(bucketIndexAt(minute, 119)).toBe(1);
+    expect(collectingSince({ ...history(minute, 75), range: "1h", bucket_sec: 60 })).toBe(75);
+  });
+});

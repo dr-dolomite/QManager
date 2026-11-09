@@ -7,7 +7,7 @@
 
 import type { EventSeverity, NetworkEventType } from "@/types/modem-status";
 
-export type HistoryRange = "24h" | "7d" | "30d";
+export type HistoryRange = "5m" | "1h" | "24h" | "7d" | "15d" | "30d";
 
 export interface HistoryRangeSpec {
   /** Seconds per returned bucket. */
@@ -17,12 +17,15 @@ export interface HistoryRangeSpec {
 }
 
 export const HISTORY_RANGES: Record<HistoryRange, HistoryRangeSpec> = {
+  "5m": { bucketSec: 10, count: 30 },
+  "1h": { bucketSec: 60, count: 60 },
   "24h": { bucketSec: 1800, count: 48 },
   "7d": { bucketSec: 10800, count: 56 },
+  "15d": { bucketSec: 21600, count: 60 },
   "30d": { bucketSec: 43200, count: 60 },
 };
 
-export const HISTORY_RANGE_ORDER: readonly HistoryRange[] = ["24h", "7d", "30d"];
+export const HISTORY_RANGE_ORDER: readonly HistoryRange[] = ["5m", "1h", "24h", "7d", "15d", "30d"];
 
 export interface HistoryMetricStat {
   n: number;

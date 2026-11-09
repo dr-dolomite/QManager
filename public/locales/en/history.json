@@ -10,9 +10,28 @@
       "s": "{{value}}s"
     },
     "range_ago": {
+      "5m": "5 minutes ago",
+      "1h": "1 hour ago",
       "24h": "24 hours ago",
       "7d": "7 days ago",
+      "15d": "15 days ago",
       "30d": "30 days ago"
+    },
+    "range_short": {
+      "5m": "5m",
+      "1h": "1h",
+      "24h": "1D",
+      "7d": "1W",
+      "15d": "15D",
+      "30d": "1M"
+    },
+    "range_span": {
+      "5m": "5 minutes",
+      "1h": "1 hour",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "15d": "15 days",
+      "30d": "30 days"
     }
   },
   "cellular": {
@@ -22,9 +41,12 @@
     },
     "range": {
       "label": "Time range",
-      "24h": "24 hours",
-      "7d": "7 days",
-      "30d": "30 days"
+      "5m": "5 minutes",
+      "1h": "1 hour",
+      "24h": "Day",
+      "7d": "Week",
+      "15d": "15 days",
+      "30d": "Month"
     },
     "summary": {
       "collecting": "Collecting data",
@@ -147,9 +169,12 @@
     },
     "range": {
       "label": "Time range",
-      "24h": "24 hours",
-      "7d": "7 days",
-      "30d": "30 days"
+      "5m": "5 minutes",
+      "1h": "1 hour",
+      "24h": "Day",
+      "7d": "Week",
+      "15d": "15 days",
+      "30d": "Month"
     },
     "parts": {
       "lte": "LTE",
@@ -202,6 +227,10 @@
       "empty": {
         "title": "No storage reading yet",
         "description": "Storage is measured once an hour."
+      },
+      "empty_short": {
+        "title": "No storage reading in this window",
+        "description": "Storage is measured once an hour. Choose Day or longer to see it."
       }
     },
     "events": {
@@ -367,9 +396,12 @@
     },
     "range": {
       "label": "Time range",
-      "24h": "24 hours",
-      "7d": "7 days",
-      "30d": "30 days"
+      "5m": "5 minutes",
+      "1h": "1 hour",
+      "24h": "Day",
+      "7d": "Week",
+      "15d": "15 days",
+      "30d": "Month"
     },
     "tiles": {
       "collecting": "Collecting data",

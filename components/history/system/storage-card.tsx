@@ -28,7 +28,9 @@ import { HISTORY_CARD, STORAGE } from "./shapes";
 // start of the range, so a slow leak shows as a gap between the fill and the
 // tick. The fill is primary until 80 %, warning from 80 %, destructive from
 // 90 % (the shared MetricBar thresholds). Hovering or focusing a meter lists
-// now, the start of the range and what is free.
+// now, the start of the range and what is free. Storage is sampled once an hour,
+// so the 5 minutes and 1 hour ranges can hold no reading; the empty state then
+// points at the longer ranges.
 // =============================================================================
 
 const WARN_AT = 80;
@@ -66,7 +68,7 @@ function AreaRow({
   const pct = (reading.usedKiB / reading.sizeKiB) * 100;
   const tone = toneOf(pct);
   const name = t(`system.storage.areas.${reading.area satisfies StorageArea}`);
-  const rangeName = t(`system.range.${range}`);
+  const rangeName = t(`shared.range_span.${range}`);
 
   const deltaMib =
     reading.startKiB === null ? 0 : (reading.usedKiB - reading.startKiB) / KIB_PER_MIB;
@@ -150,6 +152,8 @@ function TipRow({ label, value }: { label: string; value: string }) {
 export function StorageCard({ history }: { history: SystemHistory }) {
   const { t } = useTranslation("history");
   const readings = storageReadings(history.buckets);
+  // Storage is sampled hourly, so a 5 minute or 1 hour window often holds no reading.
+  const shortRange = history.range === "5m" || history.range === "1h";
   const anyTick = readings.some(
     (r) => r.startKiB !== null && Math.abs(r.usedKiB - r.startKiB) / KIB_PER_MIB >= FLAT_MIB,
   );
@@ -174,8 +178,8 @@ export function StorageCard({ history }: { history: SystemHistory }) {
         {readings.length === 0 ? (
           <Notice
             glyph="storage"
-            title={t("system.storage.empty.title")}
-            description={t("system.storage.empty.description")}
+            title={t(`system.storage.${shortRange ? "empty_short" : "empty"}.title`)}
+            description={t(`system.storage.${shortRange ? "empty_short" : "empty"}.description`)}
           />
         ) : (
           <div className={STORAGE.LIST}>
