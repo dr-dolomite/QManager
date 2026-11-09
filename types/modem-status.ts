@@ -993,7 +993,11 @@ export type NetworkEventType =
   | "apn_reapplied" // APN profile restored after a SIM profile deactivation
   | "apn_reapply_failed" // APN profile could not be restored after deactivation
   | "thermal_throttled" // Heat is limiting part of the radio or CPU
-  | "thermal_recovered"; // Heat throttling cleared
+  | "thermal_recovered" // Heat throttling cleared
+  // History-only (the "system" series records these; never in the events log):
+  | "device_reboot" // Device booted again; message "cause=<c> off=<s>"
+  | "modem_crash" // Baseband (SSR) crashed
+  | "modem_recovered"; // Baseband back up after a crash
 
 /** Severity level for UI icon coloring */
 export type EventSeverity = "info" | "warning" | "error";
