@@ -113,7 +113,7 @@ Each doc holds invariants the code doesn't show. CGI / hook / type / reboot tabl
 - `ttl-mtu.md`: `/local-network/ttl-settings`, `ttl-mtu-settings/**`, `network/ttl.sh` / `mtu.sh`, SIM-profile TTL hold
 - `cell-scanner.md`: `/cellular/cell-scanner/**`, `use-cell-scanner.ts`, `use-neighbour-scanner.ts`, SIM-PLMN lock gate, `prbToBandwidthMhz`, `lockScs`, scan lock
 - `netbird.md`: `/monitoring/netbird`, `use-netbird.ts`, `vpn/netbird.sh`, post-uninstall `RebootDialog`
-- `latency-monitor.md`: `/monitoring/latency`, `use-sites.ts`, `resolveCuts`, `SITE_MARKS`
+- `latency-monitor.md`: retired; `/monitoring/latency` redirects to `/history/connection`, see `docs/features/history.md` (Connection History) and `sites-monitor.md`
 - `safe-tmp.md`: `safe_tmp.sh` (`qm_trusted_file`, `qm_atomic_write`, `qm_run_dir`), symlink-write class
 - `auth-rate-limiting.md`: `cgi_auth.sh` rate limit, `auth/login.sh`, `auth/check.sh` (read-only), lockout ladder
 - `overview-splash.md`: pre-auth `/`, `public/*.sh`, `overview-card`, `resolveBodyMode`
