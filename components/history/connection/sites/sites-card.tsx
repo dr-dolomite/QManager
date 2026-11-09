@@ -38,7 +38,6 @@ import {
   CARD_SHELL,
   CARD_TITLE,
   HEADER_ACTIONS,
-  LIVE,
   NOTICE,
   SITES,
   SITE_INK,
@@ -364,19 +363,6 @@ export function SitesCard({ range, latencyLimitMs }: SitesCardProps) {
           {t("connection.sites.description")}
         </CardDescription>
         <CardAction className={HEADER_ACTIONS}>
-          {data && !off ? (
-            <Button
-              type="button"
-              variant={live ? "tonal" : "ghost"}
-              aria-pressed={live}
-              onClick={() => setLive((v) => !v)}
-            >
-              <span aria-hidden className={cn(LIVE.DOT, live && LIVE.DOT_ON)}>
-                {live ? <span className={LIVE.HALO} /> : null}
-              </span>
-              {t("connection.sites.live")}
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -404,7 +390,9 @@ export function SitesCard({ range, latencyLimitMs }: SitesCardProps) {
         onOpenChange={setManageOpen}
         formKey={formKey}
         seed={data ? configOf(data) : null}
+        live={live}
         onSave={handleSave}
+        onLiveChange={setLive}
       />
     </Card>
   );

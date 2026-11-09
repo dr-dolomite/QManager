@@ -52,14 +52,18 @@ export function useIntervalLabel() {
 
 interface ManageFormProps {
   seed: SitesConfig;
+  /** Live values on the card: this viewer's choice, applied on Save, never sent to the modem. */
+  live: boolean;
   onSave: (config: SitesConfig) => Promise<MutationResult>;
+  onLiveChange: (live: boolean) => void;
   onDone: () => void;
 }
 
-function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
+function ManageForm({ seed, live, onSave, onLiveChange, onDone }: ManageFormProps) {
   const { t } = useTranslation("history");
   const errorId = useId();
   const [monitor, setMonitor] = useState<Monitor>(seed.enabled ? "on" : "off");
+  const [liveDraft, setLiveDraft] = useState<Monitor>(live ? "on" : "off");
   const [intervalSec, setIntervalSec] = useState(String(seed.interval_sec));
   const [sites, setSites] = useState<SiteConfigEntry[]>(seed.sites);
   const [input, setInput] = useState("");
@@ -104,6 +108,7 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
     });
     setSaving(false);
     if (result.ok) {
+      onLiveChange(monitor === "on" && liveDraft === "on");
       markSaved();
       toast.success(t("connection.toast.save_ok"));
       onDone();
@@ -142,6 +147,24 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
           ariaLabel={t("connection.manage.monitor")}
           breakpoint="never"
           glyph={glyph}
+        />
+      </div>
+
+      <div className={DIALOG.ROW}>
+        <span className={DIALOG.ROW_LABEL}>
+          {t("connection.manage.live")}
+        </span>
+        <SegmentedField<Monitor>
+          value={monitor === "on" ? liveDraft : "off"}
+          onValueChange={setLiveDraft}
+          options={[
+            { value: "on", label: t("connection.manage.on") },
+            { value: "off", label: t("connection.manage.off") },
+          ]}
+          ariaLabel={t("connection.manage.live")}
+          breakpoint="never"
+          glyph={glyph}
+          disabled={monitor !== "on"}
         />
       </div>
 
@@ -254,7 +277,9 @@ export interface ManageSitesDialogProps {
   /** Re-seeds the draft on every open, so a cancelled edit never lingers. */
   formKey: number;
   seed: SitesConfig | null;
+  live: boolean;
   onSave: (config: SitesConfig) => Promise<MutationResult>;
+  onLiveChange: (live: boolean) => void;
 }
 
 export function ManageSitesDialog({
@@ -262,7 +287,9 @@ export function ManageSitesDialog({
   onOpenChange,
   formKey,
   seed,
+  live,
   onSave,
+  onLiveChange,
 }: ManageSitesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -271,7 +298,9 @@ export function ManageSitesDialog({
           <ManageForm
             key={formKey}
             seed={seed}
+            live={live}
             onSave={onSave}
+            onLiveChange={onLiveChange}
             onDone={() => onOpenChange(false)}
           />
         ) : null}

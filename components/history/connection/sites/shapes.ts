@@ -61,13 +61,6 @@ export const SITES = {
   SKELETON_COUNT: 13,
 } as const;
 
-/** The Live toggle: a pulsing dot beside its label. */
-export const LIVE = {
-  DOT: "relative size-2 flex-none rounded-pill bg-on-surface-variant",
-  DOT_ON: "bg-primary-on-surface",
-  HALO: "animate-live-ping absolute inset-0 rounded-pill bg-primary-on-surface",
-} as const;
-
 // -----------------------------------------------------------------------------
 // Selected-site panel
 // -----------------------------------------------------------------------------
