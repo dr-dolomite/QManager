@@ -71,6 +71,7 @@ export const FIRST_SUB_T_KEY: Readonly<Record<string, string>> = {
   local_network_settings: "ip_passthrough",
   connection_quality: "connection_quality_overview",
   system_settings: "system_settings_general",
+  history: "history_cellular",
 };
 
 /** Trailing slashes come and go with the static export; normalise once. */
@@ -82,7 +83,7 @@ export function normalizePath(pathname: string) {
 
 /** The rows a parent expands to: its own page first, then its declared rows. */
 export function subRowsOf(item: NavItem): NavSubItem[] {
-  if (!item.items?.length) return [];
+  if (!item.items) return [];
   return [
     {
       t_key: FIRST_SUB_T_KEY[item.t_key] ?? item.t_key,

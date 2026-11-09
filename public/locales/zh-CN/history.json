@@ -1,0 +1,80 @@
+{
+  "shared": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "now": "现在",
+    "duration": {
+      "d": "{{value}}天",
+      "h": "{{value}}小时",
+      "m": "{{value}}分",
+      "s": "{{value}}秒"
+    },
+    "range_ago": {
+      "24h": "24 小时前",
+      "7d": "7 天前",
+      "30d": "30 天前"
+    }
+  },
+  "cellular": {
+    "page": {
+      "title": "蜂窝历史",
+      "description": "无线电与连接随时间的表现。"
+    },
+    "range": {
+      "label": "时间范围",
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "summary": {
+      "collecting": "正在收集数据",
+      "since": "自 {{when}}",
+      "connected": {
+        "label": "已连接"
+      },
+      "disconnected": {
+        "label": "已断开"
+      },
+      "off": {
+        "label": "无线电已关闭"
+      },
+      "last_outage": {
+        "label": "上次中断",
+        "none": "无",
+        "none_caption": "没有中断记录"
+      },
+      "availability": {
+        "label": "可用率",
+        "outages_one": "{{count}} 次中断",
+        "outages_other": "{{count}} 次中断",
+        "none": "无中断"
+      },
+      "nr": {
+        "label": "5G 时长占比",
+        "lte_only": "仅 LTE",
+        "lte_share": "LTE {{percent}}%"
+      }
+    },
+    "connection": {
+      "title": "连接",
+      "description": "链路由哪种无线电承载，以及何时中断。",
+      "aria": "连接时间线",
+      "collecting": "自 {{time}} 开始收集",
+      "collecting_plain": "正在收集数据",
+      "legend": {
+        "nr": "5G NR",
+        "lte": "LTE",
+        "down": "无服务",
+        "nodata": "无数据"
+      }
+    },
+    "states": {
+      "loading_sr": "正在加载蜂窝历史",
+      "error": {
+        "title": "历史记录不可用",
+        "description": "调制解调器未返回任何历史记录。"
+      },
+      "retry": "重试"
+    }
+  }
+}

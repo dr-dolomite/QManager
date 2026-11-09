@@ -1643,6 +1643,15 @@ seed_runtime_files() {
         warn "Could not create /usrdata/qmanager/sites (Sites history will retry at runtime)"
     fi
 
+    # History store (docs/features/history.md): poller-written day files,
+    # CGI read-only. Survives updates; removed only by uninstall --purge.
+    if mkdir -p /usrdata/qmanager/history 2>>"$LOG_FILE"; then
+        chown root:root /usrdata/qmanager/history 2>/dev/null || true
+        chmod 0755 /usrdata/qmanager/history 2>/dev/null || true
+    else
+        warn "Could not create /usrdata/qmanager/history (the poller will retry at start)"
+    fi
+
     # --- Default config files (deploy ONLY if missing, never overwrite) ---
     # Exception: supported_bands_hw.env is a manually-maintained spec-sheet file
     # that MUST refresh on every upgrade, so it is force-copied below (outside the

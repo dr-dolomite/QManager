@@ -70,6 +70,11 @@ append_event() {
     fi
 
     qlog_info "EVENT [${etype}] ${message}"
+
+    # History tap (poller only: other callers have no history.sh loaded).
+    if command -v hist_event >/dev/null 2>&1; then
+        hist_event "$etype" "$message" "$severity"
+    fi
 }
 
 # ---------------------------------------------------------------------------

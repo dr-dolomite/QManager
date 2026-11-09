@@ -1,0 +1,80 @@
+{
+  "shared": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "now": "現在",
+    "duration": {
+      "d": "{{value}}天",
+      "h": "{{value}}小時",
+      "m": "{{value}}分",
+      "s": "{{value}}秒"
+    },
+    "range_ago": {
+      "24h": "24 小時前",
+      "7d": "7 天前",
+      "30d": "30 天前"
+    }
+  },
+  "cellular": {
+    "page": {
+      "title": "蜂窩歷史",
+      "description": "無線電與連線隨時間的表現。"
+    },
+    "range": {
+      "label": "時間範圍",
+      "24h": "24 小時",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "summary": {
+      "collecting": "正在收集資料",
+      "since": "自 {{when}}",
+      "connected": {
+        "label": "已連線"
+      },
+      "disconnected": {
+        "label": "已中斷"
+      },
+      "off": {
+        "label": "無線電已關閉"
+      },
+      "last_outage": {
+        "label": "上次中斷",
+        "none": "無",
+        "none_caption": "沒有中斷記錄"
+      },
+      "availability": {
+        "label": "可用率",
+        "outages_one": "{{count}} 次中斷",
+        "outages_other": "{{count}} 次中斷",
+        "none": "無中斷"
+      },
+      "nr": {
+        "label": "5G 時間佔比",
+        "lte_only": "僅 LTE",
+        "lte_share": "LTE {{percent}}%"
+      }
+    },
+    "connection": {
+      "title": "連線",
+      "description": "鏈路由哪種無線電承載，以及何時中斷。",
+      "aria": "連線時間軸",
+      "collecting": "自 {{time}} 開始收集",
+      "collecting_plain": "正在收集資料",
+      "legend": {
+        "nr": "5G NR",
+        "lte": "LTE",
+        "down": "無服務",
+        "nodata": "無資料"
+      }
+    },
+    "states": {
+      "loading_sr": "正在載入蜂窩歷史",
+      "error": {
+        "title": "歷史記錄無法使用",
+        "description": "數據機沒有回傳任何歷史記錄。"
+      },
+      "retry": "重試"
+    }
+  }
+}

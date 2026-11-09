@@ -1,0 +1,80 @@
+{
+  "shared": {
+    "today": "Hari ini",
+    "yesterday": "Kemarin",
+    "now": "Sekarang",
+    "duration": {
+      "d": "{{value}}h",
+      "h": "{{value}}j",
+      "m": "{{value}}m",
+      "s": "{{value}}d"
+    },
+    "range_ago": {
+      "24h": "24 jam lalu",
+      "7d": "7 hari lalu",
+      "30d": "30 hari lalu"
+    }
+  },
+  "cellular": {
+    "page": {
+      "title": "Riwayat Seluler",
+      "description": "Bagaimana radio dan koneksi berperilaku dari waktu ke waktu."
+    },
+    "range": {
+      "label": "Rentang waktu",
+      "24h": "24 jam",
+      "7d": "7 hari",
+      "30d": "30 hari"
+    },
+    "summary": {
+      "collecting": "Mengumpulkan data",
+      "since": "Sejak {{when}}",
+      "connected": {
+        "label": "Terhubung selama"
+      },
+      "disconnected": {
+        "label": "Terputus selama"
+      },
+      "off": {
+        "label": "Radio mati selama"
+      },
+      "last_outage": {
+        "label": "Gangguan terakhir",
+        "none": "Tidak ada",
+        "none_caption": "Belum ada gangguan tercatat"
+      },
+      "availability": {
+        "label": "Ketersediaan",
+        "outages_one": "{{count}} gangguan",
+        "outages_other": "{{count}} gangguan",
+        "none": "Tanpa gangguan"
+      },
+      "nr": {
+        "label": "Waktu di 5G",
+        "lte_only": "Hanya LTE",
+        "lte_share": "LTE {{percent}}%"
+      }
+    },
+    "connection": {
+      "title": "Koneksi",
+      "description": "Radio mana yang membawa tautan, dan kapan terputus.",
+      "aria": "Linimasa koneksi",
+      "collecting": "Mengumpulkan sejak {{time}}",
+      "collecting_plain": "Mengumpulkan data",
+      "legend": {
+        "nr": "5G NR",
+        "lte": "LTE",
+        "down": "Tanpa layanan",
+        "nodata": "Tanpa data"
+      }
+    },
+    "states": {
+      "loading_sr": "Memuat riwayat seluler",
+      "error": {
+        "title": "Riwayat tidak tersedia",
+        "description": "Modem tidak mengembalikan riwayat apa pun."
+      },
+      "retry": "Coba lagi"
+    }
+  }
+}

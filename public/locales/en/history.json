@@ -1,0 +1,80 @@
+{
+  "shared": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "now": "Now",
+    "duration": {
+      "d": "{{value}}d",
+      "h": "{{value}}h",
+      "m": "{{value}}m",
+      "s": "{{value}}s"
+    },
+    "range_ago": {
+      "24h": "24 hours ago",
+      "7d": "7 days ago",
+      "30d": "30 days ago"
+    }
+  },
+  "cellular": {
+    "page": {
+      "title": "Cellular History",
+      "description": "How the radio and the connection behaved over time."
+    },
+    "range": {
+      "label": "Time range",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "summary": {
+      "collecting": "Collecting data",
+      "since": "Since {{when}}",
+      "connected": {
+        "label": "Connected for"
+      },
+      "disconnected": {
+        "label": "Disconnected for"
+      },
+      "off": {
+        "label": "Radio off for"
+      },
+      "last_outage": {
+        "label": "Last outage",
+        "none": "None",
+        "none_caption": "No outages recorded"
+      },
+      "availability": {
+        "label": "Availability",
+        "outages_one": "{{count}} outage",
+        "outages_other": "{{count}} outages",
+        "none": "No outages"
+      },
+      "nr": {
+        "label": "Time on 5G",
+        "lte_only": "LTE only",
+        "lte_share": "LTE {{percent}}%"
+      }
+    },
+    "connection": {
+      "title": "Connection",
+      "description": "Which radio carried the link, and when it dropped.",
+      "aria": "Connection timeline",
+      "collecting": "Collecting since {{time}}",
+      "collecting_plain": "Collecting data",
+      "legend": {
+        "nr": "5G NR",
+        "lte": "LTE",
+        "down": "No service",
+        "nodata": "No data"
+      }
+    },
+    "states": {
+      "loading_sr": "Loading cellular history",
+      "error": {
+        "title": "History unavailable",
+        "description": "The modem didn't return any history."
+      },
+      "retry": "Try again"
+    }
+  }
+}

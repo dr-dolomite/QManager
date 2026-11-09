@@ -4,6 +4,7 @@
     "cellular": "Rete mobile",
     "local_network": "Rete locale",
     "monitoring": "Monitoraggio",
+    "history": "Cronologia",
     "system": "Sistema"
   },
   "breadcrumb": "Percorso di navigazione",
@@ -17,6 +18,8 @@
     "ip_passthrough": "Passthrough IP",
     "connection_quality_overview": "Panoramica",
     "system_settings_general": "Generali",
+    "history": "Cronologia",
+    "history_cellular": "Cronologia rete mobile",
     "cellular_information": "Informazioni rete mobile",
     "antenna_statistics": "Statistiche dell'antenna",
     "antenna_alignment": "Allineamento dell'antenna",

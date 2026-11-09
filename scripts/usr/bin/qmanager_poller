@@ -454,6 +454,16 @@ else
     du_flush() { :; }
 fi
 
+# History collector (optional): 10 s samples of values already read this cycle
+# into 30-minute buckets on flash; no AT (docs/features/history.md).
+if [ -f /usr/lib/qmanager/history.sh ]; then
+    . /usr/lib/qmanager/history.sh
+else
+    hist_init() { :; }
+    hist_tick() { :; }
+    hist_flush() { :; }
+fi
+
 # QMI gap-fill (optional). Missing lib = AT-only status.json; removing it is the
 # per-device off switch.
 [ -f /usr/lib/qmanager/qmi_merge.sh ] && . /usr/lib/qmanager/qmi_merge.sh
@@ -3100,6 +3110,7 @@ poll_cycle() {
         update_conn_uptime
         du_tick
         write_cache
+        hist_tick
         # Count this cycle too, or every cycle-modulo cadence above (ping
         # history) fires on every cycle, or never, for the whole scan.
         cycle_count=$((cycle_count + 1))
@@ -3338,6 +3349,8 @@ poll_cycle() {
     qmi_load
     qmi_overlay_apply
     write_cache
+    # History records what status.json says this cycle (inside the overlay).
+    hist_tick
     qmi_overlay_restore
 
     cycle_count=$((cycle_count + 1))
@@ -3388,9 +3401,12 @@ main() {
     alert_engine_reboot_detect
     # Data Used: load the persisted counter, detect a reboot via boot_id.
     du_init
-    # A stop (procd TERM, planned reboot) persists the counter first. ash runs
-    # the trap after the current sleep (at most POLL_INTERVAL).
-    trap 'du_flush; exit 0' TERM INT
+    # History: resume this boot's open bucket and clock anchor, if any.
+    hist_init
+    # A stop (procd TERM, planned reboot) persists the counter and the open
+    # history bucket first. ash runs the trap after the current sleep (at most
+    # POLL_INTERVAL).
+    trap 'du_flush; hist_flush; exit 0' TERM INT
 
     # Seed the UI heartbeat so a fresh poller start begins in the Active tier for
     # one grace window — the dashboard is the most likely caller right after a

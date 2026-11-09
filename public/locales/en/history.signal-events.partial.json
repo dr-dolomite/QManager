@@ -1,0 +1,65 @@
+{
+  "cellular": {
+    "signal": {
+      "rsrp": {
+        "title": "RSRP",
+        "description": "Reference signal power, dBm"
+      },
+      "sinr": {
+        "title": "SINR",
+        "description": "Signal to interference and noise, dB"
+      },
+      "rsrq": {
+        "title": "RSRQ",
+        "description": "Reference signal quality, dB"
+      },
+      "rssi": {
+        "title": "RSSI",
+        "description": "Total received power, dBm"
+      },
+      "chart_aria": "{{metric}} history chart",
+      "no_service": "No service",
+      "no_data": "No data",
+      "collecting_since": "Collecting since {{time}}",
+      "collecting": "Collecting data"
+    },
+    "events": {
+      "title": "Radio events",
+      "description": "Handovers, band and carrier changes, and signal loss.",
+      "col_event": "Event",
+      "col_radio": "Radio",
+      "col_time": "Time",
+      "filter_all": "All events",
+      "filter_some": "{{count}} of {{total}} types",
+      "filter_aria": "Filter by event type",
+      "show_all": "Show all",
+      "show_all_events": "Show all events",
+      "rows_per_page": "Rows per page",
+      "page_of": "Page {{page}} of {{pages}}",
+      "first_page": "First page",
+      "prev_page": "Previous page",
+      "next_page": "Next page",
+      "last_page": "Last page",
+      "count_one": "{{count}} event",
+      "count_other": "{{count}} events",
+      "shown_one": "{{count}} event shown",
+      "shown_other": "{{count}} events shown",
+      "empty_title": "No radio events yet",
+      "empty_description": "Handovers, band changes and outages will appear here.",
+      "no_match_title": "No events match",
+      "no_match_description": "Nothing of the selected types in this range.",
+      "error_title": "History unavailable",
+      "error_description": "The modem didn't return any events.",
+      "retry": "Try again",
+      "types": {
+        "signal_lost": "Signal lost",
+        "signal_restored": "Signal restored",
+        "nr_anchor": "5G anchor",
+        "pci_change": "Handovers",
+        "scc_pci_change": "Secondary carrier handovers",
+        "band_change": "Band changes",
+        "ca_change": "Carrier aggregation"
+      }
+    }
+  }
+}

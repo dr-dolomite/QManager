@@ -1,0 +1,65 @@
+{
+  "cellular": {
+    "signal": {
+      "rsrp": {
+        "title": "RSRP",
+        "description": "Potenza del segnale di riferimento, dBm"
+      },
+      "sinr": {
+        "title": "SINR",
+        "description": "Rapporto segnale/interferenza e rumore, dB"
+      },
+      "rsrq": {
+        "title": "RSRQ",
+        "description": "Qualità del segnale di riferimento, dB"
+      },
+      "rssi": {
+        "title": "RSSI",
+        "description": "Potenza totale ricevuta, dBm"
+      },
+      "chart_aria": "Grafico storico {{metric}}",
+      "no_service": "Nessun servizio",
+      "no_data": "Nessun dato",
+      "collecting_since": "Raccolta dati dalle {{time}}",
+      "collecting": "Raccolta dati in corso"
+    },
+    "events": {
+      "title": "Eventi radio",
+      "description": "Handover, cambi di banda e di portante, e perdite di segnale.",
+      "col_event": "Evento",
+      "col_radio": "Radio",
+      "col_time": "Ora",
+      "filter_all": "Tutti gli eventi",
+      "filter_some": "{{count}} di {{total}} tipi",
+      "filter_aria": "Filtra per tipo di evento",
+      "show_all": "Mostra tutti",
+      "show_all_events": "Mostra tutti gli eventi",
+      "rows_per_page": "Righe per pagina",
+      "page_of": "Pagina {{page}} di {{pages}}",
+      "first_page": "Prima pagina",
+      "prev_page": "Pagina precedente",
+      "next_page": "Pagina successiva",
+      "last_page": "Ultima pagina",
+      "count_one": "{{count}} evento",
+      "count_other": "{{count}} eventi",
+      "shown_one": "{{count}} evento mostrato",
+      "shown_other": "{{count}} eventi mostrati",
+      "empty_title": "Nessun evento radio",
+      "empty_description": "Handover, cambi di banda e interruzioni compariranno qui.",
+      "no_match_title": "Nessun evento corrispondente",
+      "no_match_description": "Nessun evento dei tipi selezionati in questo intervallo.",
+      "error_title": "Cronologia non disponibile",
+      "error_description": "Il modem non ha restituito alcun evento.",
+      "retry": "Riprova",
+      "types": {
+        "signal_lost": "Segnale perso",
+        "signal_restored": "Segnale ripristinato",
+        "nr_anchor": "Ancora 5G",
+        "pci_change": "Handover",
+        "scc_pci_change": "Handover portante secondaria",
+        "band_change": "Cambi di banda",
+        "ca_change": "Aggregazione di portanti"
+      }
+    }
+  }
+}

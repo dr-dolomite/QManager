@@ -12,7 +12,8 @@ export type Namespace =
   | "onboarding"
   | "events"
   | "errors"
-  | "at-commands";
+  | "at-commands"
+  | "history";
 
 export interface LanguageMeta {
   code: LanguageCode;

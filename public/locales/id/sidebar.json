@@ -4,6 +4,7 @@
     "cellular": "Seluler",
     "local_network": "Jaringan Lokal",
     "monitoring": "Monitoring",
+    "history": "Riwayat",
     "system": "Sistem"
   },
   "breadcrumb": "Jejak navigasi",
@@ -17,6 +18,8 @@
     "ip_passthrough": "Passthrough IP",
     "connection_quality_overview": "Ringkasan",
     "system_settings_general": "Umum",
+    "history": "Riwayat",
+    "history_cellular": "Riwayat Seluler",
     "cellular_information": "Informasi Seluler",
     "antenna_statistics": "Statistik Antena",
     "antenna_alignment": "Penyelarasan Antena",

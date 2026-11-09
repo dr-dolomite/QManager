@@ -4,6 +4,7 @@
     "cellular": "蜂窩網路",
     "local_network": "本地網路",
     "monitoring": "監控",
+    "history": "歷史記錄",
     "system": "系統"
   },
   "breadcrumb": "麵包屑導航",
@@ -17,6 +18,8 @@
     "ip_passthrough": "IP 直通",
     "connection_quality_overview": "概覽",
     "system_settings_general": "一般",
+    "history": "歷史記錄",
+    "history_cellular": "蜂窩歷史",
     "cellular_information": "蜂窩網路資訊",
     "antenna_statistics": "天線統計",
     "antenna_alignment": "天線對準",
