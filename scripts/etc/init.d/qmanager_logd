@@ -1,0 +1,83 @@
+#!/bin/sh /etc/rc.common
+# =============================================================================
+# qmanager_logd — QManager journal daemon (procd)
+# =============================================================================
+# The argv0 role "qmanager_logd" of /usr/bin/qmanager_atd. Starts before the
+# AT broker (START=97 < 98) so the broker's own lines already land in the
+# journal, and stops after it and the poller (STOP=12 > 11, 10) so late lines
+# still do. Writers fall back to /tmp/qmanager.log while it is down.
+#
+# Config (UCI quecmanager.logging): level, persist_level, forward_syslog.
+# See docs/plans/2026-11-10-logd-contract.md.
+#
+# Install location: /etc/init.d/qmanager_logd
+# =============================================================================
+
+START=97
+STOP=12
+USE_PROCD=1
+
+LOGD_RUN_DIR="/var/run/qmanager/journal"
+
+start_service() {
+    [ -f /usr/lib/qmanager/at_engine.sh ] && . /usr/lib/qmanager/at_engine.sh
+    [ -x /usr/bin/qmanager_atd ] || return 0
+    command -v at_logd_link >/dev/null 2>&1 || return 0
+
+    at_logd_link
+    command -v at_qlog_link >/dev/null 2>&1 && at_qlog_link
+
+    local level
+    local persist
+    local fwd
+    level=$(uci -q get quecmanager.logging.level 2>/dev/null)
+    [ -n "$level" ] || level="INFO"
+    persist=$(uci -q get quecmanager.logging.persist_level 2>/dev/null)
+    [ -n "$persist" ] || persist="INFO"
+    fwd=$(uci -q get quecmanager.logging.forward_syslog 2>/dev/null)
+    case "$fwd" in 1) ;; *) fwd=0 ;; esac
+
+    procd_open_instance "logd"
+    procd_set_param command /usr/bin/qmanager_logd
+    procd_set_param env QLOGD_LEVEL="$level" QLOGD_PERSIST_LEVEL="$persist" QLOGD_FORWARD_SYSLOG="$fwd"
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param respawn 3600 5 5
+    procd_close_instance
+}
+
+stop_service() {
+    # The daemon's pid, for service_stopped: procd's delete only signals it.
+    QM_LOGD_PID=$(ubus call service list '{"name":"qmanager_logd"}' 2>/dev/null |
+        jsonfilter -e '@.qmanager_logd.instances.logd.pid' 2>/dev/null)
+    # Writers test alive first: drop it now so they switch to the legacy path
+    # for the lines between here and the daemon's exit.
+    rm -f "$LOGD_RUN_DIR/alive"
+}
+
+# rc.common runs this after procd_kill. spool and spool.work stay: the next
+# start drains them.
+service_stopped() {
+    local n
+    n=0
+    case "$QM_LOGD_PID" in
+        ''|*[!0-9]*) ;;
+        *)
+            while [ "$n" -lt 50 ] && kill -0 "$QM_LOGD_PID" 2>/dev/null; do
+                sleep 0.1
+                n=$((n + 1))
+            done
+            ;;
+    esac
+    rm -f "$LOGD_RUN_DIR/alive" /var/run/qmanager_logd.sock \
+        /var/run/qmanager_logd.proto /var/run/qmanager_logd.proto.new
+    return 0
+}
+
+reload_service() {
+    restart
+}
+
+# No config trigger on purpose: many CGIs commit the quecmanager config and a
+# restart per commit would be noise. Whoever edits quecmanager.logging runs
+# `/etc/init.d/qmanager_logd reload` explicitly.

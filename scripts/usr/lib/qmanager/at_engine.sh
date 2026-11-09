@@ -33,6 +33,8 @@ ATE_BROKER_BIN="/usr/bin/qmanager_atd"
 ATE_LINK="/usr/bin/qcmd"
 ATE_SMS_LINK="/usr/bin/qsms"
 ATE_QMI_LINK="/usr/bin/qmi"
+ATE_LOGD_LINK="/usr/bin/qmanager_logd"
+ATE_QLOG_LINK="/usr/bin/qlog"
 ATE_LIVE_DIR="/var/run/qmanager/live"
 ATE_LIVE_LINK="/www/qmlive"
 ATE_SOCK="/var/run/qmanager_atd.sock"
@@ -81,6 +83,18 @@ at_qsms_link() {
 at_qmi_link() {
     [ -L "$ATE_QMI_LINK" ] && [ "$(readlink "$ATE_QMI_LINK" 2>/dev/null)" = "qmanager_atd" ] && return 0
     _ate_link_to "$ATE_QMI_LINK" "qmanager_atd"
+}
+
+# Point /usr/bin/qmanager_logd (the journal daemon role) and /usr/bin/qlog (its
+# client role) at qmanager_atd. Idempotent; inert if the binary predates logd.
+at_logd_link() {
+    [ -L "$ATE_LOGD_LINK" ] && [ "$(readlink "$ATE_LOGD_LINK" 2>/dev/null)" = "qmanager_atd" ] && return 0
+    _ate_link_to "$ATE_LOGD_LINK" "qmanager_atd"
+}
+
+at_qlog_link() {
+    [ -L "$ATE_QLOG_LINK" ] && [ "$(readlink "$ATE_QLOG_LINK" 2>/dev/null)" = "qmanager_atd" ] && return 0
+    _ate_link_to "$ATE_QLOG_LINK" "qmanager_atd"
 }
 
 # Point /www/qmlive at the broker's public live-signal dir (served by uhttpd,
