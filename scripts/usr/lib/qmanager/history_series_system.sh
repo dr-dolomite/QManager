@@ -257,7 +257,7 @@ _hsy_reboot() {
         _sev="error"
     fi
     # mono 0 = the moment this boot began (t = offset).
-    hist_event device_reboot "cause=$_c off=$_off" "$_sev" 0
+    hist_event device_reboot "cause=$_c off=$_off" "$_sev" 0 "cause=$_c;off=$_off"
     printf '%s\n' "$_hist_boot" > "$_d/boot" 2>/dev/null
     _hsy_alive $((_hist_pm + _hist_off))
 }

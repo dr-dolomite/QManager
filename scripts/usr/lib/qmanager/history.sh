@@ -708,7 +708,9 @@ hist_tick() {
 }
 
 # _hist_spool: events from processes without history.sh (watchcat, CGIs).
-# events.sh appends "mono|type|severity|message" to ext.spool. Rename, then
+# events.sh appends "mono|type|severity|message" to ext.spool, only while
+# qmanager_logd is not alive (alive, events go to its spool; a replayed line
+# then goes there too, through hist_event, at its own mono). Rename, then
 # read on the next sample tick, so an append still in flight lands in the
 # file before it is read; t comes from the stored mono, not the read time.
 _hist_spool() {
@@ -733,8 +735,40 @@ _hist_spool() {
     return 0
 }
 
-# hist_event TYPE MESSAGE SEVERITY [MONO] — called by events.sh append_event
-# (this cycle's mono) and by _hist_spool (the mono the writer recorded).
+# _hist_journal TYPE MESSAGE SEVERITY MONO FIELDS: one event spool line for
+# qmanager_logd (docs/plans/2026-11-10-logd-contract.md) when TYPE is in a
+# series' EVENTS. MONO is the event's own uptime second: logd maps it to wall
+# time, so a back-dated onset or a boot-moment reboot keeps its time. Cellular
+# rows get radio= from the provider's rule (what hist_event would store).
+# Builtins only. Returns 1 when logd is not alive or the append failed.
+_hist_journal() {
+    local _s
+    local _evs
+    local _f
+    local _hit
+    local _jd
+    _jd="${QLOGD_RUN_DIR:-/var/run/qmanager/journal}"
+    [ -d "$_jd" ] && [ -e "$_jd/alive" ] || return 1
+    _f="$5"
+    _hit=0
+    for _s in $HIST_SERIES; do
+        eval "_evs=\$HIST_${_s}_EVENTS"
+        _hist_in "$1" "$_evs" || continue
+        _hit=1
+        case ";$_f" in *";radio="*) continue ;; esac
+        _HR=""
+        command -v "hist_${_s}_radio" >/dev/null 2>&1 && "hist_${_s}_radio" "$1" "$2"
+        case "$_HR" in lte|nr) _f="${_f:+$_f;}radio=$_HR" ;; esac
+    done
+    [ "$_hit" = "1" ] || return 0
+    printf 'E\t%s\t%s\t%s\t\t%s\t%s\n' "$4" "$1" "${3:-info}" "$_f" "$2" >> "$_jd/spool" 2>/dev/null
+}
+
+# hist_event TYPE MESSAGE SEVERITY [MONO] [FIELDS] — called by events.sh
+# append_event on its legacy path (this cycle's mono), by _hist_spool (the
+# mono the writer recorded) and by the providers. While qmanager_logd is alive
+# the event goes to its spool and the events CGI reads it back from the
+# journal (history.md §6); otherwise it is a k:"e" row in the day files.
 hist_event() {
     local _s
     local _evs
@@ -750,6 +784,7 @@ hist_event() {
     _m="${4:-${_MONO_TOP:-}}"
     case "$_m" in ''|*[!0-9]*) _m=""; { read -r _m _r < /proc/uptime; } 2>/dev/null; _m="${_m%%.*}" ;; esac
     case "$_m" in ''|*[!0-9]*) return 0 ;; esac
+    _hist_journal "$1" "$2" "$3" "$_m" "${5:-}" && return 0
     for _s in $HIST_SERIES; do
         eval "_evs=\$HIST_${_s}_EVENTS; _keep=\${HIST_${_s}_EVENTS_KEEP:-}"
         _hist_in "$1" "$_evs" || continue
