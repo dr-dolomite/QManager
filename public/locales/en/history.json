@@ -597,6 +597,14 @@
       "previous": "Go to previous page",
       "next": "Go to next page",
       "last": "Go to last page"
+    },
+    "summary": {
+      "latest": {
+        "eyebrow": "Latest problem",
+        "none": "None",
+        "caption_none_one": "No errors or warnings in {{count}} line read",
+        "caption_none_other": "No errors or warnings in {{count}} lines read"
+      }
     }
   }
 }

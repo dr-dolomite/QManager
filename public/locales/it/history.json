@@ -597,6 +597,14 @@
       "previous": "Vai alla pagina precedente",
       "next": "Vai alla pagina successiva",
       "last": "Vai all'ultima pagina"
+    },
+    "summary": {
+      "latest": {
+        "eyebrow": "Ultimo problema",
+        "none": "Nessuno",
+        "caption_none_one": "Nessun errore o avviso nella {{count}} riga letta",
+        "caption_none_other": "Nessun errore o avviso nelle {{count}} righe lette"
+      }
     }
   }
 }

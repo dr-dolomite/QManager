@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { CellularPageHeader } from "@/components/cellular/page-header";
 import { Notice } from "@/components/history/system/parts";
-import { filterByLevel, visibleLogText } from "@/components/system-settings/logs/derive";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +41,15 @@ import {
 } from "@/types/device-syslog";
 import type { LevelFilter } from "@/types/system-logs";
 
-import { deviceLines, groupByDay, logLinesText, paginate, qmanagerLines } from "./derive";
+import {
+  deviceLines,
+  filterByLevel,
+  groupByDay,
+  logLinesText,
+  paginate,
+  qmanagerLines,
+  visibleLogText,
+} from "./derive";
 import { LogList, LogRowsSkeleton } from "./logs-list";
 import { LogsPagination } from "./logs-pagination";
 import { LogsSummary } from "./logs-summary";

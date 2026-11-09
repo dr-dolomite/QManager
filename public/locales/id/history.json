@@ -592,6 +592,13 @@
       "previous": "Ke halaman sebelumnya",
       "next": "Ke halaman berikutnya",
       "last": "Ke halaman terakhir"
+    },
+    "summary": {
+      "latest": {
+        "eyebrow": "Masalah terbaru",
+        "none": "Tidak ada",
+        "caption_none_other": "Tidak ada galat atau peringatan dalam {{count}} baris yang dibaca"
+      }
     }
   }
 }

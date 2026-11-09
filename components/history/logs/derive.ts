@@ -3,9 +3,7 @@ import type {
   DeviceLogLevel,
   DeviceLogResponse,
 } from "@/types/device-syslog";
-import type { LogEntry, LogLevel } from "@/types/system-logs";
-
-import { parseLogTimestamp } from "@/components/system-settings/logs/derive";
+import type { LevelFilter, LogEntry, LogLevel } from "@/types/system-logs";
 
 // =============================================================================
 // Logs: pure helpers
@@ -204,5 +202,69 @@ export function logLinesText(rows: LogLineView[]): string {
       const tag = r.tag ? ` ${r.tag}:` : "";
       return `${time}${level}${tag} ${r.message}`.trim();
     })
+    .join("\n");
+}
+
+// -----------------------------------------------------------------------------
+// QManager's own log: rotation, timestamps, level filter, clipboard text
+// -----------------------------------------------------------------------------
+
+/** `QLOG_MAX_SIZE_KB`'s default in `scripts/usr/lib/qmanager/qlog.sh`. */
+export const ROTATION_SIZE_KB = 256;
+
+/** How full the log gets before the tile warns. */
+export const ROTATION_WARN_FRACTION = 0.8;
+
+/** 205 KB. The tile turns `warning` at or above this. */
+export const ROTATION_WARN_KB = Math.ceil(
+  ROTATION_SIZE_KB * ROTATION_WARN_FRACTION,
+);
+
+export function isNearRotation(sizeKb: number | undefined): boolean {
+  return typeof sizeKb === "number" && sizeKb >= ROTATION_WARN_KB;
+}
+
+// -----------------------------------------------------------------------------
+// Timestamps
+// -----------------------------------------------------------------------------
+
+const TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/;
+
+/**
+ * The device's `YYYY-MM-DD HH:MM:SS` as epoch seconds in the viewer's zone.
+ * Built field by field rather than handed to `Date`, whose treatment of a
+ * space-separated string is implementation-defined.
+ */
+export function parseLogTimestamp(raw: string): number | null {
+  const m = TIMESTAMP.exec(raw.trim());
+  if (!m) return null;
+  const at = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+    Number(m[6]),
+  );
+  return Number.isNaN(at.getTime()) ? null : Math.floor(at.getTime() / 1000);
+}
+
+export function filterByLevel(
+  entries: LogEntry[],
+  level: LevelFilter,
+): LogEntry[] {
+  return level === "all"
+    ? entries
+    : entries.filter((entry) => entry.level === level);
+}
+
+/** The filtered window as plain text, newest first like the list. */
+export function visibleLogText(entries: LogEntry[]): string {
+  return [...entries]
+    .reverse()
+    .map(
+      (e) =>
+        `${e.timestamp} [${e.level}] ${e.component}${e.pid ? `(${e.pid})` : ""}: ${e.message}`,
+    )
     .join("\n");
 }

@@ -1031,8 +1031,6 @@
   },
   "logs": {
     "page": {
-      "title": "Log di sistema",
-      "description": "QManager conserva il log in memoria sul modem, quindi ricomincia vuoto dopo ogni riavvio e non consuma la flash. Filtralo qui per vedere cosa ha fatto ciascun componente.",
       "refresh": "Aggiorna",
       "clear": "Cancella log",
       "copy": "Copia"
@@ -1054,16 +1052,6 @@
         "caption_clean_one": "Nessun avviso in {{count}} riga letta",
         "caption_clean_other": "Nessun avviso in {{count}} righe lette"
       },
-      "feed": {
-        "eyebrow": "Flusso",
-        "live": "In tempo reale",
-        "paused": "In pausa",
-        "stopped": "Interrotto",
-        "caption_unread": "In attesa della prima lettura",
-        "caption_live": "Aggiornato {{age}}, ogni 10 secondi",
-        "caption_paused": "Aggiornamento automatico in pausa, letto {{age}}",
-        "caption_stopped": "Ultima lettura non riuscita, {{age}}"
-      },
       "file": {
         "eyebrow": "File di log",
         "size": "{{size}} KB",
@@ -1072,63 +1060,12 @@
         "caption_unread": "Dimensione non disponibile"
       }
     },
-    "card": {
-      "title": "Trascrizione",
-      "description": "Vengono mostrate {{shown}} righe. Il log in tempo reale ne contiene {{held}}.",
-      "description_loading": "Lettura del log…",
-      "description_unreadable": "QManager non è riuscito a leggere il log."
-    },
-    "rail": {
-      "label": "Filtra per livello",
-      "all": "Tutti",
-      "DEBUG": "Debug",
-      "INFO": "Info",
-      "WARN": "Warn",
-      "ERROR": "Error"
-    },
-    "filters": {
-      "search_label": "Cerca nel log",
-      "search_placeholder": "Cerca nei messaggi",
-      "component_label": "Filtra per componente",
-      "component_all": "Tutti i componenti",
-      "lines_label": "Righe da leggere",
-      "lines_option": "{{lines}} righe",
-      "archived": "Includi gli archiviati"
-    },
-    "day": {
-      "today": "Oggi",
-      "yesterday": "Ieri",
-      "unknown": "Senza data"
-    },
-    "time": {
-      "now": "proprio ora",
-      "seconds": "{{value}}s fa",
-      "minutes": "{{value}}m fa",
-      "hours": "{{value}}h fa",
-      "days": "{{value}}g fa"
-    },
-    "severity": {
-      "DEBUG": "Debug",
-      "INFO": "Informazione",
-      "WARN": "Avviso",
-      "ERROR": "Errore"
-    },
-    "notice": {
-      "stale": "QManager ha perso il contatto durante l'aggiornamento. Queste sono le ultime righe lette dal dispositivo."
-    },
-    "empty": {
-      "title": "Il log è vuoto",
-      "description": "QManager conserva il log in memoria e lo svuota a ogni riavvio, quindi non è stato scritto nulla da quando questo dispositivo si è avviato l'ultima volta."
-    },
-    "empty_filtered": {
-      "title": "Nessuna corrispondenza con questi filtri",
-      "description": "Il log contiene delle righe, ma nessuna corrisponde al livello, al componente o alla ricerca scelti.",
-      "action": "Cancella i filtri"
-    },
-    "error": {
-      "title": "Impossibile leggere il log",
-      "description": "QManager non è riuscito a raggiungere il lettore di log su questo dispositivo. Il log stesso non è stato toccato: è un errore di lettura, non una perdita di dati.",
-      "retry": "Riprova"
+    "toast": {
+      "cleared": "Log di sistema cancellato",
+      "clear_failed": "Impossibile cancellare il log di sistema",
+      "refresh_failed": "Impossibile leggere il log di sistema",
+      "copied": "Log copiato negli appunti",
+      "copy_failed": "Impossibile copiare il log"
     },
     "clear_dialog": {
       "title": "Cancellare il log di sistema?",
@@ -1136,13 +1073,6 @@
       "cancel": "Annulla",
       "confirm": "Cancella log",
       "clearing": "Cancellazione…"
-    },
-    "toast": {
-      "cleared": "Log di sistema cancellato",
-      "clear_failed": "Impossibile cancellare il log di sistema",
-      "refresh_failed": "Impossibile leggere il log di sistema",
-      "copied": "Log copiato negli appunti",
-      "copy_failed": "Impossibile copiare il log"
     }
   },
   "band": {

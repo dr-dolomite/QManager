@@ -592,6 +592,13 @@
       "previous": "上一頁",
       "next": "下一頁",
       "last": "最後一頁"
+    },
+    "summary": {
+      "latest": {
+        "eyebrow": "最近的問題",
+        "none": "無",
+        "caption_none_other": "已讀取的 {{count}} 行中沒有錯誤或警告"
+      }
     }
   }
 }

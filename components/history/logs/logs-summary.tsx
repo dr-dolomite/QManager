@@ -1,32 +1,36 @@
 "use client";
 
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { TILE_SHAPE } from "@/components/cellular/tile-shape";
-import { isNearRotation, relativeAge } from "@/components/system-settings/logs/derive";
 import { MaterialSymbol, type MaterialSymbolName } from "@/components/ui/material-symbol";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { FeedState, UseSystemLogsReturn } from "@/hooks/use-system-logs";
+import type { UseSystemLogsReturn } from "@/hooks/use-system-logs";
 import { cn } from "@/lib/utils";
+import type { LogEntry } from "@/types/system-logs";
 
+import { dayKeyOf, formatClockSeconds, isNearRotation, parseLogTimestamp } from "./derive";
 import { LOGS_SUMMARY } from "./shapes";
 
 // =============================================================================
 // Logs: the summary strip over the QManager tab
 // =============================================================================
 // Three glance tiles about QManager's own log: Severity (errors and warnings in
-// the lines read), Feed (is the 10 s refresh delivering, and how long ago), and
-// Log file (size, lines, archives, and a warning as it nears rotation). The
-// System Health tile language: neutral body, the disc is the only colour, and
-// every state of a tile wears its own glyph. Copy lives in system-settings
-// `logs.band.*`, where it has been translated since the old System Logs page.
+// the lines read), Latest problem (when the newest error or warning was logged,
+// and by what), and Log file (size, lines, archives, and a warning as it nears
+// rotation). The System Health tile language: neutral body, the disc is the
+// only colour, and every state of a tile wears its own glyph. Severity and Log
+// file copy lives in system-settings `logs.band.*` (translated since the old
+// System Logs page); Latest problem's in history `logs.summary.latest.*`.
+//
+// Latest problem shows the line's clock time, not "12m ago": the stamp is the
+// modem's local time, and the browser's clock or timezone may differ. The date
+// is added only when the line is from an earlier day than the newest line read.
 // =============================================================================
 
 const NEUTRAL_TILE = "bg-surface-container text-on-surface";
 const DISC = {
   neutral: "bg-surface-container-high text-on-surface-variant",
-  primary: "bg-primary text-primary-foreground",
   success: "bg-success text-success-foreground",
   warning: "bg-warning text-warning-foreground",
   destructive: "bg-destructive text-destructive-foreground",
@@ -51,12 +55,13 @@ const SEVERITY_FACE = {
   clean: { disc: "success", glyph: "check_circle" },
 } satisfies Record<SeverityState, Face>;
 
-/** Bound to the hook's own union, so a fourth feed state fails the build. */
-const FEED_FACE = {
-  live: { disc: "primary", glyph: "graphic_eq" },
-  paused: { disc: "neutral", glyph: "schedule" },
-  stopped: { disc: "neutral", glyph: "cloud_off" },
-} satisfies Record<FeedState, Face>;
+type LatestState = "unread" | "error" | "warn" | "none";
+const LATEST_FACE = {
+  unread: { disc: "neutral", glyph: "hourglass_top" },
+  error: { disc: "destructive", glyph: "error" },
+  warn: { disc: "warning", glyph: "warning" },
+  none: { disc: "success", glyph: "check_circle" },
+} satisfies Record<LatestState, Face>;
 
 type FileState = "unread" | "filling" | "resting";
 const FILE_FACE = {
@@ -65,16 +70,28 @@ const FILE_FACE = {
   resting: { disc: "neutral", glyph: "storage" },
 } satisfies Record<FileState, Face>;
 
+/** The newest ERROR or WARN line in an oldest-first window. */
+function latestProblem(entries: LogEntry[]): LogEntry | null {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.level === "ERROR" || e.level === "WARN") return e;
+  }
+  return null;
+}
+
 function Tile({
   face,
   eyebrow,
   value,
   caption,
+  title,
 }: {
   face: Face;
   eyebrow: string;
   value: string;
   caption: string;
+  /** The full caption on hover, for a log line the tile truncates. */
+  title?: string;
 }) {
   return (
     <div className={cn(TILE_SHAPE.ROOT, NEUTRAL_TILE)}>
@@ -84,7 +101,9 @@ function Tile({
       <div className="flex min-w-0 flex-col gap-[3px]">
         <span className={EYEBROW}>{eyebrow}</span>
         <span className={VALUE}>{value}</span>
-        <span className={CAPTION}>{caption}</span>
+        <span className={CAPTION} title={title}>
+          {caption}
+        </span>
       </div>
     </div>
   );
@@ -115,16 +134,10 @@ export function LogsSummarySkeleton() {
 
 export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
   const { t } = useTranslation("system-settings");
-  const { entries, stats, isLoading, feedState, lastReadAtSec } = logs;
+  const { t: th, i18n } = useTranslation("history");
+  const locale = i18n.language;
+  const { entries, stats, isLoading, lastReadAtSec } = logs;
   const K = "logs.band";
-
-  // A one-second tick for the Feed caption's age: a reading that changes while
-  // the user watches, not an animation.
-  const [nowSec, setNowSec] = React.useState(() => Math.floor(Date.now() / 1000));
-  React.useEffect(() => {
-    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   if (isLoading) return <LogsSummarySkeleton />;
 
@@ -157,12 +170,36 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
     clean: t(`${K}.severity.caption_clean`, { count: entries.length }),
   }[severity];
 
-  // ── Feed ────────────────────────────────────────────────────────────────
-  const age = relativeAge(read ? Math.max(0, nowSec - lastReadAtSec) : 0);
-  const ageText = t(`logs.time.${age.unit}`, { value: age.count });
-  const feedCaption = !read
-    ? t(`${K}.feed.caption_unread`)
-    : t(`${K}.feed.caption_${feedState}`, { age: ageText });
+  // ── Latest problem ──────────────────────────────────────────────────────
+  const problem = read ? latestProblem(entries) : null;
+  const latest: LatestState = !read
+    ? "unread"
+    : problem === null
+      ? "none"
+      : problem.level === "ERROR"
+        ? "error"
+        : "warn";
+  let latestValue = DASH;
+  let latestCaption = t(`${K}.severity.caption_unread`);
+  if (latest === "none") {
+    latestValue = th("logs.summary.latest.none");
+    latestCaption = th("logs.summary.latest.caption_none", { count: entries.length });
+  } else if (problem) {
+    const sec = parseLogTimestamp(problem.timestamp);
+    const newestSec = parseLogTimestamp(entries[entries.length - 1].timestamp);
+    if (sec === null) {
+      latestValue = problem.timestamp;
+    } else {
+      const clock = formatClockSeconds(sec, locale);
+      const earlierDay = newestSec !== null && dayKeyOf(sec) !== dayKeyOf(newestSec);
+      latestValue = earlierDay
+        ? `${new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(sec * 1000)}, ${clock}`
+        : clock;
+    }
+    latestCaption = problem.component
+      ? `${problem.component}: ${problem.message}`
+      : problem.message;
+  }
 
   // ── Log file ────────────────────────────────────────────────────────────
   const file: FileState = !stats
@@ -180,10 +217,11 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
         caption={severityCaption}
       />
       <Tile
-        face={FEED_FACE[feedState]}
-        eyebrow={t(`${K}.feed.eyebrow`)}
-        value={t(`${K}.feed.${feedState}`)}
-        caption={feedCaption}
+        face={LATEST_FACE[latest]}
+        eyebrow={th("logs.summary.latest.eyebrow")}
+        value={latestValue}
+        caption={latestCaption}
+        title={problem ? latestCaption : undefined}
       />
       <Tile
         face={FILE_FACE[file]}
