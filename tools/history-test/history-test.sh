@@ -53,7 +53,7 @@ load
 _NOW=5; _MONO_TOP=0
 hist_init
 check '[ "$_hist_ready" = 1 ]' "init ready"
-check '[ "$HIST_SERIES" = " cellular" ]' "registry"
+check '_hist_in cellular "$HIST_SERIES"' "registry"
 
 # 1. Untrusted boot clock (1970): samples wait in pending, nothing queued.
 cycles 50
