@@ -39,6 +39,15 @@ export interface DeviceSystemLogEntry {
 export interface DeviceKernelLogEntry {
   /** Seconds since boot (kernel stamp). Wall time = now - uptime + up. */
   up: number;
+  /**
+   * From the line's `dmesg -r` priority: "kern" for the kernel itself, "user"
+   * (or another facility) for user-space writers such as QCMAP that log into
+   * the ring. Null when the line had no priority prefix; absent from a backend
+   * older than the field.
+   */
+  facility?: string | null;
+  /** The line's priority, null without a prefix; absent from an older backend. */
+  level?: DeviceLogLevel | null;
   msg: string;
 }
 

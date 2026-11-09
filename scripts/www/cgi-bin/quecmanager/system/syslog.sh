@@ -13,7 +13,9 @@
 # Response (entries NEWEST FIRST, contract in types/device-syslog.ts):
 #   {"success":true,"source":"system","now":<epoch>,"uptime":<s>,"total":<n>,
 #    "entries":[{"t","ts","facility","level","proc","pid","msg"}]}
-#   {"success":true,"source":"kernel",...,"entries":[{"up","msg"}]}
+#   {"success":true,"source":"kernel",...,"entries":[{"up","facility","level","msg"}]}
+#   (kernel facility/level from dmesg -r, null when a line has no priority
+#   prefix; user-space writers such as QCMAP log into the ring as "user")
 #
 # Endpoint: GET /cgi-bin/quecmanager/system/syslog.sh
 # Install location: /www/cgi-bin/quecmanager/system/syslog.sh
@@ -150,8 +152,18 @@ emit() {
         }
         return "{\"t\":" t ",\"ts\":\"" esc(ts) "\",\"facility\":" fac ",\"level\":" lv ",\"proc\":" proc ",\"pid\":" pid ",\"msg\":\"" esc(msg) "\"}"
     }
-    function kern_entry(line,   upv, rest) {
+    function kern_entry(line,   upv, rest, lv, fac, fi, pr) {
         upv = "0"
+        lv = "null"
+        fac = "null"
+        # dmesg -r prefixes the raw priority, <facility*8 + level>.
+        if (match(line, /^<[0-9]+>/) && RLENGTH <= 6) {
+            pr = substr(line, 2, RLENGTH - 2) + 0
+            lv = "\"" klv[pr % 8] "\""
+            fi = int(pr / 8) ""
+            if (fi in kfac) fac = "\"" kfac[fi] "\""
+            line = substr(line, RLENGTH + 1)
+        }
         rest = line
         if (match(line, /^\[ *[0-9.]+\]/)) {
             upv = substr(line, 2, RLENGTH - 2)
@@ -161,7 +173,7 @@ emit() {
             if (match(rest, /^\[ *[TC][0-9]+\] ?/)) rest = substr(rest, RLENGTH + 1)
             else if (substr(rest, 1, 1) == " ") rest = substr(rest, 2)
         }
-        return "{\"up\":" upv ",\"msg\":\"" esc(rest) "\"}"
+        return "{\"up\":" upv ",\"facility\":" fac ",\"level\":" lv ",\"msg\":\"" esc(rest) "\"}"
     }
     BEGIN {
         for (i = 1; i < 32; i++) bad[sprintf("%c", i)] = 1
@@ -173,6 +185,11 @@ emit() {
         lvmap["err"] = "err"; lvmap["error"] = "err"
         lvmap["warn"] = "warning"; lvmap["warning"] = "warning"
         lvmap["notice"] = "notice"; lvmap["info"] = "info"; lvmap["debug"] = "debug"
+        split("emerg alert crit err warning notice info debug", kl, " ")
+        for (i = 1; i <= 8; i++) klv[i - 1] = kl[i]
+        split("kern user mail daemon auth syslog lpr news uucp cron authpriv ftp", kf, " ")
+        for (i = 1; i <= 12; i++) kfac[i - 1] = kf[i]
+        for (i = 16; i <= 23; i++) kfac[i] = "local" (i - 16)
     }
     {
         sub(/\r$/, "")
@@ -190,7 +207,8 @@ emit() {
 }
 
 if [ "$SOURCE" = "kernel" ]; then
-    dmesg 2>/dev/null | emit
+    # -r adds the priority prefix; a dmesg without -r falls back to plain lines.
+    { dmesg -r 2>/dev/null || dmesg 2>/dev/null; } | emit
 else
     logread 2>/dev/null | emit
 fi
