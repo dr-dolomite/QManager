@@ -18,9 +18,6 @@ import {
 
 export type StripKind = "up" | "slow" | "down" | "nodata";
 
-/** A bucket the collector covered for less than this share of its length reads as no data. */
-const MIN_COVERAGE = 0.5;
-
 export interface BucketDurations {
   up: number;
   down: number;
@@ -36,13 +33,13 @@ export function bucketDurations(b: ConnectionBucket): BucketDurations {
 
 /**
  * The colour a bucket is drawn in. Any outage wins (a 30-second drop must stay
- * visible in a 12-hour bucket); then no data when the collector barely saw the
- * bucket; then slow or lossy against the user's limits; otherwise responsive.
+ * visible in a 12-hour bucket); then no data when nothing was observed (a
+ * partly covered bucket is graded on what it saw); then slow or lossy against the user's limits; otherwise responsive.
  */
 export function bucketKind(b: ConnectionBucket, limits: ConnectionLimits): StripKind {
   const { up, down } = bucketDurations(b);
   if (b.x > 0 || down > 0) return "down";
-  if (up <= 0 || (b.len > 0 && up / b.len < MIN_COVERAGE)) return "nodata";
+  if (up <= 0) return "nodata";
   const latency = b.m.lat_ms?.avg;
   const loss = b.m.loss_pct?.avg;
   if ((latency !== undefined && latency > limits.latencyMs) || (loss !== undefined && loss >= LOSS_SLOW_PCT)) {
