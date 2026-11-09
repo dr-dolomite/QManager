@@ -118,21 +118,24 @@ The daemon reads at most 32 sites and drops a host that fails its check (3–253
 
 Authenticated (standard `cgi_base.sh`). Every failure is the standard `{success:false, error, detail}` envelope except `invalid_field`, which carries `field` and `reason` instead of `detail`.
 
-### `GET ?range=now|1h|3h|6h|12h|24h|7d|30d|90d`
+### `GET ?range=now|5m|1h|3h|6h|12h|24h|7d|15d|30d|90d`
 
 Default `24h`. Anything else → `{ "success": false, "error": "invalid_range", "detail": "range must be now, 1h, …" }`.
 
 | Range | Bucket | Source |
 |-------|--------|--------|
 | `now` | — | no history; `series` is `[]`. Renews the live lease and serves the live sample as `latest` |
-| `1h`, `3h`, `6h` | each sample | raw, plus rollups for any hour older than the first raw row |
+| `5m` | 10 s | raw, plus rollups for any hour older than the first raw row |
+| `1h` | 1 min | as above |
+| `3h`, `6h` | each sample | as above |
 | `12h` | 10 min | as above |
 | `24h` | 30 min | as above |
 | `7d` | 3 h | rollups, plus raw rows newer than the rollup cursor |
+| `15d` | 6 h | as `7d` |
 | `30d` | 12 h | as `7d` |
 | `90d` | 1 day | as `7d` |
 
-The `24h`/`7d`/`30d` buckets match the History ranges (`docs/features/history.md`: 30 min, 3 h, 12 h, UTC-aligned), so the Sites card on Connection History lines up bar for bar with the page's other cards.
+The `5m`/`1h`/`24h`/`7d`/`15d`/`30d` buckets match the History ranges (`docs/features/history.md`: 10 s, 1 min, 30 min, 3 h, 6 h, 12 h, UTC-aligned), so the Sites card on Connection History lines up bar for bar with the page's other cards. Every GET also returns `now`, the modem clock the response was built at; the card anchors its bucket grid on it.
 
 ```json
 {
