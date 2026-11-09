@@ -29,6 +29,7 @@ v0.1.36 adds a History section that shows how your connection and your modem hav
 - **Cleaner Network Priority page.** The technology the modem is currently using now shows the same green check as IMEI Settings in place of its rank number, replacing the separate "Serving now" badge.
 - **Language packs now include the History pages.** A downloadable language pack must carry translations for the new History pages, so they are never left in English. Packs published before this release are updated to include them; reinstall yours from the Languages page after updating.
 - **Refreshed SMS message bubbles.** Messages in the SMS conversation now use a shared bubble component, so sent, received and failed messages keep their familiar colours while sharing one consistent shape.
+- **Profiles no longer flag the right SIM as a different one.** Some SIMs report their ID ending in two padding characters (`FF`). The Custom SIM Profiles page now treats those IDs the same way the modem does, so a profile saved for such a SIM no longer shows a SIM mismatch.
 
 ## 📥 Installation
 
