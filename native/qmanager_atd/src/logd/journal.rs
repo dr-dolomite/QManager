@@ -9,7 +9,6 @@
 use super::record::{quick_sbt, Row};
 use super::registry;
 use crate::common::safefs;
-use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::OpenOptionsExt;
@@ -152,6 +151,35 @@ impl BootInfo {
     }
 }
 
+/// Boot index → facts, sorted by boot (a handful of entries).
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct BootIndex(pub Vec<(u32, BootInfo)>);
+
+impl BootIndex {
+    pub fn entry(&mut self, b: u32) -> &mut BootInfo {
+        let i = match self.0.binary_search_by_key(&b, |e| e.0) {
+            Ok(i) => i,
+            Err(i) => {
+                self.0.insert(i, (b, BootInfo::default()));
+                i
+            }
+        };
+        &mut self.0[i].1
+    }
+    pub fn get(&self, b: u32) -> Option<&BootInfo> {
+        self.0.binary_search_by_key(&b, |e| e.0).ok().map(|i| &self.0[i].1)
+    }
+    pub fn remove(&mut self, b: u32) -> Option<BootInfo> {
+        self.0.binary_search_by_key(&b, |e| e.0).ok().map(|i| self.0.remove(i).1)
+    }
+    pub fn last_boot(&self) -> Option<u32> {
+        self.0.last().map(|e| e.0)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct FlushStats {
     pub rows: u64,
@@ -230,7 +258,7 @@ impl Journal {
                 }
             }
         }
-        out.sort();
+        out.sort_unstable();
         out
     }
 
@@ -268,7 +296,7 @@ impl Journal {
     /// goes to `epochday(t)`; one still untrusted goes to `null_day`. Events
     /// past the day cap are kept only for the keep-list and `error`; a kind's
     /// file is no longer grown once it alone exceeds the kind's byte cap.
-    pub fn append(&mut self, rows: &[&Row], null_day: i64, stats: &mut FlushStats, index: &mut BTreeMap<u32, BootInfo>) {
+    pub fn append(&mut self, rows: &[&Row], null_day: i64, stats: &mut FlushStats, index: &mut BootIndex) {
         // (kind, day) -> rendered lines, in order of first appearance.
         let mut groups: Vec<(Kind, i64, String, Vec<(u64, u32, Option<i64>)>)> = Vec::new();
         for r in rows {
@@ -323,7 +351,7 @@ impl Journal {
                     stats.bytes += text.len() as u64;
                     stats.fsyncs += 1;
                     for (s, b, t) in ids {
-                        index.entry(b).or_default().note(s, t, Some(day));
+                        index.entry(b).note(s, t, Some(day));
                     }
                 }
                 Err(_) => stats.errors += 1,
@@ -402,15 +430,15 @@ impl Journal {
 
     /// One pass over every day file: the highest `s` on flash and the boot
     /// index (rows' `s`/`b`/`t` only).
-    pub fn scan(&self) -> (u64, BTreeMap<u32, BootInfo>) {
+    pub fn scan(&self) -> (u64, BootIndex) {
         let mut max_s = 0;
-        let mut idx: BTreeMap<u32, BootInfo> = BTreeMap::new();
+        let mut idx = BootIndex::default();
         for kind in [Kind::Log, Kind::Ev] {
             for (day, _) in self.days(kind) {
                 self.for_each_line(kind, day, |l| {
                     if let Some((s, b, t)) = quick_sbt(l) {
                         max_s = max_s.max(s);
-                        idx.entry(b).or_default().note(s, t, Some(day));
+                        idx.entry(b).note(s, t, Some(day));
                     }
                 });
             }
@@ -433,7 +461,7 @@ impl Journal {
                 break;
             }
         }
-        out.sort_by_key(|r| r.s);
+        out.sort_unstable_by_key(|r| r.s);
         let skip = out.len().saturating_sub(n);
         out.drain(..skip);
         out
@@ -477,15 +505,15 @@ mod tests {
         let b = Row { s: 2, b: 3, m: 0, t: None, body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "b".into() } };
         let e = ev(3, Some(86400 * 6), "band_change", Sev::Info);
         let mut st = FlushStats::default();
-        let mut idx = BTreeMap::new();
+        let mut idx = BootIndex::default();
         j.append(&[&a, &b, &e], 5, &mut st, &mut idx);
         assert_eq!((st.rows, st.fsyncs), (3, 2));
         assert_eq!(fs::read_to_string(j.path(Kind::Log, 5)).unwrap().lines().count(), 2);
         assert_eq!(j.days(Kind::Ev), vec![(6, fs::metadata(j.path(Kind::Ev, 6)).unwrap().len())]);
         let (max_s, idx2) = j.scan();
         assert_eq!(max_s, 3);
-        assert_eq!(idx2[&3].first_s, 1);
-        assert_eq!(idx2[&3].days, Some((5, 6)));
+        assert_eq!(idx2.get(3).unwrap().first_s, 1);
+        assert_eq!(idx2.get(3).unwrap().days, Some((5, 6)));
         assert_eq!(idx, idx2);
         assert_eq!(j.newest_events(50), vec![e]);
     }
@@ -499,7 +527,7 @@ mod tests {
         let rows: Vec<Row> = (1..=EV_DAY_CAP).map(|s| ev(s, t, "band_change", Sev::Info)).collect();
         let refs: Vec<&Row> = rows.iter().collect();
         let mut st = FlushStats::default();
-        j.append(&refs, 0, &mut st, &mut BTreeMap::new());
+        j.append(&refs, 0, &mut st, &mut BootIndex::default());
         assert_eq!(st.rows, EV_DAY_CAP);
         let more = [
             ev(5001, t, "band_change", Sev::Info),
@@ -511,11 +539,11 @@ mod tests {
         // A fresh Journal counts the file from flash.
         let mut j = Journal::new(j.dir.clone());
         let mut st = FlushStats::default();
-        j.append(&more.iter().collect::<Vec<_>>(), 0, &mut st, &mut BTreeMap::new());
+        j.append(&more.iter().collect::<Vec<_>>(), 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.cap_drops), (3, 2));
         // The next day starts a fresh count.
         let mut st = FlushStats::default();
-        j.append(&[&ev(6000, Some((day + 1) * 86400), "band_change", Sev::Info)], 0, &mut st, &mut BTreeMap::new());
+        j.append(&[&ev(6000, Some((day + 1) * 86400), "band_change", Sev::Info)], 0, &mut st, &mut BootIndex::default());
         assert_eq!(st.rows, 1);
     }
 
@@ -548,14 +576,14 @@ mod tests {
         let row = Row { s: 1, b: 1, m: 0, t: Some(86400 * 9), body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "a".into() } };
         fs::write(j.path(Kind::Log, 9), vec![b'x'; LOG_BYTES as usize]).unwrap();
         let mut st = FlushStats::default();
-        j.append(&[&row], 0, &mut st, &mut BTreeMap::new());
+        j.append(&[&row], 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.cap_drops), (0, 1));
         let victim = format!("{d}/victim");
         fs::write(&victim, b"SECRET").unwrap();
         std::os::unix::fs::symlink(&victim, j.path(Kind::Log, 10)).unwrap();
         let row = Row { t: Some(86400 * 10), ..row };
         let mut st = FlushStats::default();
-        j.append(&[&row], 0, &mut st, &mut BTreeMap::new());
+        j.append(&[&row], 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.errors), (0, 1));
         assert_eq!(fs::read(&victim).unwrap(), b"SECRET");
     }

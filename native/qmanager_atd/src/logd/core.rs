@@ -4,14 +4,13 @@
 
 use super::clock::{Change, Clock, SETTLE};
 use super::collapse::{Collapser, RateLimit};
-use super::journal::{epochday, BootInfo, FlushStats, Journal, Kind, State, MIN_FREE};
+use super::journal::{epochday, BootIndex, BootInfo, FlushStats, Journal, Kind, State, MIN_FREE};
 use super::mirror::{EventsMirror, TextMirror};
 use super::record::{Body, Row, Sev};
 use super::registry;
 use super::ring::Ring;
 use super::spool::{self, Rec};
 use crate::common::log::Level;
-use std::collections::BTreeMap;
 use std::io::Read;
 
 /// Flush within this of an urgent row (ERROR, or a warning/error event).
@@ -114,7 +113,7 @@ pub struct Engine {
     pub(super) text: TextMirror,
     pub(super) events: EventsMirror,
     pub(super) journal: Journal,
-    pub(super) index: BTreeMap<u32, BootInfo>,
+    pub(super) index: BootIndex,
     /// Rows with `s` at or below this are on flash (or were skipped).
     pub(super) flushed_s: u64,
     first_pending_ms: Option<u64>,
@@ -126,7 +125,7 @@ pub struct Engine {
     pub(super) lease: Option<i64>,
     last_retain_ms: Option<u64>,
     pub(super) stats: Stats,
-    syslog_open: bool,
+    syslog_sock: Option<std::os::unix::net::UnixDatagram>,
     /// Flash flushes are skipped below this much free space.
     pub(super) min_free: u64,
 }
@@ -147,9 +146,9 @@ impl Engine {
         let (flash_max, index) = journal.scan();
         let prev = st.clone().unwrap_or_default();
         let boot = match &st {
-            None => flash_max_boot(&index).map_or(1, |b| b + 1),
+            None => index.last_boot().map_or(1, |b| b + 1),
             Some(s) if s.boot_id == boot_id && !boot_id.is_empty() => s.boot.max(1),
-            Some(s) => s.boot.max(flash_max_boot(&index).unwrap_or(0)) + 1,
+            Some(s) => s.boot.max(index.last_boot().unwrap_or(0)) + 1,
         };
         let mut seq = prev.seq.max(flash_max);
         if st.is_some() && !prev.clean {
@@ -181,11 +180,11 @@ impl Engine {
             lease: None,
             last_retain_ms: None,
             stats: Stats::default(),
-            syslog_open: false,
+            syslog_sock: None,
             min_free: MIN_FREE,
             cfg,
         };
-        e.index.entry(boot).or_default();
+        e.index.entry(boot);
         e.clock_tick(now);
         e.save_state(now, false);
         e.retain(now);
@@ -304,7 +303,7 @@ impl Engine {
         if row.is_event() {
             self.events.add(&row);
         }
-        self.index.entry(self.boot).or_default().note(row.s, row.t, None);
+        self.index.entry(self.boot).note(row.s, row.t, None);
         if self.persistable(&row) {
             self.first_pending_ms.get_or_insert(now.ms());
             if urgent && self.urgent_at.is_none() {
@@ -324,15 +323,20 @@ impl Engine {
         }
     }
 
+    /// ERROR → syslog as `<27>qmanager[pid]: [component] message` (daemon.err)
+    /// on `/dev/log`, one datagram, never blocking and never forking.
     fn syslog(&mut self, c: &str, msg: &str) {
-        if !self.syslog_open {
-            static IDENT: &[u8] = b"qmanager\0";
-            unsafe { libc::openlog(IDENT.as_ptr() as *const libc::c_char, libc::LOG_PID, libc::LOG_DAEMON) };
-            self.syslog_open = true;
+        if self.syslog_sock.is_none() {
+            self.syslog_sock = std::os::unix::net::UnixDatagram::unbound().ok();
+            if let Some(s) = &self.syslog_sock {
+                let _ = s.set_nonblocking(true);
+            }
         }
-        if let Ok(text) = std::ffi::CString::new(format!("[{c}] {msg}").replace('\0', " ")) {
-            unsafe { libc::syslog(libc::LOG_ERR, b"%s\0".as_ptr() as *const libc::c_char, text.as_ptr()) };
-            self.stats.syslog += 1;
+        if let Some(s) = &self.syslog_sock {
+            let line = format!("<27>qmanager[{}]: [{c}] {msg}", self.pid);
+            if s.send_to(line.as_bytes(), "/dev/log").is_ok() {
+                self.stats.syslog += 1;
+            }
         }
     }
 
@@ -354,7 +358,7 @@ impl Engine {
         let i = self.ring.index_after(from.saturating_sub(1));
         let mut newest = None;
         let boot = self.boot;
-        let info = self.index.entry(boot).or_default();
+        let info = self.index.entry(boot);
         for r in self.ring.iter_mut_from(i) {
             if r.t.is_none() {
                 let t = (r.m / 100) as i64 + off;
@@ -546,13 +550,12 @@ impl Engine {
         if n > 0 {
             // Day files went: rebuild the flash half of the boot index.
             let (_, idx) = self.journal.scan();
-            let cur = self.index.remove(&self.boot);
+            let cur = self.index.remove(self.boot);
             self.index = idx;
-            if let Some(mut c) = cur {
-                let f = self.index.get(&self.boot).cloned().unwrap_or_default();
-                c.days = f.days;
-                c.flash_min_s = f.flash_min_s;
-                self.index.insert(self.boot, c);
+            if let Some(c) = cur {
+                let f = self.index.entry(self.boot);
+                let (days, fmin) = (f.days, f.flash_min_s);
+                *f = BootInfo { days, flash_min_s: fmin, ..c };
             }
         }
         self.last_retain_ms = Some(now.ms());
@@ -572,9 +575,6 @@ impl Engine {
     }
 }
 
-fn flash_max_boot(idx: &BTreeMap<u32, BootInfo>) -> Option<u32> {
-    idx.keys().next_back().copied()
-}
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -785,7 +785,7 @@ pub(crate) mod tests {
         fs::write(&c.boot_id, "boot-B\n").unwrap();
         let e = Engine::open(c.clone(), &now).unwrap();
         assert_eq!(e.boot, 2);
-        assert!(e.index.contains_key(&1), "the old boot is in the index");
+        assert!(e.index.get(1).is_some(), "the old boot is in the index");
         drop(e);
         // State lost but flash kept: seq and boot still come from the rows.
         fs::remove_file(format!("{}/state", c.journal_dir)).unwrap();

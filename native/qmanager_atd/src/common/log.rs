@@ -231,7 +231,10 @@ fn timestamp() -> String {
 /// `YYYY-MM-DD HH:MM:SS` of epoch `t` in local time (call `init_tz` first).
 pub fn format_local(t: i64) -> String {
     unsafe {
-        let now = t as libc::time_t;
+        let now = match t.try_into() {
+            Ok(v) => v,
+            Err(_) => return String::new(),
+        };
         let mut tm: libc::tm = std::mem::zeroed();
         libc::localtime_r(&now, &mut tm);
         format!(

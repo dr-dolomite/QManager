@@ -129,30 +129,43 @@ pub fn serve(mut s: UnixStream, e: &mut Engine, now: &Now, uid: u32) {
     let _ = s.set_nonblocking(false);
     let _ = s.set_read_timeout(Some(Duration::from_millis(500)));
     let _ = s.set_write_timeout(Some(Duration::from_secs(2)));
-    if peer_uid(&s) != Some(uid) {
-        let _ = s.write_all(&encode_answer(&Answer::Err("bad_request")));
-        return;
-    }
+    // Read to EOF (bounded) before any answer, refusals included: closing
+    // with unread bytes would reset the connection and lose the answer.
     let mut buf = Vec::new();
     let mut tmp = [0u8; 2048];
+    let mut over = false;
+    let mut failed = false;
+    let mut discarded = 0usize;
     loop {
         match s.read(&mut tmp) {
             Ok(0) => break,
+            Ok(n) if over => {
+                discarded += n;
+                if discarded > 256 * 1024 {
+                    break;
+                }
+            }
             Ok(n) => buf.extend_from_slice(&tmp[..n]),
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => {
-                let _ = s.write_all(&encode_answer(&Answer::Err("bad_request")));
-                return;
+                failed = true;
+                break;
             }
         }
         if buf.len() > BODY_CAP + 64 {
-            let _ = s.write_all(&encode_answer(&Answer::Err("too_large")));
-            return;
+            over = true;
+            buf.clear();
         }
     }
-    let a = match decode_request(&buf) {
-        Some((verb, params)) => answer(e, &verb, &params, now),
-        None => Answer::Err("bad_request"),
+    let a = if peer_uid(&s) != Some(uid) || failed {
+        Answer::Err("bad_request")
+    } else if over {
+        Answer::Err("too_large")
+    } else {
+        match decode_request(&buf) {
+            Some((verb, params)) => answer(e, &verb, &params, now),
+            None => Answer::Err("bad_request"),
+        }
     };
     let _ = s.write_all(&encode_answer(&a));
 }
@@ -285,6 +298,35 @@ enum Phase {
     Grace(u64),
 }
 
+/// Reads every queued inotify event.
+fn drain_inotify(ino: RawFd, buf: &mut [u8]) -> Wakes {
+    let mut w = Wakes::default();
+    loop {
+        let n = unsafe { libc::read(ino, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        if n <= 0 {
+            break;
+        }
+        let x = parse_inotify(&buf[..n as usize]);
+        w.spool |= x.spool;
+        w.debug |= x.debug;
+        w.lost_watch |= x.lost_watch;
+    }
+    w
+}
+
+/// Acts on the debug lease and a lost watch (the spool is the caller's).
+fn handle_wakes(cfg: &Config, e: &mut Engine, ino: RawFd, w: &Wakes, now: &Now) {
+    if w.lost_watch && std::fs::symlink_metadata(format!("{}/alive", cfg.run_dir)).is_err() {
+        // The run dir was removed under us: make it again, re-watch.
+        if ensure_run_dir(cfg).is_ok() && watch(ino, &cfg.run_dir) {
+            write_alive(cfg);
+        }
+    }
+    if w.debug {
+        e.on_debug_file(now);
+    }
+}
+
 /// Runs the daemon until the stop fd is readable (None: TERM/INT via a
 /// signalfd). Returns the exit code.
 pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
@@ -334,18 +376,21 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
     let uid = unsafe { libc::geteuid() };
 
     let mut phase = Phase::Idle;
-    let mut again = false;
     let mut buf = vec![0u8; 4096];
     loop {
         let now = real_now(&cfg);
         e.tick(&now);
         match phase {
             Phase::Wait(t) if now.ms() >= t => {
+                // Every append announced so far is in the spool taken now:
+                // those events are spent (debug ones are still handled).
+                let w = drain_inotify(ino, &mut buf);
+                handle_wakes(&cfg, &mut e, ino, &w, &now);
                 phase = if take_spool(&cfg, &mut e) { Phase::Grace(now.ms() + GRACE_MS) } else { Phase::Idle };
             }
             Phase::Grace(t) if now.ms() >= t => {
                 ingest_work(&cfg, &mut e);
-                phase = if std::mem::take(&mut again) { Phase::Wait(now.ms() + INGEST_DELAY_MS) } else { Phase::Idle };
+                phase = Phase::Idle;
             }
             _ => {}
         }
@@ -358,9 +403,13 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
             None => -1,
             Some(d) => (d.saturating_sub(now.ms()).min(i32::MAX as u64) as i32).max(5),
         };
+        // While an ingest cycle is scheduled the inotify fd is not polled: a
+        // storm of appends costs one wake per cycle, not one per line. Its
+        // events wait in the kernel queue (overflow is handled as a wake).
+        let ino_events = if phase == Phase::Idle { libc::POLLIN } else { 0 };
         let mut fds = [
             libc::pollfd { fd: stop_fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: ino, events: libc::POLLIN, revents: 0 },
+            libc::pollfd { fd: ino, events: ino_events, revents: 0 },
             libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
         ];
         let r = unsafe { libc::poll(fds.as_mut_ptr(), 3, timeout) };
@@ -371,33 +420,11 @@ pub fn run(cfg: Config, stop: Option<RawFd>) -> i32 {
             break;
         }
         if fds[1].revents & libc::POLLIN != 0 {
-            let mut w = Wakes::default();
-            loop {
-                let n = unsafe { libc::read(ino, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
-                if n <= 0 {
-                    break;
-                }
-                let x = parse_inotify(&buf[..n as usize]);
-                w.spool |= x.spool;
-                w.debug |= x.debug;
-                w.lost_watch |= x.lost_watch;
-            }
+            let w = drain_inotify(ino, &mut buf);
             let now = real_now(&cfg);
-            if w.lost_watch && std::fs::symlink_metadata(format!("{}/alive", cfg.run_dir)).is_err() {
-                // The run dir was removed under us: make it again, re-watch.
-                if ensure_run_dir(&cfg).is_ok() && watch(ino, &cfg.run_dir) {
-                    write_alive(&cfg);
-                }
-            }
-            if w.debug {
-                e.on_debug_file(&now);
-            }
-            if w.spool {
-                match phase {
-                    Phase::Idle => phase = Phase::Wait(now.ms() + INGEST_DELAY_MS),
-                    Phase::Wait(_) => {}
-                    Phase::Grace(_) => again = true,
-                }
+            handle_wakes(&cfg, &mut e, ino, &w, &now);
+            if w.spool && phase == Phase::Idle {
+                phase = Phase::Wait(now.ms() + INGEST_DELAY_MS);
             }
         }
         if fds[2].revents & libc::POLLIN != 0 {
@@ -450,6 +477,32 @@ mod tests {
         assert_eq!(decode_answer(b"ERR unknown_verb\n"), Some(Answer::Err("unknown_verb")));
         assert!(decode_answer(b"RES 0 5\n{}").is_none());
         assert!(decode_answer(b"NOPE\n").is_none());
+    }
+
+    #[test]
+    fn a_peer_of_another_uid_is_refused_and_ours_is_served() {
+        let c = crate::logd::core::tests::cfg("uid");
+        let now = crate::logd::core::Now::at(500.0, crate::logd::core::tests::W);
+        let mut e = Engine::open(c, &now).unwrap();
+        let me = unsafe { libc::geteuid() };
+        for (uid, want) in [(me.wrapping_add(1), "ERR bad_request\n"), (me, "RES 0 ")] {
+            let (mut client, server) = UnixStream::pair().unwrap();
+            client.write_all(&encode_request("STAT", &[])).unwrap();
+            client.shutdown(std::net::Shutdown::Write).unwrap();
+            serve(server, &mut e, &now, uid);
+            let mut got = String::new();
+            client.read_to_string(&mut got).unwrap();
+            assert!(got.starts_with(want), "{uid}: {got}");
+        }
+        // Oversize and malformed bodies are refused, never answered.
+        let (mut client, server) = UnixStream::pair().unwrap();
+        let big = format!("LOGQ {}\n{}", BODY_CAP + 100, "x".repeat(BODY_CAP + 100));
+        client.write_all(big.as_bytes()).unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        serve(server, &mut e, &now, me);
+        let mut got = String::new();
+        client.read_to_string(&mut got).unwrap();
+        assert_eq!(got, "ERR too_large\n");
     }
 
     #[test]

@@ -7,7 +7,6 @@
 //! row `<first message> … repeated N times in 60 s` is emitted.
 
 use crate::common::log::Level;
-use std::collections::HashMap;
 
 pub const WINDOW_MS: u64 = 60_000;
 /// Keys tracked at once; past this the expired ones are dropped first.
@@ -31,7 +30,8 @@ pub type Summary = (String, Level, u32, String);
 
 #[derive(Default)]
 pub struct Collapser {
-    wins: HashMap<String, Win>,
+    /// (key, window): a few dozen keys at most, so a Vec beats a map here.
+    wins: Vec<(String, Win)>,
     /// Lines suppressed so far (STAT).
     pub suppressed: u64,
 }
@@ -59,7 +59,7 @@ impl Collapser {
     /// be stored *before* it (a run of this key ended).
     pub fn offer(&mut self, c: &str, lv: Level, p: u32, msg: &str, now_ms: u64) -> (bool, Option<Summary>) {
         let k = key(c, lv, msg);
-        if let Some(w) = self.wins.get_mut(&k) {
+        if let Some((_, w)) = self.wins.iter_mut().find(|(x, _)| *x == k) {
             if now_ms < w.start_ms + WINDOW_MS {
                 w.n += 1;
                 w.p = p;
@@ -71,14 +71,14 @@ impl Collapser {
             return (true, sum);
         }
         if self.wins.len() >= MAX_KEYS {
-            self.wins.retain(|_, w| w.n > 0 || now_ms < w.start_ms + WINDOW_MS);
+            self.wins.retain(|(_, w)| w.n > 0 || now_ms < w.start_ms + WINDOW_MS);
             if self.wins.len() >= MAX_KEYS {
                 // Every key is live: forget the quiet ones (their summary is 0).
-                self.wins.retain(|_, w| w.n > 0);
+                self.wins.retain(|(_, w)| w.n > 0);
             }
         }
         if self.wins.len() < MAX_KEYS {
-            self.wins.insert(k, Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: msg.to_string() });
+            self.wins.push((k, Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: msg.to_string() }));
         }
         (true, None)
     }
@@ -87,7 +87,7 @@ impl Collapser {
     /// forgotten.
     pub fn expire(&mut self, now_ms: u64) -> Vec<Summary> {
         let mut out = Vec::new();
-        self.wins.retain(|_, w| {
+        self.wins.retain(|(_, w)| {
             if now_ms < w.start_ms + WINDOW_MS {
                 return true;
             }
@@ -101,14 +101,14 @@ impl Collapser {
 
     /// Every open window with suppressed lines, ended now (shutdown).
     pub fn drain(&mut self) -> Vec<Summary> {
-        let out = self.wins.values().filter(|w| w.n > 0).map(summary_of).collect();
+        let out = self.wins.iter().map(|e| &e.1).filter(|w| w.n > 0).map(summary_of).collect();
         self.wins.clear();
         out
     }
 
     /// When the next summary is due (only windows that suppressed something).
     pub fn deadline(&self) -> Option<u64> {
-        self.wins.values().filter(|w| w.n > 0).map(|w| w.start_ms + WINDOW_MS).min()
+        self.wins.iter().map(|e| &e.1).filter(|w| w.n > 0).map(|w| w.start_ms + WINDOW_MS).min()
     }
 }
 
@@ -120,7 +120,7 @@ struct Bucket {
 
 #[derive(Default)]
 pub struct RateLimit {
-    buckets: HashMap<String, Bucket>,
+    buckets: Vec<(String, Bucket)>,
     pub dropped: u64,
 }
 
@@ -128,13 +128,17 @@ impl RateLimit {
     /// Takes a token for `c`. `Ok(Some(n))`: allowed, and n lines of this
     /// component were dropped since its last allowed line.
     pub fn take(&mut self, c: &str, now_ms: u64) -> Result<Option<u64>, ()> {
-        if !self.buckets.contains_key(c) && self.buckets.len() >= MAX_BUCKETS {
-            self.buckets.retain(|_, b| b.dropped > 0);
-        }
-        let b = self
-            .buckets
-            .entry(c.to_string())
-            .or_insert(Bucket { tokens: RATE_BURST, last_ms: now_ms, dropped: 0 });
+        let i = match self.buckets.iter().position(|(x, _)| x == c) {
+            Some(i) => i,
+            None => {
+                if self.buckets.len() >= MAX_BUCKETS {
+                    self.buckets.retain(|(_, b)| b.dropped > 0);
+                }
+                self.buckets.push((c.to_string(), Bucket { tokens: RATE_BURST, last_ms: now_ms, dropped: 0 }));
+                self.buckets.len() - 1
+            }
+        };
+        let b = &mut self.buckets[i].1;
         let dt = now_ms.saturating_sub(b.last_ms) as f64 / 1000.0;
         b.tokens = (b.tokens + dt * RATE_PER_SEC).min(RATE_BURST);
         b.last_ms = now_ms;

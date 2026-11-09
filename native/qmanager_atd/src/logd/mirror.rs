@@ -20,9 +20,18 @@ pub const EVENTS_MIN_GAP_MS: u64 = 1000;
 /// The text line of a row: `[ts] LEVEL [component:pid] message`. An event is
 /// `EVENT [type] message` at INFO from component `events`.
 pub fn text_line(row: &Row, wall_now: i64, logd_pid: u32, out: &mut String) {
+    text_line_cached(row, wall_now, logd_pid, out, &mut (i64::MIN, String::new()));
+}
+
+/// `text_line` with the last formatted second cached: a storm stamps many
+/// lines with the same second, and localtime_r re-reads the zone each call.
+fn text_line_cached(row: &Row, wall_now: i64, logd_pid: u32, out: &mut String, cache: &mut (i64, String)) {
     let t = row.t.unwrap_or(wall_now);
+    if cache.0 != t {
+        *cache = (t, format_local(t));
+    }
     out.push('[');
-    out.push_str(&format_local(t));
+    out.push_str(&cache.1);
     out.push_str("] ");
     match &row.body {
         Body::Log { lv, c, p, msg } => {
@@ -51,15 +60,16 @@ pub struct TextMirror {
     buf: String,
     pub first_ms: Option<u64>,
     pub writes: u64,
+    ts: (i64, String),
 }
 
 impl TextMirror {
     pub fn new(path: String) -> TextMirror {
-        TextMirror { path, buf: String::new(), first_ms: None, writes: 0 }
+        TextMirror { path, buf: String::new(), first_ms: None, writes: 0, ts: (i64::MIN, String::new()) }
     }
 
     pub fn add(&mut self, row: &Row, wall_now: i64, pid: u32, now_ms: u64) {
-        text_line(row, wall_now, pid, &mut self.buf);
+        text_line_cached(row, wall_now, pid, &mut self.buf, &mut self.ts);
         self.first_ms.get_or_insert(now_ms);
         // A storm must not grow the batch without bound.
         if self.buf.len() > 64 * 1024 {
