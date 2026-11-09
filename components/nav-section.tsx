@@ -80,7 +80,7 @@ const STATUS_TONE: Record<NavStatus["tone"], string> = {
 function openStateFor(pathname: string, items: NavItem[]) {
   const next: Record<string, boolean> = {};
   items.forEach((item) => {
-    if (item.items?.length) next[item.t_key] = isItemActive(pathname, item);
+    if (item.items) next[item.t_key] = isItemActive(pathname, item);
   });
   return next;
 }

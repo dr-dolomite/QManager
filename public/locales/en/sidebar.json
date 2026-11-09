@@ -4,6 +4,7 @@
     "cellular": "Cellular",
     "local_network": "Local Network",
     "monitoring": "Monitoring",
+    "history": "History",
     "system": "System"
   },
   "breadcrumb": "Breadcrumb",
@@ -17,6 +18,8 @@
     "ip_passthrough": "IP Passthrough",
     "connection_quality_overview": "Overview",
     "system_settings_general": "General",
+    "history": "History",
+    "history_cellular": "Cellular History",
     "cellular_information": "Cellular Information",
     "antenna_statistics": "Antenna Statistics",
     "antenna_alignment": "Antenna Alignment",

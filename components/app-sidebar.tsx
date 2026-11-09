@@ -119,6 +119,13 @@ const navLocalNetwork: NavItem[] = [
   },
 ];
 
+// History is a section of its own. The parent row expands to its pages; with a
+// single page today, the empty `items` list keeps it an expander (its own page
+// is the first sub-row), so the next History page is one entry here.
+const navHistory: NavItem[] = [
+  { t_key: "history", url: "/history/cellular", icon: "history", items: [] },
+];
+
 // The Watchdog row's live status is injected at render (AppSidebar), so the
 // array itself stays static and the breadcrumb can read it too.
 const navMonitoring: NavItem[] = [
@@ -287,6 +294,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   { groupKey: "cellular", items: navCellular },
   { groupKey: "local_network", items: navLocalNetwork },
   { groupKey: "monitoring", items: navMonitoring },
+  { groupKey: "history", items: navHistory },
   { groupKey: "system", items: navSystem },
   { items: navFooter, size: "sm" },
 ];

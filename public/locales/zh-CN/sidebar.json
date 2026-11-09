@@ -4,6 +4,7 @@
     "cellular": "蜂窝网络",
     "local_network": "本地网络",
     "monitoring": "监控",
+    "history": "历史记录",
     "system": "系统"
   },
   "breadcrumb": "面包屑导航",
@@ -17,6 +18,8 @@
     "ip_passthrough": "IP 直通",
     "connection_quality_overview": "概览",
     "system_settings_general": "常规",
+    "history": "历史记录",
+    "history_cellular": "蜂窝历史",
     "cellular_information": "蜂窝网络信息",
     "antenna_statistics": "天线统计",
     "antenna_alignment": "天线对准",
