@@ -306,6 +306,8 @@ Main polling endpoint. Returns the cached modem status JSON (built by `qmanager_
 
 Returns network events as a JSON array. `internet_lost`/`internet_restored` and the latency/loss pairs come from the single detector (one outage logs one lost/restored pair); `ca_change` events are settled and debounced (a one-sample carrier dip logs nothing, a flapping carrier logs one "CA churn detected" warning per episode). See [`docs/features/connection-quality.md`](features/connection-quality.md#one-detector-eventssh).
 
+**Query (optional, logd path only):** `types` (comma-separated event types), `cat` (`cellular|connection|system|config|security|lan|alerts|other`), `after` / `before` (journal `seq`), `since` / `until` (epoch), `limit` (1..2000, default 50). With `qmanager_logd` running (`evq=1` in `/var/run/qmanager_logd.proto`) the reply comes from `qlog evq` and each event also carries `seq`, `cat`, `f` (fields object), `boot`, `t`. An invalid value, no capability, or logd unreachable serves the legacy `/tmp/qmanager_events.json` array instead (query ignored).
+
 **Response:**
 ```json
 [
@@ -1500,7 +1502,14 @@ Device hardware and firmware information.
 
 ### GET `/system/logs.sh`
 
-System log output.
+QManager log viewer. Query: `lines` (default 100, max 500 on the logd path), `level` (minimum severity), `component`, `search`, `include_rotated`, plus `boot` (`this|prev|<n>`), `after` / `before` (journal `seq`). With `qmanager_logd` running (`logq=1` in `/var/run/qmanager_logd.proto`) it is served by `qlog logq` and adds `seq`, `t`, `boot` per entry and `this_boot`, `head_seq`, `has_more`, `boots[]`, `counts`, `latest_problem`; otherwise the legacy `/tmp/qmanager.log` parser answers with the original shape. POST `{"action":"clear"|"status"}` is unchanged. See [`docs/reference/logs.md`](./reference/logs.md#the-logd-path-logq).
+
+### GET/POST `/system/log_debug.sh`
+
+Journal debug lease (30 minutes of DEBUG logging). Auth required.
+
+`GET` and `POST {"enable":true|false}` both return `{"success":true,"active":bool,"expires_in":<seconds>,"available":bool}`; `available` is true while logd's capability file exists. Errors: `invalid_body`, `unavailable` (no journal directory), `write_failed`. See [`docs/reference/logs.md`](./reference/logs.md#debug-lease-systemlog_debugsh).
+
 
 ### GET `/system/syslog.sh`
 

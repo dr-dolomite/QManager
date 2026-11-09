@@ -310,6 +310,58 @@ not what the placeholder copy implies.
 
 ---
 
+## The logd path (LOGQ)
+
+When `qmanager_logd` is running, `system/logs.sh` GET is answered by one fork to
+`/usr/bin/qlog logq k=v ...` instead of the awk pass over `/tmp/qmanager.log`. The "frozen"
+contract above still holds: the reply is the same shape plus additive fields, so an older UI
+reads it unchanged. Design: `docs/plans/2026-11-10-qmanager-logd-journal.md` (section 2.5, 2.7).
+
+**Use condition.** `/var/run/qmanager_logd.proto` contains the line `logq=1` (read with the
+`read` builtin). Any other state falls back to the legacy file path, unchanged:
+no capability file, a parameter that fails validation, `qlog` exit 3 (logd unreachable), any
+other non-zero `qlog` exit, or an empty reply. POST (`clear`, `status`) is always the legacy
+code.
+
+**Parameter mapping** (every value is validated with `case` and passed as one argv element,
+never through `eval`):
+
+| Query param | `qlog logq` arg | Validation |
+| ----------- | --------------- | ---------- |
+| `lines` (alias `limit`) | `limit=N` | digits only, at most 10; `0` becomes 100, above 500 is clamped to 500; absent sends `limit=100` (the legacy default) |
+| `level` (alias `min_level`) | `min_level=L` | `DEBUG`, `INFO`, `WARN`, `ERROR` or empty |
+| `component` | `component=C` | `[a-z0-9_-]`, at most 48 chars; `all` or empty omits it |
+| `search` | `search=S` | percent/plus decoded, control bytes dropped, truncated to 256 chars; logd matches case-insensitively |
+| `boot` | `boot=B` | `this`, `prev` or digits (at most 10) |
+| `after`, `before` | same | digits only, at most 18 (journal sequence numbers) |
+| `include_rotated` | *(not sent)* | meaningless: the journal spans boots through `boot=` |
+
+An invalid value does not return an error: it takes the legacy path, so a hostile or odd query
+degrades to today's behaviour.
+
+**Additive response fields:** per entry `seq`, `t` (epoch, when the clock was trusted), `boot`;
+top level `this_boot`, `head_seq`, `has_more`, `boots[]`, `counts`, `latest_problem`. `after` /
+`before` page by `seq`; `boot=prev` reads the previous boot's rows (the journal lives on flash,
+so they survive a reboot). Events appear as INFO rows of component `events` (`EVENT [type]
+message`), as the legacy writers logged them.
+
+## Debug lease (`system/log_debug.sh`)
+
+A 30 minute switch that makes logd keep DEBUG rows and makes `qlog_debug` write.
+
+- Lease file: `/var/run/qmanager/journal/debug`, content = expiry in whole seconds of
+  `/proc/uptime` (monotonic). logd removes it on expiry.
+- `GET` returns `{"success":true,"active":bool,"expires_in":<s>,"available":bool}`;
+  `available` is true while `/var/run/qmanager_logd.proto` exists. A lease file with an
+  unparsable body counts as active (logd gives it first-seen + 1800 s).
+- `POST {"enable":true}` writes `uptime + 1800` through `qm_atomic_write`, only when the
+  journal directory exists and is a real root-owned directory (`qm_owned_by_root`: not a
+  symlink). `{"enable":false}` removes the file. Both reply with the GET shape.
+- Errors (HTTP 200 envelope): `invalid_body` (`enable` missing or not a boolean), `unavailable`
+  (no journal directory), `write_failed`. Both directions log at INFO (`cgi_log_debug`).
+
+---
+
 ## Device logs (`system/syslog.sh`)
 
 A second, separate read: the modem's own logs, not QManager's transcript. Read-only, no locks,
