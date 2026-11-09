@@ -87,6 +87,17 @@ qm_verify_password() {
     qm_timing_safe_compare "$_computed_hash" "$_stored_hash"
 }
 
+# qm_set_ssh_password <password> — make <password> the root (SSH) password.
+# Used only by first-time onboarding so the password chosen there also opens
+# SSH. CGIs run as root, so no helper binary or sudo is needed (same mechanism
+# as system/ssh_password.sh). Returns non-zero on empty input or passwd failure;
+# callers treat that as a warning, never as a reason to refuse onboarding.
+qm_set_ssh_password() {
+    [ -n "$1" ] || return 1
+    command -v passwd >/dev/null 2>&1 || return 1
+    printf '%s\n%s\n' "$1" "$1" | passwd root >/dev/null 2>&1
+}
+
 qm_save_password() {
     _new_salt=$(qm_generate_salt)
     _new_hash=$(qm_hash_password "$1" "$_new_salt")

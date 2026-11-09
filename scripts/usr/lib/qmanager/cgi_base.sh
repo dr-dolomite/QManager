@@ -54,6 +54,7 @@ if ! type require_auth >/dev/null 2>&1; then
     qm_cleanup_sessions()   { :; }
     qm_verify_password()    { return 1; }
     qm_save_password()      { return 1; }
+    qm_set_ssh_password()   { return 1; }
     qm_check_rate_limit()   { return 0; }
     qm_get_rate_limit_status() { RATE_LIMIT_RETRY_AFTER=0; RATE_LIMIT_ATTEMPTS_REMAINING=5; return 0; }
     qm_record_failed_attempt() { :; }

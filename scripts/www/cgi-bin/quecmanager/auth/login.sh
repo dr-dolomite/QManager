@@ -84,6 +84,17 @@ if is_setup_required; then
     fi
     qlog_info "First-time password configured"
 
+    # The onboarding password is also the SSH (root) password. Soft-fail: the
+    # web UI is the recovery path, so a failed sync never blocks onboarding;
+    # the response says so and the UI points to Settings > Passwords.
+    _ssh_synced="false"
+    if qm_set_ssh_password "$_password"; then
+        _ssh_synced="true"
+        qlog_info "SSH password synced from onboarding"
+    else
+        qlog_warn "SSH password sync failed during onboarding"
+    fi
+
     _token=$(qm_create_session)
     if [ -z "$_token" ]; then
         cgi_error "session_failed" "Could not create a session"
@@ -91,7 +102,7 @@ if is_setup_required; then
     fi
     qm_set_session_cookies "$_token"
     cgi_headers
-    jq -n '{"success":true}'
+    jq -n --argjson synced "$_ssh_synced" '{"success":true,"ssh_synced":$synced}'
     exit 0
 fi
 
