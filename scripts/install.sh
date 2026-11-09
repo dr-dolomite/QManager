@@ -1336,6 +1336,25 @@ seed_uci_defaults() {
         info "quecmanager.eth_link.aspm_policy already set — preserving user choice"
     fi
 
+    # Journal daemon (qmanager_logd). The old /etc/qmanager/log_level file was
+    # never written by anything; carry a hand-made one over once, then drop it.
+    if ! uci -q get quecmanager.logging >/dev/null 2>&1; then
+        uci set quecmanager.logging=logging
+        _lg_level=""
+        if [ -f /etc/qmanager/log_level ]; then
+            read -r _lg_level < /etc/qmanager/log_level 2>/dev/null || true
+            case "$_lg_level" in
+                DEBUG|INFO|WARN|ERROR) ;;
+                *) _lg_level="" ;;
+            esac
+        fi
+        uci set quecmanager.logging.level="${_lg_level:-INFO}"
+        uci set quecmanager.logging.persist_level='INFO'
+        uci set quecmanager.logging.forward_syslog='0'
+        info "Seeded quecmanager.logging (level=${_lg_level:-INFO})"
+    fi
+    rm -f /etc/qmanager/log_level
+
     uci commit quecmanager 2>/dev/null || warn "uci commit quecmanager failed"
 
     seed_web_port
@@ -1359,6 +1378,16 @@ seed_uci_defaults() {
         else
             warn "Could not link $BIN_DIR/qmi — QMI client unavailable"
         fi
+        if at_logd_link; then
+            info "qmanager_logd -> $(readlink "$BIN_DIR/qmanager_logd" 2>/dev/null)"
+        else
+            warn "Could not link $BIN_DIR/qmanager_logd - journal daemon unavailable"
+        fi
+        if at_qlog_link; then
+            info "qlog -> $(readlink "$BIN_DIR/qlog" 2>/dev/null)"
+        else
+            warn "Could not link $BIN_DIR/qlog - journal client unavailable"
+        fi
         # Runs after install_frontend (its /www wipe removes the link).
         if at_live_link; then
             info "qmlive -> $(readlink "$WWW_ROOT/qmlive" 2>/dev/null)"
@@ -1366,7 +1395,7 @@ seed_uci_defaults() {
             warn "Could not link $WWW_ROOT/qmlive — real-time signal unavailable"
         fi
     else
-        warn "at_engine.sh missing — /usr/bin/qcmd, qsms and qmi not linked"
+        warn "at_engine.sh missing — /usr/bin/qcmd, qsms, qmi, qmanager_logd and qlog not linked"
     fi
 }
 
@@ -1409,7 +1438,15 @@ enable_services() {
 start_services() {
     step "Starting QManager services"
 
-    # AT broker first (boot order START=98 before qmanager's 99), so the poller's
+    # Journal daemon before the broker (boot order START=97 before 98) so the
+    # broker's and poller's first lines already reach the journal. Writers fall
+    # back to /tmp/qmanager.log without it.
+    if [ -x "$INITD_DIR/qmanager_logd" ]; then
+        "$INITD_DIR/qmanager_logd" start >>"$LOG_FILE" 2>&1             || warn "Failed to start journal daemon (logs fall back to /tmp/qmanager.log)"
+        info "Started journal daemon"
+    fi
+
+    # AT broker next (boot order START=98 before qmanager's 99), so the poller's
     # first AT call goes through it. qcmd works without it (in-process fallback).
     if [ -x "$INITD_DIR/qmanager_atd" ]; then
         "$INITD_DIR/qmanager_atd" start >>"$LOG_FILE" 2>&1 \
@@ -1444,7 +1481,7 @@ restore_running_services() {
         # Under --configure the list comes back from a /tmp file, so only a
         # plain qmanager* service name may reach the init.d call below.
         case "$name" in
-            qmanager_atd|qmanager|qmanager_sites) continue ;;
+            qmanager_logd|qmanager_atd|qmanager|qmanager_sites) continue ;;
             *[!A-Za-z0-9_]*) continue ;;
             qmanager*) ;;
             *) continue ;;
@@ -1645,6 +1682,14 @@ seed_runtime_files() {
 
     # History store (docs/features/history.md): poller-written day files,
     # CGI read-only. Survives updates; removed only by uninstall --purge.
+    # Journal store (qmanager_logd day files).
+    if mkdir -p /usrdata/qmanager/journal 2>>"$LOG_FILE"; then
+        chown root:root /usrdata/qmanager/journal 2>/dev/null || true
+        chmod 0755 /usrdata/qmanager/journal 2>/dev/null || true
+    else
+        warn "Could not create /usrdata/qmanager/journal (logd will retry at start)"
+    fi
+
     if mkdir -p /usrdata/qmanager/history 2>>"$LOG_FILE"; then
         chown root:root /usrdata/qmanager/history 2>/dev/null || true
         chmod 0755 /usrdata/qmanager/history 2>/dev/null || true
