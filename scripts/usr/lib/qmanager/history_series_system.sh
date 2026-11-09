@@ -13,6 +13,9 @@ HIST_system_METRICS="cpu mem_pct mem_mb temp_c st_sys_used st_sys_size st_app_us
 HIST_system_EVENTS="device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered"
 HIST_system_EVENTS_KEEP="device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered"
 HIST_system_PAIRS="modem_crash:modem_recovered thermal_throttled:thermal_recovered"
+# Crash state survives a same-boot poller restart (system.ssr), so its
+# recovery still comes: only a new boot closes an open crash (history.md §6).
+HIST_system_RESUME="modem_crash"
 
 # Overridable for tools/history-test/.
 : "${HIST_SYS_CRASH_LOG:=/etc/qmanager/crash.log}"

@@ -13,7 +13,7 @@ QManager keeps a small, flash-friendly history of things the poller already know
 | Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat; `history.sh` dot-sources every one) |
 | Read lib (sourced by CGIs) | `scripts/usr/lib/qmanager/history_read.sh` (awk merge, range math) |
 | CGIs | `scripts/www/cgi-bin/quecmanager/history/series.sh?series=&range=`, `.../history/events.sh?series=&range=&types=&limit=&offset=` (contract in §6, endpoints in [`../API-REFERENCE.md`](../API-REFERENCE.md#history)) |
-| Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only; plus two small durable marker files per series: `since` (when collecting began, written once) and `last_fault` (`<start> <end>` of the newest completed fault run) |
+| Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only; plus two small durable marker files per series: `since` (when collecting began, written once) and `last_fault` (`<start> <end>` of the newest completed fault run); plus one store-wide `last_wall` (wall time of the newest sample, written by the TERM flush, §5) |
 | RAM state | `/var/run/qmanager/history/` (`clock.env`, `<series>.open`, `<series>.queue`, `<series>.pending`, `<series>.run`, `ext.spool`, `ext.spool.work`) |
 | Event pairing | optional `HIST_<id>_PAIRS="onset:recovery ..."` per series; cellular: `signal_lost:signal_restored` (§6) |
 | External events | `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2) |
@@ -52,9 +52,11 @@ Resolved by the provider from the poller's globals as `status.json` reports them
 | State | Rule (first match wins) |
 |---|---|
 | `off` | `t1_cfun` is `0` or `4` (radio off by the user, airplane mode). Not an outage; drawn as "no data". |
-| `down` | `modem_reachable` is not `true`, or `service_status` is empty/`unknown`/`sim_error`/`no_service`/`searching`, or neither leg is connected |
+| `down` | the QMI lane reports the baseband down (`_QMI_OK=1`, `_QMI_STATE=down`, read at most `HIST_CL_QMI_MAX_AGE` = 10 s old on the uptime clock), or `modem_reachable` is not `true`, or `service_status` is empty/`unknown`/`sim_error`/`no_service`/`searching`, or neither leg is connected |
 | `nr` | `nr_state = connected` (5G NSA anchor up, or SA) |
 | `lte` | `lte_state = connected` |
+
+**Why the QMI clause:** outside the Active tier the AT-derived state refreshes every 15 s (Idle) or 60 s (Deep), so a baseband crash (SSR, typically 12 to 20 s on the RM551E) is over before the next AT read and every sample during it still said `nr`. Seen live on 2026-11-09: six SSRs, each a real outage on the Connection series, recorded nothing on Cellular. The QMI sidecar is refreshed every 2 s and says `down` for exactly that window (`qmi-lane.md`). The age guard matters: a broker that dies leaves its last sidecar behind, and a stale `down` must not pin the series at `down`. CFUN 0/4 still wins (`off`). `signal_lost` is unchanged (it is the AT link, "Modem became unreachable"), so an SSR adds `down` time and an outage entry (`x`) but no `signal_lost` row.
 
 "No data" is **never stored**. It is the part of a bucket no sample covered: `nodata = bucket_len - (nr + lte + down + off)`, computed at read time. A poller that is stopped, a modem that is rebooting or off, and the time before install all read as no data. **No service is `down`, a stored state; no data is the absence of samples.** They are never confused.
 
@@ -80,6 +82,14 @@ Event row (`k:"e"`), the same shape as `NetworkEvent` in `types/modem-status.ts`
 {"k":"e","t":1794187659,"type":"ca_change","severity":"info","radio":"lte","message":"LTE CA activated: B1 + B41, 35 MHz (2 carriers)"}
 ```
 
+Restart row (`k:"r"`), one per series on every poller start (`hist_init`), when the store already has data:
+
+```json
+{"k":"r","t":1794199490,"boot":1}
+```
+
+- `t` = when observation stopped: the trust floor (`last_wall` from the TERM flush, else the newest stored bucket's end, §5); on a same-boot restart, the last saved sample when that is newer (a kill with no TERM flush). It is a stored wall time, so it is queued at once, before the clock is trusted. `boot` = 1 on a new boot, 0 on a same-boot poller restart. Readers that ask for `b` or `e` never see it (`hr_rows` filters by kind); only the events CGI reads it, as a pairing break (§6). The daily event cap does not count it.
+
 **Rows are mergeable.** Several bucket rows with the same `t` are summed (`st`, `x`, `n`, `sum`) and min/max-ed at read time. This one rule absorbs a poller restart mid-bucket, the partial bucket flushed on TERM before a reboot, and a backward clock step that revisits an older bucket. There is no rewrite-in-place anywhere.
 
 ### Registering a new series (no core change)
@@ -94,6 +104,7 @@ HIST_thermal_METRICS="soc_c modem_c"
 HIST_thermal_EVENTS="thermal_throttled thermal_recovered"
 HIST_thermal_EVENTS_KEEP="thermal_throttled thermal_recovered"   # optional: kept past the per-day cap
 HIST_thermal_PAIRS="thermal_throttled:thermal_recovered"        # optional: events CGI adds "end" to onsets
+HIST_thermal_RESUME=""                                          # optional: onsets a same-boot poller restart keeps (§6)
 hist_thermal_sample() {                      # builtins only, no forks
     _HS="normal"; [ "$thermal_throttled" = "1" ] && _HS="throttled"
     _HV_soc_c="$thermal_soc"; _HV_modem_c="$thermal_modem"
@@ -154,6 +165,7 @@ All three UI ranges are exact multiples of 30 min, so **no coarse tier is stored
 | Open bucket, queue, pending, run state, clock anchor, external-event spool | `/var/run/qmanager/history/` (tmpfs, dir `0700` root via `qm_run_dir`) | changes every 10 s; survives a poller restart, not a reboot |
 | Closed buckets and events | `/usrdata/qmanager/history/<series>/` (UBIFS, dir `0755`) | must survive reboots |
 | `since` (when collecting began) and `last_fault` (newest completed fault run) | `<series>/since` and `<series>/last_fault` on flash, written once / once per outage through `qm_durable_write` | rare writes that must survive a reboot right after; the CGI reads them directly (`since` is moved up to the oldest kept row once retention has trimmed past it) |
+| `last_wall` (when observation stopped) | `/usrdata/qmanager/history/last_wall`, one line, written by `hist_flush` (the TERM trap) with `printf` before the flush's global `sync`, only while the clock is trusted: the newest sample, or the last poller cycle when newer (events are recorded on every cycle, samples every 5) | read once by `hist_init` as the clock-trust floor (§5) and as the restart row's `t` (§1); one tiny write per poller stop. A torn or old value is ignored |
 
 **Flush.** When any series closes a bucket, `hist_flush` appends every queued row of every series to its day file(s) with `printf >>`, then runs **one `sync`** (global on BusyBox) and truncates the queues. It also runs from the TERM trap (procd stop, planned reboot) with the open bucket written as a partial row, which §1's merge rule absorbs. Worst case on an unplanned reboot or AP hang: the open bucket (≤ 30 min) and its events are lost and read as no data.
 
@@ -166,7 +178,8 @@ All three UI ranges are exact multiples of 30 min, so **no coarse tier is stored
 The RM551E has no usable RTC: the kernel boots at 1970, `sysfixtime` sets it to the newest `/etc` mtime (often stale), and `time_daemon` (NITZ) or `sysntpd` step it later; an SSR can step it back about 80 s and forward again. The collector therefore stamps everything on the monotonic clock and maps to wall time through an **anchor**:
 
 - `offset = wall - mono`, taken at a trusted moment and kept in `clock.env` (`hist_offset`, `hist_trusted`, `hist_boot`). A bucket key is `floor((mono + offset) / 1800) * 1800`.
-- **Trusted** means all of: wall ≥ 1700000000 (`HIST_SANE_EPOCH`, same as Data Used); wall ≥ the newest stored bucket end minus 120 s (a clock behind our own newest record is stale); and either uptime ≥ 300 s (`QM_TIMER_SETTLE_SECS`, the scheduled-jobs guard) or a step has already been seen this boot.
+- **Trusted** means all of: wall ≥ 1700000000 (`HIST_SANE_EPOCH`, same as Data Used); wall ≥ the newest record minus 120 s (a clock behind our own newest record is stale); and either uptime ≥ 300 s (`QM_TIMER_SETTLE_SECS`, the scheduled-jobs guard) or a step has already been seen this boot.
+- **The newest record** (`_hist_tfloor`, set in `hist_init`) is the `last_wall` marker when it is no older than the start of the newest stored bucket, else the newest stored bucket's **end**. **Why:** the TERM flush stores the open bucket as a partial row keyed to its bucket *start*, so that bucket's end can be up to 30 min after the last real sample. Before the marker (until 2026-11-09), every planned reboot left the clock untrusted, and all History pages empty, until the wall clock reached that end: observed live, a reboot at 1794199488 stayed untrusted until uptime ≈ 770 s instead of 300 s. A marker older than the newest bucket belongs to an earlier stop (an unplanned reboot writes none) and is ignored; an unplanned reboot's newest row is a fully closed bucket, whose end is exact.
 - **Before trust,** samples go to `<series>.pending` with their `mono`, and events are stamped with `mono` only. At the first trusted tick one `awk` pass back-dates them with the new offset (`mono` is continuous since boot, so a sample taken at 1970 + 40 s lands at its real time), merges them into rows and queues them. Rows that would land before the newest stored bucket are dropped and counted in the log. **Nothing is ever recorded into 1970.** If trust never comes (no SIM, no NTP), the pending file rolls at 1 h and the page shows no data for that time.
 - **Steps.** Each tick compares `wall` with `mono + offset`. A drift within ±120 s is ignored (the NITZ wobble around an SSR never touches the buckets). A larger drift re-anchors: the open accumulator is closed into its current key and a new one starts under the new offset. Forward steps leave the skipped span as no data; backward steps revisit older keys, which the merge rule sums. Merged coverage above the bucket length is clamped by scaling the states down proportionally at read time, so a bucket never reports more than 30 minutes.
 - **Reboots.** `boot_id` changes, `mono` restarts: the open mirror from the old boot is discarded (its partial row was flushed by the TERM trap if the stop was planned), and the time until the first sample of the new boot is no data.
@@ -227,7 +240,14 @@ Newest first. `types` (optional) is a comma list checked against the series' `ev
 }
 ```
 
-**Pairing (`end`).** A series that declares `HIST_<id>_PAIRS="onset:recovery ..."` gets `"end": <t of the next matching recovery>` on its onset rows, or `"end": null` while no recovery has been recorded (ongoing). Only onset rows carry `end`; every other row omits it (`HistoryEvent.end?: number | null`). Cellular sets `signal_lost:signal_restored`, so a signal-loss row shows its duration. The CGI pairs over the **whole retention window** (31 days, not just the range) *before* the window cut, the type filter and paging, so an outage that began before a 24 h window and ended inside it still resolves, and filtering to `signal_lost` alone still shows each end. `counts` and `total` are computed after pairing.
+**Pairing (`end`).** A series that declares `HIST_<id>_PAIRS="onset:recovery ..."` gets `"end"` on its onset rows: the `t` of the next matching recovery, unless a **break** comes first, in which case `end` is the break's `t`; `"end": null` while neither exists (ongoing). Breaks:
+
+- **A restart row** (`k:"r"`, §1) at or after the onset. **Why:** the event detectors start fresh after a poller start and adopt the first reading silently, so an onset still open at a stop never gets its recovery; without the break, the next real recovery (hours later) closed it with a fake duration. Observed live 2026-11-09: `internet_lost` at 1794199488, cut by a planned reboot, read **Ongoing** while the page said Online. `end` = when observation stopped: a bounded, honest duration, never a guess at when the outage really ended.
+- **A `device_reboot` row of the `system` series**, at `t - off` (when the device went down; unknown `off`: at `t`). For a paired series other than `system`, the CGI reads those rows too (one extra `hr_rows system e`); for `system` they are already in the stream. This covers history written before restart rows existed, with no backfill, and dates an unplanned stop more exactly than a restart row (the alive stamp against the newest bucket's end). The earliest break wins.
+- **The next onset of the same type** before any recovery (a missed recovery with no recorded restart): the older onset closes at the newer one.
+- **`HIST_<id>_RESUME`** names onset types whose state survives a same-boot poller restart (`system`: `modem_crash`, kept in `system.ssr`, so its recovery still comes). Restart rows with `boot:0` do not break those; a new boot does.
+
+A break at the same second as the onset still applies; a recovery at the same second as a break still pairs. `components/history/system/derive.ts` `closeStaleCrashes` applied the same rules to crash rows on the client and now sees them already closed. Only onset rows carry `end`; every other row omits it (`HistoryEvent.end?: number | null`). Cellular sets `signal_lost:signal_restored`, so a signal-loss row shows its duration. The CGI pairs over the **whole retention window** (31 days, not just the range) *before* the window cut, the type filter and paging, so an outage that began before a 24 h window and ended inside it still resolves, and filtering to `signal_lost` alone still shows each end. `counts` and `total` are computed after pairing.
 `counts` is over the range ignoring `types`, so the filter menu can show counts and hide empty types. `radio` is `lte`, `nr` or `null`, set at record time (message prefix `LTE`/`NR`, `nr_anchor` = `nr`, `signal_*` = the leg at that moment, else `null`).
 
 ## 7. Frontend contract
@@ -293,7 +313,7 @@ sh history-test.sh <flat dir>
 
 | Check | Result |
 |---|---|
-| On-device test (`history-test.sh`) | 50 passed, 0 failed |
+| On-device test (`history-test.sh`) | 50 passed, 0 failed; 63 of 63 after the 2026-11-09 fixes (QMI `down` cases, `last_wall` trust-floor cases); 71 of 71 with the pairing-break cases |
 | Live CGI shape | 24h = 48 buckets, 7d = 56, 30d = 60 |
 | 30 d query time | about 60 ms |
 | Poller restart mid-bucket | the run resumed (`run_mono` kept) |
@@ -304,9 +324,23 @@ sh history-test.sh <flat dir>
 | Reboot survival | passed. Day files, `since` and events survived. The TERM flush stored the open buckets and the last events. After boot the clock stayed untrusted (`hist_trusted=0`, samples in `.pending`) until uptime about 344 s, then re-trusted and back-dated both series. No row is dated before 2023 in the day files or queues. The reboot gap reads as no data, not an outage. The on-device test was rerun after the reboot: 50 passed, 0 failed |
 | Poller restart with a third series loaded | `[cellular connection system]` loaded; the cellular run resumed without a gap |
 
-**Open (not yet done):**
+### Live events (2026-11-09, RM551E, watchdog off)
 
-- Outage observed live: not yet observed (none occurred during validation; forcing one with `AT+CFUN=4` needs the user's OK).
+Real events, not simulated: 8 baseband SSRs (broker episodes 2 to 9) (dmesg `4080000.remoteproc-mss: fatal error`, RF `nr_rx_ctl_agc` fault), one `AT+CFUN=4` window (92 s, with the user's OK), two planned reboots (user's OK) and one unplanned hard reset (PMIC `PS_HOLD`, no pstore record, cause unknown).
+
+| Check | Result |
+|---|---|
+| Connection outages | every SSR produced an `internet_lost` row and, except the last (cut by a reboot, see Open), an `internet_restored` row 10 to 22 s later. `down` seconds and `x` in the right buckets, `last_fault` set, the events CGI sets `end` on each onset. On the page: reachability strip red in the 11:00, 12:00 and 12:30 buckets, Availability 98.59 % with 10 outages (= sum of `x`), Last outage 10 s, Lasted column filled |
+| Cellular during SSRs | **gap found and fixed.** Before the fix, the six SSRs recorded nothing on Cellular (state kept `nr`, AT state lags up to 60 s). After the fix (§1, QMI clause), the next two SSRs were recorded as `down` 36 s, `x` 2, `last_fault` 1794199397..1794199417. On the page: Last outage 20 s, Availability 99.64 % with 2 outages |
+| `AT+CFUN=4` (92 s) | both series `off` within one 10 s sample, 101 s `off` stored, not counted in `x`. The ping verdict went false about 28 s in, so Connection logs an `internet_lost` row during radio-off (paired, Lasted 1m 27s); the outage count only counts the 14 s still `down` after `CFUN=1` until the ping recovered |
+| Clock trust after a planned reboot | **delay found and fixed** (§5, `last_wall`). Reboot 1 (old code): untrusted until uptime ≈ 770 s, all pages "Collecting" meanwhile. Reboot 2 (fixed): trusted at uptime 303 s |
+| Rows after reboots | no row dated before 2023; reboot gaps read as no data (bucket coverage 1669 of 1800 and 578 of 688) |
+| Untrusted window, page | Cellular and Connection showed "Last outage: None, No outages recorded" while the CGI answered `last_fault:null`; **fixed**, the tile now shows a dash and "Collecting data" until the clock is trusted |
+| Onset rows across a reboot | **found and fixed** (§6 Pairing breaks, restart rows §1). `internet_lost` at 1794199488 (an SSR detected in the second the planned reboot was requested) read **Ongoing**, and the next real recovery would have given it an hours-long duration. After the fix the CGI closes it at 1794199488 (`device_reboot` t 1794199512, `off` 24: down in that second, so Lasted 0 s); the crash row at 1794199473 closes at the same break. history-test 71 of 71 (6 new checks fail on the old code), system-test 51 of 51 |
+
+**Open:**
+
+- `signal_lost` has still never been observed live: it fires only when the AT link itself fails, and none did; the SSRs above are recorded as `down` time, not as `signal_lost`.
 
 ---
 
@@ -385,7 +419,7 @@ The strip, charts and events share one cursor (`history-cursor.tsx`): hovering a
 
 ### Events: pairing and the external spool
 
-- **Lasted.** `history/events.sh` reads `HIST_connection_PAIRS`. Each onset row (`internet_lost`, `high_latency`, `high_packet_loss`) gets `"end": <epoch>` of the next matching recovery, or `"end": null` when none exists yet (ongoing). The page shows the duration, or "Ongoing" (destructive ink for an outage). Pairing scans every retained row (31 days), not only the range window, so an onset near the start of the window still finds its recovery. `HIST_cellular_PAIRS="signal_lost:signal_restored"` uses the same mechanism. A core without `PAIRS` returns no `end` and the column shows nothing.
+- **Lasted.** `history/events.sh` reads `HIST_connection_PAIRS`. Each onset row (`internet_lost`, `high_latency`, `high_packet_loss`) gets `"end": <epoch>` of the next matching recovery, or of the first break before it (a restart, a device reboot, a newer onset of the same type, §6 Pairing), or `"end": null` when neither exists yet (ongoing). The page shows the duration, or "Ongoing" (destructive ink for an outage). Pairing scans every retained row (31 days), not only the range window, so an onset near the start of the window still finds its recovery. `HIST_cellular_PAIRS="signal_lost:signal_restored"` uses the same mechanism. A core without `PAIRS` returns no `end` and the column shows nothing.
 - **Why in the CGI:** pairing in the client fails across pages (the recovery can sit on page 2), so the one place that sees all rows does it.
 - **Watchdog and SIM failover rows** (`watchcat_recovery`, `sim_failover`) are written by `qmanager_watchcat`, a separate daemon with no `history.sh`. `events.sh` `append_event` calls `_ev_hist_spool` when `hist_event` is not defined, which appends `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool` (only once the poller has made that directory; capped at 200 lines, new lines are dropped when full). The poller's `hist_tick` ingests the spool (`_hist_spool`, rename then read) through the normal `hist_event` path, using the `mono` the writer recorded. There is still exactly one writer to flash. A watchdog recovery is `info` severity: the watchdog acting is a fact, not a verdict.
 

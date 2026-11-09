@@ -114,8 +114,8 @@ Runs once per boot, on the first sample where the history clock is trusted (`his
 | Limit | Why | Effect |
 |---|---|---|
 | Unexpected-reboot offline time is accurate to about 5 min | the `alive` stamp is written every 5 min | `off` can be up to 5 min too long; with no valid stamp it is `-` |
-| After a planned reboot shorter than 30 min, the `device_reboot` event can be delayed by up to about 28 min | the core's clock-trust rule (`history.md` §5) needs wall time to reach the newest stored bucket end minus 120 s, and the TERM-flushed partial bucket of the old boot may end up to 30 min ahead | the event appears late but its `t` (boot epoch) is correct; the charts lag the same way |
-| A crash followed by a device reboot has no `modem_recovered` row | the modem went down with the device | `deriveIncidents` (`closeStaleCrashes`) ends the crash at the reboot's offline start; an older unpaired crash ends at the next crash |
+| The `device_reboot` event appears about 5 min after the device is back | it is classified on the first trusted sample, and the core trusts the clock at the 300 s settle (`history.md` §5; earlier on a NITZ step) | the event appears late but its `t` (boot epoch) is correct; the charts lag the same way. Until 2026-11-09 this could reach about 28 min after a planned reboot (trust waited for the end of the TERM-flushed bucket); the core's `last_wall` marker removed that |
+| A crash followed by a device reboot has no `modem_recovered` row | the modem went down with the device | the events CGI ends the crash at the reboot's offline start (`device_reboot` `t - off`, or the new boot's restart row) and an older unpaired crash at the next crash (`history.md` §6 Pairing); `deriveIncidents` (`closeStaleCrashes`) keeps the same rule as a fallback. A same-boot poller restart does not end a crash (`HIST_system_RESUME="modem_crash"`: the state survives in `system.ssr`); an open `thermal_throttled` ends at it, and a throttle still active after it opens a new row |
 | `state` and the thermal events can differ by 1-2 samples | the state uses raw `thermal_throttling`; events use the `events.sh` debounce (2 samples in, 3 out) | a throttle edge in the shaded state strip may not line up exactly with its event |
 | No crash events without the QMI lane | the SSR counter comes from the broker | `_QMI_OK` not `1` records nothing while the lane is absent; a crash during that time is seen only if the counter has risen when the lane returns |
 | A planned reboot with no breadcrumb reads as unexpected | a reboot path that does not call `record_planned_reboot` | the worst case is a planned restart shown as unexpected; the message keeps the raw cause |
@@ -144,5 +144,16 @@ Runs once per boot, on the first sample where the history clock is trusted (`his
 | Whole-poller CPU | within measurement noise |
 
 Frontend: `bunx tsc --noEmit`, eslint on touched files, `bun run icons:check`, `bun run i18n:check`, `derive.test.ts`.
+
+### Live events (2026-11-09, RM551E)
+
+| Event | Recorded | Page |
+|---|---|---|
+| 7 baseband SSRs after the series started (broker episodes 3 to 9) | 7 `modem_crash`/`modem_recovered` pairs, 12 to 17 s, onset equal to the dmesg `fatal error received` second, `end` set by the events CGI. The one at 12:44:33 had its recovery stamped two seconds before the reboot that followed | "Modem crashed and restarted itself, Back in 15 s"; Modem lane "Restarted 7×", destructive marks |
+| Planned reboot 1 (`crash.log` `1794199488\|reboot\|user`) | `device_reboot` `t` 1794199512 (boot epoch), `cause=user off=24`, `info`; arrived late (≈ 13 min) because of the trust delay, fixed since (Known limits) | "Restarted from QManager, Offline for 24s"; a gap in the Device lane from `t - off` |
+| Unplanned hard reset (PMIC `PS_HOLD`, no pstore record) | `device_reboot` `t` 1794200293, `cause=unexpected off=7` (from the `alive` stamp 1794200286), `error`. The alert engine back-filled `unplanned` in `crash.log`, which the classifier skips as designed | "Device restarted unexpectedly, Offline for 7s"; destructive mark |
+| Planned reboot 2 (with the `last_wall` fix) | `device_reboot` `t` 1794200749, `cause=user off=22`, recorded at uptime 303 s | "Restarted from QManager, Offline for 22s" |
+
+The offline spans are drawn from `t - off` to `t`; at 7 to 24 s they are below one pixel on a 24 h lane, so the lane draws them at its 3 to 4 px minimum width. Not observed live: `scheduled`, `update` and `tier4_escalation` causes, and thermal throttling (the hottest sensor stayed under 60 °C).
 
 Related: [`history.md`](history.md) (core), [`thermal-throttling.md`](thermal-throttling.md) (the thermal events and `trip_c`), [`qmi-lane.md`](qmi-lane.md) (SSR counter), [`alerts.md`](alerts.md) (reboot classification buckets, `crash.log`), [`connection-watchdog.md`](connection-watchdog.md) (Tier 4 reboot), [`scheduled-jobs.md`](scheduled-jobs.md) (scheduled reboot).

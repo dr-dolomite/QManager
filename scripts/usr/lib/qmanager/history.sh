@@ -61,6 +61,9 @@ _hist_uoff=""
 _hist_stepped=0
 _hist_pm=""
 _hist_hwm=0
+# Trust floor: wall time of the newest record. hwm (a bucket END) by default;
+# the TERM flush's last_wall marker when it is at least as new (hist_init).
+_hist_tfloor=0
 _hist_mc=0
 _hist_closed=0
 _hist_wall=0
@@ -271,7 +274,7 @@ _hist_clock() {
     fi
     _hist_uoff="$_uo"
     [ "$_w" -ge "$HIST_SANE_EPOCH" ] || return 0
-    [ "$_w" -ge $((_hist_hwm - HIST_STEP_TOL)) ] || return 0
+    [ "$_w" -ge $((_hist_tfloor - HIST_STEP_TOL)) ] || return 0
     [ "$_m" -ge "$HIST_SETTLE" ] || [ "$_hist_stepped" = "1" ] || return 0
     _hist_trusted=1
     _hist_off="$_uo"
@@ -477,6 +480,7 @@ hist_init() {
     local run_state
     local run_mono
     local _ft
+    local _same
     [ -n "$HIST_SERIES" ] || return 0
     if command -v qm_root_dir >/dev/null 2>&1; then
         qm_root_dir "$HIST_RUN" 0700 || { _hist_log error "run dir unusable"; return 0; }
@@ -504,7 +508,9 @@ hist_init() {
         done < "$HIST_CLOCK"
     fi
     case "$hist_offset" in ''|*[!0-9-]*) hist_trusted="" ;; esac
+    _same=0
     if [ -n "$_hist_boot" ] && [ "$hist_boot" = "$_hist_boot" ]; then
+        _same=1
         if [ "$hist_trusted" = "1" ]; then
             _hist_trusted=1
             _hist_off="$hist_offset"
@@ -565,6 +571,38 @@ hist_init() {
         fi
         _hist_ev_count "$_s"
     done
+    # The TERM flush keys its partial rows to the bucket START, so hwm (that
+    # bucket's END) can be up to 30 min after the last real sample; trusting
+    # only past hwm left every page empty that long after a planned reboot.
+    # last_wall is the newest sample's wall time, written by that flush. A
+    # marker older than the newest bucket is an earlier stop's: hwm stands.
+    _hist_tfloor="$_hist_hwm"
+    _b=""
+    { read -r _b < "$HIST_STORE/last_wall"; } 2>/dev/null
+    case "$_b" in
+        ''|*[!0-9]*|0*|???????????*) ;;
+        *) [ "$_b" -ge $((_hist_hwm - HIST_BUCKET)) ] && _hist_tfloor="$_b" ;;
+    esac
+    # Restart row: observation stopped at the floor (same boot: at the last
+    # saved sample when that is newer, e.g. after a kill with no TERM flush).
+    # The events CGI closes an onset still open here (§6 Pairing); "boot":1
+    # marks a new boot, which also ends the states a poller restart resumes.
+    # The t is a stored wall time, so it is queued now, before the clock is
+    # trusted; flushing it early touches no retention (that needs today).
+    _f="$_hist_tfloor"
+    _b=1
+    if [ "$_same" = "1" ]; then
+        _b=0
+        if [ "$_hist_resume" = "1" ] && [ "$_hist_trusted" = "1" ]             && [ $((_hist_pm + _hist_off)) -gt "$_f" ]; then
+            _f=$((_hist_pm + _hist_off))
+        fi
+    fi
+    if [ "$_f" -ge "$HIST_SANE_EPOCH" ]; then
+        for _s in $HIST_SERIES; do
+            _hist_queue_line "$_s" "{\"k\":\"r\",\"t\":$_f,\"boot\":$_b}"
+        done
+        _hist_closed=1
+    fi
     _hist_save_clock
     _hist_ready=1
     _hist_log info "ready: series [${HIST_SERIES# }] trusted=$_hist_trusted"
@@ -715,10 +753,28 @@ hist_event() {
 # hist_flush — TERM trap: queue the open buckets as partial rows, flush.
 hist_flush() {
     local _s
+    local _m
     [ "$_hist_ready" = "1" ] || return 0
     for _s in $HIST_SERIES; do
         _hist_close "$_s"
         rm -f "$HIST_RUN/$_s.open"
     done
+    # When observation stopped: the newest sample, or the last poller cycle
+    # when that is newer (events are recorded on every cycle, samples every
+    # HIST_EVERY). The next start's trust floor and restart row (hist_init).
+    # Written before the flush so its sync covers it.
+    if [ "$_hist_trusted" = "1" ]; then
+        case "$_hist_pm" in
+            ''|*[!0-9]*) ;;
+            *)
+                _m="$_hist_pm"
+                case "${_MONO_TOP:-}" in
+                    ''|*[!0-9]*) ;;
+                    *) [ "$_MONO_TOP" -gt "$_m" ] && _m="$_MONO_TOP" ;;
+                esac
+                printf '%s\n' "$((_m + _hist_off))" > "$HIST_STORE/last_wall" 2>/dev/null
+                ;;
+        esac
+    fi
     hist_flush_queues
 }
