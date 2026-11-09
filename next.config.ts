@@ -7,22 +7,22 @@ const nextConfig: NextConfig = {
 
   // This block will be commented out before running bun run build and only used in development to proxy API requests to the modem's web server.
 
-  async rewrites() {
-    return [
-      {
-        source: "/cgi-bin/:path*",
-        //  cgi-bin path is used by the modem's web server for API requests, so we proxy all /api requests to the modem's IP address
-        destination: "http://192.168.224.1/cgi-bin/:path*",
-        basePath: false,
-      },
-      {
-        source: "/qmlive/:path*",
-        //  live signal files are static, served from /www/qmlive (a symlink to the broker's tmpfs dir)
-        destination: "http://192.168.224.1/qmlive/:path*",
-        basePath: false,
-      },
-    ];
-  },
+  // async rewrites() {
+  //   return [
+  //     {
+  //       source: "/cgi-bin/:path*",
+  //       //  cgi-bin path is used by the modem's web server for API requests, so we proxy all /api requests to the modem's IP address
+  //       destination: "http://192.168.224.1/cgi-bin/:path*",
+  //       basePath: false,
+  //     },
+  //     {
+  //       source: "/qmlive/:path*",
+  //       //  live signal files are static, served from /www/qmlive (a symlink to the broker's tmpfs dir)
+  //       destination: "http://192.168.224.1/qmlive/:path*",
+  //       basePath: false,
+  //     },
+  //   ];
+  // },
 };
 
 export default nextConfig;
