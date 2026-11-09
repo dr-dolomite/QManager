@@ -14,9 +14,10 @@ journal to fall back on**: `journald` is masked to `/dev/null` on both modems, s
 History (2026-11): the page used to be a System Settings surface (`components/system-settings/logs/**`:
 status band, transcript card, 52px rows, search / component / archived filters), and System
 Health carried a separate two-tab Logs card. The two were unified onto the System Health card's
-design and moved here; System Health no longer shows logs. Only `derive.ts` remains under
-`components/system-settings/logs/` (`filterByLevel`, `parseLogTimestamp`, `visibleLogText`), and
-the old `/system-settings/logs` route redirects here. The backend was not touched.
+design and moved here; System Health no longer shows logs. The old family is gone (its last
+helpers, `filterByLevel`, `parseLogTimestamp`, `isNearRotation` and `visibleLogText`, now live in
+`components/history/logs/derive.ts`), its unused `system-settings.json` `logs.*` strings were
+pruned, and the old `/system-settings/logs` route redirects here. The backend was not touched.
 
 ---
 
@@ -26,12 +27,11 @@ the old `/system-settings/logs` route redirects here. The backend was not touche
 | ----- | ----- |
 | Route | `app/monitoring/history/logs/page.tsx` (renders `LogsPage`) |
 | Page | `components/history/logs/logs-page.tsx` (header actions, tabs, filters, states, clear dialog) |
-| Summary tiles | `components/history/logs/logs-summary.tsx` (QManager tab only; copy in `system-settings.json` `logs.band.*`) |
+| Summary tiles | `components/history/logs/logs-summary.tsx` (QManager tab only; copy in `system-settings.json` `logs.band.*` and `history.json` `logs.summary.*`) |
 | Footer | `components/history/logs/logs-pagination.tsx` (range, rows per page, page count, first/prev/next/last) |
 | Rows | `components/history/logs/logs-list.tsx` (`LogList`, `LogRowsSkeleton`) |
-| Derivations | `components/history/logs/derive.ts` (`qmanagerLines`, `deviceLines`, `groupByDay`, `paginate`, `logLinesText`; tests in `derive.test.ts`) |
+| Derivations | `components/history/logs/derive.ts` (`qmanagerLines`, `deviceLines`, `groupByDay`, `paginate`, `logLinesText`, `filterByLevel`, `parseLogTimestamp`, `isNearRotation`, `visibleLogText`; tests in `derive.test.ts`) |
 | Geometry | `components/history/logs/shapes.ts` (`LOGS`, `PAGE_SIZES`) |
-| Level filter + copy text | `components/system-settings/logs/derive.ts` (`filterByLevel`, `visibleLogText`) |
 | Hooks | `hooks/use-system-logs.ts` (QManager), `hooks/use-device-syslog.ts` (System / Kernel) |
 | Types | `types/system-logs.ts`, `types/device-syslog.ts` |
 | CGI endpoint | `GET`/`POST` `/cgi-bin/quecmanager/system/logs.sh` |
@@ -207,9 +207,11 @@ poll adds a line at the top, which remounts the whole list.
   paused.
 - **Summary tiles (QManager tab only).** Three System Health-style tiles above the card, in
   `LOGS_SUMMARY.GRID` (stacked, three across from `@3xl/main`). **Severity**: errors, else
-  warnings, else Clean, counted over the fetched window (not the level filter). **Feed**: the
-  hook's `FeedState` (`live` / `paused` while the tab is hidden or the clear dialog is open /
-  `stopped` after a failed read) with a one-second age caption. **Log file**: `stats.current_size_kb`,
+  warnings, else Clean, counted over the fetched window (not the level filter). **Latest problem**:
+  the newest ERROR or WARN line in the window, as its clock time (plus the date when it is from an
+  earlier day than the newest line), with `component: message` as the caption (full text on hover);
+  "None" when the window has neither. It shows clock time, not an age, because the stamp is the
+  modem's local time and the browser's clock may differ. **Log file**: `stats.current_size_kb`,
   lines and archived files; the disc turns warning at `ROTATION_WARN_KB` (80 % of the 256 KB
   rotation default, a client-side mirror of `QLOG_MAX_SIZE_KB` with no wire representation).
   Every state of a tile has its own glyph; the disc is the only colour.

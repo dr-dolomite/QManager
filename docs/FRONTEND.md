@@ -145,7 +145,7 @@ constants/                      # Static configuration data
 | `/history/*`, `/system-settings/logs`, `/monitoring/{events,tailscale,netbird,prometheus,connection-quality}` | (redirect) | Client-side redirects to the routes above (`components/route-redirect.tsx` keeps the query and hash) |
 | `/system-settings` | SystemSettings | System preferences, scheduled ops |
 | `/system-settings/connection-quality` | (redirect) | Client-side redirect to `/monitoring/settings` |
-| `/monitoring/history/logs` | SystemLogs | Log viewer |
+| `/monitoring/history/logs` | LogsPage | Log viewer: QManager and System/Kernel tabs, paged (see `docs/reference/logs.md`) |
 | `/system-settings/config-backup` | (see page file) | Configuration backup and restore |
 | `/system-settings/software-update` | (see page file) | Software update |
 | `/system-settings/at-terminal` | (see page file) | AT terminal |
