@@ -185,6 +185,16 @@ _hist_backdate() {
     local _q
     _p="$HIST_RUN/$1.pending"
     [ -s "$_p" ] || { rm -f "$_p"; return 0; }
+    # Collecting began at the oldest pending sample (when there is no marker).
+    if [ ! -s "$HIST_STORE/$1/since" ]; then
+        while IFS='|' read -r _st _mt _q; do
+            [ "$_st" = "p" ] || continue
+            case "$_mt" in ''|*[!0-9]*) continue ;; esac
+            [ $((_mt + _hist_off)) -ge $((_hist_hwm - HIST_BUCKET)) ] || continue
+            _hist_write_since "$1" $((_mt + _hist_off))
+            break
+        done < "$_p"
+    fi
     eval "_st=\$HIST_${1}_STATES; _mt=\$HIST_${1}_METRICS"
     _q="$HIST_RUN/$1.queue"
     awk -F'|' -v off="$_hist_off" -v B="$HIST_BUCKET" -v hwm="$_hist_hwm" \
@@ -315,6 +325,12 @@ _hist_add() {
         _hist_pending_cap "$_s"
         return 0
     fi
+    # First trusted sample ever: remember when collecting began (once).
+    eval "_o=\${_hsn_${_s}:-}"
+    if [ -z "$_o" ]; then
+        [ -s "$HIST_STORE/$_s/since" ] || _hist_write_since "$_s" $((_m + _hist_off))
+        eval "_hsn_${_s}=1"
+    fi
     _k=$(( (_m + _hist_off) / HIST_BUCKET * HIST_BUCKET ))
     eval "_o=\$_ha_${_s}_t"
     if [ "$_o" != "$_k" ]; then
@@ -344,6 +360,17 @@ _hist_write_fault() {
     else
         printf '%s %s\n' "$2" "$3" > "$_f.tmp" 2>/dev/null && "$HIST_SYNC" 2>/dev/null \
             && mv -f "$_f.tmp" "$_f" 2>/dev/null && "$HIST_SYNC" 2>/dev/null
+    fi
+}
+
+# _hist_write_since ID T: when collecting began (CGI "since"); once per store.
+_hist_write_since() {
+    local _f
+    _f="$HIST_STORE/$1/since"
+    if command -v qm_durable_write >/dev/null 2>&1; then
+        printf '%s\n' "$2" | qm_durable_write "$_f"
+    else
+        printf '%s\n' "$2" > "$_f" 2>/dev/null && "$HIST_SYNC" 2>/dev/null
     fi
 }
 

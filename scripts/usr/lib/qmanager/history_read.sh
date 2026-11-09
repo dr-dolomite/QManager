@@ -131,28 +131,44 @@ hr_rows() {
     } 2>/dev/null | grep "^{\"k\":\"$2\",\"t\":[0-9][0-9]*,.*}\$"
 }
 
-# hr_since ID -> HR_SINCE = t of the oldest stored row, or empty.
+# hr_since ID -> HR_SINCE = when collecting began (the collector's since
+# marker), moved up to the oldest kept row once retention has trimmed past it.
 hr_since() {
     local _f
     local _t
+    local _mk
     HR_SINCE=""
-    for _f in "$HIST_STORE/$1"/d*.jsonl; do
+    _mk=""
+    { read -r _mk < "$HIST_STORE/$1/since"; } 2>/dev/null
+    case "$_mk" in ''|*[!0-9]*) _mk="" ;; esac
+    _hr_oldest "$1"
+    if [ -n "$_mk" ]; then
+        if [ -n "$HR_SINCE" ] && [ "$HR_SINCE" -gt "$_mk" ]; then
+            return 0
+        fi
+        HR_SINCE="$_mk"
+    fi
+}
+
+# _hr_min_t FILE -> _HT = smallest bucket-row t in FILE (rows are not in time
+# order: back-dated and merged rows can land after newer ones), or empty.
+_hr_min_t() {
+    _HT=$(grep '^{"k":"b","t":[0-9][0-9]*,' "$1" 2>/dev/null | awk '
+        { t = $0; sub(/^\{"k":"b","t":/, "", t); sub(/,.*/, "", t); t += 0
+          if (m == "" || t < m) m = t }
+        END { if (m != "") print m }')
+    case "$_HT" in ''|*[!0-9]*) _HT="" ;; esac
+}
+
+# _hr_oldest ID -> HR_SINCE = t of the oldest stored bucket row, or empty.
+_hr_oldest() {
+    local _f
+    HR_SINCE=""
+    for _f in "$HIST_STORE/$1"/d*.jsonl "$HIST_RUN/$1.queue" "$HIST_RUN/$1.open"; do
         [ -f "$_f" ] || continue
-        _t=$(grep -m 1 '^{"k":"[be]","t":[0-9][0-9]*,' "$_f" 2>/dev/null)
-        _t="${_t#*\"t\":}"
-        _t="${_t%%,*}"
-        case "$_t" in ''|*[!0-9]*) continue ;; esac
-        HR_SINCE="$_t"
-        return 0
-    done
-    # Nothing on flash yet: the queue or the open bucket.
-    for _f in "$HIST_RUN/$1.queue" "$HIST_RUN/$1.open"; do
-        [ -f "$_f" ] || continue
-        _t=$(grep -m 1 '^{"k":"[be]","t":[0-9][0-9]*,' "$_f" 2>/dev/null)
-        _t="${_t#*\"t\":}"
-        _t="${_t%%,*}"
-        case "$_t" in ''|*[!0-9]*) continue ;; esac
-        HR_SINCE="$_t"
+        _hr_min_t "$_f"
+        [ -n "$_HT" ] || continue
+        HR_SINCE="$_HT"
         return 0
     done
 }
