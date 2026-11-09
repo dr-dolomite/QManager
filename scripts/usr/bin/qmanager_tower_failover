@@ -33,6 +33,15 @@ else
 fi
 qlog_init "tower_failover"
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Load tower lock library -------------------------------------------------
 if [ -f /usr/lib/qmanager/tower_lock_mgr.sh ]; then
     . /usr/lib/qmanager/tower_lock_mgr.sh
@@ -182,6 +191,7 @@ while true; do
                 tower_config_update '.lte.enabled = false | .nr_sa.enabled = false'
                 echo "activated" > "$FLAG_FILE"
                 qlog_warn "FAILOVER COMPLETE — locks cleared"
+                append_event "tower_failover" "Tower lock cleared after signal fell below threshold" "warning" "" "quality=${quality};threshold=${threshold};rsrp=${rsrp}"
             else
                 # Record only what actually cleared, so config never claims a
                 # lock is off while the modem still holds it.
@@ -191,6 +201,7 @@ while true; do
                 [ "$lte_ok" -eq 1 ] && tower_config_update '.lte.enabled = false'
                 [ "$nr_ok" -eq 1 ] && tower_config_update '.nr_sa.enabled = false'
                 qlog_error "FAILOVER FAILED after retry (lte_ok=$lte_ok nr_ok=$nr_ok) — remaining lock left in place, watching again"
+                append_event "tower_failover" "Tower failover failed: a lock could not be cleared" "error" "" "quality=${quality};threshold=${threshold};rsrp=${rsrp}"
                 if [ "$lte_ok" -eq 1 ] || [ "$nr_ok" -eq 1 ]; then
                     mtu_reapply_after_bounce
                 fi

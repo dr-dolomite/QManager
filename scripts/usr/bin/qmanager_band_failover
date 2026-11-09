@@ -41,6 +41,15 @@ fi
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
 qlog_init "band_failover"
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Configuration -----------------------------------------------------------
 PID_FILE="/tmp/qmanager_band_failover.pid"
 ACTIVATED_FLAG="/tmp/qmanager_band_failover"
@@ -173,9 +182,11 @@ fi
 if [ "$fail_count" -eq 0 ]; then
     echo "activated" > "$ACTIVATED_FLAG"
     qlog_warn "FAILOVER COMPLETE: All bands reverted to defaults"
+    append_event "band_failover" "Band failover: no signal, bands reverted to defaults" "warning" "" "to=defaults;fail_count=0"
 else
     echo "partial" > "$ACTIVATED_FLAG"
     qlog_error "FAILOVER PARTIAL: $fail_count band type(s) failed to reset"
+    append_event "band_failover" "Band failover partial: ${fail_count} band type(s) failed to reset" "warning" "" "to=partial;fail_count=${fail_count}"
 fi
 
 exit 0
