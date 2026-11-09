@@ -15,6 +15,10 @@ _QM_HISTORY_READ_LOADED=1
 : "${HIST_BUCKET:=1800}"
 : "${HIST_ALIVE_SEC:=90}"
 : "${HIST_UPTIME_FILE:=/proc/uptime}"
+# The event journal (qmanager_logd): client, capability file, EVQ page size.
+: "${HIST_QLOG:=/usr/bin/qlog}"
+: "${HIST_LOGD_PROTO:=${QLOGD_PROTO:-/var/run/qmanager_logd.proto}}"
+: "${HIST_EVQ_PAGE:=2000}"
 
 # hr_param NAME -> _HP = the query value (only %2C is decoded; values are
 # validated by the caller against fixed sets).
@@ -142,6 +146,79 @@ hr_rows() {
         [ -f "$HIST_RUN/$1.queue" ] && cat "$HIST_RUN/$1.queue"
         [ "$2" = "b" ] && [ -f "$HIST_RUN/$1.open" ] && head -n 1 "$HIST_RUN/$1.open"
     } 2>/dev/null | grep "^{\"k\":\"$2\",\"t\":[0-9][0-9]*,.*}\$"
+}
+
+# hr_logd_evq -> 0 when qmanager_logd answers EVQ (capability line evq=1).
+# Builtins only.
+hr_logd_evq() {
+    local _l
+    [ -x "$HIST_QLOG" ] && [ -f "$HIST_LOGD_PROTO" ] || return 1
+    while IFS= read -r _l; do
+        [ "$_l" = "evq=1" ] && return 0
+    done < "$HIST_LOGD_PROTO" 2>/dev/null
+    return 1
+}
+
+# hr_ev_merge TYPES XTYPES FIRST_T LAST_T: stdin = the day-file rows of
+# hr_rows (k "e" and "r", X-prefixed break rows); stdout = the same stream
+# with the journal's events added, in the k:"e" row shape hist_event wrote
+# (qlog evq fmt=hist). TYPES are the series' events, XTYPES the break-only
+# types (device_reboot for a paired series other than system: X-prefixed).
+#
+# Since Phase 3 an event is in one store only: logd's journal while logd is
+# alive, the day files while it is not (hist_event falls back), so both are
+# read. A day-file event that the journal also holds (type and message equal,
+# within 2 s: rows from builds that wrote both) is dropped.
+#
+# EVQ answers the newest PAGE rows in [since, until]. A full page is split in
+# two halves of the time range until each answer fits, so a range holding
+# more than a page (2000 events/day cap, 31 days) still comes back whole,
+# with one qlog fork per window. Untrusted-time rows are not served. logd
+# unreachable (qlog exit 3, no output) = the journal adds nothing.
+hr_ev_merge() {
+    local _csv
+    local _w
+    _csv=""
+    for _w in $1 $2; do _csv="${_csv:+$_csv,}$_w"; done
+    awk -v q="$HIST_QLOG" -v types="$_csv" -v xt="$2" -v lo="$3" -v hi="$4" \
+        -v lim="$HIST_EVQ_PAGE" '
+    function rtype(l,  x) { x = l; sub(/.*"type":"/, "", x); sub(/".*/, "", x); return x }
+    function rt(l,  x) { x = l; sub(/^X?\{"k":"e","t":/, "", x); sub(/,.*/, "", x); return x + 0 }
+    function rmsg(l,  x) { x = l; sub(/.*,"message":/, "", x); return x }
+    BEGIN { nx = split(xt, XA, " "); for (i = 1; i <= nx; i++) XS[XA[i]] = 1; nl = 0 }
+    substr($0, 1, 7) == "{\"k\":\"r" { print; next }
+    { L[++nl] = $0 }
+    END {
+        sp = 1; SL[1] = lo; SH[1] = hi
+        while (sp > 0) {
+            a = SL[sp]; b = SH[sp]; sp--
+            cmd = q " evq fmt=hist types=" types " since=" a " until=" b " limit=" lim " 2>/dev/null"
+            n = 0
+            while ((cmd | getline ln) > 0)
+                if (ln ~ /^\{"k":"e","t":[0-9]+,"type":"[a-z0-9_]+",.*\}$/) B[++n] = ln
+            close(cmd)
+            if (n >= lim && b > a) {
+                m = int((a + b) / 2)
+                SL[++sp] = a; SH[sp] = m
+                SL[++sp] = m + 1; SH[sp] = b
+                continue
+            }
+            for (i = 1; i <= n; i++) {
+                ty = rtype(B[i])
+                if (nl) { k = ty SUBSEP rmsg(B[i]); J[k] = J[k] " " rt(B[i]) }
+                pre = (ty in XS) ? "X" : ""
+                print pre B[i]
+            }
+        }
+        for (i = 1; i <= nl; i++) {
+            l = L[i]; k = rtype(l) SUBSEP rmsg(l); d = 0
+            if (k in J) {
+                t = rt(l); nj = split(J[k], JT, " ")
+                for (j = 1; j <= nj; j++) if (JT[j] - t <= 2 && t - JT[j] <= 2) { d = 1; break }
+            }
+            if (!d) print l
+        }
+    }'
 }
 
 # hr_since ID -> HR_SINCE = when collecting began (the collector's since

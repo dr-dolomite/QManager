@@ -12,7 +12,9 @@
 # restart row ("k":"r", observation stopped) or a device_reboot row of the
 # system series (at t - off). Then end = that break; null while ongoing.
 # Paired over the whole retention window before the window, type filter and
-# paging. Read-only. Contract: docs/features/history.md §6.
+# paging. Events come from qmanager_logd's journal (qlog evq fmt=hist) merged
+# with the day files, or from the day files alone when logd has no EVQ.
+# Read-only. Contract: docs/features/history.md §6.
 #
 # Endpoint: GET /cgi-bin/quecmanager/history/events.sh
 # Install location: /www/cgi-bin/quecmanager/history/events.sh
@@ -93,12 +95,18 @@ fi
 
 # Rows: the series' events and restart rows, plus (paired series other than
 # system) the system series' device_reboot rows, marked X: breaks only.
-body=$( {
+xtypes=""
+[ -n "$pairs" ] && [ "$series" != "system" ] && xtypes="device_reboot"
+ev_rows() {
     hr_rows "$series" '[er]' "$scan"
-    if [ -n "$pairs" ] && [ "$series" != "system" ]; then
+    if [ -n "$xtypes" ]; then
         hr_rows system e "$scan" | grep '"type":"device_reboot"' | sed 's/^/X/'
     fi
-} | awk -v first="$first" -v now="$now" \
+}
+
+# Pairing, counts and paging over the merged rows (stdin).
+ev_pair() {
+awk -v first="$first" -v now="$now" \
     -v evtypes="$evtypes" -v types="$types" -v pairs="$pairs" -v resume="$resume" \
     -v limit="$limit" -v offset="$offset" '
 BEGIN {
@@ -178,6 +186,16 @@ END {
     sep = ""
     for (k = offset + 1; k <= m && k <= offset + limit; k++) { printf "%s%s", sep, O[k]; sep = "," }
     printf "]"
-}')
+}'
+}
+
+# Events come from qmanager_logd's journal when it answers EVQ, merged with
+# the day files (events recorded while logd was not alive); else from the
+# day files alone (history.md §6 Event source).
+if hr_logd_evq; then
+    body=$(ev_rows | hr_ev_merge "$evtypes" "$xtypes" "$scan" $((now + 60)) | ev_pair)
+else
+    body=$(ev_rows | ev_pair)
+fi
 
 printf '{"success":true,"series":"%s","range":"%s",%s}\n' "$series" "$range" "$body"
