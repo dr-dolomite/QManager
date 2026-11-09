@@ -2,13 +2,13 @@
 
 > **Status: APPROVED 2026-11-09.** This file is the canon for every History page.
 
-QManager keeps a small, flash-friendly history of things the poller already knows, rolled up into fixed 30-minute buckets and kept for 31 days. A History page asks one generic CGI for a series and a range and gets back merged buckets plus the series' events. **Cellular History** (`/history/cellular`) is the first series. Data usage, latency and connection quality, and thermals are expected to follow; each is a new *provider* file, not a change to the core.
+QManager keeps a small, flash-friendly history of things the poller already knows, rolled up into fixed 30-minute buckets and kept for 31 days. A History page asks one generic CGI for a series and a range and gets back merged buckets plus the series' events. **Cellular History** (`/history/cellular`) is the first series; **System Health** (`/history/system-health`, [`system-health-history.md`](system-health-history.md)) is the second (reboots, modem crashes, heat throttling, processor, memory, temperature, storage). Data usage and latency and connection quality are expected to follow; each is a new *provider* file, not a change to the core.
 
 ## Quick Reference
 
 | Item | Value |
 |---|---|
-| Page | `/history/cellular` (sidebar group **History**) |
+| Page | `/history/cellular` (sidebar group **History**); second series: System Health `/history/system-health`, see [`system-health-history.md`](system-health-history.md) |
 | Core lib (sourced by the poller) | `scripts/usr/lib/qmanager/history.sh` (`hist_init`, `hist_tick`, `hist_event`, `hist_flush`) |
 | Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat; `history.sh` dot-sources every one) |
 | Read lib (sourced by CGIs) | `scripts/usr/lib/qmanager/history_read.sh` (awk merge, range math) |
