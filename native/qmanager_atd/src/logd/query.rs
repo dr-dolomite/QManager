@@ -17,7 +17,7 @@
 
 use super::core::{Engine, Now};
 use super::journal::{epochday, Kind};
-use super::record::{fmt_mono, parse_row, quick_sbt, render_fields, Body, Row};
+use super::record::{fac_name, fmt_mono, kern_level, quick_sbt, render_fields, Body, Names, RKind, Row, PRI_NAMES};
 use super::registry;
 use super::server::Answer;
 use crate::common::json::{json_escape, J};
@@ -100,7 +100,16 @@ impl Engine {
 
     /// The flash rows below `below_s` of the given kind that pass `want`
     /// (checked on `s`, `b`, `t` before the full parse), over the day range.
-    fn flash_rows(&self, kind: Kind, days: Option<(i64, i64)>, below_s: u64, mut want: impl FnMut(u64, u32, Option<i64>) -> bool, mut f: impl FnMut(Row)) {
+    /// Rows are interned into a scratch table handed to `f` with them.
+    fn flash_rows(
+        &self,
+        kind: Kind,
+        days: Option<(i64, i64)>,
+        below_s: u64,
+        mut want: impl FnMut(u64, u32, Option<i64>) -> bool,
+        mut f: impl FnMut(Row, &Names),
+    ) {
+        let mut names = Names::default();
         for (day, _) in self.journal.days(kind) {
             if let Some((lo, hi)) = days {
                 if day < lo || day > hi {
@@ -110,8 +119,8 @@ impl Engine {
             self.journal.for_each_line(kind, day, |l| {
                 if let Some((s, b, t)) = quick_sbt(l) {
                     if s < below_s && want(s, b, t) {
-                        if let Some(r) = parse_row(l) {
-                            f(r);
+                        if let Some(r) = Row::from_line(l, &mut names) {
+                            f(r, &names);
                         }
                     }
                 }
@@ -128,8 +137,28 @@ impl Engine {
                 _ => return Err("min_level must be DEBUG, INFO, WARN or ERROR".into()),
             }),
         };
+        // Which kinds: logs and events (the transcript) by default; `kind=K`
+        // or `source=kernel` is the kept kernel history.
+        let kinds: Vec<RKind> = match (param(p, "kind"), param(p, "source")) {
+            (Some(k), _) if !k.is_empty() => {
+                let mut v = Vec::new();
+                for x in k.split(',') {
+                    v.push(match x {
+                        "L" => RKind::L,
+                        "E" => RKind::E,
+                        "K" => RKind::K,
+                        _ => return Err("kind must be L, E or K".into()),
+                    });
+                }
+                v
+            }
+            (_, Some("kernel")) => vec![RKind::K],
+            (_, None | Some("") | Some("journal")) => vec![RKind::L, RKind::E],
+            (_, Some(_)) => return Err("source must be journal or kernel".into()),
+        };
+        let tag = param(p, "tag").filter(|t| !t.is_empty()).map(str::to_string);
         let comp = param(p, "component").filter(|c| !c.is_empty() && *c != "all").map(str::to_string);
-        let search: Vec<u8> = param(p, "search").unwrap_or("").trim().bytes().map(|b| b.to_ascii_lowercase()).collect();
+        let search: Vec<u8> = json_escape(param(p, "search").unwrap_or("").trim()).bytes().map(|b| b.to_ascii_lowercase()).collect();
         let boot = match param(p, "boot") {
             None | Some("") | Some("this") => self.boot,
             Some("prev") => self.index.0.iter().rev().map(|e| e.0).find(|&b| b < self.boot).unwrap_or(0),
@@ -142,32 +171,38 @@ impl Engine {
             Some(n) if (1..=500).contains(&n) => n as usize,
             Some(_) => return Err("limit must be 1..500".into()),
         };
+        let mono_only = match param(p, "fmt") {
+            None | Some("") | Some("json") => false,
+            Some("mono") => true,
+            Some(_) => return Err("fmt must be json or mono".into()),
+        };
 
         let mut acc = LogAcc { limit, ..Default::default() };
-        let base = |r: &Row| -> bool {
-            if r.b != boot || r.s <= after || r.s >= before {
+        let base = |r: &Row, names: &Names| -> bool {
+            if r.b != boot || r.s <= after || r.s >= before || !kinds.contains(&r.kind) {
                 return false;
             }
-            let c = match &r.body {
-                Body::Log { c, .. } => c.as_str(),
-                Body::Ev { .. } => "events",
-            };
             if let Some(want) = &comp {
-                if want != c {
+                if names.name(r.comp) != want {
                     return false;
                 }
             }
-            search.is_empty() || contains_ci(r.msg(), &search) || matches!(&r.body, Body::Ev { ty, .. } if contains_ci(ty, &search))
+            if let Some(tg) = &tag {
+                if !r.tag_is(tg) {
+                    return false;
+                }
+            }
+            search.is_empty() || contains_ci(r.msg_escaped(), &search) || (r.kind == RKind::E && contains_ci(names.name(r.ty), &search))
         };
-        let lv_of = |r: &Row| r.level().unwrap_or(Level::Info);
+        let in_view = |r: &Row| r.b == boot && kinds.contains(&r.kind);
         let ring_min = self.ring.min_s().unwrap_or(self.seq + 1);
         // Ring first (newest first): the newest picks are always here.
         for r in self.ring.iter().rev() {
-            if r.b == boot {
-                acc.component(r);
+            if in_view(r) {
+                acc.component(self.names.name(r.comp));
             }
-            if base(r) {
-                acc.offer(r, lv_of(r), min, true);
+            if base(r, &self.names) {
+                acc.offer(r, min, true);
             }
         }
         let flash_has_older = match self.index.get(boot) {
@@ -181,16 +216,17 @@ impl Engine {
         if read_flash {
             let days = self.index.get(boot).and_then(|i| i.days);
             let mut older: Vec<Row> = Vec::new();
-            for kind in [Kind::Log, Kind::Ev] {
-                self.flash_rows(kind, days, ring_min, |_, b, _| b == boot, |r| {
-                    acc.component(&r);
-                    if base(&r) {
-                        let lv = lv_of(&r);
-                        if acc.offer(&r, lv, min, false) {
-                            older.push(r);
-                            if older.len() > 2 * limit + 64 {
-                                trim_newest(&mut older, limit);
-                            }
+            // Kernel rows sit in the log day files.
+            let fkinds: &[Kind] = if kinds.iter().all(|&k| k == RKind::E) { &[Kind::Ev] } else if kinds.contains(&RKind::E) { &[Kind::Log, Kind::Ev] } else { &[Kind::Log] };
+            for &kind in fkinds {
+                self.flash_rows(kind, days, ring_min, |_, b, _| b == boot, |r, names| {
+                    if in_view(&r) {
+                        acc.component(names.name(r.comp));
+                    }
+                    if base(&r, names) && acc.offer(&r, min, false) {
+                        older.push(r);
+                        if older.len() > 2 * limit + 64 {
+                            trim_newest(&mut older, limit);
                         }
                     }
                 });
@@ -199,6 +235,19 @@ impl Engine {
             acc.picked.extend(older);
         }
         acc.picked.sort_unstable_by_key(|r| r.s);
+
+        if mono_only {
+            // One line per entry: its kernel/uptime stamp in whole seconds
+            // (what the History system series reads instead of `dmesg`).
+            let mut out = String::new();
+            for (i, r) in acc.picked.iter().enumerate() {
+                if i > 0 {
+                    out.push('\n');
+                }
+                out.push_str(&(r.m / 100).to_string());
+            }
+            return Ok(out);
+        }
 
         let mut out = String::with_capacity(256 + acc.picked.len() * 160);
         out.push_str("{\"success\":true,\"entries\":[");
@@ -253,26 +302,42 @@ impl Engine {
         if let Some(t) = self.shown_wall(r, now) {
             out.push_str(&format_local(t));
         }
-        match &r.body {
+        match r.decode() {
             Body::Log { lv, c, p, msg } => {
                 out.push_str("\",\"level\":\"");
                 out.push_str(lv.name());
                 out.push_str("\",\"component\":\"");
-                out.push_str(&json_escape(c));
+                out.push_str(&json_escape(&c));
                 out.push_str("\",\"pid\":\"");
-                if *p != 0 {
+                if p != 0 {
                     out.push_str(&p.to_string());
                 }
                 out.push_str("\",\"message\":\"");
-                out.push_str(&json_escape(msg));
+                out.push_str(&json_escape(&msg));
             }
             Body::Ev { ty, msg, .. } => {
                 out.push_str("\",\"level\":\"INFO\",\"component\":\"events\",\"pid\":\"\",\"message\":\"EVENT [");
-                out.push_str(&json_escape(ty));
+                out.push_str(&json_escape(&ty));
                 out.push_str("] ");
-                out.push_str(&json_escape(msg));
+                out.push_str(&json_escape(&msg));
                 out.push_str("\",\"event_type\":\"");
-                out.push_str(&json_escape(ty));
+                out.push_str(&json_escape(&ty));
+            }
+            Body::Kern { pri, fac, kseq, tag, msg } => {
+                out.push_str("\",\"level\":\"");
+                out.push_str(kern_level(pri).name());
+                out.push_str("\",\"component\":\"kernel\",\"pid\":\"\",\"message\":\"");
+                out.push_str(&json_escape(&msg));
+                out.push_str("\",\"facility\":\"");
+                out.push_str(fac_name(fac));
+                out.push_str("\",\"priority\":\"");
+                out.push_str(PRI_NAMES[(pri & 7) as usize]);
+                out.push_str("\",\"up\":");
+                out.push_str(&fmt_mono(r.m));
+                out.push_str(",\"kseq\":");
+                out.push_str(&kseq.to_string());
+                out.push_str(",\"tag\":\"");
+                out.push_str(&json_escape(&tag));
             }
         }
         out.push_str("\",\"seq\":");
@@ -374,20 +439,19 @@ impl Engine {
             }
             since.map_or(true, |x| t.map_or(false, |t| t >= x)) && until.map_or(true, |x| t.map_or(false, |t| t <= x))
         };
-        let ok = |r: &Row| -> bool {
-            match &r.body {
-                Body::Ev { ty, cat: c, .. } => {
-                    ok_sbt(r.s, r.t) && (types.is_empty() || types.contains(&ty.as_str())) && cat.map_or(true, |x| x == *c)
-                }
-                _ => false,
+        let ok = |r: &Row, names: &Names| -> bool {
+            if r.kind != RKind::E || !ok_sbt(r.s, r.t) {
+                return false;
             }
+            let ty = names.name(r.ty);
+            (types.is_empty() || types.contains(&ty)) && cat.map_or(true, |x| x == registry::category(ty))
         };
         let mut picked: Vec<Row> = Vec::new();
         for r in self.ring.iter().rev() {
             if picked.len() >= limit {
                 break;
             }
-            if ok(r) {
+            if ok(r, &self.names) {
                 picked.push(r.clone());
             }
         }
@@ -399,8 +463,8 @@ impl Engine {
             };
             let need = limit - picked.len();
             let mut older: Vec<Row> = Vec::new();
-            self.flash_rows(Kind::Ev, days, ring_min, |s, _, t| ok_sbt(s, t), |r| {
-                if ok(&r) {
+            self.flash_rows(Kind::Ev, days, ring_min, |s, _, t| ok_sbt(s, t), |r, names| {
+                if ok(&r, names) {
                     older.push(r);
                     if older.len() > 2 * need + 64 {
                         trim_newest(&mut older, need);
@@ -433,19 +497,19 @@ impl Engine {
     }
 
     fn event_item(&self, r: &Row, now: &Now, out: &mut String) {
-        if let Body::Ev { ty, sev, cat, code, f, msg } = &r.body {
+        if let Body::Ev { ty, sev, cat, code, f, msg } = r.decode() {
             out.push_str("{\"timestamp\":");
             out.push_str(&self.shown_wall(r, now).unwrap_or(0).to_string());
             out.push_str(",\"type\":\"");
-            out.push_str(&json_escape(ty));
+            out.push_str(&json_escape(&ty));
             out.push_str("\",\"message\":\"");
-            out.push_str(&json_escape(msg));
+            out.push_str(&json_escape(&msg));
             out.push_str("\",\"severity\":\"");
             out.push_str(sev.name());
             out.push('"');
             if !code.is_empty() {
                 out.push_str(",\"code\":\"");
-                out.push_str(&json_escape(code));
+                out.push_str(&json_escape(&code));
                 out.push('"');
             }
             out.push_str(",\"seq\":");
@@ -453,7 +517,7 @@ impl Engine {
             out.push_str(",\"cat\":\"");
             out.push_str(cat);
             out.push_str("\",\"f\":");
-            render_fields(out, f);
+            render_fields(out, &f);
             out.push_str(",\"boot\":");
             out.push_str(&r.b.to_string());
             out.push_str(",\"t\":");
@@ -471,10 +535,14 @@ impl Engine {
 /// rule is `hist_cellular_radio` for the cellular series' types (writer field
 /// `radio`, then the message prefix, then `nr_anchor`), null for the rest.
 pub fn hist_row(r: &Row, out: &mut String) {
-    if let (Body::Ev { ty, sev, f, msg, .. }, Some(t)) = (&r.body, r.t) {
-        let radio = if registry::hist_cellular(ty) {
+    let t = match r.t {
+        Some(t) => t,
+        None => return,
+    };
+    if let Body::Ev { ty, sev, f, msg, .. } = r.decode() {
+        let radio = if registry::hist_cellular(&ty) {
             match f.iter().find(|(k, _)| k == "radio").map(|(_, v)| v.as_str()) {
-                Some(v @ ("lte" | "nr")) => Some(v),
+                Some(v @ ("lte" | "nr")) => Some(if v == "lte" { "lte" } else { "nr" }),
                 _ if msg.starts_with("LTE") => Some("lte"),
                 _ if msg.starts_with("NR") || msg.starts_with("5G") => Some("nr"),
                 _ if ty == "nr_anchor" => Some("nr"),
@@ -486,7 +554,7 @@ pub fn hist_row(r: &Row, out: &mut String) {
         out.push_str("{\"k\":\"e\",\"t\":");
         out.push_str(&t.to_string());
         out.push_str(",\"type\":\"");
-        out.push_str(ty);
+        out.push_str(&ty);
         out.push_str("\",\"severity\":\"");
         out.push_str(sev.name());
         out.push_str("\",\"radio\":");
@@ -499,7 +567,7 @@ pub fn hist_row(r: &Row, out: &mut String) {
             None => out.push_str("null"),
         }
         out.push_str(",\"message\":\"");
-        out.push_str(&json_escape(msg));
+        out.push_str(&json_escape(&msg));
         out.push_str("\"}");
     }
 }
@@ -515,11 +583,7 @@ struct LogAcc {
 }
 
 impl LogAcc {
-    fn component(&mut self, r: &Row) {
-        let c = match &r.body {
-            Body::Log { c, .. } => c.as_str(),
-            Body::Ev { .. } => "events",
-        };
+    fn component(&mut self, c: &str) {
         if !self.comps.iter().any(|x| x == c) {
             self.comps.push(c.to_string());
         }
@@ -528,7 +592,8 @@ impl LogAcc {
     /// Counts a row that passed every filter but the level; picks it (ring:
     /// newest first while under the limit). For flash rows returns whether
     /// the caller should keep it as a candidate.
-    fn offer(&mut self, r: &Row, lv: Level, min: Option<Level>, ring: bool) -> bool {
+    fn offer(&mut self, r: &Row, min: Option<Level>, ring: bool) -> bool {
+        let lv = r.lv;
         self.counts[lv as usize] += 1;
         if lv >= Level::Warn && self.problem.as_ref().map_or(true, |p| r.s > p.s) {
             self.problem = Some(r.clone());

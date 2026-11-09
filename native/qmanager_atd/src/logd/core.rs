@@ -6,7 +6,7 @@ use super::clock::{Change, Clock, SETTLE};
 use super::collapse::{Collapser, RateLimit};
 use super::journal::{epochday, BootIndex, BootInfo, FlushStats, Journal, Kind, State, MIN_FREE};
 use super::mirror::{EventsMirror, TextMirror};
-use super::record::{Body, Row, Sev};
+use super::record::{Body, Names, Row, Sev};
 use super::registry;
 use super::ring::Ring;
 use super::spool::{self, Rec};
@@ -98,6 +98,7 @@ pub struct Stats {
     pub bytes_day: (i64, u64),
     pub last_flush_ms: Option<u64>,
     pub syslog: u64,
+    pub kernel: u64,
 }
 
 pub struct Engine {
@@ -114,6 +115,8 @@ pub struct Engine {
     pub(super) events: EventsMirror,
     pub(super) journal: Journal,
     pub(super) index: BootIndex,
+    /// Interned component and event-type names of every row held.
+    pub(super) names: Names,
     /// Rows with `s` at or below this are on flash (or were skipped).
     pub(super) flushed_s: u64,
     first_pending_ms: Option<u64>,
@@ -154,8 +157,9 @@ impl Engine {
         if st.is_some() && !prev.clean {
             seq += UNCLEAN_SEQ_GAP;
         }
+        let mut names = Names::default();
         let mut events = EventsMirror::new(cfg.events_mirror.clone());
-        for r in journal.newest_events(super::mirror::EVENTS_KEEP) {
+        for r in journal.newest_events(super::mirror::EVENTS_KEEP, &mut names) {
             events.add(&r);
         }
         events.dirty = false;
@@ -172,6 +176,7 @@ impl Engine {
             events,
             journal,
             index,
+            names,
             flushed_s: seq,
             first_pending_ms: None,
             urgent_at: None,
@@ -271,10 +276,7 @@ impl Engine {
     }
 
     fn persistable(&self, r: &Row) -> bool {
-        match r.level() {
-            Some(lv) => lv >= self.cfg.persist_level,
-            None => true,
-        }
+        r.log_level().map_or(true, |lv| lv >= self.cfg.persist_level)
     }
 
     fn store(&mut self, body: Body, m: u64, now: &Now) {
@@ -285,8 +287,8 @@ impl Engine {
         } else if self.null_from.is_none() {
             self.null_from = Some(self.seq);
         }
-        let row = Row { s: self.seq, b: self.boot, m, t, body };
-        let urgent = match &row.body {
+        let row = Row::build(self.seq, self.boot, m, t, &body, &mut self.names);
+        let urgent = match &body {
             Body::Log { lv, c, msg, .. } => {
                 self.stats.logs[*lv as usize] += 1;
                 if *lv == Level::Error && self.cfg.forward_syslog {
@@ -298,8 +300,12 @@ impl Engine {
                 self.stats.events += 1;
                 *sev != Sev::Info
             }
+            Body::Kern { .. } => {
+                self.stats.kernel += 1;
+                false
+            }
         };
-        self.text.add(&row, now.wall, self.pid, now.ms());
+        self.text.add(&body, t, now.wall, self.pid, now.ms());
         if row.is_event() {
             self.events.add(&row);
         }
@@ -491,16 +497,16 @@ impl Engine {
         let head = self.ring.iter().next_back().map_or(self.flushed_s, |r| r.s).max(self.flushed_s);
         let i = self.ring.index_after(self.flushed_s);
         let persist = self.cfg.persist_level;
-        let any = self.ring.range_from(i).any(|r| r.level().map_or(true, |l| l >= persist));
+        let any = self.ring.range_from(i).any(|r| r.log_level().map_or(true, |l| l >= persist));
         if any {
             let low = self.journal.free_bytes().map_or(false, |f| f < self.min_free);
             if low {
                 self.stats.flush_skips += 1;
             } else {
                 let null_day = self.null_day();
-                let rows: Vec<&Row> = self.ring.range_from(i).filter(|r| r.level().map_or(true, |l| l >= persist)).collect();
+                let rows: Vec<&Row> = self.ring.range_from(i).filter(|r| r.log_level().map_or(true, |l| l >= persist)).collect();
                 let mut fs = FlushStats::default();
-                self.journal.append(&rows, null_day, &mut fs, &mut self.index);
+                self.journal.append(&rows, null_day, &mut fs, &mut self.index, &self.names);
                 self.stats.fsyncs += fs.fsyncs;
                 self.stats.cap_drops += fs.cap_drops;
                 self.stats.flush_errors += fs.errors;

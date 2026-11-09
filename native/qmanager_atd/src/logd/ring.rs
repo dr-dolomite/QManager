@@ -5,8 +5,9 @@
 use super::record::Row;
 use std::collections::VecDeque;
 
-pub const MAX_ROWS: usize = 8192;
-pub const MAX_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_ROWS: usize = 4096;
+/// Rendered bytes (the RSS gate is 1.5 MB for the whole daemon).
+pub const MAX_BYTES: usize = 768 * 1024;
 
 pub struct Ring {
     rows: VecDeque<Row>,
@@ -79,10 +80,11 @@ impl Ring {
 mod tests {
     use super::*;
     use crate::common::log::Level;
-    use crate::logd::record::Body;
+    use crate::logd::record::{Body, Names};
 
     fn row(s: u64, msg_len: usize) -> Row {
-        Row { s, b: 1, m: 0, t: None, body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "x".repeat(msg_len) } }
+        let body = Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "x".repeat(msg_len) };
+        Row::build(s, 1, 0, None, &body, &mut Names::default())
     }
 
     #[test]
@@ -106,7 +108,7 @@ mod tests {
             r.push(row(s, 4000));
         }
         assert!(r.bytes() <= MAX_BYTES, "{}", r.bytes());
-        assert!(r.len() < 600 && r.len() > 400, "{}", r.len());
+        assert!(r.len() < 200 && r.len() > 180, "{}", r.len());
         assert_eq!(r.iter().last().unwrap().s, 2000);
         assert!(r.would_evict(5000));
         // One huge row is still kept alone.

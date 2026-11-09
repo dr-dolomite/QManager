@@ -1,10 +1,14 @@
-//! Journal rows: the one record shape held in the RAM ring and appended to
-//! the flash day files (JSONL), plus a small parser for reading them back.
+//! Journal rows. A row is stored compactly: the few fields queries index on
+//! (seq, boot, mono, wall, kind, level, interned component / type) plus the
+//! rendered JSON tail of the row, which is what flash gets. `Body` is the
+//! decoded form, used to build a row and to render answers from it.
 //!
 //! Row (contract): `{"s":1842,"b":7,"m":12345.67,"t":1794199490,"k":"L",
-//! "lv":"WARN","c":"poller","p":7600,"msg":"…"}` and for events `"k":"E",
-//! "type":…,"sev":…,"cat":…[,"code":…][,"f":{…}],"msg":…`. `t` is null while
-//! the clock is untrusted. Readers drop torn lines: a row must start with
+//! "lv":"WARN","c":"poller","p":7600,"msg":"…"}`; events `"k":"E","type":…,
+//! "sev":…,"cat":…[,"code":…][,"f":{…}],"msg":…`; kernel `"k":"K","pri":3,
+//! "fac":0,"kseq":…,"tag":…,"msg":…`. `t` is null while the clock is
+//! untrusted. The message is always the last key, so the tail's escaped
+//! message is a slice. Readers drop torn lines: a row must start with
 //! `{"s":` and end with `}`.
 
 use crate::common::json::json_escape;
@@ -34,51 +38,201 @@ impl Sev {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RKind {
+    L,
+    E,
+    K,
+}
+
+/// The decoded fields of a row.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Body {
     Log { lv: Level, c: String, p: u32, msg: String },
     Ev { ty: String, sev: Sev, cat: &'static str, code: String, f: Vec<(String, String)>, msg: String },
+    /// A kept `/dev/kmsg` record: priority level, facility, kernel seq, filter tag.
+    Kern { pri: u8, fac: u8, kseq: u64, tag: String, msg: String },
+}
+
+impl Body {
+    pub fn msg(&self) -> &str {
+        match self {
+            Body::Log { msg, .. } | Body::Ev { msg, .. } | Body::Kern { msg, .. } => msg,
+        }
+    }
+}
+
+/// syslog level of a kmsg priority → the journal's level (0-3 ERROR, 4 WARN,
+/// 5-6 INFO, 7 DEBUG).
+pub fn kern_level(pri: u8) -> Level {
+    match pri {
+        0..=3 => Level::Error,
+        4 => Level::Warn,
+        5 | 6 => Level::Info,
+        _ => Level::Debug,
+    }
+}
+
+pub const PRI_NAMES: [&str; 8] = ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"];
+
+pub fn fac_name(fac: u8) -> &'static str {
+    const F: [&str; 12] = ["kern", "user", "mail", "daemon", "auth", "syslog", "lpr", "news", "uucp", "cron", "authpriv", "ftp"];
+    const L: [&str; 8] = ["local0", "local1", "local2", "local3", "local4", "local5", "local6", "local7"];
+    match fac {
+        0..=11 => F[fac as usize],
+        16..=23 => L[(fac - 16) as usize],
+        _ => "kern",
+    }
+}
+
+/// Interned component and event-type names (a few dozen in practice).
+#[derive(Default, Debug)]
+pub struct Names {
+    v: Vec<Box<str>>,
+}
+
+pub const NO_NAME: u16 = u16::MAX;
+const MAX_NAMES: usize = 4096;
+
+impl Names {
+    pub fn id(&mut self, s: &str) -> u16 {
+        if let Some(i) = self.find(s) {
+            return i;
+        }
+        if self.v.len() >= MAX_NAMES {
+            return NO_NAME;
+        }
+        self.v.push(s.into());
+        (self.v.len() - 1) as u16
+    }
+    pub fn find(&self, s: &str) -> Option<u16> {
+        self.v.iter().position(|x| &**x == s).map(|i| i as u16)
+    }
+    pub fn name(&self, id: u16) -> &str {
+        self.v.get(id as usize).map_or("", |b| &**b)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
     /// Global sequence number, monotonic across restarts and reboots.
     pub s: u64,
-    /// Boot index.
-    pub b: u32,
     /// Monotonic time in centiseconds (`/proc/uptime` × 100).
     pub m: u64,
     /// Wall epoch seconds, None while the clock is untrusted.
     pub t: Option<i64>,
-    pub body: Body,
+    /// Boot index.
+    pub b: u32,
+    /// Where the escaped message starts in `tail`.
+    msg_at: u32,
+    /// L: component, E: `events`, K: `kernel` (interned).
+    pub comp: u16,
+    /// E: event type (interned), else NO_NAME.
+    pub ty: u16,
+    pub kind: RKind,
+    /// L: its level, E: INFO, K: from the kmsg priority.
+    pub lv: Level,
+    /// E: severity (Info elsewhere).
+    pub sev: Sev,
+    /// The JSON after `"t":…,`, ending in `}`.
+    tail: Box<str>,
 }
 
 impl Row {
-    pub fn is_event(&self) -> bool {
-        matches!(self.body, Body::Ev { .. })
-    }
-
-    pub fn level(&self) -> Option<Level> {
-        match &self.body {
-            Body::Log { lv, .. } => Some(*lv),
-            Body::Ev { .. } => None,
-        }
-    }
-
-    pub fn msg(&self) -> &str {
-        match &self.body {
-            Body::Log { msg, .. } | Body::Ev { msg, .. } => msg,
-        }
-    }
-
-    /// What the ring charges for this row (heap strings plus a fixed overhead).
-    pub fn cost(&self) -> usize {
-        96 + match &self.body {
-            Body::Log { c, msg, .. } => c.len() + msg.len(),
-            Body::Ev { ty, code, f, msg, .. } => {
-                ty.len() + code.len() + msg.len() + f.iter().map(|(k, v)| k.len() + v.len() + 48).sum::<usize>()
+    pub fn build(s: u64, b: u32, m: u64, t: Option<i64>, body: &Body, names: &mut Names) -> Row {
+        let mut tail = String::with_capacity(64 + body.msg().len());
+        let (kind, lv, sev, comp, ty);
+        match body {
+            Body::Log { lv: l, c, p, .. } => {
+                tail.push_str("\"k\":\"L\",\"lv\":\"");
+                tail.push_str(l.name());
+                tail.push_str("\",\"c\":\"");
+                tail.push_str(&json_escape(c));
+                tail.push_str("\",\"p\":");
+                push_num(&mut tail, *p);
+                tail.push(',');
+                kind = RKind::L;
+                lv = *l;
+                sev = Sev::Info;
+                comp = names.id(c);
+                ty = NO_NAME;
+            }
+            Body::Ev { ty: t_, sev: sv, cat, code, f, .. } => {
+                tail.push_str("\"k\":\"E\",\"type\":\"");
+                tail.push_str(&json_escape(t_));
+                tail.push_str("\",\"sev\":\"");
+                tail.push_str(sv.name());
+                tail.push_str("\",\"cat\":\"");
+                tail.push_str(cat);
+                tail.push('"');
+                if !code.is_empty() {
+                    tail.push_str(",\"code\":\"");
+                    tail.push_str(&json_escape(code));
+                    tail.push('"');
+                }
+                if !f.is_empty() {
+                    tail.push_str(",\"f\":");
+                    render_fields(&mut tail, f);
+                }
+                tail.push(',');
+                kind = RKind::E;
+                lv = Level::Info;
+                sev = *sv;
+                comp = names.id("events");
+                ty = names.id(t_);
+            }
+            Body::Kern { pri, fac, kseq, tag, .. } => {
+                tail.push_str("\"k\":\"K\",\"pri\":");
+                push_num(&mut tail, *pri);
+                tail.push_str(",\"fac\":");
+                push_num(&mut tail, *fac);
+                tail.push_str(",\"kseq\":");
+                push_num(&mut tail, *kseq);
+                tail.push_str(",\"tag\":\"");
+                tail.push_str(&json_escape(tag));
+                tail.push_str("\",");
+                kind = RKind::K;
+                lv = kern_level(*pri);
+                sev = Sev::Info;
+                comp = names.id("kernel");
+                ty = NO_NAME;
             }
         }
+        tail.push_str("\"msg\":\"");
+        let msg_at = tail.len() as u32;
+        tail.push_str(&json_escape(body.msg()));
+        tail.push_str("\"}");
+        Row { s, m, t, b, msg_at, comp, ty, kind, lv, sev, tail: tail.into_boxed_str() }
+    }
+
+    /// The decoded message.
+    pub fn msg(&self) -> String {
+        self.decode().msg().to_string()
+    }
+
+    /// True for a kernel row with this filter tag.
+    pub fn tag_is(&self, tag: &str) -> bool {
+        self.kind == RKind::K && self.tail.contains(&format!("\"tag\":\"{tag}\""))
+    }
+
+    pub fn is_event(&self) -> bool {
+        self.kind == RKind::E
+    }
+
+    /// The level of a log line (None for events and kernel rows, which are
+    /// always persisted).
+    pub fn log_level(&self) -> Option<Level> {
+        (self.kind == RKind::L).then_some(self.lv)
+    }
+
+    /// The message as it sits in the JSON (escaped).
+    pub fn msg_escaped(&self) -> &str {
+        &self.tail[self.msg_at as usize..self.tail.len() - 2]
+    }
+
+    /// What the ring charges for this row: its rendered length.
+    pub fn cost(&self) -> usize {
+        self.tail.len() + 48
     }
 
     /// One JSONL line, without the trailing LF.
@@ -94,46 +248,32 @@ impl Row {
             Some(t) => push_num(out, t),
             None => out.push_str("null"),
         }
-        match &self.body {
-            Body::Log { lv, c, p, msg } => {
-                out.push_str(",\"k\":\"L\",\"lv\":\"");
-                out.push_str(lv.name());
-                out.push_str("\",\"c\":\"");
-                out.push_str(&json_escape(c));
-                out.push_str("\",\"p\":");
-                push_num(out, *p);
-                out.push_str(",\"msg\":\"");
-                out.push_str(&json_escape(msg));
-                out.push_str("\"}");
-            }
-            Body::Ev { ty, sev, cat, code, f, msg } => {
-                out.push_str(",\"k\":\"E\",\"type\":\"");
-                out.push_str(&json_escape(ty));
-                out.push_str("\",\"sev\":\"");
-                out.push_str(sev.name());
-                out.push_str("\",\"cat\":\"");
-                out.push_str(cat);
-                out.push('"');
-                if !code.is_empty() {
-                    out.push_str(",\"code\":\"");
-                    out.push_str(&json_escape(code));
-                    out.push('"');
-                }
-                if !f.is_empty() {
-                    out.push_str(",\"f\":");
-                    render_fields(out, f);
-                }
-                out.push_str(",\"msg\":\"");
-                out.push_str(&json_escape(msg));
-                out.push_str("\"}");
-            }
-        }
+        out.push(',');
+        out.push_str(&self.tail);
     }
 
     pub fn to_line(&self) -> String {
-        let mut s = String::with_capacity(128 + self.msg().len());
+        let mut s = String::with_capacity(48 + self.tail.len());
         self.render(&mut s);
         s
+    }
+
+    /// The decoded fields (parses the tail).
+    pub fn decode(&self) -> Body {
+        let mut line = String::with_capacity(self.tail.len() + 1);
+        line.push('{');
+        line.push_str(&self.tail);
+        decode_obj(&line).map(|d| d.4).unwrap_or(Body::Log { lv: self.lv, c: String::new(), p: 0, msg: String::new() })
+    }
+
+    /// Parses one journal line. None for torn, foreign or malformed lines.
+    pub fn from_line(line: &str, names: &mut Names) -> Option<Row> {
+        let line = line.trim_end_matches(['\r', '\n']);
+        if !looks_whole(line) {
+            return None;
+        }
+        let (s, b, m, t, body) = decode_obj(line)?;
+        Some(Row::build(s?, b?, m.unwrap_or(0), t, &body, names))
     }
 }
 
@@ -307,17 +447,16 @@ pub fn looks_whole(line: &str) -> bool {
     l.starts_with("{\"s\":") && l.ends_with('}')
 }
 
-/// Parses one journal line. None for torn, foreign or malformed lines.
-pub fn parse_row(line: &str) -> Option<Row> {
-    let line = line.trim_end_matches(['\r', '\n']);
-    if !looks_whole(line) {
-        return None;
-    }
+type Decoded = (Option<u64>, Option<u32>, Option<u64>, Option<i64>, Body);
+
+/// Parses a row object (or a `{` + tail) into its header fields and body.
+fn decode_obj(line: &str) -> Option<Decoded> {
     let mut p = P { b: line.as_bytes(), i: 0 };
     p.eat(b'{')?;
     let (mut s, mut b, mut m, mut t) = (None, None, None, None);
     let (mut k, mut lv, mut c, mut pid, mut msg) = (None, None, None, 0u32, None);
     let (mut ty, mut sev, mut code, mut f) = (None, None, String::new(), Vec::new());
+    let (mut pri, mut fac, mut kseq, mut tag) = (6u8, 0u8, 0u64, String::new());
     loop {
         let key = p.string()?;
         p.eat(b':')?;
@@ -327,7 +466,6 @@ pub fn parse_row(line: &str) -> Option<Row> {
             ("b", Val::Num(n)) => b = n.parse::<u32>().ok(),
             ("m", Val::Num(n)) => m = parse_mono(&n),
             ("t", Val::Num(n)) => t = n.parse::<i64>().ok(),
-            ("t", Val::Null) => {}
             ("k", Val::Str(x)) => k = Some(x),
             ("lv", Val::Str(x)) => lv = Some(Level::parse(&x)),
             ("c", Val::Str(x)) => c = Some(x),
@@ -337,6 +475,10 @@ pub fn parse_row(line: &str) -> Option<Row> {
             ("sev", Val::Str(x)) => sev = Some(Sev::parse(&x)),
             ("code", Val::Str(x)) => code = x,
             ("f", Val::Obj(kv)) => f = kv,
+            ("pri", Val::Num(n)) => pri = n.parse::<u8>().unwrap_or(6).min(7),
+            ("fac", Val::Num(n)) => fac = n.parse().unwrap_or(0),
+            ("kseq", Val::Num(n)) => kseq = n.parse().unwrap_or(0),
+            ("tag", Val::Str(x)) => tag = x,
             _ => {}
         }
         if p.eat(b',').is_some() {
@@ -351,9 +493,10 @@ pub fn parse_row(line: &str) -> Option<Row> {
             let ty = ty?;
             Body::Ev { cat: super::registry::category(&ty), ty, sev: sev.unwrap_or(Sev::Info), code, f, msg: msg? }
         }
+        "K" => Body::Kern { pri, fac, kseq, tag, msg: msg? },
         _ => return None,
     };
-    Some(Row { s: s?, b: b?, m: m.unwrap_or(0), t, body })
+    Some((s, b, m, t, body))
 }
 
 /// The leading `s`, `b`, `t` of a row, without parsing the rest (the boot
@@ -372,60 +515,66 @@ pub fn quick_sbt(line: &str) -> Option<(u64, u32, Option<i64>)> {
 mod tests {
     use super::*;
 
-    fn ev() -> Row {
-        Row {
-            s: 1843,
-            b: 7,
-            m: 1235002,
-            t: Some(1794199494),
-            body: Body::Ev {
-                ty: "band_change".into(),
-                sev: Sev::Info,
-                cat: "cellular",
-                code: String::new(),
-                f: vec![("from".into(), "B3".into()), ("to".into(), "B7".into())],
-                msg: "LTE band changed: B3 → B7 \"q\"\t".into(),
-            },
+    fn ev_body() -> Body {
+        Body::Ev {
+            ty: "band_change".into(),
+            sev: Sev::Info,
+            cat: "cellular",
+            code: String::new(),
+            f: vec![("from".into(), "B3".into()), ("to".into(), "B7".into())],
+            msg: "LTE band changed: B3 → B7 \"q\"\t".into(),
         }
     }
 
     #[test]
     fn rows_render_in_the_contract_shape_and_parse_back() {
-        let l = Row {
-            s: 1842,
-            b: 7,
-            m: 1234567,
-            t: Some(1794199490),
-            body: Body::Log { lv: Level::Warn, c: "poller".into(), p: 7600, msg: "x".into() },
-        };
+        let mut n = Names::default();
+        let lb = Body::Log { lv: Level::Warn, c: "poller".into(), p: 7600, msg: "x".into() };
+        let l = Row::build(1842, 7, 1234567, Some(1794199490), &lb, &mut n);
         assert_eq!(
             l.to_line(),
             "{\"s\":1842,\"b\":7,\"m\":12345.67,\"t\":1794199490,\"k\":\"L\",\"lv\":\"WARN\",\"c\":\"poller\",\"p\":7600,\"msg\":\"x\"}"
         );
-        assert_eq!(parse_row(&l.to_line()).unwrap(), l);
-        let e = ev();
+        assert_eq!(Row::from_line(&l.to_line(), &mut n).unwrap(), l);
+        assert_eq!(l.decode(), lb);
+        assert_eq!((l.kind, l.lv, n.name(l.comp)), (RKind::L, Level::Warn, "poller"));
+        let e = Row::build(1843, 7, 1235002, Some(1794199494), &ev_body(), &mut n);
         assert_eq!(
             e.to_line(),
             "{\"s\":1843,\"b\":7,\"m\":12350.02,\"t\":1794199494,\"k\":\"E\",\"type\":\"band_change\",\"sev\":\"info\",\"cat\":\"cellular\",\"f\":{\"from\":\"B3\",\"to\":\"B7\"},\"msg\":\"LTE band changed: B3 → B7 \\\"q\\\"\\t\"}"
         );
-        assert_eq!(parse_row(&e.to_line()).unwrap(), e);
-        let mut n = e.clone();
-        n.t = None;
-        assert!(n.to_line().contains("\"t\":null,"));
-        assert_eq!(parse_row(&n.to_line()).unwrap(), n);
-        assert_eq!(quick_sbt(&n.to_line()), Some((1843, 7, None)));
+        assert_eq!(e.msg_escaped(), "LTE band changed: B3 → B7 \\\"q\\\"\\t");
+        assert_eq!(Row::from_line(&e.to_line(), &mut n).unwrap(), e);
+        assert_eq!(e.decode(), ev_body());
+        assert_eq!((n.name(e.ty), n.name(e.comp)), ("band_change", "events"));
+        let mut u = e.clone();
+        u.t = None;
+        assert!(u.to_line().contains("\"t\":null,"));
+        assert_eq!(Row::from_line(&u.to_line(), &mut n).unwrap(), u);
+        assert_eq!(quick_sbt(&u.to_line()), Some((1843, 7, None)));
         assert_eq!(quick_sbt(&l.to_line()), Some((1842, 7, Some(1794199490))));
+        let kb = Body::Kern { pri: 3, fac: 0, kseq: 991, tag: "ssr".into(), msg: "remoteproc-mss: fatal error".into() };
+        let k = Row::build(1844, 7, 1235110, None, &kb, &mut n);
+        assert_eq!(
+            k.to_line(),
+            "{\"s\":1844,\"b\":7,\"m\":12351.10,\"t\":null,\"k\":\"K\",\"pri\":3,\"fac\":0,\"kseq\":991,\"tag\":\"ssr\",\"msg\":\"remoteproc-mss: fatal error\"}"
+        );
+        assert_eq!((k.lv, k.log_level()), (Level::Error, None));
+        assert_eq!(Row::from_line(&k.to_line(), &mut n).unwrap(), k);
+        assert_eq!(k.decode(), kb);
     }
 
     #[test]
     fn torn_and_foreign_lines_are_refused() {
-        let line = ev().to_line();
-        assert!(parse_row(&line[..line.len() - 1]).is_none());
-        assert!(parse_row(&line[10..]).is_none());
-        assert!(parse_row("{\"k\":\"e\",\"t\":1}").is_none());
-        assert!(parse_row("").is_none());
-        assert!(parse_row("{\"s\":1,\"b\":1,\"m\":1,\"t\":null,\"k\":\"X\",\"msg\":\"a\"}").is_none());
-        assert!(parse_row("{\"s\":1,\"b\":1,\"m\":1,\"t\":null,\"k\":\"L\",\"msg\":\"\\ud83d\\ude00 \\u00e9\"}").unwrap().msg() == "😀 é");
+        let mut n = Names::default();
+        let line = Row::build(1, 1, 0, None, &ev_body(), &mut n).to_line();
+        assert!(Row::from_line(&line[..line.len() - 1], &mut n).is_none());
+        assert!(Row::from_line(&line[10..], &mut n).is_none());
+        assert!(Row::from_line("{\"k\":\"e\",\"t\":1}", &mut n).is_none());
+        assert!(Row::from_line("", &mut n).is_none());
+        assert!(Row::from_line("{\"s\":1,\"b\":1,\"m\":1,\"t\":null,\"k\":\"X\",\"msg\":\"a\"}", &mut n).is_none());
+        let r = Row::from_line("{\"s\":1,\"b\":1,\"m\":1,\"t\":null,\"k\":\"L\",\"msg\":\"\\ud83d\\ude00 \\u00e9\"}", &mut n).unwrap();
+        assert_eq!(r.decode().msg(), "😀 é");
     }
 
     #[test]
@@ -438,5 +587,10 @@ mod tests {
             assert_eq!(parse_mono(bad), None, "{bad}");
         }
         assert_eq!(fmt_mono(1234507), "12345.07");
+    }
+
+    #[test]
+    fn a_row_is_small() {
+        assert!(std::mem::size_of::<Row>() <= 64, "{}", std::mem::size_of::<Row>());
     }
 }

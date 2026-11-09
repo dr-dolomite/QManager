@@ -26,6 +26,8 @@ symlink to it, and it is QManager's only AT path; see
 daemon `qmanager_logd` and its client `qlog` (argv0 roles, a separate process
 from the broker; contract `docs/plans/2026-11-10-logd-contract.md`). Since 0.8.0 the same binary is also the journal
 daemon `qmanager_logd` and its client `qlog` (argv0 roles, a separate process
+from the broker; contract `docs/plans/2026-11-10-logd-contract.md`). Since 0.8.0 the same binary is also the journal
+daemon `qmanager_logd` and its client `qlog` (argv0 roles, a separate process
 from the broker; contract `docs/plans/2026-11-10-logd-contract.md`).
 
 ### Rebuild (static aarch64 musl)
@@ -37,7 +39,7 @@ CRT objects and `rust-lld`, so no cross gcc is needed; the crate's
 ```sh
 rustup target add aarch64-unknown-linux-musl     # once
 cd native/qmanager_atd
-cargo test --release                             # host unit tests (352 at 0.8.0)
+cargo test --release                             # host unit tests (353 at 0.8.0)
 cargo build --release --target aarch64-unknown-linux-musl
 cp target/aarch64-unknown-linux-musl/release/qmanager_atd ../../dependencies/qmanager_atd
 
@@ -46,7 +48,7 @@ readelf -l ../../dependencies/qmanager_atd | grep -i INTERP   # -> (nothing)
 file ../../dependencies/qmanager_atd   # ELF 64-bit LSB executable, ARM aarch64, statically linked
 ```
 
-Shipped build: **0.8.0** (journal daemon qmanager_logd: spool ingest, RAM ring, flash journal, STAT, LOGQ and EVQ via qlog; broker log lines to the spool while logd is alive), 789616 bytes, md5 `282730476b0da4a305b433da0d05047f` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 352 host tests green, verified static as above; size ceiling 800 kB). The previous shipped build was 0.7.0 (per-carrier LTE signal and NR identity in `qmi.env`, `sysinfo` / `bands` reads), 677184 bytes, md5 `d7034deb3c57f5fb05a43a725bdd83bd`. Before that 0.6.2 (state-file hardening against planted FIFOs and foreign files), 669488 bytes, md5 `c70fc6cc9e50911abf373bcc4d7addcb` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 288 host tests green, verified static as above). Before that 0.6.1 (WDS packet counter for Data Used, with IPv6-only call support), 668064 bytes, md5 `de71a292e8160465b4895988fe32d995`. Before that 0.5.0 (NAS Config Signal Info v2 held by the broker, so the live file carries SINR and NR), 650560 bytes, md5 `1552dcf62e2aa318ac4819fc03f382c6`. Before that 0.4.1 (live signal at 1 Hz in both tiers, 5 Hz `aim` parked), 647904 bytes, md5 `14112f99eb2a68dce66db6f3aa5ce90b`. Before that, 0.4.0 (5 Hz `aim`) was 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656`.
+Shipped build: **0.8.0** (journal daemon qmanager_logd: compact RAM ring (4096 rows / 768 KB), flash journal, STAT, LOGQ and EVQ via qlog; broker log lines to the spool while logd is alive), 799856 bytes, md5 `eff51fcdf11d65631b087edf196c91c5` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 353 host tests green, verified static as above; size ceiling 800 kB). The previous shipped build was 0.7.0 (per-carrier LTE signal and NR identity in `qmi.env`, `sysinfo` / `bands` reads), 677184 bytes, md5 `d7034deb3c57f5fb05a43a725bdd83bd`. Before that 0.6.2 (state-file hardening against planted FIFOs and foreign files), 669488 bytes, md5 `c70fc6cc9e50911abf373bcc4d7addcb` (rebuilt from `native/qmanager_atd/` in WSL on a Linux filesystem, 288 host tests green, verified static as above). Before that 0.6.1 (WDS packet counter for Data Used, with IPv6-only call support), 668064 bytes, md5 `de71a292e8160465b4895988fe32d995`. Before that 0.5.0 (NAS Config Signal Info v2 held by the broker, so the live file carries SINR and NR), 650560 bytes, md5 `1552dcf62e2aa318ac4819fc03f382c6`. Before that 0.4.1 (live signal at 1 Hz in both tiers, 5 Hz `aim` parked), 647904 bytes, md5 `14112f99eb2a68dce66db6f3aa5ce90b`. Before that, 0.4.0 (5 Hz `aim`) was 647984 bytes, md5 `96cb55dbc2d942e7c779e3376f394656`.
 
 Build on a Linux filesystem (e.g. copy the crate into `~/`), not across
 `/mnt/<drive>`, and commit the binary together with any source change.

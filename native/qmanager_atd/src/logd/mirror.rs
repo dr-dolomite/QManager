@@ -18,22 +18,27 @@ pub const EVENTS_KEEP: usize = 50;
 pub const EVENTS_MIN_GAP_MS: u64 = 1000;
 
 /// The text line of a row: `[ts] LEVEL [component:pid] message`. An event is
-/// `EVENT [type] message` at INFO from component `events`.
-pub fn text_line(row: &Row, wall_now: i64, logd_pid: u32, out: &mut String) {
-    text_line_cached(row, wall_now, logd_pid, out, &mut (i64::MIN, String::new()));
+/// `EVENT [type] message` at INFO from component `events`. Kernel rows have
+/// no text line (the kernel ring is not QManager's transcript).
+pub fn text_line(body: &Body, t: Option<i64>, wall_now: i64, logd_pid: u32, out: &mut String) {
+    text_line_cached(body, t, wall_now, logd_pid, out, &mut (i64::MIN, String::new()));
 }
 
 /// `text_line` with the last formatted second cached: a storm stamps many
 /// lines with the same second, and localtime_r re-reads the zone each call.
-fn text_line_cached(row: &Row, wall_now: i64, logd_pid: u32, out: &mut String, cache: &mut (i64, String)) {
-    let t = row.t.unwrap_or(wall_now);
+fn text_line_cached(body: &Body, t: Option<i64>, wall_now: i64, logd_pid: u32, out: &mut String, cache: &mut (i64, String)) {
+    if let Body::Kern { .. } = body {
+        return;
+    }
+    let t = t.unwrap_or(wall_now);
     if cache.0 != t {
         *cache = (t, format_local(t));
     }
     out.push('[');
     out.push_str(&cache.1);
     out.push_str("] ");
-    match &row.body {
+    match body {
+        Body::Kern { .. } => {}
         Body::Log { lv, c, p, msg } => {
             out.push_str(lv.padded());
             out.push_str(" [");
@@ -68,8 +73,11 @@ impl TextMirror {
         TextMirror { path, buf: String::new(), first_ms: None, writes: 0, ts: (i64::MIN, String::new()) }
     }
 
-    pub fn add(&mut self, row: &Row, wall_now: i64, pid: u32, now_ms: u64) {
-        text_line_cached(row, wall_now, pid, &mut self.buf, &mut self.ts);
+    pub fn add(&mut self, body: &Body, t: Option<i64>, wall_now: i64, pid: u32, now_ms: u64) {
+        if let Body::Kern { .. } = body {
+            return;
+        }
+        text_line_cached(body, t, wall_now, pid, &mut self.buf, &mut self.ts);
         self.first_ms.get_or_insert(now_ms);
         // A storm must not grow the batch without bound.
         if self.buf.len() > 64 * 1024 {
@@ -121,7 +129,7 @@ impl TextMirror {
 
 /// One legacy events row: `{"timestamp":…,"type":…,"message":…,"severity":…[,"code":…]}`.
 pub fn event_json(row: &Row, wall_now: i64, out: &mut String) {
-    if let Body::Ev { ty, sev, code, msg, .. } = &row.body {
+    if let Body::Ev { ty, sev, code, msg, .. } = &row.decode() {
         out.push_str("{\"timestamp\":");
         out.push_str(&row.t.unwrap_or(wall_now).to_string());
         out.push_str(",\"type\":\"");
@@ -183,7 +191,7 @@ impl EventsMirror {
 mod tests {
     use super::*;
     use crate::common::log::Level;
-    use crate::logd::record::Sev;
+    use crate::logd::record::{Names, Sev};
 
     fn tmp(name: &str) -> String {
         let d = std::env::temp_dir().join(format!("qlogd-mirror-{name}-{}", std::process::id()));
@@ -192,25 +200,32 @@ mod tests {
         d.join("qmanager.log").to_str().unwrap().to_string()
     }
 
+    fn logb(msg: &str) -> Body {
+        Body::Log { lv: Level::Warn, c: "poller".into(), p: 77, msg: msg.into() }
+    }
+
     #[test]
     fn text_lines_are_the_legacy_format_and_rotate_at_256k() {
         crate::common::log::init_tz();
         let p = tmp("text");
         let mut m = TextMirror::new(p.clone());
-        let row = Row { s: 1, b: 1, m: 0, t: Some(1_794_199_490), body: Body::Log { lv: Level::Warn, c: "poller".into(), p: 77, msg: "hi\tthere".into() } };
-        m.add(&row, 0, 9, 5);
+        m.add(&logb("hi\tthere"), Some(1_794_199_490), 0, 9, 5);
         assert_eq!(m.deadline(), Some(1005));
         m.flush();
         let s = fs::read_to_string(&p).unwrap();
         assert!(s.starts_with('[') && s.ends_with("] WARN  [poller:77] hi\tthere\n"), "{s:?}");
         assert_eq!(s.len(), "[2026-11-10 00:00:00] WARN  [poller:77] hi\tthere\n".len());
-        let ev = Row { s: 2, b: 1, m: 0, t: None, body: Body::Ev { ty: "band_change".into(), sev: Sev::Info, cat: "cellular", code: String::new(), f: vec![], msg: "B3".into() } };
+        let ev = Body::Ev { ty: "band_change".into(), sev: Sev::Info, cat: "cellular", code: String::new(), f: vec![], msg: "B3".into() };
         let mut line = String::new();
-        text_line(&ev, 1_794_199_490, 9, &mut line);
+        text_line(&ev, None, 1_794_199_490, 9, &mut line);
         assert!(line.ends_with("] INFO  [events:9] EVENT [band_change] B3\n"), "{line}");
+        let k = Body::Kern { pri: 3, fac: 0, kseq: 1, tag: "ssr".into(), msg: "x".into() };
+        let mut line = String::new();
+        text_line(&k, None, 1, 9, &mut line);
+        assert!(line.is_empty(), "kernel rows have no text line");
         // Rotation keeps .1 and .2.
         fs::write(&p, vec![b'x'; ROTATE_BYTES as usize]).unwrap();
-        m.add(&row, 0, 9, 5);
+        m.add(&logb("x"), Some(1), 0, 9, 5);
         m.flush();
         assert!(fs::metadata(format!("{p}.1")).unwrap().len() >= ROTATE_BYTES);
         assert!(fs::metadata(&p).unwrap().len() < 200);
@@ -223,8 +238,7 @@ mod tests {
         fs::write(&victim, b"SECRET").unwrap();
         std::os::unix::fs::symlink(&victim, &p).unwrap();
         let mut m = TextMirror::new(p.clone());
-        let row = Row { s: 1, b: 1, m: 0, t: Some(1), body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "x".into() } };
-        m.add(&row, 0, 1, 0);
+        m.add(&logb("x"), Some(1), 0, 1, 0);
         m.flush();
         assert_eq!(fs::read(&victim).unwrap(), b"SECRET");
     }
@@ -233,9 +247,12 @@ mod tests {
     fn the_events_file_keeps_the_newest_50_in_the_legacy_shape() {
         let p = tmp("ev");
         let mut e = EventsMirror::new(p.clone());
-        for i in 0..60 {
+        let mut n = Names::default();
+        for i in 0..60u64 {
             let code = if i == 59 { "wd_tier_start".to_string() } else { String::new() };
-            e.add(&Row { s: i, b: 1, m: 0, t: if i == 58 { None } else { Some(1000 + i as i64) }, body: Body::Ev { ty: "watchcat_recovery".into(), sev: Sev::Warning, cat: "connection", code, f: vec![], msg: format!("step \"{i}\"") } });
+            let b = Body::Ev { ty: "watchcat_recovery".into(), sev: Sev::Warning, cat: "connection", code, f: vec![], msg: format!("step \"{i}\"") };
+            let t = if i == 58 { None } else { Some(1000 + i as i64) };
+            e.add(&Row::build(i, 1, 0, t, &b, &mut n));
         }
         assert_eq!(e.deadline(), Some(0));
         e.write(5555, 10);

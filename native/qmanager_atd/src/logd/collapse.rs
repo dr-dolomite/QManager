@@ -10,7 +10,9 @@ use crate::common::log::Level;
 
 pub const WINDOW_MS: u64 = 60_000;
 /// Keys tracked at once; past this the expired ones are dropped first.
-const MAX_KEYS: usize = 512;
+const MAX_KEYS: usize = 256;
+/// Characters of the first message kept for the summary.
+const FIRST_CHARS: usize = 200;
 
 pub const RATE_PER_SEC: f64 = 20.0;
 pub const RATE_BURST: f64 = 200.0;
@@ -31,27 +33,38 @@ pub type Summary = (String, Level, u32, String);
 #[derive(Default)]
 pub struct Collapser {
     /// (key, window): a few dozen keys at most, so a Vec beats a map here.
-    wins: Vec<(String, Win)>,
+    /// (key hash, window): a storm of long distinct lines costs a few bytes
+    /// per key, not a copy of each line.
+    wins: Vec<(u64, Win)>,
     /// Lines suppressed so far (STAT).
     pub suppressed: u64,
 }
 
-fn key(c: &str, lv: Level, msg: &str) -> String {
-    let mut k = String::with_capacity(c.len() + msg.len() + 8);
-    k.push_str(c);
-    k.push('\0');
-    k.push_str(lv.name());
-    k.push('\0');
-    k.extend(msg.chars().filter(|ch| !ch.is_ascii_digit()));
-    k
+/// FNV-1a over (component, level, message without ASCII digits).
+fn key(c: &str, lv: Level, msg: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |b: u8| {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    };
+    c.bytes().for_each(&mut eat);
+    eat(0);
+    eat(lv as u8);
+    eat(0);
+    msg.bytes().filter(|b| !b.is_ascii_digit()).for_each(&mut eat);
+    h
+}
+
+fn first_of(msg: &str) -> String {
+    let mut first: String = msg.chars().take(FIRST_CHARS).collect();
+    if first.len() < msg.len() {
+        first.push('…');
+    }
+    first
 }
 
 fn summary_of(w: &Win) -> Summary {
-    let mut first: String = w.first.chars().take(200).collect();
-    if w.first.chars().count() > 200 {
-        first.push('…');
-    }
-    (w.c.clone(), w.lv, w.p, format!("{first} … repeated {} times in 60 s", w.n))
+    (w.c.clone(), w.lv, w.p, format!("{} … repeated {} times in 60 s", w.first, w.n))
 }
 
 impl Collapser {
@@ -67,7 +80,7 @@ impl Collapser {
                 return (false, None);
             }
             let sum = (w.n > 0).then(|| summary_of(w));
-            *w = Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: msg.to_string() };
+            *w = Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: first_of(msg) };
             return (true, sum);
         }
         if self.wins.len() >= MAX_KEYS {
@@ -78,7 +91,7 @@ impl Collapser {
             }
         }
         if self.wins.len() < MAX_KEYS {
-            self.wins.push((k, Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: msg.to_string() }));
+            self.wins.push((k, Win { start_ms: now_ms, n: 0, c: c.to_string(), lv, p, first: first_of(msg) }));
         }
         (true, None)
     }

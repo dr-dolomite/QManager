@@ -6,7 +6,7 @@
 //! global sync. Each file is opened O_APPEND|O_CREAT|O_NOFOLLOW and must be
 //! our own regular file with one link.
 
-use super::record::{quick_sbt, Row};
+use super::record::{quick_sbt, Names, Row, Sev};
 use super::registry;
 use crate::common::safefs;
 use std::fs::{self, File, OpenOptions};
@@ -296,9 +296,31 @@ impl Journal {
     /// goes to `epochday(t)`; one still untrusted goes to `null_day`. Events
     /// past the day cap are kept only for the keep-list and `error`; a kind's
     /// file is no longer grown once it alone exceeds the kind's byte cap.
-    pub fn append(&mut self, rows: &[&Row], null_day: i64, stats: &mut FlushStats, index: &mut BootIndex) {
-        // (kind, day) -> rendered lines, in order of first appearance.
-        let mut groups: Vec<(Kind, i64, String, Vec<(u64, u32, Option<i64>)>)> = Vec::new();
+    pub fn append(&mut self, rows: &[&Row], null_day: i64, stats: &mut FlushStats, index: &mut BootIndex, names: &Names) {
+        // One open file per (kind, day) touched, written in 32 KB chunks so a
+        // full ring never needs a second copy of itself in RAM.
+        struct G {
+            kind: Kind,
+            day: i64,
+            file: Option<File>,
+            buf: String,
+            wrote: bool,
+        }
+        const CHUNK: usize = 32 * 1024;
+        let mut groups: Vec<G> = Vec::new();
+        let write = |g: &mut G, stats: &mut FlushStats| {
+            if g.buf.is_empty() {
+                return;
+            }
+            let ok = g.file.as_mut().map_or(false, |f| f.write_all(g.buf.as_bytes()).is_ok());
+            if ok {
+                stats.bytes += g.buf.len() as u64;
+                g.wrote = true;
+            } else if g.file.take().is_some() {
+                stats.errors += 1;
+            }
+            g.buf.clear();
+        };
         for r in rows {
             let kind = Kind::of(r);
             let day = r.t.map(epochday).unwrap_or(null_day);
@@ -308,12 +330,7 @@ impl Journal {
                     _ => Self::count_lines(&self.path(Kind::Ev, day)),
                 };
                 if n >= EV_DAY_CAP {
-                    let keep = match &r.body {
-                        super::record::Body::Ev { ty, sev, .. } => {
-                            registry::kept_past_cap(ty) || *sev == super::record::Sev::Error
-                        }
-                        _ => true,
-                    };
+                    let keep = registry::kept_past_cap(names.name(r.ty)) || r.sev == Sev::Error;
                     self.ev_day = Some((day, n));
                     if !keep {
                         stats.cap_drops += 1;
@@ -322,39 +339,45 @@ impl Journal {
                 }
                 self.ev_day = Some((day, n + 1));
             }
-            let g = match groups.iter().position(|g| g.0 == kind && g.1 == day) {
+            let gi = match groups.iter().position(|g| g.kind == kind && g.day == day) {
                 Some(i) => i,
                 None => {
-                    groups.push((kind, day, String::new(), Vec::new()));
+                    let path = self.path(kind, day);
+                    let cap = if kind == Kind::Log { LOG_BYTES } else { EV_BYTES };
+                    let size = fs::symlink_metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    let file = if size >= cap {
+                        None
+                    } else {
+                        match Self::open_append(&path) {
+                            Ok(f) => Some(f),
+                            Err(_) => {
+                                stats.errors += 1;
+                                None
+                            }
+                        }
+                    };
+                    groups.push(G { kind, day, file, buf: String::new(), wrote: false });
                     groups.len() - 1
                 }
             };
-            r.render(&mut groups[g].2);
-            groups[g].2.push('\n');
-            groups[g].3.push((r.s, r.b, r.t));
-        }
-        for (kind, day, text, ids) in groups {
-            let path = self.path(kind, day);
-            let cap = if kind == Kind::Log { LOG_BYTES } else { EV_BYTES };
-            let size = fs::symlink_metadata(&path).map(|m| m.len()).unwrap_or(0);
-            if size >= cap {
-                stats.cap_drops += ids.len() as u64;
+            let g = &mut groups[gi];
+            if g.file.is_none() {
+                stats.cap_drops += 1;
                 continue;
             }
-            match Self::open_append(&path).and_then(|mut f| {
-                f.write_all(text.as_bytes())?;
+            r.render(&mut g.buf);
+            g.buf.push('\n');
+            stats.rows += 1;
+            index.entry(r.b).note(r.s, r.t, Some(day));
+            if g.buf.len() >= CHUNK {
+                write(g, stats);
+            }
+        }
+        for g in groups.iter_mut() {
+            write(g, stats);
+            if let (true, Some(f)) = (g.wrote, g.file.as_ref()) {
                 unsafe { libc::fdatasync(f.as_raw_fd()) };
-                Ok(())
-            }) {
-                Ok(()) => {
-                    stats.rows += ids.len() as u64;
-                    stats.bytes += text.len() as u64;
-                    stats.fsyncs += 1;
-                    for (s, b, t) in ids {
-                        index.entry(b).note(s, t, Some(day));
-                    }
-                }
-                Err(_) => stats.errors += 1,
+                stats.fsyncs += 1;
             }
         }
     }
@@ -447,12 +470,12 @@ impl Journal {
     }
 
     /// The newest `n` events on flash (for seeding the events mirror).
-    pub fn newest_events(&self, n: usize) -> Vec<Row> {
+    pub fn newest_events(&self, n: usize, names: &mut Names) -> Vec<Row> {
         let mut out: Vec<Row> = Vec::new();
         for (day, _) in self.days(Kind::Ev).into_iter().rev() {
             let mut rows = Vec::new();
             self.for_each_line(Kind::Ev, day, |l| {
-                if let Some(r) = super::record::parse_row(l) {
+                if let Some(r) = Row::from_line(l, names) {
                     rows.push(r);
                 }
             });
@@ -482,7 +505,21 @@ mod tests {
     }
 
     fn ev(s: u64, t: Option<i64>, ty: &str, sev: Sev) -> Row {
-        Row { s, b: 3, m: 0, t, body: Body::Ev { ty: ty.into(), sev, cat: registry::category(ty), code: String::new(), f: vec![], msg: "m".into() } }
+        let b = Body::Ev { ty: ty.into(), sev, cat: registry::category(ty), code: String::new(), f: vec![], msg: "m".into() };
+        NAMES.with(|n| Row::build(s, 3, 0, t, &b, &mut n.borrow_mut()))
+    }
+
+    fn lg(s: u64, b: u32, t: Option<i64>, msg: &str) -> Row {
+        let body = Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: msg.into() };
+        NAMES.with(|n| Row::build(s, b, 0, t, &body, &mut n.borrow_mut()))
+    }
+
+    thread_local! {
+        static NAMES: std::cell::RefCell<Names> = std::cell::RefCell::new(Names::default());
+    }
+
+    fn app(j: &mut Journal, rows: &[&Row], null_day: i64, st: &mut FlushStats, idx: &mut BootIndex) {
+        NAMES.with(|n| j.append(rows, null_day, st, idx, &n.borrow()));
     }
 
     #[test]
@@ -501,12 +538,12 @@ mod tests {
     fn rows_go_to_their_day_and_untrusted_rows_to_the_null_day() {
         let d = tmpdir("days");
         let mut j = Journal::new(d.clone());
-        let a = Row { s: 1, b: 3, m: 0, t: Some(86400 * 5 + 10), body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "a".into() } };
-        let b = Row { s: 2, b: 3, m: 0, t: None, body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "b".into() } };
+        let a = lg(1, 3, Some(86400 * 5 + 10), "a");
+        let b = lg(2, 3, None, "b");
         let e = ev(3, Some(86400 * 6), "band_change", Sev::Info);
         let mut st = FlushStats::default();
         let mut idx = BootIndex::default();
-        j.append(&[&a, &b, &e], 5, &mut st, &mut idx);
+        app(&mut j, &[&a, &b, &e], 5, &mut st, &mut idx);
         assert_eq!((st.rows, st.fsyncs), (3, 2));
         assert_eq!(fs::read_to_string(j.path(Kind::Log, 5)).unwrap().lines().count(), 2);
         assert_eq!(j.days(Kind::Ev), vec![(6, fs::metadata(j.path(Kind::Ev, 6)).unwrap().len())]);
@@ -515,7 +552,7 @@ mod tests {
         assert_eq!(idx2.get(3).unwrap().first_s, 1);
         assert_eq!(idx2.get(3).unwrap().days, Some((5, 6)));
         assert_eq!(idx, idx2);
-        assert_eq!(j.newest_events(50), vec![e]);
+        assert_eq!(NAMES.with(|n| j.newest_events(50, &mut n.borrow_mut())), vec![e]);
     }
 
     #[test]
@@ -527,7 +564,7 @@ mod tests {
         let rows: Vec<Row> = (1..=EV_DAY_CAP).map(|s| ev(s, t, "band_change", Sev::Info)).collect();
         let refs: Vec<&Row> = rows.iter().collect();
         let mut st = FlushStats::default();
-        j.append(&refs, 0, &mut st, &mut BootIndex::default());
+        app(&mut j, &refs, 0, &mut st, &mut BootIndex::default());
         assert_eq!(st.rows, EV_DAY_CAP);
         let more = [
             ev(5001, t, "band_change", Sev::Info),
@@ -539,11 +576,11 @@ mod tests {
         // A fresh Journal counts the file from flash.
         let mut j = Journal::new(j.dir.clone());
         let mut st = FlushStats::default();
-        j.append(&more.iter().collect::<Vec<_>>(), 0, &mut st, &mut BootIndex::default());
+        app(&mut j, &more.iter().collect::<Vec<_>>(), 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.cap_drops), (3, 2));
         // The next day starts a fresh count.
         let mut st = FlushStats::default();
-        j.append(&[&ev(6000, Some((day + 1) * 86400), "band_change", Sev::Info)], 0, &mut st, &mut BootIndex::default());
+        app(&mut j, &[&ev(6000, Some((day + 1) * 86400), "band_change", Sev::Info)], 0, &mut st, &mut BootIndex::default());
         assert_eq!(st.rows, 1);
     }
 
@@ -573,17 +610,17 @@ mod tests {
     fn a_full_day_file_is_not_grown_and_a_planted_link_is_refused() {
         let d = tmpdir("full");
         let mut j = Journal::new(d.clone());
-        let row = Row { s: 1, b: 1, m: 0, t: Some(86400 * 9), body: Body::Log { lv: Level::Info, c: "c".into(), p: 1, msg: "a".into() } };
+        let row = lg(1, 1, Some(86400 * 9), "a");
         fs::write(j.path(Kind::Log, 9), vec![b'x'; LOG_BYTES as usize]).unwrap();
         let mut st = FlushStats::default();
-        j.append(&[&row], 0, &mut st, &mut BootIndex::default());
+        app(&mut j, &[&row], 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.cap_drops), (0, 1));
         let victim = format!("{d}/victim");
         fs::write(&victim, b"SECRET").unwrap();
         std::os::unix::fs::symlink(&victim, j.path(Kind::Log, 10)).unwrap();
-        let row = Row { t: Some(86400 * 10), ..row };
+        let row = lg(1, 1, Some(86400 * 10), "a");
         let mut st = FlushStats::default();
-        j.append(&[&row], 0, &mut st, &mut BootIndex::default());
+        app(&mut j, &[&row], 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.errors), (0, 1));
         assert_eq!(fs::read(&victim).unwrap(), b"SECRET");
     }
