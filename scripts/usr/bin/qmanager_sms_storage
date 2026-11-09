@@ -23,9 +23,14 @@
 #
 # Does NOT reboot or call CFUN.
 #
-# Dependencies: qsms + qcmd (qmanager_atd), logger
+# Dependencies: qsms + qcmd (qmanager_atd)
 # Install location: /usr/bin/qmanager_sms_storage
 # =============================================================================
+
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+qlog_init "qmanager_sms_storage"
 
 QSMS="/usr/bin/qsms"
 QCMD="/usr/bin/qcmd"
@@ -47,7 +52,7 @@ while [ "$i" -lt "$READY_TRIES" ]; do
 done
 
 if [ "$ready" -ne 1 ]; then
-    logger -t qmanager_sms_storage "Modem not ready after $((READY_TRIES * READY_SLEEP))s — CPMS routing not applied"
+    qlog_warn "Modem not ready after $((READY_TRIES * READY_SLEEP))s — CPMS routing not applied"
     exit 1
 fi
 
@@ -55,7 +60,7 @@ fi
 mem=$(tr -d ' \r\n' < "$PREF_FILE" 2>/dev/null | tr 'a-z' 'A-Z')
 [ "$mem" = "SM" ] || mem="ME"
 if [ "$mem" = "SM" ] && ! "$QSMS" status SM >/dev/null 2>&1; then
-    logger -t qmanager_sms_storage "SIM storage chosen but unusable; using modem storage this boot"
+    qlog_warn "SIM storage chosen but unusable; using modem storage this boot"
     mem="ME"
 fi
 
@@ -64,9 +69,9 @@ apply_out=$("$QCMD" "AT+CPMS=\"$mem\",\"$mem\",\"$mem\"" 2>/dev/null)
 apply_rc=$?
 
 if [ "$apply_rc" -eq 0 ] && printf '%s\n' "$apply_out" | tr -d '\r' | grep -q '^OK'; then
-    logger -t qmanager_sms_storage "CPMS routing set to $mem (incoming SMS storage)"
+    qlog_info "CPMS routing set to $mem (incoming SMS storage)"
     exit 0
 fi
 
-logger -t qmanager_sms_storage "Failed to set CPMS routing (rc=$apply_rc)"
+qlog_error "Failed to set CPMS routing (rc=$apply_rc)"
 exit 1

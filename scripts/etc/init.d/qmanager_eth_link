@@ -18,6 +18,10 @@
 # Install location: /etc/init.d/qmanager_eth_link
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+
 START=99
 STOP=10
 
@@ -45,7 +49,8 @@ apply_aspm_policy() {
     [ "$cur" = "$want" ] && return 0
 
     echo "$want" > "$policy_file" 2>/dev/null
-    logger -t qmanager_eth_link "ASPM policy: ${cur:-unknown} -> $want"
+    qlog_init "qmanager_eth_link"
+    qlog_info "ASPM policy: ${cur:-unknown} -> $want"
 }
 
 # Build hex advertise mask from ethtool's "Supported link modes" output.
@@ -88,7 +93,8 @@ start() {
     # speed counts as good. This is the hot path on every install/upgrade.
     if [ -n "$current_speed" ]; then
         if [ -z "$desired_speed" ] || [ "$current_speed" = "$desired_speed" ]; then
-            logger -t qmanager_eth_link "Link already at ${current_speed}Mb/s (limit=${limit:-auto}) — skip apply"
+            qlog_init "qmanager_eth_link"
+            qlog_info "Link already at ${current_speed}Mb/s (limit=${limit:-auto}) — skip apply"
             return 0
         fi
     fi
@@ -115,7 +121,8 @@ start() {
 
     ethtool -r "$ETH_INTERFACE" 2>/dev/null
 
-    logger -t qmanager_eth_link "Applied speed limit: ${limit:-auto} (was ${current_speed:-unknown}Mb/s)"
+    qlog_init "qmanager_eth_link"
+    qlog_info "Applied speed limit: ${limit:-auto} (was ${current_speed:-unknown}Mb/s)"
 }
 
 # stop() is intentionally a no-op. Resetting the link on stop forces a

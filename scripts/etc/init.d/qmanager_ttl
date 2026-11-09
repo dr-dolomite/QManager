@@ -21,6 +21,10 @@
 # Install location: /etc/init.d/qmanager_ttl
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+
 START=99
 STOP=10
 
@@ -33,7 +37,8 @@ start() {
     sleep 5
 
     . "$TTL_FILE"
-    logger -t qmanager_ttl "Applied TTL/HL settings from $TTL_FILE"
+    qlog_init "qmanager_ttl"
+    qlog_info "Applied TTL/HL settings from $TTL_FILE"
 }
 
 stop() {

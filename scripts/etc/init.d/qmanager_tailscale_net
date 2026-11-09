@@ -9,6 +9,10 @@
 # not being 0 (default on). See /usr/lib/qmanager/tailscale_net.sh.
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+
 START=99
 STOP=10
 
@@ -25,24 +29,29 @@ start() {
     # it back before tailscaled is relied on (never while a worker runs).
     if command -v ts_recover_interrupted >/dev/null 2>&1 && ! ts_lock_holder >/dev/null; then
         if ts_recover_interrupted; then
-            logger -t qmanager_tailscale_net "Restored Tailscale binaries from an interrupted update"
+            qlog_init "qmanager_tailscale_net"
+            qlog_info "Restored Tailscale binaries from an interrupted update"
         fi
     fi
 
     if [ ! -x /usr/bin/tailscale ] && ! command -v tailscale >/dev/null 2>&1; then
-        logger -t qmanager_tailscale_net "Tailscale not installed, skipping"
+        qlog_init "qmanager_tailscale_net"
+        qlog_info "Tailscale not installed, skipping"
         return 0
     fi
     if ! ts_net_owned; then
-        logger -t qmanager_tailscale_net "Tailscale Tiny build manages its own network setup, skipping"
+        qlog_init "qmanager_tailscale_net"
+        qlog_info "Tailscale Tiny build manages its own network setup, skipping"
         return 0
     fi
     if ! ts_net_enabled; then
-        logger -t qmanager_tailscale_net "Tailscale network fixes disabled, skipping"
+        qlog_init "qmanager_tailscale_net"
+        qlog_info "Tailscale network fixes disabled, skipping"
         return 0
     fi
     ts_net_apply
-    logger -t qmanager_tailscale_net "Applied: $(ts_net_status_json)"
+    qlog_init "qmanager_tailscale_net"
+    qlog_info "Applied: $(ts_net_status_json)"
 }
 
 # Teardown on stop would cut the tunnel on every service reload; removal is

@@ -18,6 +18,11 @@
 # Install location: /usr/bin/qmanager_mtu_apply
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+qlog_init "qmanager_mtu_apply"
+
 MTU_FILE="/etc/firewall.user.mtu"
 
 # Nothing to do if no custom MTU is configured
@@ -32,7 +37,7 @@ while [ "$retries" -lt 60 ]; do
 done
 
 if ! ip link show rmnet_data0 >/dev/null 2>&1; then
-    logger -t qmanager_mtu_apply "rmnet_data0 not ready after 120s, skipping MTU apply"
+    qlog_warn "rmnet_data0 not ready after 120s, skipping MTU apply"
     exit 0
 fi
 
@@ -42,4 +47,4 @@ sleep 2
 # Source the rules file to apply MTU to all configured interfaces
 . "$MTU_FILE"
 
-logger -t qmanager_mtu_apply "MTU settings applied from $MTU_FILE"
+qlog_info "MTU settings applied from $MTU_FILE"

@@ -16,6 +16,10 @@
 # Install location: /etc/init.d/qmanager_tower_failover
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+
 START=99
 STOP=10
 
@@ -79,7 +83,8 @@ start() {
 
     # Spawn daemon (double-fork to detach from any parent process group)
     ( "$DAEMON" </dev/null >/dev/null 2>&1 & )
-    logger -t qmanager_tower_failover "Failover daemon started"
+    qlog_init "qmanager_tower_failover"
+    qlog_info "Failover daemon started"
 }
 
 # BusyBox `sleep` does not accept fractional seconds on all builds — use
@@ -117,15 +122,18 @@ stop() {
 
         # Still alive? Escalate to SIGKILL and give it one more tick.
         if is_daemon_pid_running "$pid"; then
-            logger -t qmanager_tower_failover "Failover daemon did not exit on SIGTERM (PID=$pid) — sending SIGKILL"
+            qlog_init "qmanager_tower_failover"
+            qlog_warn "Failover daemon did not exit on SIGTERM (PID=$pid) — sending SIGKILL"
             kill -9 "$pid" 2>/dev/null
             sleep_fractional 0.1
         fi
 
         if is_daemon_pid_running "$pid"; then
-            logger -t qmanager_tower_failover "Failover daemon still alive after SIGKILL (PID=$pid)"
+            qlog_init "qmanager_tower_failover"
+            qlog_warn "Failover daemon still alive after SIGKILL (PID=$pid)"
         else
-            logger -t qmanager_tower_failover "Failover daemon stopped (PID=$pid)"
+            qlog_init "qmanager_tower_failover"
+            qlog_info "Failover daemon stopped (PID=$pid)"
         fi
     fi
 

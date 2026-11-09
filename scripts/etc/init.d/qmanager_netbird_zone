@@ -25,6 +25,10 @@
 # Install location: /etc/init.d/qmanager_netbird_zone
 # =============================================================================
 
+# Guarded source: BusyBox ash exits when `.` cannot find its file.
+[ -f /usr/lib/qmanager/qlog.sh ] && . /usr/lib/qmanager/qlog.sh
+command -v qlog_init >/dev/null 2>&1 || { qlog_init() { :; }; qlog_info() { :; }; qlog_warn() { :; }; qlog_error() { :; }; qlog_debug() { :; }; }
+
 START=99
 STOP=10
 
@@ -32,16 +36,19 @@ STOP=10
 
 start() {
     if ! command -v netbird >/dev/null 2>&1; then
-        logger -t qmanager_netbird_zone "netbird not installed, skipping zone"
+        qlog_init "qmanager_netbird_zone"
+        qlog_info "netbird not installed, skipping zone"
         return 0
     fi
 
     if netbird_fw_zone_exists "netbird"; then
-        logger -t qmanager_netbird_zone "Zone 'netbird' already present, no action"
+        qlog_init "qmanager_netbird_zone"
+        qlog_info "Zone 'netbird' already present, no action"
         return 0
     fi
 
-    logger -t qmanager_netbird_zone "Zone 'netbird' missing for installed netbird — creating"
+    qlog_init "qmanager_netbird_zone"
+    qlog_info "Zone 'netbird' missing for installed netbird — creating"
     netbird_fw_ensure_zone "netbird" "wt0"
     return 0
 }

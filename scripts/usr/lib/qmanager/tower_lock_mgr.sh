@@ -569,7 +569,7 @@ _mtu_reapply_worker() {
     done
 
     if [ -z "$iface" ]; then
-        logger -t qmanager_mtu "MTU re-apply timed out waiting for rmnet_data carrier"
+        qlog_warn "MTU re-apply timed out waiting for rmnet_data carrier"
         rm -f "$MTU_REAPPLY_PID"
         return 1
     fi
@@ -600,9 +600,9 @@ _mtu_reapply_worker() {
             stable_hits=$((stable_hits + 1))
             if [ "$stable_hits" -ge 2 ]; then
                 if [ -n "$last_applied_from" ]; then
-                    logger -t qmanager_mtu "MTU stable at ${expected_mtu} on ${iface} (re-applied from ${last_applied_from})"
+                    qlog_info "MTU stable at ${expected_mtu} on ${iface} (re-applied from ${last_applied_from})"
                 else
-                    logger -t qmanager_mtu "MTU already correct at ${expected_mtu} on ${iface} — no re-apply needed"
+                    qlog_info "MTU already correct at ${expected_mtu} on ${iface} — no re-apply needed"
                 fi
                 rm -f "$MTU_REAPPLY_PID"
                 return 0
@@ -615,7 +615,7 @@ _mtu_reapply_worker() {
         stable_hits=0
 
         if [ "$retries" -le 0 ]; then
-            logger -t qmanager_mtu "MTU re-apply exhausted retries (current=${current_mtu}, expected=${expected_mtu}, iface=${iface})"
+            qlog_warn "MTU re-apply exhausted retries (current=${current_mtu}, expected=${expected_mtu}, iface=${iface})"
             rm -f "$MTU_REAPPLY_PID"
             return 1
         fi
@@ -631,7 +631,7 @@ _mtu_reapply_worker() {
         _mtu_sleep_ms 200
     done
 
-    logger -t qmanager_mtu "MTU re-apply timed out after ${max_wait}s (iface=${iface}, last=${current_mtu:-unknown}, expected=${expected_mtu})"
+    qlog_warn "MTU re-apply timed out after ${max_wait}s (iface=${iface}, last=${current_mtu:-unknown}, expected=${expected_mtu})"
     rm -f "$MTU_REAPPLY_PID"
     return 1
 }
