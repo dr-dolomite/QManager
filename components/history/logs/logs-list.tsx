@@ -55,7 +55,7 @@ function LogRow({ row, plain, locale }: { row: LogLineView; plain: boolean; loca
             <span aria-hidden="true" className="hidden @2xl/card:block" />
           )}
           {row.tag ? (
-            <Tag variant="neutral" className="min-w-0 justify-self-start">
+            <Tag variant="neutral" className="min-w-0 max-w-full justify-self-start" title={row.tag}>
               <span className="truncate">{row.tag}</span>
             </Tag>
           ) : (
