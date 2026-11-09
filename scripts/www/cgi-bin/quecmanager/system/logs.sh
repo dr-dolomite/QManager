@@ -30,6 +30,152 @@ cgi_handle_options
 LOG_FILE="/tmp/qmanager.log"
 MAX_ROTATED=2
 
+# --- logd journal fast path ---------------------------------------------------
+# Capability file written by qmanager_logd after bind; one key=1 line per verb.
+LOGD_PROTO="/var/run/qmanager_logd.proto"
+
+# _qd_cap KEY=1 — true when the capability file carries that exact line.
+# `read` is a builtin: no fork.
+_qd_cap() {
+    local want="$1"
+    local line
+    [ -r "$LOGD_PROTO" ] || return 1
+    while IFS= read -r line; do
+        [ "$line" = "$want" ] && return 0
+    done < "$LOGD_PROTO" 2>/dev/null
+    return 1
+}
+
+# _qd_decode STRING — percent/plus-decode into _QD_VAL. Control bytes
+# (%00-%1F, %7F) are dropped; a malformed %XX is kept literally. The only fork
+# is the printf subshell per decoded byte.
+_qd_decode() {
+    local s="$1"
+    local out=""
+    local hex
+    while case "$s" in *+*) true ;; *) false ;; esac; do
+        s="${s%%+*} ${s#*+}"
+    done
+    while case "$s" in *%*) true ;; *) false ;; esac; do
+        out="$out${s%%\%*}"
+        s="${s#*%}"
+        hex="${s%"${s#??}"}"
+        case "$hex" in
+            [0-9A-Fa-f][0-9A-Fa-f]) ;;
+            *) out="$out%"; continue ;;
+        esac
+        s="${s#??}"
+        case "$hex" in
+            0?|1?|7[Ff]) continue ;;
+        esac
+        out="$out$(printf "\\x$hex")"
+    done
+    _QD_VAL="$out$s"
+}
+
+# try_logd — answer a GET from qmanager_logd. Returns 0 once the response body
+# is printed; 1 (nothing printed) means "use the legacy file path": no
+# capability, an invalid parameter, logd unreachable (qlog exit 3) or any other
+# non-zero qlog exit. Values are validated with case patterns and passed as
+# argv elements, never through eval.
+try_logd() {
+    local rest
+    local pair
+    local k
+    local v
+    local p_limit="100"
+    local p_level=""
+    local p_comp=""
+    local p_search=""
+    local p_boot=""
+    local p_after=""
+    local p_before=""
+    local out
+    local rc
+
+    _qd_cap "logq=1" || return 1
+
+    rest="${QUERY_STRING}&"
+    while [ -n "$rest" ]; do
+        pair="${rest%%&*}"
+        rest="${rest#*&}"
+        [ -n "$pair" ] || continue
+        k="${pair%%=*}"
+        v=""
+        [ "$k" = "$pair" ] || v="${pair#*=}"
+        case "$k" in
+            lines|limit)
+                case "$v" in
+                    '') ;;
+                    *[!0-9]*|???????????*) return 1 ;;
+                    *)
+                        v="${v#"${v%%[!0]*}"}"
+                        [ -n "$v" ] || v=0
+                        [ "$v" -lt 1 ] && v=100
+                        [ "$v" -gt 500 ] && v=500
+                        p_limit="$v"
+                        ;;
+                esac
+                ;;
+            level|min_level)
+                case "$v" in
+                    ''|DEBUG|INFO|WARN|ERROR) p_level="$v" ;;
+                    *) return 1 ;;
+                esac
+                ;;
+            component)
+                case "$v" in
+                    ''|all) p_comp="" ;;
+                    *[!a-z0-9_-]*|?????????????????????????????????????????????????*) return 1 ;;
+                    *) p_comp="$v" ;;
+                esac
+                ;;
+            search)
+                _qd_decode "$v"
+                p_search="$_QD_VAL"
+                if [ "${#p_search}" -gt 256 ]; then
+                    p_search=$(printf '%.256s' "$p_search")
+                fi
+                ;;
+            boot)
+                case "$v" in
+                    ''|this|prev) p_boot="$v" ;;
+                    *[!0-9]*|???????????*) return 1 ;;
+                    *) p_boot="$v" ;;
+                esac
+                ;;
+            after)
+                case "$v" in
+                    '') ;;
+                    *[!0-9]*|???????????????????*) return 1 ;;
+                    *) p_after="$v" ;;
+                esac
+                ;;
+            before)
+                case "$v" in
+                    '') ;;
+                    *[!0-9]*|???????????????????*) return 1 ;;
+                    *) p_before="$v" ;;
+                esac
+                ;;
+        esac
+    done
+
+    set -- logq "limit=$p_limit"
+    [ -n "$p_level" ] && set -- "$@" "min_level=$p_level"
+    [ -n "$p_comp" ] && set -- "$@" "component=$p_comp"
+    [ -n "$p_search" ] && set -- "$@" "search=$p_search"
+    [ -n "$p_boot" ] && set -- "$@" "boot=$p_boot"
+    [ -n "$p_after" ] && set -- "$@" "after=$p_after"
+    [ -n "$p_before" ] && set -- "$@" "before=$p_before"
+
+    out=$(/usr/bin/qlog "$@" 2>/dev/null)
+    rc=$?
+    [ "$rc" -eq 0 ] && [ -n "$out" ] || return 1
+    printf '%s\n' "$out"
+    return 0
+}
+
 # --- Helpers -----------------------------------------------------------------
 
 # Extract a query parameter from QUERY_STRING
@@ -201,6 +347,8 @@ parse_logs() {
 # GET — Read and filter logs
 # =============================================================================
 if [ "$REQUEST_METHOD" = "GET" ]; then
+    try_logd && exit 0
+
     PARAM_LINES=$(get_param "lines")
     PARAM_LEVEL=$(get_param "level")
     PARAM_COMPONENT=$(get_param "component")
