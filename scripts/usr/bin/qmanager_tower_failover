@@ -29,6 +29,7 @@ else
     qlog_info() { :; }
     qlog_warn() { :; }
     qlog_error() { :; }
+    mono_now_set() { _MONO=0; }
 fi
 qlog_init "tower_failover"
 
@@ -71,6 +72,7 @@ qlog_info "Active: interval=${INTERVAL}s threshold=${threshold}% bad_limit=${BAD
 
 # --- Main loop ---------------------------------------------------------------
 bad=0
+bad_since=0     # mono of the first bad cycle of the current episode
 cycle=0
 
 while true; do
@@ -132,7 +134,14 @@ while true; do
     # --- Evaluate ------------------------------------------------------------
     if [ "$quality" -lt "$threshold" ]; then
         bad=$((bad + 1))
-        qlog_warn "Below threshold: ${quality}% < ${threshold}%, bad=${bad}/${BAD_LIMIT}"
+        # First bad cycle of an episode is WARN, the rest DEBUG (FAILOVER: stays WARN).
+        if [ "$bad" -eq 1 ]; then
+            mono_now_set
+            bad_since="$_MONO"
+            qlog_warn "Below threshold: ${quality}% < ${threshold}%, bad=${bad}/${BAD_LIMIT}"
+        else
+            qlog_debug "Below threshold: ${quality}% < ${threshold}%, bad=${bad}/${BAD_LIMIT}"
+        fi
 
         if [ "$bad" -ge "$BAD_LIMIT" ]; then
             qlog_warn "FAILOVER: ${BAD_LIMIT} consecutive bad — clearing locks"
@@ -197,7 +206,8 @@ while true; do
         fi
     else
         if [ "$bad" -gt 0 ]; then
-            qlog_info "Signal recovered: ${quality}% (was bad=${bad})"
+            mono_now_set
+            qlog_info "Signal recovered: ${quality}% (was bad=${bad}) after $((_MONO - bad_since))s"
         else
             qlog_debug "OK: ${quality}% (RSRP=${rsrp:-?})"
         fi
