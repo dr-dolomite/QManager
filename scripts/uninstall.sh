@@ -341,6 +341,7 @@ remove_backend() {
         /var/run/qmanager/qmi_live_aim.* /var/run/qmanager/qmi_live_watch.* \
         /var/run/qmanager/qmi_live.token /var/run/qmanager/qmi_live.token.* \
         /var/run/qmanager/qmi_live.lock /var/run/qmanager/qmi.stamp \
+        /var/run/qmanager/broker.seen /var/run/qmanager/data_cid.last \
         "$BIN_DIR"/.qcmd.* "$BIN_DIR"/.qsms.* "$BIN_DIR"/.qmi.* 2>/dev/null || true
 
     for f in "$BIN_DIR"/qmanager_*; do
