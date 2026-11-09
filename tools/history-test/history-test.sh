@@ -355,6 +355,15 @@ O7=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=1h" sh 
 echo "$O7" | jq -e '(.buckets|length) == 60 and ([.buckets[].x] | add) == 1' >/dev/null 2>&1 && ok || bad "1h shape + one fault entry: $(echo "$O7" | jq -c '[.buckets[].x]|add')"
 echo "$O7" | jq -e '([.buckets[].st.nr] | add) == 400' >/dev/null 2>&1 && ok || bad "1h covers the ring span: $(echo "$O7" | jq -c '[.buckets[].st.nr]|add')"
 echo "$O7" | jq -e '[.buckets[:-8][] | .st.nr == 0 and (.m|length) == 0] | all' >/dev/null 2>&1 && ok || bad "1h empty before the ring"
+# The newest sample lags now by up to 10 s: while the collector is alive its
+# state holds until now, so the last bars are not "no data".
+printf '%s.00 0.00
+' "$((MONO + 15))" > "$T/uptime"
+O8=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=5m" sh "$SRC/series.sh" | sed -n '/^{/,$p')
+echo "$O8" | jq -e '[.buckets[] | (.st.nr) == .len] | all' >/dev/null 2>&1 && ok || bad "5m state held to now: $(echo "$O8" | jq -c '[.buckets[-3:][] | [.len, .st.nr]]')"
+echo "$O8" | jq -e '(.buckets[-1].m | length) == 0' >/dev/null 2>&1 && ok || bad "5m held span has no metrics"
+printf '%s.00 0.00
+' "$MONO" > "$T/uptime"
 E5=$(_SKIP_AUTH=1 REQUEST_METHOD=GET QUERY_STRING="series=cellular&range=5m" sh "$SRC/events.sh" | sed -n '/^{/,$p')
 echo "$E5" | jq -e '.success' >/dev/null 2>&1 && ok || bad "events 5m"
 # Ring trim: past HIST_FINE_MAX + 60 rows it keeps the newest HIST_FINE_MAX.

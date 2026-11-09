@@ -107,7 +107,7 @@ else
     rows_cmd="hr_rows"
 fi
 buckets=$($rows_cmd "$series" b "$first" | awk -v first="$first" -v B="$HR_B" -v N="$HR_N" \
-    -v now="$now" -v states="$states" -v metrics="$metrics" '
+    -v now="$now" -v states="$states" -v metrics="$metrics" -v alive="$HR_ALIVE" '
 BEGIN {
     ns = split(states, S, " "); nm = split(metrics, M, " ")
     for (j = 1; j <= nm; j++) MI[M[j]] = j
@@ -145,6 +145,7 @@ function fine(line,    t, dt, a, b, s, x, i, i0, i1, lo, hi, ov, m, e, name, j, 
     if (b <= first && dt > 0) return
     if (dt <= 0 && t < first) return
     s = line; sub(/.*"s":"/, "", s); sub(/".*/, "", s)
+    if (t > LT) { LT = t; LS = s }
     x = line; sub(/.*"x":/, "", x); sub(/,.*/, "", x); x += 0
     i0 = int((a - first) / B); if (a < first) i0 = 0
     i1 = (dt > 0) ? int((b - 1 - first) / B) : int((b - first) / B)
@@ -169,6 +170,17 @@ function fine(line,    t, dt, a, b, s, x, i, i0, i1, lo, hi, ov, m, e, name, j, 
     }
 }
 END {
+    # Fine ranges: the newest sample is up to 10 s old, which would leave the
+    # last bars as "no data". While the collector is alive, its state holds
+    # until now (at most 30 s); no metric is invented for that span.
+    if (alive == 1 && LT > 0 && now > LT && now - LT <= 30) {
+        for (i = int((LT - first) / B); i < N; i++) {
+            if (i < 0) continue
+            lo = first + i * B; hi = lo + B
+            ov = (now < hi ? now : hi) - (LT > lo ? LT : lo)
+            if (ov > 0) ST[i, LS] += ov
+        }
+    }
     for (i = 0; i < N; i++) {
         t = first + i * B
         len = (i == N - 1) ? now - t : B
