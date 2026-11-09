@@ -54,11 +54,14 @@ app/                            # Next.js App Router
 │   ├── custom-dns/             # DNS settings
 │   ├── traffic-engine/         # Traffic Engine (DPI settings: Video Optimizer / Traffic Masquerade)
 │   └── dpi-masking/            # Redirect stub to /local-network/traffic-engine
+├── history/                    # History (generic time-series pages, docs/features/history.md)
+│   ├── cellular/               # Cellular History
+│   └── connection/             # Connection History (reachability, charts, Sites, events)
 ├── monitoring/                 # Monitoring & alerts
 │   ├── page.tsx                # Redirect stub to /monitoring/events
 │   ├── connection-quality/     # Ping profile + quality thresholds
 │   ├── events/                 # Network events
-│   ├── latency/                # Latency monitoring
+│   ├── latency/                # Redirect stub to /history/connection (retired Latency Monitor)
 │   ├── alerts/                 # Centralized SMS + email connection alerts
 │   ├── watchdog/               # Watchdog settings
 │   ├── prometheus/             # Prometheus metrics endpoint (token, scrape freshness, scrape config)
@@ -82,6 +85,7 @@ components/
 ├── cellular/                   # Cellular components (100 files)
 ├── dashboard/                  # Dashboard cards
 ├── local-network/              # Network components
+├── history/                    # History components (shared pieces; cellular/, connection/ incl. connection/sites/)
 ├── monitoring/                 # Monitoring components
 ├── system-settings/            # System settings & scheduled ops
 ├── about-device/               # About page components
@@ -129,12 +133,14 @@ constants/                      # Static configuration data
 | `/monitoring` | (redirect) | Client-side redirect to `/monitoring/events` |
 | `/monitoring/events` | NetworkEvents | Event log |
 | `/monitoring/connection-quality` | ConnectionQuality | Ping profile + quality thresholds |
-| `/monitoring/latency` | LatencyMonitoring | Right now + History cards, Sites card (per-site latency, live Now); see `docs/reference/latency-monitor.md` |
+| `/monitoring/latency` | (redirect) | Client-side redirect to `/history/connection` (retired Latency Monitor; see `docs/reference/latency-monitor.md`) |
 | `/monitoring/alerts` | Alerts | Centralized SMS + email connection alerts (routing matrix + capability, readiness status, merged log) |
 | `/monitoring/watchdog` | Watchdog | Connection health |
 | `/monitoring/prometheus` | Prometheus | Prometheus scrape endpoint settings (enable, scrape freshness, bearer token, scrape config); see `docs/features/prometheus-metrics.md` |
 | `/monitoring/tailscale` | Tailscale | VPN status |
 | `/monitoring/netbird` | (see page file) | NetBird VPN status |
+| `/history/cellular` | CellularHistory | Cellular History (signal, state and radio events over 24 h / 7 d / 30 d); see `docs/features/history.md` |
+| `/history/connection` | ConnectionHistory | Connection History: summary tiles, Reachability strip, Latency / Packet loss / Jitter / DNS charts, Sites card (per-site latency, Live values in Manage, detail panel), connection events; see `docs/features/history.md#connection-history` |
 | `/system-settings` | SystemSettings | System preferences, scheduled ops |
 | `/system-settings/connection-quality` | (redirect) | Client-side redirect to `/monitoring/connection-quality` |
 | `/system-settings/logs` | SystemLogs | Log viewer |
@@ -209,15 +215,15 @@ Fetches ping history for latency charts.
 
 - **Endpoint**: `GET /cgi-bin/quecmanager/at_cmd/fetch_ping_history.sh`
 - **Returns**: `PingHistoryEntry[]`
-- **Consumers**: Latency Monitor History card (1 h / 6 h / 24 h, reads each row's `lat` only) and Right now's "last answer" caption
+- **Consumers**: the dashboard Connection Quality card (the Latency Monitor page that also read it is retired)
 
-#### `useSites(range)`
+#### `useSites(range, live)`
 
-Polls the Sites monitor for the Latency Monitor's Sites card.
+Polls the Sites monitor for the Sites card on Connection History. `range` is a `HistoryRange` (`24h` | `7d` | `30d`); `live` turns on the 2 s live loop.
 
 - **Endpoint**: `GET/POST /cgi-bin/quecmanager/monitoring/sites.sh`
-- **Returns**: `data` (`SitesResponse`), `dataRange`, `checkPending`, `checkNow()` and `save()` returning `MutationResult` (`types/mutation-result.ts`: `ok`, `code`, `error`)
-- **Cadence**: `now` every 2 s while the tab is visible and the monitor is on; otherwise 30 s idle, 3 s while a sweep runs
+- **Returns**: `data` (`SitesResponse` for `dataRange`), `dataRange`, `dataNow`, `liveData` (the live sweep, `null` while Live is off), `isLoading`, `error`, `checkPending`, `refresh()`, `checkNow()` and `save()` returning `MutationResult` (`types/mutation-result.ts`: `ok`, `code`, `error`)
+- **Cadence**: the range read every 30 s idle, 3 s while a sweep runs; with `live` on, a second `range=now` loop every 2 s while the tab is visible and the monitor is on
 
 ### One-Shot Hooks (Fetch + Save)
 
@@ -491,7 +497,8 @@ The sidebar (`app-sidebar.tsx`) defines the full navigation structure:
 | **Main** | Home (Dashboard) |
 | **Cellular** | Cellular Info, SMS, Custom Profiles (+ Connection Scenarios), Band Locking (+ Tower, Frequency), Cell Scanner (+ Neighbor, Calculator), Settings (+ APN, Network Priority, IMEI, FPLMN) |
 | **Local Network** | Ethernet Status, Traffic Engine, Settings (TTL & MTU, Custom DNS) |
-| **Monitoring** | Connection Quality (+ Latency Monitor, Network Events), Alerts, Watchdog (live "acting" / "settling" pill), Tailscale, NetBird |
+| **Monitoring** | Connection Quality (+ Network Events), Alerts, Watchdog (live "acting" / "settling" pill), Tailscale, NetBird |
+| **History** | Cellular History (+ Connection History) |
 | **System** | System Settings (+ Logs, Languages, Configuration Backup, Adaptive Polling) |
 | **Footer** (unlabelled) | About Device, Support, Donate |
 | **User menu** | Change Password, Theme, Animations, Reboot Device, Logout |

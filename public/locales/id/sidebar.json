@@ -47,7 +47,6 @@
     "traffic_masquerade": "Traffic Masquerade",
     "traffic_engine": "Traffic Engine",
     "network_events": "Peristiwa Jaringan",
-    "latency_monitor": "Monitor Latensi",
     "alerts": "Peringatan",
     "tailscale": "Tailscale",
     "netbird": "NetBird",

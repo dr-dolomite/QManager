@@ -8,7 +8,7 @@ Plan and decision log: [`../plans/prometheus-metrics.md`](../plans/prometheus-me
 
 | Item | Value |
 |---|---|
-| Page | `/monitoring/prometheus` (`app/monitoring/prometheus/page.tsx`, `components/monitoring/prometheus/{prometheus,prometheus-card,scrape-config}.tsx` + `shapes.ts`); sidebar entry is a sub-item of Connection Quality (beside Latency Monitor and Network Events), the route is unchanged |
+| Page | `/monitoring/prometheus` (`app/monitoring/prometheus/page.tsx`, `components/monitoring/prometheus/{prometheus,prometheus-card,scrape-config}.tsx` + `shapes.ts`); sidebar entry is a sub-item of Connection Quality (beside Network Events), the route is unchanged |
 | Hook / types | `hooks/use-prometheus-metrics.ts`, `types/prometheus-metrics.ts` |
 | Scrape CGI | `GET /cgi-bin/quecmanager/metrics/prometheus.sh` (bearer token, no session cookie) |
 | Settings CGI | `GET/POST /cgi-bin/quecmanager/monitoring/prometheus.sh` (session cookie via `cgi_base.sh`) |

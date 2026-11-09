@@ -1,7 +1,7 @@
-// Sites monitor: the GET/POST contract of the sites CGI (docs/reference/sites-monitor.md).
+// Sites monitor: the GET/POST contract of the sites CGI (docs/features/sites-monitor.md).
 
-/** The ranges the Latency Monitor page reads; "now" is live latest-only with an empty series. */
-export type SitesRange = "now" | "1h" | "24h" | "7d";
+/** The ranges the sites CGI serves the page; "now" is live latest-only with an empty series. */
+export type SitesRange = "now" | "24h" | "7d" | "30d";
 
 export interface SiteLatest {
   ts: number;

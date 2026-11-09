@@ -47,7 +47,6 @@
     "traffic_masquerade": "Traffic Masquerade",
     "traffic_engine": "Traffic Engine",
     "network_events": "Eventi di rete",
-    "latency_monitor": "Monitoraggio della latenza",
     "alerts": "Avvisi",
     "tailscale": "Tailscale",
     "netbird": "NetBird",

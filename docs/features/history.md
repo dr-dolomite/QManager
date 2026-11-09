@@ -301,8 +301,120 @@ sh history-test.sh <flat dir>
 | `hist_tick` cost | micro-benchmark about 1.5 ms per poller cycle averaged (about 0.08 % of one core at the 2 s period), with the cellular and connection providers loaded |
 | Whole-poller CPU | 4.74 % (idle tier 12/12) against a 4.17 % baseline (idle 3 / deep 9). The delta is the tier mix, not history |
 | UI (dev server, captured live responses) | 24h/7d/30d switch refetches both endpoints at once; error state and retry verified |
+| Reboot survival | passed. Day files, `since` and events survived. The TERM flush stored the open buckets and the last events. After boot the clock stayed untrusted (`hist_trusted=0`, samples in `.pending`) until uptime about 344 s, then re-trusted and back-dated both series. No row is dated before 2023 in the day files or queues. The reboot gap reads as no data, not an outage. The on-device test was rerun after the reboot: 50 passed, 0 failed |
+| Poller restart with a third series loaded | `[cellular connection system]` loaded; the cellular run resumed without a gap |
 
 **Open (not yet done):**
 
-- Reboot survival: pending (needs the user's OK).
-- Outage observed live: pending.
+- Outage observed live: not yet observed (none occurred during validation; forcing one with `AT+CFUN=4` needs the user's OK).
+
+---
+
+## Connection History
+
+`/history/connection` is the second History page and the home of what used to be the Latency Monitor (retired, see [`../reference/latency-monitor.md`](../reference/latency-monitor.md)). It answers "was the internet up, and how fast was it" over 24 h, 7 d or 30 d: a reachability strip, four metric charts, the per-site Sites card and the connection events. The series is a provider file only; the core, the two CGIs and the shared pieces in §1 to §8 are unchanged.
+
+### Quick Reference
+
+| Item | Value |
+|---|---|
+| Page | `/history/connection` (sidebar **History** group, sub-row `history_connection`); `app/history/connection/page.tsx` |
+| Provider | `scripts/usr/lib/qmanager/history_series_connection.sh` (series id `connection`) |
+| States | `up down off` (fault: `down`) |
+| Metrics | `lat_ms jit_ms loss_pct dns_ms` (integers, only sampled while `up`) |
+| Events | `internet_lost internet_restored high_latency latency_recovered high_packet_loss packet_loss_recovered watchcat_recovery sim_failover` |
+| `EVENTS_KEEP` | `internet_lost internet_restored sim_failover` (kept past the per-day event cap) |
+| `PAIRS` | `internet_lost:internet_restored high_latency:latency_recovered high_packet_loss:packet_loss_recovered` |
+| Page components | `components/history/connection/**` (`connection-history.tsx`, `reachability-card.tsx`, `summary-tiles.tsx`, `metric-charts.tsx`, `connection-events-card.tsx`), pure logic in `derive.ts`, `chart-metrics.ts`, `events-presentation.ts`; data access in `data.ts` (thin wrappers over `useHistorySeries` / `useHistoryEvents`); types in `types.ts` |
+| Sites card | `components/history/connection/sites/` (`sites-card.tsx`, `site-detail.tsx`, `manage-sites-dialog.tsx`, `site-mark.tsx`, `condition-block.tsx`, `derive.ts`, `shapes.ts`); depends on `hooks/use-sites.ts` and `monitoring/sites.sh`, see [sites-monitor.md](sites-monitor.md) |
+| Limits | `connectivity.thresholds.latency_ms` / `.loss_pct` from `useModemStatus` (30 s poll); fallback **250 ms / 30 %** (`DEFAULT_LIMITS`) |
+| Copy | `history` namespace, `connection.*`, all five locales (the Sites strings moved here from `dashboard` `latencyMonitor.*`) |
+| AT / probe cost | **none**: reads globals the poller already holds; no new probe, no AT command |
+
+### State rules
+
+Resolved each 10 s tick by `hist_connection_sample` from the poller's globals (first match wins):
+
+| Sample | Rule |
+|---|---|
+| `off` | `t1_cfun` is `0` or `4`. The radio is off on purpose, so it is **not an outage**. It is drawn as no data. |
+| `down` | `conn_internet_available` is `false` (the ping daemon's verdict, `qmanager_ping`). The only fault state. |
+| `up` | `conn_internet_available` is `true` |
+| no sample | `conn_internet_available` is anything else (`null`: the ping data is missing or stale). The tick takes no sample, so that time reads as no data. |
+
+**Why:** `down` must mean "the ping daemon said so", not "we lost sight of the ping daemon". A stalled prober, a poller restart and a reboot all produce no data, never a fake outage. `off` is separate from `down` so an airplane-mode night does not read as an outage in the availability figure (`availability = up / (up + down)`, `off` and no data are in neither).
+
+### Metric sources and cadence
+
+| Metric | Source global | Notes |
+|---|---|---|
+| `lat_ms` | `conn_latency` | The **last RTT**, rounded to whole ms (0 to 60000). Bucket avg/min/max come from real RTTs, not a 5-minute average. |
+| `jit_ms` | `conn_jitter` | 5-minute window from the poller; `null` while immature = no reading. 0 to 60000. |
+| `loss_pct` | `conn_packet_loss` | Integer %, 5-minute window from the poller. 0 to 100. |
+| `dns_ms` | `dns_lookup_ms` | The Connection Quality DNS sidecar; `null` after 180 s = no reading ([connection-quality.md](connection-quality.md#dns-lookup-time)). 0 to 60000. |
+
+- **Metrics are sampled only while `up`.** A `down` or `off` tick adds time to its state and no metric value, so a dead link never writes a 0 ms latency.
+- **Cadence chain.** `qmanager_ping` probes once per Sensitivity interval; the poller reads the result every 2 s cycle; the history samples every 10 s (§2). A value is therefore repeated between pings, which weights the bucket average by time, as for any other slow input.
+- **Loss and jitter lag.** They are 5-minute windows, so a short burst raises the loss figure for up to five minutes after it ends. Read the Reachability strip for when it happened and the loss chart for how much.
+- Values pass `_hcn_v` (builtins only): non-numeric, negative, multi-dot or out-of-range input is no reading; `62.4` rounds to `62`. The provider forks nothing and sends no AT command.
+
+### "Slow or lossy" is derived, never stored
+
+The store holds `up`, `down` and `off` seconds plus metrics. "Slow or lossy" exists only in the page (`bucketKind` in `derive.ts`), per bucket, against the **current** limits:
+
+| Reachability colour | Rule (first match wins) |
+|---|---|
+| Destructive (down) | `x > 0` or any `down` seconds in the bucket |
+| `surface-container-high` (no data) | no `up` time (a partly covered bucket is graded on what it saw) |
+| Warning (slow or lossy) | bucket average latency above the latency limit, **or** bucket average loss at or above 5 % (`LOSS_SLOW_PCT`) |
+| Success (responsive) | otherwise |
+
+**Why:** the limit is a user setting. Storing a verdict would freeze it at the limit of the day; deriving it means changing the limit in Connection Quality recolours the whole history. Any outage wins so a 30-second drop stays visible inside a 12-hour bucket. The summary tile "Slow in N of M periods" counts warning buckets out of the buckets that are not no data.
+
+### Page anatomy
+
+The range control (24h / 7d / 30d) is the only page-level state besides the shared cursor; every card follows it.
+
+1. **Summary tiles** (`summary-tiles.tsx`): Online for, Offline for or Radio off (how long the current state has held, `current.since`), Last outage (`last_fault`), Availability % (floored, so an outage never reads as a perfect 100; 99.99 at most with any down time), Median latency (median of the per-bucket averages) with "Slow in N of M periods" or "Within your limit".
+2. **Reachability strip** (`reachability-card.tsx`): one bar per bucket in the colours above, legend of the states present, tooltip with the figures.
+3. **Charts** (`metric-charts.tsx`, 2x2): Latency, Packet loss (bars), Jitter, DNS lookup. Dashed limit lines for latency and loss. A bucket that spent half or more of its observed time down plots as a gap (the line breaks) and an outage band marks it. Y top = nice ceiling of `max(p95 of bucket averages x 1.25, floor, limit x 1.2)`, floors 300 ms / 40 % / 20 ms / 60 ms.
+4. **Sites card** (below).
+5. **Connection events** (`connection-events-card.tsx`): newest first, type filter (Outages, High latency, Packet loss, Watchdog, SIM failover), 5 / 10 / 25 / 50 rows per page (default 5), a **Lasted** column on onset rows.
+
+The strip, charts and events share one cursor (`history-cursor.tsx`): hovering a bar marks that moment on every card. A collector with no trusted clock answers with no buckets; `withBuckets` lays out empty buckets so the cards still draw their collecting state.
+
+### Events: pairing and the external spool
+
+- **Lasted.** `history/events.sh` reads `HIST_connection_PAIRS`. Each onset row (`internet_lost`, `high_latency`, `high_packet_loss`) gets `"end": <epoch>` of the next matching recovery, or `"end": null` when none exists yet (ongoing). The page shows the duration, or "Ongoing" (destructive ink for an outage). Pairing scans every retained row (31 days), not only the range window, so an onset near the start of the window still finds its recovery. `HIST_cellular_PAIRS="signal_lost:signal_restored"` uses the same mechanism. A core without `PAIRS` returns no `end` and the column shows nothing.
+- **Why in the CGI:** pairing in the client fails across pages (the recovery can sit on page 2), so the one place that sees all rows does it.
+- **Watchdog and SIM failover rows** (`watchcat_recovery`, `sim_failover`) are written by `qmanager_watchcat`, a separate daemon with no `history.sh`. `events.sh` `append_event` calls `_ev_hist_spool` when `hist_event` is not defined, which appends `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool` (only once the poller has made that directory; capped at 200 lines, new lines are dropped when full). The poller's `hist_tick` ingests the spool (`_hist_spool`, rename then read) through the normal `hist_event` path, using the `mono` the writer recorded. There is still exactly one writer to flash. A watchdog recovery is `info` severity: the watchdog acting is a fact, not a verdict.
+
+### Sites card and alignment
+
+The Sites card follows the page range. `useSites(range: HistoryRange, live: boolean)` requests `monitoring/sites.sh?range=24h|7d|30d`, whose buckets are **1800 s / 10800 s / 43200 s**, the same UTC-aligned sizes as the History ranges. The two are aligned **on the server** on purpose: the old 20-minute, 2-hour and 8-hour buckets do not divide into the page's buckets, so client re-binning would smear samples across bars and break the shared cursor. The 24h range no longer returns raw rows. Daemon, store and CGI contract: [sites-monitor.md](sites-monitor.md).
+
+- **Value under each logo.** In Live, the latest live sample (`liveData`; a miss reads "No reply"). Otherwise `siteAverage(series)` over the range: the mean of **answered** samples, each bucket weighted by its `ok` count (not a mean of bucket means). No answered sample but some sampled reads "No reply"; never checked reads "Not checked yet"; anything else is a dash.
+- **Tone.** `latencyTone(ms, limit)`: amber above the latency limit, red above twice the limit, green otherwise. A Sites figure is a **TCP connect time** graded against the same single latency limit as the ICMP probe, not a site-specific number.
+- **Live values** replaces the old "Now" pill. It is a row in the **Manage** dialog (On/Off, disabled while Monitor is off), part of the dialog draft and applied on Save. It is this viewer's choice, held in the card's state, never sent to the modem (the lease belongs to whoever is watching). On, `useSites` runs a second loop reading `?range=now` every 2 s (`LIVE_POLL_MS`) **only while the tab is visible and the monitor is enabled**; each read renews the daemon's lease ([sites-monitor.md](sites-monitor.md#live-mode-now)). The result lands in `liveData` and never touches `data`; turning Live off clears it. A disabled monitor writes no lease, so Live reads nothing.
+- **`dataRange` / `dataNow`.** `dataRange` is the range `data` was read for and lags `range` until the new read lands (the figures dim meanwhile); `dataNow` is the right edge of the detail chart's bucket grid. Every fetch carries a sequence number so a slow 30d read cannot overwrite a newer 24h one.
+- **Detail panel.** Clicking a site opens Average, Fastest, Slowest, Answered % and a latency chart over the range with the limit line.
+- **Cadence.** Range read: 30 s idle, 3 s while `checking` or a check is pending (a pending check expires after 90 s). No Check now button: a successful Manage save with the monitor on calls `checkNow()` without blocking the dialog, and only a failed check toasts (`connection.toast.check_failed`).
+- **Manage dialog.** On/Off, sweep interval, the site list. `normalizeHost` lower-cases and strips scheme, credentials, path, query and port (not `www.`); `hostError` returns `invalid`, `duplicate` or `full` at `MAX_SITES = 32`.
+- **Toasts** (`connection.toast.*`): `save_ok` / `save_failed` (dialog), `turn_on_ok` / `turn_on_failed`, `check_failed`. Failure descriptions come from the call's returned `MutationResult` through `resolveErrorMessage`. Polling, range changes and draft edits never toast ([toast-confirmation.md](../reference/toast-confirmation.md)).
+
+> ⚠️ WARNING: the saved sites config is built by `configOf()` in `sites-card.tsx`, which keeps only `kind: "site"` entries. The CGI response can include a `kind: "gateway"` entry that is not part of the config; saving it back would add the gateway as a site. Any new save path (Turn on, the dialog) must go through `configOf`.
+
+**Brand marks.** `site-mark.tsx` is a thin wrapper over the shared `components/ui/brand-mark.tsx` (also used by the SMS sender discs; contract in [sms.md](sms.md#sender-identity-and-logos)). One map, `BRAND_MARKS`, holds domain to glyph and colour; add a brand there and nowhere else. `markFor()` strips a leading `www.` and matches the domain or any subdomain. A `null` colour means on-surface ink (near-black brands, and any hex that fails contrast on either tile; check a new hex on the tile in both themes). `dota2.com` needs its mapped mark because it serves only a 16 px favicon. An unmapped host goes through `lib/logo-store.ts` (Hunter, then the Google s2 favicon, else a monogram); Sites tiles keep the fitted logo, the SMS discs fill the disc.
+
+### Invariants
+
+- **No new probes, no AT.** The series reads globals the poller already holds. Adding a probe for this page would double the load on the modem for data the Connection Quality pipeline already produces.
+- **"Slow" is never stored.** Do not add a `slow` state to the provider; the page derives it from the live limits.
+- **`off` is not an outage.** CFUN 0/4 is `off`, shown as no data, excluded from availability and from the outage count.
+- **A stale or missing ping is no data**, not `down`.
+- **The Sites ranges stay aligned.** If you change a History range or bucket size, change the `24h` / `7d` / `30d` buckets in `monitoring/sites.sh` with it.
+- **`hooks/use-latency-history.ts` stays.** The dashboard Connection Quality card still reads the in-RAM ping archive; only the Latency Monitor page was retired.
+
+### Retired route
+
+`app/monitoring/latency/page.tsx` is a client-side redirect to `/history/connection` (`router.replace`). QManager is a static export served off the modem, so a server redirect is impossible; a `Suspense`-wrapped client page keeps old bookmarks working. The `latency_monitor` sidebar row is gone.

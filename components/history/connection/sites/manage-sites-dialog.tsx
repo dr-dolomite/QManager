@@ -3,8 +3,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { CheckIcon, PlusIcon, XIcon } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,10 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MaterialSymbol } from "@/components/ui/material-symbol";
 import { SaveButton, useSaveFlash } from "@/components/ui/save-button";
 import { SegmentedField } from "@/components/ui/segmented-field";
 import { resolveErrorMessage } from "@/lib/i18n/resolve-error";
-import { cn } from "@/lib/utils";
 import type { MutationResult } from "@/types/mutation-result";
 import type { SiteConfigEntry, SitesConfig } from "@/types/sites";
 
@@ -30,38 +28,42 @@ import { SiteMark } from "./site-mark";
 const BASE_INTERVALS = [60, 300, 900, 3600] as const;
 
 const HOST_ERROR_KEY = {
-  invalid: "latencyMonitor.manage.error_invalid",
-  duplicate: "latencyMonitor.manage.error_duplicate",
-  full: "latencyMonitor.manage.error_full",
+  invalid: "connection.manage.error_invalid",
+  duplicate: "connection.manage.error_duplicate",
+  full: "connection.manage.error_full",
 } satisfies Record<HostError, string>;
 
 type Monitor = "on" | "off";
 
 const glyph = (className: string) => (
-  <CheckIcon aria-hidden className={cn("size-4", className)} />
+  <MaterialSymbol name="check" size={16} className={className} />
 );
 
 /** A sweep interval in the largest whole unit: "1 h", "5 min", "90 s". */
 export function useIntervalLabel() {
-  const { t } = useTranslation("dashboard");
+  const { t } = useTranslation("history");
   return (sec: number) =>
     sec % 3600 === 0
-      ? t("latencyMonitor.interval.hours", { n: sec / 3600 })
+      ? t("connection.manage.every.hours", { n: sec / 3600 })
       : sec % 60 === 0
-        ? t("latencyMonitor.interval.minutes", { n: sec / 60 })
-        : t("latencyMonitor.interval.seconds", { n: sec });
+        ? t("connection.manage.every.minutes", { n: sec / 60 })
+        : t("connection.manage.every.seconds", { n: sec });
 }
 
 interface ManageFormProps {
   seed: SitesConfig;
+  /** Live values on the card: this viewer's choice, applied on Save, never sent to the modem. */
+  live: boolean;
   onSave: (config: SitesConfig) => Promise<MutationResult>;
+  onLiveChange: (live: boolean) => void;
   onDone: () => void;
 }
 
-function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
-  const { t } = useTranslation("dashboard");
+function ManageForm({ seed, live, onSave, onLiveChange, onDone }: ManageFormProps) {
+  const { t } = useTranslation("history");
   const errorId = useId();
   const [monitor, setMonitor] = useState<Monitor>(seed.enabled ? "on" : "off");
+  const [liveDraft, setLiveDraft] = useState<Monitor>(live ? "on" : "off");
   const [intervalSec, setIntervalSec] = useState(String(seed.interval_sec));
   const [sites, setSites] = useState<SiteConfigEntry[]>(seed.sites);
   const [input, setInput] = useState("");
@@ -106,16 +108,17 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
     });
     setSaving(false);
     if (result.ok) {
+      onLiveChange(monitor === "on" && liveDraft === "on");
       markSaved();
-      toast.success(t("latencyMonitor.toast.save_ok"));
+      toast.success(t("connection.toast.save_ok"));
       onDone();
     } else {
-      toast.error(t("latencyMonitor.toast.save_failed"), {
+      toast.error(t("connection.toast.save_failed"), {
         description: resolveErrorMessage(
           t,
           result.code,
           result.error,
-          t("latencyMonitor.sites.error_description"),
+          t("connection.sites.error_description"),
         ),
       });
     }
@@ -124,24 +127,24 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
   return (
     <>
       <DialogHeader className="text-left">
-        <DialogTitle>{t("latencyMonitor.manage.title")}</DialogTitle>
+        <DialogTitle>{t("connection.manage.title")}</DialogTitle>
         <DialogDescription className="text-on-surface-variant">
-          {t("latencyMonitor.manage.description", { max: MAX_SITES })}
+          {t("connection.manage.description", { max: MAX_SITES })}
         </DialogDescription>
       </DialogHeader>
 
       <div className={DIALOG.ROW}>
         <span className={DIALOG.ROW_LABEL}>
-          {t("latencyMonitor.manage.monitor")}
+          {t("connection.manage.monitor")}
         </span>
         <SegmentedField<Monitor>
           value={monitor}
           onValueChange={setMonitor}
           options={[
-            { value: "on", label: t("latencyMonitor.manage.on") },
-            { value: "off", label: t("latencyMonitor.manage.off") },
+            { value: "on", label: t("connection.manage.on") },
+            { value: "off", label: t("connection.manage.off") },
           ]}
-          ariaLabel={t("latencyMonitor.manage.monitor")}
+          ariaLabel={t("connection.manage.monitor")}
           breakpoint="never"
           glyph={glyph}
         />
@@ -149,13 +152,31 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
 
       <div className={DIALOG.ROW}>
         <span className={DIALOG.ROW_LABEL}>
-          {t("latencyMonitor.manage.interval")}
+          {t("connection.manage.live")}
+        </span>
+        <SegmentedField<Monitor>
+          value={monitor === "on" ? liveDraft : "off"}
+          onValueChange={setLiveDraft}
+          options={[
+            { value: "on", label: t("connection.manage.on") },
+            { value: "off", label: t("connection.manage.off") },
+          ]}
+          ariaLabel={t("connection.manage.live")}
+          breakpoint="never"
+          glyph={glyph}
+          disabled={monitor !== "on"}
+        />
+      </div>
+
+      <div className={DIALOG.ROW}>
+        <span className={DIALOG.ROW_LABEL}>
+          {t("connection.manage.interval")}
         </span>
         <SegmentedField
           value={intervalSec}
           onValueChange={setIntervalSec}
           options={intervalOptions}
-          ariaLabel={t("latencyMonitor.manage.interval")}
+          ariaLabel={t("connection.manage.interval")}
           breakpoint="lg"
           glyph={glyph}
         />
@@ -163,11 +184,11 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
 
       <div className={DIALOG.WELL}>
         {sites.length === 0 ? (
-          <p className={DIALOG.EMPTY}>{t("latencyMonitor.manage.empty")}</p>
+          <p className={DIALOG.EMPTY}>{t("connection.manage.empty")}</p>
         ) : (
           <ul
             className={DIALOG.LIST}
-            aria-label={t("latencyMonitor.manage.list_aria")}
+            aria-label={t("connection.manage.list_aria")}
           >
             {sites.map((site) => (
               <li key={site.host} className={DIALOG.ITEM}>
@@ -177,14 +198,14 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  aria-label={t("latencyMonitor.manage.remove", {
+                  aria-label={t("connection.manage.remove", {
                     host: site.host,
                   })}
                   onClick={() =>
                     setSites((prev) => prev.filter((s) => s.host !== site.host))
                   }
                 >
-                  <XIcon aria-hidden />
+                  <MaterialSymbol name="close" size={18} />
                 </Button>
               </li>
             ))}
@@ -200,8 +221,8 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
             setInput(e.target.value);
             if (error) setError(null);
           }}
-          placeholder={t("latencyMonitor.manage.add_placeholder")}
-          aria-label={t("latencyMonitor.manage.add_label")}
+          placeholder={t("connection.manage.add_placeholder")}
+          aria-label={t("connection.manage.add_label")}
           aria-invalid={error !== null || undefined}
           aria-describedby={error ? errorId : undefined}
           autoCapitalize="off"
@@ -216,8 +237,8 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
           className="h-[2.625rem]"
           disabled={sites.length >= MAX_SITES}
         >
-          <PlusIcon aria-hidden />
-          {t("latencyMonitor.manage.add")}
+          <MaterialSymbol name="add" size={18} />
+          {t("connection.manage.add")}
         </Button>
       </form>
       {error ? (
@@ -228,20 +249,20 @@ function ManageForm({ seed, onSave, onDone }: ManageFormProps) {
 
       <DialogFooter className={DIALOG.FOOTER}>
         <span className={DIALOG.COUNT}>
-          {t("latencyMonitor.manage.count", {
+          {t("connection.manage.count", {
             n: sites.length,
             max: MAX_SITES,
           })}
         </span>
         <DialogClose asChild>
           <Button type="button" variant="ghost">
-            {t("latencyMonitor.manage.cancel")}
+            {t("connection.manage.cancel")}
           </Button>
         </DialogClose>
         <SaveButton
           isSaving={saving}
           saved={saved}
-          label={t("latencyMonitor.manage.save")}
+          label={t("connection.manage.save")}
           onClick={handleSave}
           disabled={saving}
         />
@@ -256,7 +277,9 @@ export interface ManageSitesDialogProps {
   /** Re-seeds the draft on every open, so a cancelled edit never lingers. */
   formKey: number;
   seed: SitesConfig | null;
+  live: boolean;
   onSave: (config: SitesConfig) => Promise<MutationResult>;
+  onLiveChange: (live: boolean) => void;
 }
 
 export function ManageSitesDialog({
@@ -264,7 +287,9 @@ export function ManageSitesDialog({
   onOpenChange,
   formKey,
   seed,
+  live,
   onSave,
+  onLiveChange,
 }: ManageSitesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -273,7 +298,9 @@ export function ManageSitesDialog({
           <ManageForm
             key={formKey}
             seed={seed}
+            live={live}
             onSave={onSave}
+            onLiveChange={onLiveChange}
             onDone={() => onOpenChange(false)}
           />
         ) : null}

@@ -2,7 +2,7 @@
 
 The Sites monitor times a TCP handshake to each website in a list, over the cellular link, every few minutes, and keeps up to 90 days of history: the per-site latency view UniFi and WiFiman show. The one-host ICMP verdict in [Connection Quality](connection-quality.md) answers "is there internet?"; this answers "is YouTube slow right now?". It is a separate daemon, `qmanager_sites`, that never touches the AT port and does **not** feed the connectivity verdict, events, the watchdog or alerts.
 
-Ported from the RM520N fork (ledger B3.1; source `3af1cc15`, `c9d162a2`, `8e8806ec`, `33047f70`, plus the untrusted-pid fix from `ba4df3b3`). The UI (the Sites card on the Latency Monitor, [latency-monitor.md](../reference/latency-monitor.md)) is ledger **U4.8**, which consumes the [CGI contract](#cgi-contract--monitoringsitessh) below.
+Ported from the RM520N fork (ledger B3.1; source `3af1cc15`, `c9d162a2`, `8e8806ec`, `33047f70`, plus the untrusted-pid fix from `ba4df3b3`). The UI is the Sites card on **History > Connection History** (`/history/connection`, [history.md](history.md#connection-history); ledger **U4.8** ported it onto the retired Latency Monitor, [latency-monitor.md](../reference/latency-monitor.md)), which consumes the [CGI contract](#cgi-contract--monitoringsitessh) below.
 
 ## Quick Reference
 
@@ -51,7 +51,7 @@ curl -s -I -o /dev/null --connect-timeout 5 --max-time 6 \
 
 ## Live mode ("Now")
 
-While someone has the Sites card's **Now** range open in a visible tab, the page reads `?range=now` every 2 s. Each read renews the lease, and the daemon probes every site about every 2 s between sweeps:
+While someone has **Live values** on (a row in the Sites card's Manage dialog) in a visible tab, the page reads `?range=now` every 2 s. Each read renews the lease, and the daemon probes every site about every 2 s between sweeps:
 
 | Step | Who | Action |
 |------|-----|--------|
@@ -70,7 +70,7 @@ curl -s -I --resolve <host>:80:<cached-ipv4> -o /dev/null --connect-timeout 1.5 
 - Same `ms` formula; any HTTP reply with curl exit 0 counts, including a redirect. Plain HTTP because a TLS `HEAD` is ~8 times the bytes (8.8 KB vs 1.1 KB per site, measured on the fork).
 - A host that fails loses its cached IP and resolves fresh next tick; a change of the site list clears the cache. IP literals are never cached.
 - Start latency is up to ~6 s (the first renewal usually lands in a 5 s nap); stop is ~10 s after the last renewal. No live ticks run during a sweep, and the gateway entry is never live.
-- Live samples go **only** to `/tmp/qmanager_sites_live.json`, never to raw, rollups or `qmanager_sites.json`, so watching Now changes no 1h–90d figure. The CGI ignores the file once it is more than 6 s old.
+- Live samples go **only** to `/tmp/qmanager_sites_live.json`, never to raw, rollups or `qmanager_sites.json`, so watching Live changes no 1h–90d figure. The CGI ignores the file once it is more than 6 s old.
 - Shape: `{ "at": 1760000000, "results": [ { "host": "google.com", "ms": 41.3, "ok": true } ] }`
 
 ## Cost
@@ -127,10 +127,12 @@ Default `24h`. Anything else → `{ "success": false, "error": "invalid_range", 
 | `now` | — | no history; `series` is `[]`. Renews the live lease and serves the live sample as `latest` |
 | `1h`, `3h`, `6h` | each sample | raw, plus rollups for any hour older than the first raw row |
 | `12h` | 10 min | as above |
-| `24h` | 20 min | as above |
-| `7d` | 2 h | rollups, plus raw rows newer than the rollup cursor |
-| `30d` | 8 h | as `7d` |
+| `24h` | 30 min | as above |
+| `7d` | 3 h | rollups, plus raw rows newer than the rollup cursor |
+| `30d` | 12 h | as `7d` |
 | `90d` | 1 day | as `7d` |
+
+The `24h`/`7d`/`30d` buckets match the History ranges (`docs/features/history.md`: 30 min, 3 h, 12 h, UTC-aligned), so the Sites card on Connection History lines up bar for bar with the page's other cards.
 
 ```json
 {
@@ -173,8 +175,8 @@ Also accepted as `?action=check_now`. Raises the flag → `{ "success": true }`.
 
 ### UI consumer (U4.8)
 
-- The Sites card on `/monitoring/latency` ([latency-monitor.md](../reference/latency-monitor.md)) reads this through `hooks/use-sites.ts`. All six error codes are in the five `errors.json` catalogs; toasts resolve the returned `code` through `resolveErrorMessage` (`invalid_field`'s `reason` is the detail fallback).
-- `range=now` polls every 2 s only while the tab is visible **and** `enabled` is true (fork fix `8e8806ec`): a disabled monitor writes no lease, so 2 s polling would spend CGI time for nothing.
+- The Sites card on `/history/connection` ([history.md](history.md#connection-history)) reads this through `hooks/use-sites.ts`: `useSites(range: HistoryRange, live: boolean)` returns `data`, `dataRange`, `dataNow`, `liveData`, `isLoading`, `error`, `checkPending`, `refresh`, `checkNow` and `save`. The page range (`24h`, `7d` or `30d`) is the CGI `range`; Live values (set in the Manage dialog, not saved to the modem) runs a second loop on `range=now` whose result lands in `liveData` and never replaces `data`. All six error codes are in the five `errors.json` catalogs; toasts resolve the returned `code` through `resolveErrorMessage` (`invalid_field`'s `reason` is the detail fallback).
+- Live (`range=now`) polls every 2 s only while the tab is visible **and** `enabled` is true (fork fix `8e8806ec`): a disabled monitor writes no lease, so 2 s polling would spend CGI time for nothing.
 
 ## Lifecycle
 
@@ -197,4 +199,5 @@ The SIM was walled off by the carrier during the test (ICMP down, HTTP redirecte
 ## Related
 
 - [connection-quality.md](connection-quality.md): the reachability verdict and DNS lookup time this monitor does not replace
-- [`docs/rm520n-port-ledger.md`](../rm520n-port-ledger.md): B3.1 (this) and U4.8 (the card)
+- [history.md](history.md#connection-history): the Sites card and the Connection History page
+- [`docs/rm520n-port-ledger.md`](../rm520n-port-ledger.md): B3.1 (this) and U4.8 (the card, since moved)
