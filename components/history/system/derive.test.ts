@@ -211,6 +211,26 @@ describe("deriveIncidents", () => {
   });
 });
 
+describe("deriveIncidents with journal-era types", () => {
+  it("ignores event types it does not build incidents for", () => {
+    const out = deriveIncidents(
+      [
+        ev(NOW - 100, "software_updated", "x"),
+        ev(NOW - 200, "clock_stepped", "x"),
+        ev(NOW - 300, "storage_low", "x"),
+        ev(NOW - 400, "broker_restarted", "x"),
+        ev(NOW - 500, "oom_kill", "x"),
+        ev(NOW - 600, "imei_changed", "x"),
+        ev(NOW - 700, "modem_recovered", "Modem recovered"),
+        ev(NOW - 800, "device_reboot", "The device restarted"),
+      ],
+      [bucket(NOW - 1800, {}, 1800)],
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe("reboot");
+  });
+});
+
 describe("summaries", () => {
   it("counts lanes and flags what is still going", () => {
     const incidents = deriveIncidents(

@@ -301,7 +301,10 @@
       "storage_low": "存储空间不足",
       "oom_kill": "内存不足",
       "eth_link_up": "以太网已连接",
-      "eth_link_down": "以太网已断开"
+      "eth_link_down": "以太网已断开",
+      "device_reboot": "设备已重启",
+      "modem_crash": "调制解调器崩溃",
+      "modem_recovered": "调制解调器已恢复"
     },
     "description": "无线电模块的最新动态，并标注仍未解决的问题。",
     "error_title": "无法加载事件",

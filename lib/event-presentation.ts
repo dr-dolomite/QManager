@@ -1,3 +1,4 @@
+import { rebootCause } from "@/lib/event-message";
 import type { NetworkEvent, NetworkEventType } from "@/types/modem-status";
 
 // =============================================================================
@@ -60,6 +61,7 @@ const RESOLVED_BY: Partial<Record<NetworkEventType, NetworkEventType>> = {
   dns_failing: "dns_recovered",
   site_down: "site_up",
   eth_link_down: "eth_link_up",
+  modem_crash: "modem_recovered",
 };
 
 /**
@@ -249,6 +251,7 @@ const RECOVERY_TYPES: ReadonlySet<NetworkEventType> = new Set([
   "dns_recovered",
   "site_up",
   "eth_link_up",
+  "modem_recovered",
 ]);
 
 /** Family glyphs for routine info events, so a row is scannable by shape
@@ -293,6 +296,9 @@ const FAMILY_GLYPHS: Partial<Record<NetworkEventType, EventGlyph>> = {
   storage_low: "system",
   oom_kill: "system",
   eth_link_down: "ethernet",
+  device_reboot: "system",
+  modem_crash: "radio",
+  modem_recovered: "radio",
 };
 
 /**
@@ -415,6 +421,10 @@ const SR_KEY: Record<EventTone, string> = {
  * that was gone is back.
  */
 function toneOf(event: NetworkEvent): EventTone {
+  // A restart reads by its cause, not by the backend severity: an unplanned
+  // one is a warning, a planned one is just news.
+  if (event.type === "device_reboot")
+    return rebootCause(event) === "unexpected" ? "warning" : "routine";
   if (event.severity === "error") return "error";
   if (event.severity === "warning") return "warning";
   if (RECOVERY_TYPES.has(event.type) || SELF_RESOLVING.has(event.type))

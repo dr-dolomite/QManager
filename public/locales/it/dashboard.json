@@ -301,7 +301,10 @@
       "storage_low": "Spazio di archiviazione scarso",
       "oom_kill": "Memoria esaurita",
       "eth_link_up": "Ethernet connessa",
-      "eth_link_down": "Ethernet disconnessa"
+      "eth_link_down": "Ethernet disconnessa",
+      "device_reboot": "Dispositivo riavviato",
+      "modem_crash": "Modem in crash",
+      "modem_recovered": "Modem ripristinato"
     },
     "description": "Cosa ha fatto la radio, dal più recente, e se qualcosa è ancora irrisolto.",
     "error_title": "Impossibile caricare gli eventi",

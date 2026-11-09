@@ -301,7 +301,10 @@
       "storage_low": "Penyimpanan Hampir Penuh",
       "oom_kill": "Memori Habis",
       "eth_link_up": "Ethernet Terhubung",
-      "eth_link_down": "Ethernet Terputus"
+      "eth_link_down": "Ethernet Terputus",
+      "device_reboot": "Perangkat Di-restart",
+      "modem_crash": "Modem Crash",
+      "modem_recovered": "Modem Pulih"
     },
     "description": "Apa yang dilakukan radio, terbaru dulu, dan apakah ada yang belum teratasi.",
     "error_title": "Tidak dapat memuat peristiwa",

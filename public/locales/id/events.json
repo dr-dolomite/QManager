@@ -63,7 +63,10 @@
     "storage_low": "Penyimpanan Hampir Penuh",
     "oom_kill": "Memori Habis",
     "eth_link_up": "Ethernet Terhubung",
-    "eth_link_down": "Ethernet Terputus"
+    "eth_link_down": "Ethernet Terputus",
+    "device_reboot": "Perangkat Di-restart",
+    "modem_crash": "Modem Crash",
+    "modem_recovered": "Modem Pulih"
   },
   "message": {
     "apn_changed": "APN diubah dari {{from}} ke {{to}}",
@@ -98,6 +101,15 @@
     "storage_low": "Penyimpanan hampir penuh (tersisa {{free_kb}})",
     "oom_kill": "Memori habis: {{proc}} dihentikan",
     "eth_link_up": "Ethernet terhubung di {{iface}}",
-    "eth_link_down": "Ethernet terputus di {{iface}}"
+    "eth_link_down": "Ethernet terputus di {{iface}}",
+    "device_reboot": "Perangkat melakukan restart",
+    "device_reboot_unexpected": "Perangkat restart tanpa terduga",
+    "device_reboot_update": "Perangkat restart untuk menyelesaikan pembaruan perangkat lunak",
+    "device_reboot_scheduled": "Perangkat restart sesuai jadwal",
+    "device_reboot_user": "Perangkat di-restart dari QManager",
+    "device_reboot_watchdog": "Perangkat di-restart oleh watchdog koneksi",
+    "device_reboot_off": "{{what}} (mati selama {{duration}})",
+    "modem_crash": "Modem crash dan sedang restart",
+    "modem_recovered": "Modem sudah pulih"
   }
 }

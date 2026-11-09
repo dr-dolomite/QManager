@@ -301,7 +301,10 @@
       "storage_low": "儲存空間不足",
       "oom_kill": "記憶體不足",
       "eth_link_up": "乙太網路已連線",
-      "eth_link_down": "乙太網路已中斷"
+      "eth_link_down": "乙太網路已中斷",
+      "device_reboot": "裝置已重新啟動",
+      "modem_crash": "數據機當機",
+      "modem_recovered": "數據機已恢復"
     },
     "description": "無線電模組的最新動態，並標註仍未解決的問題。",
     "error_title": "無法載入事件",

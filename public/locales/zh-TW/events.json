@@ -63,7 +63,10 @@
     "storage_low": "儲存空間不足",
     "oom_kill": "記憶體不足",
     "eth_link_up": "乙太網路已連線",
-    "eth_link_down": "乙太網路已中斷"
+    "eth_link_down": "乙太網路已中斷",
+    "device_reboot": "裝置已重新啟動",
+    "modem_crash": "數據機當機",
+    "modem_recovered": "數據機已恢復"
   },
   "message": {
     "apn_changed": "APN 已從 {{from}} 變更為 {{to}}",
@@ -98,6 +101,15 @@
     "storage_low": "儲存空間不足（剩餘 {{free_kb}}）",
     "oom_kill": "記憶體不足：已停止 {{proc}}",
     "eth_link_up": "乙太網路 {{iface}} 已連線",
-    "eth_link_down": "乙太網路 {{iface}} 已中斷"
+    "eth_link_down": "乙太網路 {{iface}} 已中斷",
+    "device_reboot": "裝置已重新啟動",
+    "device_reboot_unexpected": "裝置意外重新啟動",
+    "device_reboot_update": "裝置為完成軟體更新而重新啟動",
+    "device_reboot_scheduled": "裝置依排程重新啟動",
+    "device_reboot_user": "裝置已從 QManager 重新啟動",
+    "device_reboot_watchdog": "裝置已由連線看門狗重新啟動",
+    "device_reboot_off": "{{what}}（關機 {{duration}}）",
+    "modem_crash": "數據機當機，正在重新啟動",
+    "modem_recovered": "數據機已恢復"
   }
 }

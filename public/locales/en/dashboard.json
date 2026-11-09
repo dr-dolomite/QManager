@@ -301,7 +301,10 @@
       "storage_low": "Storage Low",
       "oom_kill": "Out of Memory",
       "eth_link_up": "Ethernet Connected",
-      "eth_link_down": "Ethernet Disconnected"
+      "eth_link_down": "Ethernet Disconnected",
+      "device_reboot": "Device Restarted",
+      "modem_crash": "Modem Crashed",
+      "modem_recovered": "Modem Recovered"
     },
     "description": "What the radio did, newest first, and whether anything is still unresolved.",
     "error_title": "Couldn't load events",

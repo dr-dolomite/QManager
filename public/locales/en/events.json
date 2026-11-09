@@ -63,7 +63,10 @@
     "storage_low": "Storage Low",
     "oom_kill": "Out of Memory",
     "eth_link_up": "Ethernet Connected",
-    "eth_link_down": "Ethernet Disconnected"
+    "eth_link_down": "Ethernet Disconnected",
+    "device_reboot": "Device Restarted",
+    "modem_crash": "Modem Crashed",
+    "modem_recovered": "Modem Recovered"
   },
   "message": {
     "apn_changed": "APN changed from {{from}} to {{to}}",
@@ -98,6 +101,15 @@
     "storage_low": "Storage is running low ({{free_kb}} free)",
     "oom_kill": "Out of memory: {{proc}} was stopped",
     "eth_link_up": "Ethernet connected on {{iface}}",
-    "eth_link_down": "Ethernet disconnected on {{iface}}"
+    "eth_link_down": "Ethernet disconnected on {{iface}}",
+    "device_reboot": "The device restarted",
+    "device_reboot_unexpected": "The device restarted unexpectedly",
+    "device_reboot_update": "The device restarted to finish a software update",
+    "device_reboot_scheduled": "The device restarted on schedule",
+    "device_reboot_user": "The device was restarted from QManager",
+    "device_reboot_watchdog": "The device was restarted by the connection watchdog",
+    "device_reboot_off": "{{what}} (off for {{duration}})",
+    "modem_crash": "The modem crashed and is restarting",
+    "modem_recovered": "The modem recovered"
   }
 }

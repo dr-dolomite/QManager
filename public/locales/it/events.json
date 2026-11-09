@@ -63,7 +63,10 @@
     "storage_low": "Spazio di archiviazione scarso",
     "oom_kill": "Memoria esaurita",
     "eth_link_up": "Ethernet connessa",
-    "eth_link_down": "Ethernet disconnessa"
+    "eth_link_down": "Ethernet disconnessa",
+    "device_reboot": "Dispositivo riavviato",
+    "modem_crash": "Modem in crash",
+    "modem_recovered": "Modem ripristinato"
   },
   "message": {
     "apn_changed": "APN cambiato da {{from}} a {{to}}",
@@ -98,6 +101,15 @@
     "storage_low": "Spazio di archiviazione quasi esaurito ({{free_kb}} liberi)",
     "oom_kill": "Memoria esaurita: {{proc}} è stato arrestato",
     "eth_link_up": "Ethernet connessa su {{iface}}",
-    "eth_link_down": "Ethernet disconnessa su {{iface}}"
+    "eth_link_down": "Ethernet disconnessa su {{iface}}",
+    "device_reboot": "Il dispositivo si è riavviato",
+    "device_reboot_unexpected": "Il dispositivo si è riavviato inaspettatamente",
+    "device_reboot_update": "Il dispositivo si è riavviato per completare un aggiornamento software",
+    "device_reboot_scheduled": "Il dispositivo si è riavviato come programmato",
+    "device_reboot_user": "Il dispositivo è stato riavviato da QManager",
+    "device_reboot_watchdog": "Il dispositivo è stato riavviato dal watchdog di connessione",
+    "device_reboot_off": "{{what}} (spento per {{duration}})",
+    "modem_crash": "Il modem è andato in crash e si sta riavviando",
+    "modem_recovered": "Il modem si è ripristinato"
   }
 }

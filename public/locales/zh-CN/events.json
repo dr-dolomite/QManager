@@ -63,7 +63,10 @@
     "storage_low": "存储空间不足",
     "oom_kill": "内存不足",
     "eth_link_up": "以太网已连接",
-    "eth_link_down": "以太网已断开"
+    "eth_link_down": "以太网已断开",
+    "device_reboot": "设备已重启",
+    "modem_crash": "调制解调器崩溃",
+    "modem_recovered": "调制解调器已恢复"
   },
   "message": {
     "apn_changed": "APN 已从 {{from}} 更改为 {{to}}",
@@ -98,6 +101,15 @@
     "storage_low": "存储空间不足（剩余 {{free_kb}}）",
     "oom_kill": "内存不足：已停止 {{proc}}",
     "eth_link_up": "以太网 {{iface}} 已连接",
-    "eth_link_down": "以太网 {{iface}} 已断开"
+    "eth_link_down": "以太网 {{iface}} 已断开",
+    "device_reboot": "设备已重启",
+    "device_reboot_unexpected": "设备意外重启",
+    "device_reboot_update": "设备为完成软件更新而重启",
+    "device_reboot_scheduled": "设备按计划重启",
+    "device_reboot_user": "设备已从 QManager 重启",
+    "device_reboot_watchdog": "设备已由连接看门狗重启",
+    "device_reboot_off": "{{what}}（关机 {{duration}}）",
+    "modem_crash": "调制解调器崩溃，正在重启",
+    "modem_recovered": "调制解调器已恢复"
   }
 }
