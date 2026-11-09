@@ -56,9 +56,8 @@ SF_INTERVAL=15
 [ -f /usr/lib/qmanager/safe_tmp.sh ] && . /usr/lib/qmanager/safe_tmp.sh
 PID_FILE="/var/run/qmanager/sms_forward.pid"
 RELOAD_FLAG="/tmp/qmanager_sms_forward_reload"
-# sf_read_inbox runs in a $( ) subshell, so it hands its failure reason to the
-# caller through this file; the caller owns the edge-only logging state.
-READERR_FILE="/tmp/qmanager_sms_forward_rderr"
+# sf_read_inbox runs in a $( ) subshell, so on a read failure it prints
+# "ERR<TAB><reason>" on stdout; the caller owns the edge-only logging state.
 _sf_rd_fail_since=""     # mono of the first failed inbox read; "" = reads OK
 _sf_idle_logged=0        # 1 once the invalid-target idle line was logged
 SEEN_FILE="/var/run/qmanager/sms_forward_seen"
@@ -143,7 +142,7 @@ sf_read_inbox() {
     _lrc=$?
     if [ "$_lrc" -ne 0 ]; then
         _lerr=$(printf '%s' "$_list" | jq -r 'if .error == null then empty else (.error | tostring) end' 2>/dev/null)
-        printf '%s' "${_lerr:-rc=$_lrc}" > "$READERR_FILE" 2>/dev/null
+        printf 'ERR	%s' "${_lerr:-rc=$_lrc}"
         return 1
     fi
 
@@ -310,14 +309,17 @@ sf_mark_seen() {
 process_cycle() {
     _seeding="$1"
 
-    rm -f "$READERR_FILE"
     _inbox=$(sf_read_inbox)
     if [ $? -ne 0 ]; then
-        if [ -f "$READERR_FILE" ] && [ -z "$_sf_rd_fail_since" ]; then
-            mono_now_set
-            _sf_rd_fail_since="$_MONO"
-            qlog_warn "SMS forward: inbox read failed ($(cat "$READERR_FILE" 2>/dev/null)); skipping cycle"
-        fi
+        case "$_inbox" in
+            "ERR$(printf '	')"*)
+                if [ -z "$_sf_rd_fail_since" ]; then
+                    mono_now_set
+                    _sf_rd_fail_since="$_MONO"
+                    qlog_warn "SMS forward: inbox read failed (${_inbox#ERR?}); skipping cycle"
+                fi
+                ;;
+        esac
         return 1
     fi
     if [ -n "$_sf_rd_fail_since" ]; then
