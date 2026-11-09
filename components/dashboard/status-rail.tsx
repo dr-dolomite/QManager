@@ -74,7 +74,7 @@ const CHIP_BASE =
 // chain so a tone with no container pairing cannot compile — the same guarantee
 // `BadgeVariant` gives the shared wrapper, restated here because the rail
 // renders its own pill (see the note above).
-type ChipTone = "success" | "warning" | "destructive" | "muted";
+export type ChipTone = "success" | "warning" | "destructive" | "muted";
 
 const CHIP_TONE: Record<ChipTone, string> = {
   success: "bg-success-container text-on-success-container",
@@ -83,7 +83,7 @@ const CHIP_TONE: Record<ChipTone, string> = {
   muted: "bg-surface-container-high text-on-surface-variant",
 };
 
-function Chip({
+export function Chip({
   tone,
   swapKey,
   children,
@@ -328,7 +328,7 @@ function InternetDot({ chip }: { chip: InternetChip }) {
 // "Throttling (5G)" / "Throttling (5G, LTE)": the parts are the ones the poller
 // measured as slowed, localized one by one. An empty list (the poller said
 // "throttling" without naming a part) falls back to the part-less word.
-function buildThrottleLabel(parts: ThermalPart[], t: TFunction): string {
+export function buildThrottleLabel(parts: ThermalPart[], t: TFunction): string {
   if (parts.length === 0) return t("thermal.chip_bare");
   return t("thermal.chip", {
     parts: parts.map((part) => t(`thermal.parts.${part}`)).join(", "),
