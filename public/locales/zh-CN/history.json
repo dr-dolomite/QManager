@@ -677,7 +677,8 @@
         "disabled": "调试日志已关闭。",
         "enable_failed": "无法开启调试日志。",
         "disable_failed": "无法停止调试日志。"
-      }
+      },
+      "badge": "调试日志已开启（{{left}}）"
     }
   }
 }

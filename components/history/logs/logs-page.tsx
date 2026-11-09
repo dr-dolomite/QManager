@@ -30,6 +30,7 @@ import {
 import { SEGMENTED, SegmentedField } from "@/components/ui/segmented-field";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDeviceSyslog } from "@/hooks/use-device-syslog";
+import { useLogDebug } from "@/hooks/use-log-debug";
 import { LINE_BUDGETS, THIS_BOOT, useSystemLogs, type BootChoice } from "@/hooks/use-system-logs";
 import { copyText } from "@/lib/clipboard";
 import { staggerContainer, staggerItem } from "@/lib/motion";
@@ -51,7 +52,7 @@ import {
   visibleLogText,
 } from "./derive";
 import { BootSelect } from "./boot-select";
-import { DebugLeaseAction } from "./debug-lease-action";
+import { DebugLeaseAction, DebugLeaseBadge, useDebugLeaseToggle } from "./debug-lease-action";
 import { LogList, LogRowsSkeleton } from "./logs-list";
 import { LogsPagination } from "./logs-pagination";
 import { DeviceLogsSummary, LogsSummary, LogsSummarySkeleton } from "./logs-summary";
@@ -68,7 +69,8 @@ import { HISTORY_CARD, HISTORY_PAGE, LOGS, PAGE_SIZES, type PageSize } from "./s
 // Rows are paged (10 by default); a tab, filter or line-budget change returns to
 // page 1. The header's Refresh and Copy act on the tab in view; Clear empties QManager's
 // own log and is only offered on that tab, beside the 30-minute Debug logging
-// action. With the journal backend, a boot selector (This / Previous boot)
+// action; while that lease runs, an info chip with the time left sits in the
+// QManager toolbar. The page owns the lease so a tab switch keeps its state. With the journal backend, a boot selector (This / Previous boot)
 // appears under the toolbar once two boots are held; a finished boot is a fixed
 // record and is not polled. The kernel source reuses it when its response
 // carries boots.
@@ -108,6 +110,9 @@ export function LogsPage() {
 
   // Only the tab in view polls; the clear dialog suspends the QManager feed.
   const qm = useSystemLogs({ paused: tab !== "qmanager" || clearOpen });
+  // The lease lives here, not in the action, so a tab switch keeps its state.
+  const debug = useLogDebug();
+  const toggleDebug = useDebugLeaseToggle(debug);
   const sys = useDeviceSyslog(source, sysLines, {
     paused: tab !== "system",
     boot: source === "kernel" ? kernelBoot : THIS_BOOT,
@@ -272,7 +277,7 @@ export function LogsPage() {
                 <MaterialSymbol name="content_copy" size={ACTION_GLYPH} aria-hidden="true" />
                 {ts("logs.page.copy")}
               </Button>
-              {tab === "qmanager" ? <DebugLeaseAction /> : null}
+              {tab === "qmanager" ? <DebugLeaseAction debug={debug} onToggle={toggleDebug} /> : null}
               {tab === "qmanager" ? (
                 <Button
                   type="button"
@@ -336,22 +341,21 @@ export function LogsPage() {
                 />
               )}
 
-              <Select value={linesValue} onValueChange={changeLines}>
-                <SelectTrigger
-                  size="sm"
-                  aria-label={t("logs.lines_label")}
-                  className="ml-auto tabular-nums"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="rounded-tile">
-                  {lineOptions.map((n) => (
-                    <SelectItem key={n} value={n} className="tabular-nums">
-                      {t("logs.lines_option", { value: n })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="ml-auto flex items-center gap-3">
+                {tab === "qmanager" ? <DebugLeaseBadge debug={debug} /> : null}
+                <Select value={linesValue} onValueChange={changeLines}>
+                  <SelectTrigger size="sm" aria-label={t("logs.lines_label")} className="tabular-nums">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-tile">
+                    {lineOptions.map((n) => (
+                      <SelectItem key={n} value={n} className="tabular-nums">
+                        {t("logs.lines_option", { value: n })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {bootView && bootView.boots.length >= 2 ? (

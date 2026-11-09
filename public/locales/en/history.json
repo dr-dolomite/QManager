@@ -694,7 +694,8 @@
         "disabled": "Debug logging is off.",
         "enable_failed": "Couldn't turn on debug logging.",
         "disable_failed": "Couldn't stop debug logging."
-      }
+      },
+      "badge": "Debug logging on ({{left}})"
     }
   }
 }

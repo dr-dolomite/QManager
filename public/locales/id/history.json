@@ -677,7 +677,8 @@
         "disabled": "Log debug nonaktif.",
         "enable_failed": "Tidak dapat mengaktifkan log debug.",
         "disable_failed": "Tidak dapat menghentikan log debug."
-      }
+      },
+      "badge": "Log debug aktif ({{left}})"
     }
   }
 }

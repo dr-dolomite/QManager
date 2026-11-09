@@ -677,7 +677,8 @@
         "disabled": "除錯日誌已關閉。",
         "enable_failed": "無法開啟除錯日誌。",
         "disable_failed": "無法停止除錯日誌。"
-      }
+      },
+      "badge": "除錯日誌已開啟（{{left}}）"
     }
   }
 }

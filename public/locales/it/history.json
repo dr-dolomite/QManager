@@ -694,7 +694,8 @@
         "disabled": "Log di debug disattivato.",
         "enable_failed": "Impossibile attivare il log di debug.",
         "disable_failed": "Impossibile interrompere il log di debug."
-      }
+      },
+      "badge": "Log di debug attivo ({{left}})"
     }
   }
 }
