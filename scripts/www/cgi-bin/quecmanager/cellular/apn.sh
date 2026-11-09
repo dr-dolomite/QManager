@@ -54,6 +54,15 @@ qlog_init "cgi_apn"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -239,10 +248,16 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
         qlog_info "Save APN: apn=$APN pdp=$PDP_AT cid=$SLOT_CID"
 
+        # Previous live APN (active slot's, "" = carrier default) for the event.
+        ev_from=$(read_config_v2 | jq -r '(.active) as $a | if $a == 0 or $a == null then "" else ((.profiles[] | select(.id == $a) | .apn) // "") end' 2>/dev/null)
+
         # --- Apply to the modem first (modem is the source of truth) --------
         # save always drives the COPS cycle — there is only one APN and it is
         # always meant to be live. Empty-APN slots are prevented by validation.
         apply_apn_to_modem "$SLOT_CID" "$PDP_AT" "$APN" || die "$APN_APPLY_ERR_CODE" "$APN_APPLY_ERR_DETAIL"
+        if [ "$ev_from" != "$APN" ]; then
+            append_event "apn_changed" "APN changed to ${APN} (CID ${SLOT_CID})" "info" "" "from=${ev_from};to=${APN};cid=${SLOT_CID}"
+        fi
 
         # --- Persist slot 1 + set active=1 (best-effort after modem apply) --
         # If the modem write succeeded but the config write fails, still return
@@ -300,7 +315,11 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         qlog_info "Deactivate: reverting slot $active_id (cid=$SLOT_CID) to carrier default; active=0"
 
         # --- Drive the modem first; empty APN -> carrier reassigns default --
+        ev_from=$(printf '%s' "$config_json" | jq -r --argjson id "$active_id" '(.profiles[] | select(.id == $id) | .apn) // ""' 2>/dev/null)
         apply_apn_to_modem "$SLOT_CID" "$PDP_AT" "" || die "$APN_APPLY_ERR_CODE" "$APN_APPLY_ERR_DETAIL"
+        if [ -n "$ev_from" ]; then
+            append_event "apn_changed" "APN reverted to carrier default (CID ${SLOT_CID})" "info" "" "from=${ev_from};to=;cid=${SLOT_CID}"
+        fi
 
         # --- Persist active=0. A persist failure AFTER a successful modem
         # revert still reports success: the modem is already on carrier-default,

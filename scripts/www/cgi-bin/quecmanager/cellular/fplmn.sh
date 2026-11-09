@@ -25,6 +25,15 @@ qlog_init "cgi_fplmn"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # =============================================================================
 # GET — Read FPLMN status
 # =============================================================================
@@ -97,6 +106,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     esac
 
     qlog_info "FPLMN list cleared"
+    append_event "fplmn_cleared" "Forbidden PLMN list cleared" "info" "" ""
     cgi_success
     exit 0
 fi

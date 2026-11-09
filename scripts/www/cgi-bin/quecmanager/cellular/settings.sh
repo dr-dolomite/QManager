@@ -42,6 +42,15 @@ qlog_init "cgi_cellular_settings"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Configuration -----------------------------------------------------------
 CMD_GAP=0.2
 
@@ -474,6 +483,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
             if [ -n "$sim_switch_verified" ]; then
                 qlog_info "SIM procedure: QUIMSLOT=$SIM_SLOT verified active"
+                append_event "sim_switched" "Active SIM slot switched to slot ${SIM_SLOT}" "info" "" "to=${SIM_SLOT}"
                 applied="${applied}sim_slot,"
             else
                 qlog_error "SIM procedure: QUIMSLOT=$SIM_SLOT NOT verified after retry — modem stayed on old slot"

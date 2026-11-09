@@ -29,6 +29,15 @@ qlog_init "cgi_tower_lock"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Load library ------------------------------------------------------------
 if [ -f /usr/lib/qmanager/tower_lock_mgr.sh ]; then
     . /usr/lib/qmanager/tower_lock_mgr.sh
@@ -145,6 +154,8 @@ if [ "$LOCK_TYPE" = "lte" ]; then
         # Failover is no longer auto-enabled on lock; the user must toggle
         # Signal Failover explicitly via settings.sh.
         tower_config_update_lte "true" "$c1_earfcn" "$c1_pci" "$c2_earfcn" "$c2_pci" "$c3_earfcn" "$c3_pci"
+        append_event "tower_lock_changed" "LTE tower lock applied (${num_cells} cell(s))" "info" "" "rat=lte;action=lock;cells=${num_cells}"
+
 
         # Spawn failover watcher only if the user has failover enabled.
         # tower_spawn_failover_watcher returns "false" when config says off.
@@ -185,6 +196,8 @@ if [ "$LOCK_TYPE" = "lte" ]; then
 
         # Update config — preserve ALL cell data, just set enabled=false
         tower_config_update '.lte.enabled = false'
+        append_event "tower_lock_changed" "LTE tower lock cleared" "info" "" "rat=lte;action=unlock;cells=0"
+
 
         # Check if other lock remains active
         nr_active=$(tower_config_get ".nr_sa.enabled")
@@ -259,6 +272,8 @@ elif [ "$LOCK_TYPE" = "nr_sa" ]; then
         # Failover is no longer auto-enabled on lock; the user must toggle
         # Signal Failover explicitly via settings.sh.
         tower_config_update_nr "true" "$nr_pci" "$nr_arfcn" "$nr_scs" "$nr_band"
+        append_event "tower_lock_changed" "NR-SA tower lock applied" "info" "" "rat=nr_sa;action=lock;cells=1"
+
 
         # Spawn failover watcher only if the user has failover enabled.
         failover_armed=$(tower_spawn_failover_watcher)
@@ -298,6 +313,8 @@ elif [ "$LOCK_TYPE" = "nr_sa" ]; then
 
         # Update config — preserve ALL NR params, just set enabled=false
         tower_config_update '.nr_sa.enabled = false'
+        append_event "tower_lock_changed" "NR-SA tower lock cleared" "info" "" "rat=nr_sa;action=unlock;cells=0"
+
 
         # Check if other lock remains active
         lte_active=$(tower_config_get ".lte.enabled")

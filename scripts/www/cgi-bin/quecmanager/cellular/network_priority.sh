@@ -20,6 +20,15 @@ qlog_init "cgi_net_prio"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # =============================================================================
 # GET — Fetch current RAT acquisition order
 # =============================================================================
@@ -87,6 +96,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     esac
 
     qlog_info "RAT acquisition order set to: $ORDER"
+    append_event "rat_priority_changed" "RAT acquisition order changed to ${ORDER}" "info" "" "to=${ORDER}"
     cgi_success
     exit 0
 fi

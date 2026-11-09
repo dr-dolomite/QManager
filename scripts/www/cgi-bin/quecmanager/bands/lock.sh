@@ -29,6 +29,15 @@ qlog_init "cgi_bands_lock"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Configuration -----------------------------------------------------------
 FAILOVER_ENABLED_FILE="/etc/qmanager/band_failover_enabled"
 FAILOVER_ACTIVATED_FLAG="/tmp/qmanager_band_failover"
@@ -102,6 +111,8 @@ case "$result" in
 esac
 
 qlog_info "Band lock applied: $AT_PARAM=$BANDS"
+ev_to=$(printf '%s' "$BANDS" | tr -d ';[:cntrl:]')
+append_event "band_lock_changed" "Band lock changed (${BAND_TYPE}): ${ev_to}" "info" "" "rat=${BAND_TYPE};to=${ev_to}"
 
 # --- Force an early poller Tier-2 refresh so the UI reflects the new band
 #     registration within ~2s instead of the next ~30s tier boundary ---
