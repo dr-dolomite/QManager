@@ -59,7 +59,8 @@ EOF
 
     # Read log level from config (default: INFO)
     local log_level
-    log_level=$(cat /etc/qmanager/log_level 2>/dev/null || echo "INFO")
+    log_level=$(uci -q get quecmanager.logging.level 2>/dev/null)
+    [ -n "$log_level" ] || log_level="INFO"
 
     # -----------------------------------------------------------------
     # Instance 1: Ping Daemon (starts first — no dependencies)

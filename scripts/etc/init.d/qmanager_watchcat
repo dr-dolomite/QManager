@@ -26,7 +26,8 @@ start_service() {
 
     # Read log level from config
     local log_level
-    log_level=$(cat /etc/qmanager/log_level 2>/dev/null || echo "INFO")
+    log_level=$(uci -q get quecmanager.logging.level 2>/dev/null)
+    [ -n "$log_level" ] || log_level="INFO"
 
     procd_open_instance "watchcat"
     procd_set_param command /usr/bin/qmanager_watchcat
