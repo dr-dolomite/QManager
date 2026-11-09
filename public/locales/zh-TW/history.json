@@ -156,7 +156,14 @@
         "pci_change": "小區切換",
         "scc_pci_change": "輔載波切換",
         "band_change": "頻段變化",
-        "ca_change": "載波聚合"
+        "ca_change": "載波聚合",
+        "registration_changed": "註冊狀態",
+        "sim_switched": "SIM 切換",
+        "apn_changed": "APN 變更",
+        "band_lock_changed": "頻段鎖定",
+        "tower_lock_changed": "基地台鎖定",
+        "band_failover": "頻段容錯移轉",
+        "tower_failover": "基地台容錯移轉"
       }
     }
   },
@@ -465,7 +472,12 @@
         "latency": "高延遲",
         "loss": "封包遺失",
         "watchdog": "看門狗",
-        "sim": "SIM 切換"
+        "sim": "SIM 切換",
+        "data_call": "數據連線",
+        "dns": "DNS",
+        "sites": "網站",
+        "address": "WAN 位址",
+        "service": "模組服務"
       }
     },
     "states": {
@@ -577,7 +589,8 @@
     },
     "empty": {
       "title": "尚無日誌",
-      "description": "新的日誌行會顯示在這裡。"
+      "description": "新的日誌行會顯示在這裡。",
+      "description_boot": "那次開機期間沒有記錄任何內容。"
     },
     "empty_level": {
       "title": "此等級沒有日誌行",
@@ -618,6 +631,29 @@
           "eyebrow": "開機以來",
           "caption_other": "核心日誌中有 {{count}} 行"
         }
+      }
+    },
+    "boot": {
+      "label": "開機",
+      "this": "本次開機",
+      "prev": "上次開機",
+      "started": "{{when}} 的開機",
+      "numbered": "第 {{n}} 次開機",
+      "since": "自 {{when}} 起",
+      "span": "{{from}} – {{to}}",
+      "hint_label": "關於開機紀錄",
+      "hint": "QManager 會在重新啟動後保留日誌，因此可以查看上次重新啟動前發生了什麼。"
+    },
+    "debug": {
+      "start": "除錯日誌",
+      "stop": "停止除錯日誌",
+      "start_aria": "開啟除錯日誌 {{minutes}} 分鐘",
+      "stop_aria": "停止除錯日誌，剩餘 {{left}}",
+      "toast": {
+        "enabled": "除錯日誌已開啟 {{minutes}} 分鐘。",
+        "disabled": "除錯日誌已關閉。",
+        "enable_failed": "無法開啟除錯日誌。",
+        "disable_failed": "無法停止除錯日誌。"
       }
     }
   }

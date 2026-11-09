@@ -158,7 +158,14 @@
         "pci_change": "Handovers",
         "scc_pci_change": "Secondary carrier handovers",
         "band_change": "Band changes",
-        "ca_change": "Carrier aggregation"
+        "ca_change": "Carrier aggregation",
+        "registration_changed": "Registration",
+        "sim_switched": "SIM switches",
+        "apn_changed": "APN changes",
+        "band_lock_changed": "Band locks",
+        "tower_lock_changed": "Tower locks",
+        "band_failover": "Band failovers",
+        "tower_failover": "Tower failovers"
       }
     }
   },
@@ -470,7 +477,12 @@
         "latency": "High latency",
         "loss": "Packet loss",
         "watchdog": "Watchdog",
-        "sim": "SIM failover"
+        "sim": "SIM failover",
+        "data_call": "Data connection",
+        "dns": "DNS",
+        "sites": "Sites",
+        "address": "WAN address",
+        "service": "Modem service"
       }
     },
     "states": {
@@ -582,7 +594,8 @@
     },
     "empty": {
       "title": "Nothing logged yet",
-      "description": "New log lines will appear here."
+      "description": "New log lines will appear here.",
+      "description_boot": "Nothing was logged in that boot."
     },
     "empty_level": {
       "title": "No lines at this level",
@@ -631,6 +644,29 @@
           "caption_one": "{{count}} line in the kernel log",
           "caption_other": "{{count}} lines in the kernel log"
         }
+      }
+    },
+    "boot": {
+      "label": "Boot",
+      "this": "This boot",
+      "prev": "Previous boot",
+      "started": "Boot from {{when}}",
+      "numbered": "Boot {{n}}",
+      "since": "Since {{when}}",
+      "span": "{{from}} – {{to}}",
+      "hint_label": "About boots",
+      "hint": "QManager keeps its log across restarts, so you can read what happened before the last one."
+    },
+    "debug": {
+      "start": "Debug logging",
+      "stop": "Stop debug logging",
+      "start_aria": "Turn on debug logging for {{minutes}} minutes",
+      "stop_aria": "Stop debug logging, {{left}} left",
+      "toast": {
+        "enabled": "Debug logging is on for {{minutes}} minutes.",
+        "disabled": "Debug logging is off.",
+        "enable_failed": "Couldn't turn on debug logging.",
+        "disable_failed": "Couldn't stop debug logging."
       }
     }
   }

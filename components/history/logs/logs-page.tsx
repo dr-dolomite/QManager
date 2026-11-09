@@ -30,7 +30,7 @@ import {
 import { SEGMENTED, SegmentedField } from "@/components/ui/segmented-field";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDeviceSyslog } from "@/hooks/use-device-syslog";
-import { LINE_BUDGETS, useSystemLogs } from "@/hooks/use-system-logs";
+import { LINE_BUDGETS, THIS_BOOT, useSystemLogs, type BootChoice } from "@/hooks/use-system-logs";
 import { copyText } from "@/lib/clipboard";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,8 @@ import {
   qmanagerLines,
   visibleLogText,
 } from "./derive";
+import { BootSelect } from "./boot-select";
+import { DebugLeaseAction } from "./debug-lease-action";
 import { LogList, LogRowsSkeleton } from "./logs-list";
 import { LogsPagination } from "./logs-pagination";
 import { DeviceLogsSummary, LogsSummary, LogsSummarySkeleton } from "./logs-summary";
@@ -65,7 +67,11 @@ import { HISTORY_CARD, HISTORY_PAGE, LOGS, PAGE_SIZES, type PageSize } from "./s
 // file) and System (severity, latest problem, then coverage or time since boot).
 // Rows are paged (10 by default); a tab, filter or line-budget change returns to
 // page 1. The header's Refresh and Copy act on the tab in view; Clear empties QManager's
-// own log and is only offered on that tab.
+// own log and is only offered on that tab, beside the 30-minute Debug logging
+// action. With the journal backend, a boot selector (This / Previous boot)
+// appears under the toolbar once two boots are held; a finished boot is a fixed
+// record and is not polled. The kernel source reuses it when its response
+// carries boots.
 // =============================================================================
 
 type LogsTab = "qmanager" | "system";
@@ -98,10 +104,14 @@ export function LogsPage() {
   const [pageSize, setPageSize] = React.useState<PageSize>(PAGE_SIZES[0]);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [clearOpen, setClearOpen] = React.useState(false);
+  const [kernelBoot, setKernelBoot] = React.useState<BootChoice>(THIS_BOOT);
 
   // Only the tab in view polls; the clear dialog suspends the QManager feed.
   const qm = useSystemLogs({ paused: tab !== "qmanager" || clearOpen });
-  const sys = useDeviceSyslog(source, sysLines, { paused: tab !== "system" });
+  const sys = useDeviceSyslog(source, sysLines, {
+    paused: tab !== "system",
+    boot: source === "kernel" ? kernelBoot : THIS_BOOT,
+  });
 
   const qmRows = React.useMemo(
     () => qmanagerLines(filterByLevel(qm.entries, qm.level), Number.POSITIVE_INFINITY),
@@ -134,6 +144,11 @@ export function LogsPage() {
   const changeLines = (next: string) => {
     if (tab === "qmanager") qm.setLines(next);
     else setSysLines(Number(next) as DeviceLogLines);
+    resetPage();
+  };
+  const changeBoot = (next: BootChoice) => {
+    if (tab === "qmanager") qm.setBoot(next);
+    else setKernelBoot(next);
     resetPage();
   };
   const changePageSize = (next: PageSize) => {
@@ -188,6 +203,21 @@ export function LogsPage() {
   const plain = tab === "system" && source === "kernel";
   const levelNarrowed = tab === "qmanager" && qm.level !== "all";
 
+  // The boot selector: QManager's journal, or a journal-backed kernel log.
+  const bootView =
+    tab === "qmanager"
+      ? { boots: qm.boots, thisBoot: qm.thisBoot, value: qm.boot }
+      : plain && device?.boots
+        ? {
+            boots: [...device.boots].sort(
+              (a, b) => (b.last_seq ?? b.first_seq ?? 0) - (a.last_seq ?? a.first_seq ?? 0),
+            ),
+            thisBoot: device.this_boot !== undefined ? String(device.this_boot) : null,
+            value: kernelBoot,
+          }
+        : null;
+  const pastBoot = bootView !== null && bootView.value !== THIS_BOOT;
+
   const levelOptions = LEVEL_OPTIONS.map((value) => ({
     value,
     label: t(`logs.level.${LEVEL_KEY[value]}`),
@@ -238,6 +268,7 @@ export function LogsPage() {
                 <MaterialSymbol name="content_copy" size={ACTION_GLYPH} aria-hidden="true" />
                 {ts("logs.page.copy")}
               </Button>
+              {tab === "qmanager" ? <DebugLeaseAction /> : null}
               {tab === "qmanager" ? (
                 <Button
                   type="button"
@@ -319,6 +350,16 @@ export function LogsPage() {
               </Select>
             </div>
 
+            {bootView && bootView.boots.length >= 2 ? (
+              <BootSelect
+                boots={bootView.boots}
+                thisBoot={bootView.thisBoot}
+                value={bootView.value}
+                onValueChange={changeBoot}
+                nowSec={nowSec}
+              />
+            ) : null}
+
             {loading ? (
               <>
                 <span className="sr-only" role="status">
@@ -345,7 +386,11 @@ export function LogsPage() {
                 className={LOGS.STATE_H}
                 title={t(levelNarrowed ? "logs.empty_level.title" : "logs.empty.title")}
                 description={t(
-                  levelNarrowed ? "logs.empty_level.description" : "logs.empty.description",
+                  levelNarrowed
+                    ? "logs.empty_level.description"
+                    : pastBoot
+                      ? "logs.empty.description_boot"
+                      : "logs.empty.description",
                 )}
                 action={
                   levelNarrowed ? (

@@ -28,6 +28,9 @@ import type {
 //
 // `error` is set only when the current query has no data to show: a failed
 // poll behind an on-screen response keeps that response and retries next tick.
+//
+// `boot` (journal-backed kernel log only): anything but "this" reads a finished
+// boot, which is fetched once and never polled.
 // =============================================================================
 
 const ENDPOINT = "/cgi-bin/quecmanager/system/syslog.sh";
@@ -37,6 +40,8 @@ const FALLBACK_ERROR = "Failed to load device logs";
 export interface UseDeviceSyslogOptions {
   /** Suspend polling and fetching entirely. */
   paused?: boolean;
+  /** Which boot to read: "this" (default, polled), "prev" or a boot id (read once). */
+  boot?: string;
 }
 
 export interface UseDeviceSyslogReturn {
@@ -80,11 +85,15 @@ export function useDeviceSyslog(
   opts: UseDeviceSyslogOptions = {},
 ): UseDeviceSyslogReturn {
   const paused = opts.paused ?? false;
+  const boot = opts.boot ?? "this";
   const { t } = useTranslation("errors");
   const [state, setState] = useState<ResourceState>(INITIAL);
   const [nonce, setNonce] = useState(0);
 
-  const url = `${ENDPOINT}?source=${source}&lines=${lines}`;
+  const url =
+    `${ENDPOINT}?source=${source}&lines=${lines}` +
+    (boot !== "this" ? `&boot=${encodeURIComponent(boot)}` : "");
+  const once = boot !== "this";
   const key = `${url}#${nonce}`;
 
   useEffect(() => {
@@ -124,13 +133,15 @@ export function useDeviceSyslog(
       }
     };
 
-    // Paused while the tab is hidden; fetches at once when shown again.
-    const stop = startVisibleInterval(() => void load(), POLL_MS);
+    // A finished boot is read once. Otherwise paused while the tab is hidden,
+    // and fetched at once when shown again.
+    const stop = once ? () => {} : startVisibleInterval(() => void load(), POLL_MS);
+    if (once) void load();
     return () => {
       controller.abort();
       stop();
     };
-  }, [url, key, paused]);
+  }, [url, key, paused, once]);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 

@@ -224,5 +224,7 @@
   "ota_rate_limited": "發佈伺服器正在限制要求。請稍後再試。",
   "ota_opkg_managed": "QManager 以套件方式安裝。請透過套件管理員更新。",
   "ota_curl_missing": "數據機上未安裝更新所需的工具（curl）。",
-  "ota_bad_request": "更新要求不完整。請重試。"
+  "ota_bad_request": "更新要求不完整。請重試。",
+  "invalid_body": "請求無效",
+  "unavailable": "此裝置不支援該功能"
 }

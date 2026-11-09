@@ -1,3 +1,5 @@
+import type { LogBoot } from "@/types/system-logs";
+
 // =============================================================================
 // Device logs: GET /cgi-bin/quecmanager/system/syslog.sh
 // =============================================================================
@@ -59,6 +61,13 @@ interface DeviceLogBase {
   uptime: number;
   /** Lines in the ring before the lines limit. */
   total: number;
+  // ── Journal fields: absent until the kernel log is journal-backed ──
+  /** The boot this response reads. */
+  boot?: number | string;
+  /** The boot the device is running now. */
+  this_boot?: number | string;
+  /** Boots held, in the Logs page's `LogBoot` shape. */
+  boots?: LogBoot[];
 }
 
 export interface DeviceSystemLogResponse extends DeviceLogBase {

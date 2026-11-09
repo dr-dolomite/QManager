@@ -224,5 +224,7 @@
   "ota_rate_limited": "Il server delle release sta limitando le richieste. Riprova più tardi.",
   "ota_opkg_managed": "QManager è installato come pacchetto. Aggiornalo con il gestore pacchetti.",
   "ota_curl_missing": "Uno strumento necessario all'aggiornamento (curl) non è installato sul modem.",
-  "ota_bad_request": "La richiesta di aggiornamento era incompleta. Riprova."
+  "ota_bad_request": "La richiesta di aggiornamento era incompleta. Riprova.",
+  "invalid_body": "La richiesta non è valida",
+  "unavailable": "Questa funzione non è disponibile su questo dispositivo"
 }

@@ -158,7 +158,14 @@
         "pci_change": "Handover",
         "scc_pci_change": "Handover portante secondaria",
         "band_change": "Cambi di banda",
-        "ca_change": "Aggregazione di portanti"
+        "ca_change": "Aggregazione di portanti",
+        "registration_changed": "Registrazione",
+        "sim_switched": "Cambi di SIM",
+        "apn_changed": "Modifiche APN",
+        "band_lock_changed": "Blocchi banda",
+        "tower_lock_changed": "Blocchi cella",
+        "band_failover": "Failover banda",
+        "tower_failover": "Failover cella"
       }
     }
   },
@@ -470,7 +477,12 @@
         "latency": "Latenza alta",
         "loss": "Perdita di pacchetti",
         "watchdog": "Watchdog",
-        "sim": "Failover SIM"
+        "sim": "Failover SIM",
+        "data_call": "Connessione dati",
+        "dns": "DNS",
+        "sites": "Siti",
+        "address": "Indirizzo WAN",
+        "service": "Servizio modem"
       }
     },
     "states": {
@@ -582,7 +594,8 @@
     },
     "empty": {
       "title": "Ancora nessun log",
-      "description": "Le nuove righe di log compariranno qui."
+      "description": "Le nuove righe di log compariranno qui.",
+      "description_boot": "Non è stato registrato nulla durante quell'avvio."
     },
     "empty_level": {
       "title": "Nessuna riga a questo livello",
@@ -631,6 +644,29 @@
           "caption_one": "{{count}} riga nel log del kernel",
           "caption_other": "{{count}} righe nel log del kernel"
         }
+      }
+    },
+    "boot": {
+      "label": "Avvio",
+      "this": "Avvio attuale",
+      "prev": "Avvio precedente",
+      "started": "Avvio del {{when}}",
+      "numbered": "Avvio {{n}}",
+      "since": "Da {{when}}",
+      "span": "{{from}} – {{to}}",
+      "hint_label": "Informazioni sugli avvii",
+      "hint": "QManager conserva il registro dopo un riavvio, così puoi leggere cosa è successo prima dell'ultimo."
+    },
+    "debug": {
+      "start": "Log di debug",
+      "stop": "Interrompi log di debug",
+      "start_aria": "Attiva il log di debug per {{minutes}} minuti",
+      "stop_aria": "Interrompi il log di debug, {{left}} rimanenti",
+      "toast": {
+        "enabled": "Log di debug attivo per {{minutes}} minuti.",
+        "disabled": "Log di debug disattivato.",
+        "enable_failed": "Impossibile attivare il log di debug.",
+        "disable_failed": "Impossibile interrompere il log di debug."
       }
     }
   }

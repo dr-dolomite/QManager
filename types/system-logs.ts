@@ -26,7 +26,24 @@ export interface LogEntry {
   /** Present but empty when the log line carried no PID. */
   pid: string;
   message: string;
+  /** Journal sequence number; absent from the pre-journal backend. */
+  seq?: number;
+  /** Epoch seconds when the journal knows the wall time; null when it does not. */
+  t?: number | null;
 }
+
+/** One boot the journal holds lines for. */
+export interface LogBoot {
+  /** The boot's id, as the `boot` query parameter accepts it. */
+  boot: number | string;
+  first_seq?: number;
+  last_seq?: number;
+  /** Epoch seconds of the boot's first and last line, null when unknown. */
+  first?: number | null;
+  last?: number | null;
+}
+
+export type LogCounts = Partial<Record<LogLevel, number>>;
 
 export interface LogStats {
   current_size_kb: number;
@@ -45,6 +62,18 @@ export interface LogsResponse {
   total: number;
   stats: LogStats;
   available_components: string[];
+  // ── Journal fields (qmanager_logd); every one is absent from the old backend ──
+  /** The boot this response reads. */
+  boot?: number | string;
+  /** The boot the device is running now. */
+  this_boot?: number | string;
+  /** The newest sequence number in the queried boot; the poll's `after` cursor. */
+  head_seq?: number;
+  /** More lines exist before the oldest returned one. */
+  has_more?: boolean;
+  boots?: LogBoot[];
+  counts?: LogCounts;
+  latest_problem?: LogEntry | null;
   error?: string;
   detail?: string;
 }

@@ -156,7 +156,14 @@
         "pci_change": "小区切换",
         "scc_pci_change": "辅载波切换",
         "band_change": "频段变化",
-        "ca_change": "载波聚合"
+        "ca_change": "载波聚合",
+        "registration_changed": "注册状态",
+        "sim_switched": "SIM 切换",
+        "apn_changed": "APN 更改",
+        "band_lock_changed": "频段锁定",
+        "tower_lock_changed": "基站锁定",
+        "band_failover": "频段故障转移",
+        "tower_failover": "基站故障转移"
       }
     }
   },
@@ -465,7 +472,12 @@
         "latency": "高延迟",
         "loss": "丢包",
         "watchdog": "看门狗",
-        "sim": "SIM 切换"
+        "sim": "SIM 切换",
+        "data_call": "数据连接",
+        "dns": "DNS",
+        "sites": "站点",
+        "address": "WAN 地址",
+        "service": "模组服务"
       }
     },
     "states": {
@@ -577,7 +589,8 @@
     },
     "empty": {
       "title": "暂无日志",
-      "description": "新的日志行会显示在这里。"
+      "description": "新的日志行会显示在这里。",
+      "description_boot": "那次启动期间没有记录任何内容。"
     },
     "empty_level": {
       "title": "此级别没有日志行",
@@ -618,6 +631,29 @@
           "eyebrow": "开机以来",
           "caption_other": "内核日志中有 {{count}} 行"
         }
+      }
+    },
+    "boot": {
+      "label": "启动",
+      "this": "本次启动",
+      "prev": "上次启动",
+      "started": "{{when}} 的启动",
+      "numbered": "第 {{n}} 次启动",
+      "since": "自 {{when}} 起",
+      "span": "{{from}} – {{to}}",
+      "hint_label": "关于启动记录",
+      "hint": "QManager 会在重启后保留日志，因此可以查看上次重启前发生了什么。"
+    },
+    "debug": {
+      "start": "调试日志",
+      "stop": "停止调试日志",
+      "start_aria": "开启调试日志 {{minutes}} 分钟",
+      "stop_aria": "停止调试日志，剩余 {{left}}",
+      "toast": {
+        "enabled": "调试日志已开启 {{minutes}} 分钟。",
+        "disabled": "调试日志已关闭。",
+        "enable_failed": "无法开启调试日志。",
+        "disable_failed": "无法停止调试日志。"
       }
     }
   }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { authFetch } from "@/lib/auth-fetch";
 import type {
   LevelFilter,
+  LogBoot,
   LogEntry,
   LogStats,
   LogsResponse,
@@ -19,6 +20,15 @@ import type {
 // is NOT: the backend's `level` is a minimum-severity FLOOR, so a filtered
 // window cannot report the rail's other counts and picking WARN also showed
 // ERROR. One unfiltered window is fetched and the level is applied in the view.
+//
+// Journal backend (qmanager_logd): entries carry `seq`, and the response names
+// its boot, the boot running now, the newest `head_seq` and the boots held.
+// While this boot is in view, the poll after the first read sends
+// `after=<head_seq>` and appends only what is new (deduped by seq, trimmed to
+// the line budget). The cursor resets when the boot changes or `head_seq`
+// goes backwards (the journal was cleared). A previous boot is a fixed record:
+// it is read once and never polled. Without `head_seq` (the old backend) every
+// poll is a full read, exactly as before.
 // =============================================================================
 
 const CGI_ENDPOINT = "/cgi-bin/quecmanager/system/logs.sh";
@@ -30,6 +40,32 @@ export const POLL_INTERVAL_MS = 10_000;
 const SEARCH_DEBOUNCE_MS = 400;
 
 export const LINE_BUDGETS = ["50", "100", "200", "500"] as const;
+
+/**
+ * Which boot the transcript reads: `this` (live), `prev` (the one before), or
+ * an older boot's id. Sent verbatim as the `boot` parameter.
+ */
+export type BootChoice = string;
+export const THIS_BOOT: BootChoice = "this";
+export const PREV_BOOT: BootChoice = "prev";
+
+interface Cursor {
+  boot: string;
+  head: number;
+}
+
+const bootKey = (b: number | string | undefined): string => (b === undefined ? "" : String(b));
+
+/** Append `fresh` to `prev` (both oldest first), dropping seqs already held. */
+function mergeBySeq(prev: LogEntry[], fresh: LogEntry[], cap: number): LogEntry[] {
+  if (fresh.length === 0) return prev;
+  const held = new Set<number>();
+  for (const e of prev) if (typeof e.seq === "number") held.add(e.seq);
+  const added = fresh.filter((e) => typeof e.seq !== "number" || !held.has(e.seq));
+  if (added.length === 0) return prev;
+  const next = prev.concat(added);
+  return next.length > cap ? next.slice(next.length - cap) : next;
+}
 
 /**
  * What the feed is actually doing, with real referents.
@@ -57,6 +93,13 @@ export interface UseSystemLogsReturn {
   feedState: FeedState;
   /** Epoch seconds of the last read that landed. */
   lastReadAtSec: number | null;
+
+  /** Boots the journal holds (newest first); empty on the old backend. */
+  boots: LogBoot[];
+  /** The id of the boot running now, when the journal reports it. */
+  thisBoot: string | null;
+  boot: BootChoice;
+  setBoot: (next: BootChoice) => void;
 
   level: LevelFilter;
   setLevel: (next: LevelFilter) => void;
@@ -98,6 +141,14 @@ export function useSystemLogs({
   const [error, setError] = useState<string | null>(null);
   const [lastReadAtSec, setLastReadAtSec] = useState<number | null>(null);
   const [tabHidden, setTabHidden] = useState(false);
+  const [boot, setBoot] = useState<BootChoice>(THIS_BOOT);
+  const [boots, setBoots] = useState<LogBoot[]>([]);
+  const [thisBoot, setThisBoot] = useState<string | null>(null);
+
+  // The incremental cursor, and a generation that drops a response from a
+  // query that has since changed (a slow poll landing after a filter switch).
+  const cursorRef = useRef<Cursor | null>(null);
+  const genRef = useRef(0);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -120,8 +171,22 @@ export function useSystemLogs({
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  // The reset path below re-reads through this, so it never closes over itself.
+  const fetchLogsRef = useRef<(silent: boolean, incremental?: boolean) => Promise<boolean>>(
+    async () => false,
+  );
+
+  /**
+   * One read. `incremental` asks only for what follows the cursor; it is a
+   * full read when there is no cursor (old backend, first read, a reset).
+   */
   const fetchLogs = useCallback(
-    async (silent: boolean): Promise<boolean> => {
+    async (silent: boolean, incremental = false): Promise<boolean> => {
+      const cursor = incremental && boot === THIS_BOOT ? cursorRef.current : null;
+      if (!cursor) genRef.current += 1;
+      const gen = genRef.current;
+      const current = () => mountedRef.current && gen === genRef.current;
+
       if (!silent) setIsRefreshing(true);
 
       try {
@@ -130,26 +195,48 @@ export function useSystemLogs({
         if (component !== "all") params.set("component", component);
         if (search.trim()) params.set("search", search.trim());
         if (includeRotated) params.set("include_rotated", "1");
+        if (boot !== THIS_BOOT) params.set("boot", boot);
+        if (cursor) params.set("after", String(cursor.head));
 
         const resp = await authFetch(`${CGI_ENDPOINT}?${params.toString()}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
         const data: LogsResponse = await resp.json();
-        if (!mountedRef.current) return false;
+        if (!current()) return false;
         if (!data.success) {
           throw new Error(data.detail || data.error || "read_failed");
         }
 
-        setEntries(data.entries ?? []);
+        const fresh = data.entries ?? [];
+        const head = typeof data.head_seq === "number" ? data.head_seq : null;
+        const respBoot = bootKey(data.this_boot ?? data.boot);
+
+        // The boot changed or the journal went backwards: the cursor no longer
+        // names a point in this log, so read the window again from scratch.
+        if (cursor && (head === null || respBoot !== cursor.boot || head < cursor.head)) {
+          cursorRef.current = null;
+          return await fetchLogsRef.current(true, false);
+        }
+
+        const cap = Number(lines) || 100;
+        if (cursor) setEntries((prev) => mergeBySeq(prev, fresh, cap));
+        else setEntries(fresh);
+        cursorRef.current =
+          boot === THIS_BOOT && head !== null ? { boot: respBoot, head } : null;
+
         setStats(data.stats ?? null);
-        setAvailableComponents(data.available_components ?? []);
+        if (Array.isArray(data.available_components)) {
+          setAvailableComponents(data.available_components);
+        }
+        setBoots(Array.isArray(data.boots) ? data.boots : []);
+        setThisBoot(data.this_boot !== undefined ? bootKey(data.this_boot) : null);
         setLastReadAtSec(Math.floor(Date.now() / 1000));
         setError(null);
         return true;
       } catch (err) {
         // A failed background poll is NOT silent any more: it sets the error
         // that drives the stale notice. Only the toast is foreground-only.
-        if (!mountedRef.current) return false;
+        if (!current()) return false;
         setError(err instanceof Error ? err.message : "read_failed");
         return false;
       } finally {
@@ -159,22 +246,29 @@ export function useSystemLogs({
         }
       }
     },
-    [lines, component, search, includeRotated],
+    [lines, component, search, includeRotated, boot],
   );
 
-  // First read, and one on every server-side filter change.
   useEffect(() => {
+    fetchLogsRef.current = fetchLogs;
+  }, [fetchLogs]);
+
+  // First read, and one on every server-side filter or boot change.
+  useEffect(() => {
+    cursorRef.current = null;
     void fetchLogs(true);
   }, [fetchLogs]);
 
   // The poll. Deliberately torn down while suspended, which is exactly what
-  // `paused` reports — the interval and the face cannot disagree.
+  // `paused` reports — the interval and the face cannot disagree. A previous
+  // boot is finished, so it is never polled.
   const pollSuspended = paused || tabHidden;
+  const pollable = boot === THIS_BOOT;
   useEffect(() => {
-    if (pollSuspended) return;
-    const id = setInterval(() => void fetchLogs(true), POLL_INTERVAL_MS);
+    if (pollSuspended || !pollable) return;
+    const id = setInterval(() => void fetchLogs(true, true), POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [pollSuspended, fetchLogs]);
+  }, [pollSuspended, pollable, fetchLogs]);
 
   const refresh = useCallback(() => fetchLogs(false), [fetchLogs]);
 
@@ -211,9 +305,15 @@ export function useSystemLogs({
 
   const feedState: FeedState = error
     ? "stopped"
-    : pollSuspended
+    : pollSuspended || !pollable
       ? "paused"
       : "live";
+
+  // Newest first, whatever order the journal sends them in.
+  const orderedBoots = useMemo(() => {
+    const seqOf = (b: LogBoot) => b.last_seq ?? b.first_seq ?? 0;
+    return [...boots].sort((a, b) => seqOf(b) - seqOf(a));
+  }, [boots]);
 
   return {
     entries,
@@ -225,6 +325,10 @@ export function useSystemLogs({
     isClearing,
     feedState,
     lastReadAtSec,
+    boots: orderedBoots,
+    thisBoot,
+    boot,
+    setBoot,
     level,
     setLevel,
     component,

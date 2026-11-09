@@ -156,7 +156,14 @@
         "pci_change": "Handover",
         "scc_pci_change": "Handover carrier sekunder",
         "band_change": "Perubahan pita",
-        "ca_change": "Agregasi carrier"
+        "ca_change": "Agregasi carrier",
+        "registration_changed": "Registrasi",
+        "sim_switched": "Pergantian SIM",
+        "apn_changed": "Perubahan APN",
+        "band_lock_changed": "Kunci band",
+        "tower_lock_changed": "Kunci menara",
+        "band_failover": "Failover band",
+        "tower_failover": "Failover menara"
       }
     }
   },
@@ -465,7 +472,12 @@
         "latency": "Latensi tinggi",
         "loss": "Kehilangan paket",
         "watchdog": "Watchdog",
-        "sim": "Failover SIM"
+        "sim": "Failover SIM",
+        "data_call": "Koneksi data",
+        "dns": "DNS",
+        "sites": "Situs",
+        "address": "Alamat WAN",
+        "service": "Layanan modem"
       }
     },
     "states": {
@@ -577,7 +589,8 @@
     },
     "empty": {
       "title": "Belum ada log",
-      "description": "Baris log baru akan muncul di sini."
+      "description": "Baris log baru akan muncul di sini.",
+      "description_boot": "Tidak ada yang dicatat selama boot itu."
     },
     "empty_level": {
       "title": "Tidak ada baris pada tingkat ini",
@@ -618,6 +631,29 @@
           "eyebrow": "Sejak boot",
           "caption_other": "{{count}} baris di log kernel"
         }
+      }
+    },
+    "boot": {
+      "label": "Boot",
+      "this": "Boot ini",
+      "prev": "Boot sebelumnya",
+      "started": "Boot dari {{when}}",
+      "numbered": "Boot {{n}}",
+      "since": "Sejak {{when}}",
+      "span": "{{from}} – {{to}}",
+      "hint_label": "Tentang boot",
+      "hint": "QManager menyimpan log-nya setelah restart, jadi Anda bisa membaca apa yang terjadi sebelum restart terakhir."
+    },
+    "debug": {
+      "start": "Log debug",
+      "stop": "Hentikan log debug",
+      "start_aria": "Aktifkan log debug selama {{minutes}} menit",
+      "stop_aria": "Hentikan log debug, tersisa {{left}}",
+      "toast": {
+        "enabled": "Log debug aktif selama {{minutes}} menit.",
+        "disabled": "Log debug nonaktif.",
+        "enable_failed": "Tidak dapat mengaktifkan log debug.",
+        "disable_failed": "Tidak dapat menghentikan log debug."
       }
     }
   }

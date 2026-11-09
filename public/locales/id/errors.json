@@ -224,5 +224,7 @@
   "ota_rate_limited": "Server rilis membatasi permintaan. Coba lagi nanti.",
   "ota_opkg_managed": "QManager dipasang sebagai paket. Perbarui melalui pengelola paket.",
   "ota_curl_missing": "Alat yang dibutuhkan pembaruan (curl) tidak terpasang di modem.",
-  "ota_bad_request": "Permintaan pembaruan tidak lengkap. Coba lagi."
+  "ota_bad_request": "Permintaan pembaruan tidak lengkap. Coba lagi.",
+  "invalid_body": "Permintaan tidak valid",
+  "unavailable": "Fitur ini tidak tersedia di perangkat ini"
 }
