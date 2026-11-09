@@ -21,7 +21,7 @@ System Health is the second History page. It shows how the modem itself held up 
 | Dev test | `tools/history-test/system-test.sh` (51 checks, runs on the device or any POSIX sh) |
 | AT cost | none |
 
-The page also hosts a **Logs card** (QManager tab and System tab, with a System/Kernel switch) at the bottom. It is not part of the `system` series: it reads the log CGIs directly. Its contract lives in [`../reference/logs.md`](../reference/logs.md).
+Logs are not on this page. The two-tab Logs card that used to sit at the bottom was unified with the Logs page (History > Logs, `/monitoring/history/logs`); see [`../reference/logs.md`](../reference/logs.md).
 
 ---
 
@@ -104,7 +104,7 @@ Runs once per boot, on the first sample where the history clock is trusted (`his
 
 - `derive.ts` is pure and unit-tested (`derive.test.ts`). `deriveIncidents(events, buckets)` turns the raw event rows into `SystemIncident`s (`reboot`, `modem`, `heat`), newest first, so the stability lanes, the chart markers, the summary tiles and the events list all agree. Recovery rows are dropped; an incident that began before the window but reaches into it is kept.
 - **Lanes** (Stability card): Device, Modem, Heat. A planned restart is a gap in the track; an unexpected restart and a modem crash are destructive marks; throttling is a warning span. The lanes, charts and events list share one cursor (`HistoryCursorProvider`).
-- **Cards:** four summary tiles (Up for, Modem restarts, Processor, Memory; Up for and Memory use the live status poll), Stability, three charts (Processor, Memory, Temperature with a dashed "Throttles at N C" guide from the status poll's `trip_c`), Storage (three meters with a tick for where each area stood at the start of the range; warning from 80 %, destructive from 90 %), System events (grouped by day, five rows then "Show more"), Logs.
+- **Cards:** four summary tiles (Up for, Modem restarts, Processor, Memory; Up for and Memory use the live status poll), Stability, three charts (Processor, Memory, Temperature with a dashed "Throttles at N C" guide from the status poll's `trip_c`), Storage (three meters with a tick for where each area stood at the start of the range; warning from 80 %, destructive from 90 %), System events (grouped by day, five rows then "Show more").
 - **One event fetch** (`pageSize: 100`) feeds lanes, markers and the list. Reboot, crash and throttle episodes beyond 100 events in a range are not drawn.
 - Strings live in `history.json` `system.*` in all five catalogs. Glyphs are Material Symbols (`/monitoring/history/**` is a Material route).
 - `mock-fixture.ts` holds five scenarios (healthy, modem, hot, storage, fresh) in the exact CGI shapes; it is test-only (`derive.test.ts`), the page has no mock switch.
