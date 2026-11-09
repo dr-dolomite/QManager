@@ -33,6 +33,15 @@ else
 fi
 qlog_init "sites"
 
+# Events (site_down / site_up). Guarded: a bare `.` of a missing file aborts.
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 TMP_DIR="${QM_SITES_TMP_DIR:-/tmp}"
 DATA_DIR="${QM_SITES_DATA_DIR:-/usrdata/qmanager/sites}"
 CONF_FILE="${QM_SITES_CONF:-/etc/qmanager/sites.json}"
@@ -289,6 +298,46 @@ probe_gateway() {
 # SWEEP
 # =============================================================================
 
+# _sites_events <results json>: per-site down/up events. State lives in shell
+# variables named from the host (_sf_<host> = consecutive failed sweeps,
+# _ss_<host> = up|down). A site goes down after 2 failed sweeps in a row and up
+# on the first success after that. The first sweep only sets the baseline. A
+# sweep in which no site answered at all says the link is down, not the sites:
+# it is no observation (internet_lost covers the link).
+_sites_events() {
+    local _se_lines
+    local _se_var
+    local _se_host
+    local _se_ok
+    local _se_fail
+    local _se_st
+    _se_lines=$(printf '%s' "$1" | jq -r '
+        ([.[] | select(.kind == "site" and .ok)] | length) as $up
+        | if $up == 0 then empty else
+            .[] | select(.kind == "site")
+            | "\(.host | explode | map(if (. >= 48 and . <= 57) or (. >= 65 and . <= 90) or (. >= 97 and . <= 122) then . else 95 end) | implode) \(.host) \(.ok)"
+          end' 2>/dev/null)
+    [ -n "$_se_lines" ] || return 0
+    while read -r _se_var _se_host _se_ok; do
+        [ -n "$_se_var" ] || continue
+        eval "_se_fail=\"\${_sf_$_se_var:-0}\"; _se_st=\"\${_ss_$_se_var:-}\""
+        if [ "$_se_ok" = "true" ]; then
+            [ "$_se_st" = "down" ] && append_event "site_up" "Site ${_se_host} is reachable again" "info" "" "site=${_se_host}"
+            _se_fail=0
+            _se_st="up"
+        else
+            _se_fail=$(( _se_fail + 1 ))
+            if [ "$_se_fail" -ge 2 ] && [ "$_se_st" = "up" ]; then
+                _se_st="down"
+                append_event "site_down" "Site ${_se_host} is unreachable" "warning" "" "site=${_se_host}"
+            fi
+        fi
+        eval "_sf_$_se_var=\"\$_se_fail\"; _ss_$_se_var=\"\$_se_st\""
+    done <<EOT
+$_se_lines
+EOT
+}
+
 sweep() {
     local start_mono
     local ts
@@ -336,6 +385,8 @@ EOF
         rm -f "$CHECKING_FILE"
         return 1
     fi
+
+    _sites_events "$results"
 
     jq -n --argjson r "$results" --argjson ts "$ts_json" --argjson nx "$next_json" \
         --argjson iv "$cfg_interval" '
