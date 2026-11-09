@@ -72,3 +72,15 @@ Branch `claude/system-health-f7023d` (fast-forwarded onto `claude/cellular-histo
 ## 7. Docs
 
 A System Health section in `docs/features/history.md` (provider, events, message formats, the reboot classification), `docs/features/README.md` + `CLAUDE.md` routing, and a `RELEASE_NOTE.md` entry.
+
+## 8. Addendum (2026-11-09, user request mid-build): Logs card with two tabs
+
+The user asked to show the modem's logs on this page: "make a tab for it, one for QManager and one for actual System logs". **Needs the user's OK before building** (new CGI = backend change).
+
+Live evidence (read-only): `logd -S 64` runs, so `logread` holds a 64 KB RAM ring (~550 lines, e.g. `Mon Nov  9 11:25:58 2026 user.notice qms[11579]: ...`); the kernel ring (`dmesg`, ~1600 lines) is separate (no klogd feeding logd); `/var/log` is empty. QManager's own log is `/tmp/qmanager.log` (+ `.1`, `.2`), already served by `GET system/logs.sh` and `hooks/use-system-logs.ts` (doc `docs/reference/logs.md`).
+
+Proposal:
+- A **Logs** card at the bottom of `/history/system-health` (after System events), description e.g. "What the modem and QManager wrote to their logs, newest first."; `Tabs` with two triggers: **QManager** and **System**. Logs are a sanctioned "surface that exists to show them", so raw lines may contain paths/daemon names.
+- **QManager tab**: reuse `useSystemLogs` (no backend change) and its `derive.ts` helpers; a compact newest-first row list (time, level Badge, component Tag, message) with level filter and a link to the full System Logs page. Material glyphs only (this is a `/history` route; the System Logs page's lucide components are not mounted here).
+- **System tab**: new read-only CGI `scripts/www/cgi-bin/quecmanager/system/syslog.sh` (`GET ?lines=100..500&source=system|kernel`): `logread -l N` (or `logread | tail -n N`) parsed by one `awk` into NDJSON `{t, facility, level, proc, pid, msg}`, wrapped `{success, source, entries, total}`; `source=kernel` reads `dmesg | tail -n N` (`{uptime_s, msg}`); clamp N; no writes, no clear action. Hook `hooks/use-device-syslog.ts` (10 s visible poll like `use-system-logs`), types `types/device-syslog.ts`. In the tab, a small segmented switch "System / Kernel" (open question for the user: keep Kernel, or System only).
+- Lifecycle: the CGI rides `install_tree`; nothing to seed or clean. i18n in all five catalogs. Static audit + on-device CGI check.
