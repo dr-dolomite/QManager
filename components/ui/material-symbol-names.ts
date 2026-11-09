@@ -81,6 +81,9 @@ export const MATERIAL_SYMBOL_NAMES = [
   "energy_savings_leaf",
   "error",
   "event_busy",
+  "event_note",
+  "event_repeat",
+  "expand_less",
   "expand_more",
   "explore",
   "favorite",
@@ -95,6 +98,7 @@ export const MATERIAL_SYMBOL_NAMES = [
   "home",
   // NetBird's sidebar row. Tailscale already wears vpn_lock; a mesh of nodes
   // is what NetBird is.
+  "hourglass_top",
   "hub",
   "info",
   "layers",
@@ -116,6 +120,7 @@ export const MATERIAL_SYMBOL_NAMES = [
   "mark_email_read",
   "mark_email_unread",
   "memory",
+  "memory_alt",
   "monitor",
   "more_horiz",
   "more_vert",
@@ -171,8 +176,11 @@ export const MATERIAL_SYMBOL_NAMES = [
   "speed",
   "sports_esports",
   "stacked_line_chart",
+  "storage",
   "support",
   "swap_horiz",
+  "sync_problem",
+  "system_update",
   "terminal",
   // The Overview splash's `normal` temperature band. Temperature previously
   // only spoke when something was wrong — `warning` and `priority_high` and
@@ -182,10 +190,12 @@ export const MATERIAL_SYMBOL_NAMES = [
   // verdict about it.
   "thermostat",
   "timeline",
+  "timer",
   "translate",
   "trophy",
   "tune",
   "unfold_more",
+  "verified",
   "videocam",
   "visibility",
   "visibility_off",
