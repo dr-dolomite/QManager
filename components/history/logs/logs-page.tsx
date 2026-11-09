@@ -30,7 +30,7 @@ import {
 import { SEGMENTED, SegmentedField } from "@/components/ui/segmented-field";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDeviceSyslog } from "@/hooks/use-device-syslog";
-import { useLogDebug } from "@/hooks/use-log-debug";
+import { DEBUG_LEASE_MIN, useLogDebug } from "@/hooks/use-log-debug";
 import { LINE_BUDGETS, THIS_BOOT, useSystemLogs, type BootChoice } from "@/hooks/use-system-logs";
 import { copyText } from "@/lib/clipboard";
 import { staggerContainer, staggerItem } from "@/lib/motion";
@@ -211,6 +211,9 @@ export function LogsPage() {
   const refreshing = tab === "qmanager" ? qm.isRefreshing : sys.isLoading && device !== null;
   const plain = tab === "system" && source === "kernel";
   const levelNarrowed = tab === "qmanager" && qm.level !== "all";
+  // DEBUG lines are only kept while the lease runs, so an empty DEBUG view
+  // says why and offers the lease instead of a bare "nothing at this level".
+  const debugUnkept = levelNarrowed && qm.level === "DEBUG" && debug.available && !debug.active;
 
   // The boot selector: QManager's journal, or a journal-backed kernel log.
   const bootView =
@@ -394,14 +397,25 @@ export function LogsPage() {
                 className={LOGS.STATE_H}
                 title={t(levelNarrowed ? "logs.empty_level.title" : "logs.empty.title")}
                 description={t(
-                  levelNarrowed
-                    ? "logs.empty_level.description"
-                    : pastBoot
-                      ? "logs.empty.description_boot"
-                      : "logs.empty.description",
+                  debugUnkept
+                    ? "logs.empty_debug.description"
+                    : levelNarrowed
+                      ? "logs.empty_level.description"
+                      : pastBoot
+                        ? "logs.empty.description_boot"
+                        : "logs.empty.description",
                 )}
                 action={
-                  levelNarrowed ? (
+                  debugUnkept ? (
+                    <Button
+                      variant="tonal-neutral"
+                      size="sm"
+                      disabled={debug.isBusy}
+                      onClick={() => void toggleDebug(true)}
+                    >
+                      {t("logs.empty_debug.action", { minutes: DEBUG_LEASE_MIN })}
+                    </Button>
+                  ) : levelNarrowed ? (
                     <Button variant="tonal-neutral" size="sm" onClick={() => changeLevel("all")}>
                       {t("logs.show_all")}
                     </Button>

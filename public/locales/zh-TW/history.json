@@ -679,6 +679,10 @@
         "disable_failed": "無法停止除錯日誌。"
       },
       "badge": "除錯日誌已開啟（{{left}}）"
+    },
+    "empty_debug": {
+      "description": "只有在除錯日誌開啟期間才會保留詳細日誌行。",
+      "action": "開啟 {{minutes}} 分鐘"
     }
   }
 }

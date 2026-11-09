@@ -696,6 +696,10 @@
         "disable_failed": "Couldn't stop debug logging."
       },
       "badge": "Debug logging on ({{left}})"
+    },
+    "empty_debug": {
+      "description": "Detailed lines are only kept while debug logging is on.",
+      "action": "Turn on for {{minutes}} min"
     }
   }
 }

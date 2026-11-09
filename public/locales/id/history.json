@@ -679,6 +679,10 @@
         "disable_failed": "Tidak dapat menghentikan log debug."
       },
       "badge": "Log debug aktif ({{left}})"
+    },
+    "empty_debug": {
+      "description": "Baris terperinci hanya disimpan selama log debug aktif.",
+      "action": "Aktifkan selama {{minutes}} menit"
     }
   }
 }

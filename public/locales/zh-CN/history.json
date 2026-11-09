@@ -679,6 +679,10 @@
         "disable_failed": "无法停止调试日志。"
       },
       "badge": "调试日志已开启（{{left}}）"
+    },
+    "empty_debug": {
+      "description": "只有在调试日志开启期间才会保留详细日志行。",
+      "action": "开启 {{minutes}} 分钟"
     }
   }
 }
