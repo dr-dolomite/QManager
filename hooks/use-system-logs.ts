@@ -6,6 +6,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import type {
   LevelFilter,
   LogBoot,
+  LogCounts,
   LogEntry,
   LogStats,
   LogsResponse,
@@ -29,6 +30,12 @@ import type {
 // goes backwards (the journal was cleared). A previous boot is a fixed record:
 // it is read once and never polled. Without `head_seq` (the old backend) every
 // poll is a full read, exactly as before.
+//
+// The journal also reports `counts` and `latest_problem` over every matching
+// row of the boot, not just the window. logd applies `after=` to them too, so
+// an incremental read carries only the new rows' counts: they are added to the
+// held ones, and its problem replaces the held one only when it has one. A
+// read that omits them (the old backend) keeps nothing new.
 // =============================================================================
 
 const CGI_ENDPOINT = "/cgi-bin/quecmanager/system/logs.sh";
@@ -55,6 +62,16 @@ interface Cursor {
 }
 
 const bootKey = (b: number | string | undefined): string => (b === undefined ? "" : String(b));
+
+/** `held` plus `fresh`, per level; `fresh` alone when nothing is held. */
+function addCounts(held: LogCounts | null, fresh: LogCounts): LogCounts {
+  if (!held) return fresh;
+  const out: LogCounts = { ...held };
+  for (const k of Object.keys(fresh) as (keyof LogCounts)[]) {
+    out[k] = (held[k] ?? 0) + (fresh[k] ?? 0);
+  }
+  return out;
+}
 
 /** Append `fresh` to `prev` (both oldest first), dropping seqs already held. */
 function mergeBySeq(prev: LogEntry[], fresh: LogEntry[], cap: number): LogEntry[] {
@@ -84,6 +101,13 @@ export interface UseSystemLogsOptions {
 export interface UseSystemLogsReturn {
   entries: LogEntry[];
   stats: LogStats | null;
+  /** Per-level counts over the whole boot in view; null on the old backend. */
+  counts: LogCounts | null;
+  /**
+   * The boot's newest ERROR or WARN: null when it has none, undefined when the
+   * backend does not report it (the tiles then read the window instead).
+   */
+  latestProblem: LogEntry | null | undefined;
   availableComponents: string[];
   isLoading: boolean;
   /** Non-null when the most recent read failed, background or foreground. */
@@ -126,6 +150,8 @@ export function useSystemLogs({
 }: UseSystemLogsOptions = {}): UseSystemLogsReturn {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState<LogStats | null>(null);
+  const [counts, setCounts] = useState<LogCounts | null>(null);
+  const [latestProblem, setLatestProblem] = useState<LogEntry | null | undefined>(undefined);
   const [availableComponents, setAvailableComponents] = useState<string[]>([]);
 
   const [level, setLevel] = useState<LevelFilter>("all");
@@ -225,10 +251,19 @@ export function useSystemLogs({
           boot === THIS_BOOT && head !== null ? { boot: respBoot, head } : null;
 
         setStats(data.stats ?? null);
+        const freshCounts = data.counts ?? null;
+        if (cursor) {
+          if (freshCounts) setCounts((held) => addCounts(held, freshCounts));
+          if (data.latest_problem) setLatestProblem(data.latest_problem);
+        } else {
+          setCounts(freshCounts);
+          setLatestProblem(data.latest_problem);
+        }
         if (Array.isArray(data.available_components)) {
           setAvailableComponents(data.available_components);
         }
-        setBoots(Array.isArray(data.boots) ? data.boots : []);
+        const held = Array.isArray(data.boots) ? data.boots : [];
+        setBoots(held);
         setThisBoot(data.this_boot !== undefined ? bootKey(data.this_boot) : null);
         setLastReadAtSec(Math.floor(Date.now() / 1000));
         setError(null);
@@ -318,6 +353,8 @@ export function useSystemLogs({
   return {
     entries,
     stats,
+    counts,
+    latestProblem,
     availableComponents,
     isLoading,
     error,

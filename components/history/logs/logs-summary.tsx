@@ -7,7 +7,7 @@ import { TILE_SHAPE } from "@/components/cellular/tile-shape";
 import { formatDuration } from "@/components/history/format";
 import { MaterialSymbol, type MaterialSymbolName } from "@/components/ui/material-symbol";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { UseSystemLogsReturn } from "@/hooks/use-system-logs";
+import { PREV_BOOT, THIS_BOOT, type UseSystemLogsReturn } from "@/hooks/use-system-logs";
 import { cn } from "@/lib/utils";
 import type { DeviceLogResponse } from "@/types/device-syslog";
 import type { LogEntry } from "@/types/system-logs";
@@ -37,6 +37,13 @@ import { LOGS_SUMMARY } from "./shapes";
 // Latest problem shows the line's clock time, not "12m ago": the stamp is the
 // modem's local time, and the browser's clock or timezone may differ. The date
 // is added only when the line is from an earlier day than the newest line read.
+//
+// With the journal backend the response also counts the whole boot in view
+// (`counts`, `latest_problem`), so Severity and Latest problem speak for the
+// boot rather than the lines read, and their captions name it ("in this boot",
+// "in the previous boot"). The log file is one file across every boot, so with
+// a past boot chosen its caption says so instead of lending it to that boot.
+// Without those fields the tiles read the window, as before.
 //
 // The System tab gets the same strip (DeviceLogsSummary), following the System /
 // Kernel switch: Severity and Latest problem over the device lines read, then
@@ -101,6 +108,13 @@ const BOOT_FACE = {
   unread: { disc: "neutral", glyph: "hourglass_top" },
   read: { disc: "neutral", glyph: "timer" },
 } satisfies Record<BootState, Face>;
+
+type BootScope = "this" | "prev" | "older";
+
+/** Seconds on the rows' clock: the line's own stamp, else its epoch. */
+function problemSec(e: LogEntry): number | null {
+  return parseLogTimestamp(e.timestamp) ?? (typeof e.t === "number" ? e.t : null);
+}
 
 /** The newest ERROR or WARN line in an oldest-first window. */
 function latestProblem(entries: LogEntry[]): LogEntry | null {
@@ -168,19 +182,27 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
   const { t } = useTranslation("system-settings");
   const { t: th, i18n } = useTranslation("history");
   const locale = i18n.language;
-  const { entries, stats, isLoading, lastReadAtSec } = logs;
+  const { entries, stats, counts, latestProblem: bootProblem, isLoading, lastReadAtSec, boot } = logs;
   const K = "logs.band";
+  const B = "logs.summary.boot";
+  const scope: BootScope = boot === THIS_BOOT ? "this" : boot === PREV_BOOT ? "prev" : "older";
 
   if (isLoading) return <LogsSummarySkeleton />;
 
   const read = lastReadAtSec !== null;
 
   // ── Severity ────────────────────────────────────────────────────────────
+  // The whole boot when the journal counts it, else the lines read.
   let errors = 0;
   let warnings = 0;
-  for (const e of entries) {
-    if (e.level === "ERROR") errors++;
-    else if (e.level === "WARN") warnings++;
+  if (counts) {
+    errors = counts.ERROR ?? 0;
+    warnings = counts.WARN ?? 0;
+  } else {
+    for (const e of entries) {
+      if (e.level === "ERROR") errors++;
+      else if (e.level === "WARN") warnings++;
+    }
   }
   const severity: SeverityState = !read
     ? "unread"
@@ -195,15 +217,23 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
     warnings: t(`${K}.severity.warnings`, { count: warnings }),
     clean: t(`${K}.severity.clean`),
   }[severity];
-  const severityCaption = {
-    unread: t(`${K}.severity.caption_unread`),
-    errors: t(`${K}.severity.caption_errors`, { count: warnings, lines: entries.length }),
-    warnings: t(`${K}.severity.caption_warnings`, { count: entries.length }),
-    clean: t(`${K}.severity.caption_clean`, { count: entries.length }),
-  }[severity];
+  const severityCaption = counts
+    ? {
+        unread: t(`${K}.severity.caption_unread`),
+        errors: th(`${B}.${scope}.caption_errors`, { count: warnings }),
+        warnings: th(`${B}.${scope}.caption_warnings`),
+        clean: th(`${B}.${scope}.caption_clean`),
+      }[severity]
+    : {
+        unread: t(`${K}.severity.caption_unread`),
+        errors: t(`${K}.severity.caption_errors`, { count: warnings, lines: entries.length }),
+        warnings: t(`${K}.severity.caption_warnings`, { count: entries.length }),
+        clean: t(`${K}.severity.caption_clean`, { count: entries.length }),
+      }[severity];
 
   // ── Latest problem ──────────────────────────────────────────────────────
-  const problem = read ? latestProblem(entries) : null;
+  const wholeBoot = bootProblem !== undefined;
+  const problem = !read ? null : wholeBoot ? bootProblem : latestProblem(entries);
   const latest: LatestState = !read
     ? "unread"
     : problem === null
@@ -215,12 +245,15 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
   let latestCaption = t(`${K}.severity.caption_unread`);
   if (latest === "none") {
     latestValue = th("logs.summary.latest.none");
-    latestCaption = th("logs.summary.latest.caption_none", { count: entries.length });
+    latestCaption = wholeBoot
+      ? th(`${B}.${scope}.caption_none`)
+      : th("logs.summary.latest.caption_none", { count: entries.length });
   } else if (problem) {
-    const sec = parseLogTimestamp(problem.timestamp);
-    const newestSec = parseLogTimestamp(entries[entries.length - 1].timestamp);
+    const sec = problemSec(problem);
+    const newest = entries[entries.length - 1];
+    const newestSec = newest ? parseLogTimestamp(newest.timestamp) : null;
     if (sec === null) {
-      latestValue = problem.timestamp;
+      latestValue = problem.timestamp || DASH;
     } else {
       const clock = formatClockSeconds(sec, locale);
       const earlierDay = newestSec !== null && dayKeyOf(sec) !== dayKeyOf(newestSec);
@@ -260,9 +293,11 @@ export function LogsSummary({ logs }: { logs: UseSystemLogsReturn }) {
         eyebrow={t(`${K}.file.eyebrow`)}
         value={stats ? t(`${K}.file.size`, { size: stats.current_size_kb }) : DASH}
         caption={
-          stats
-            ? t(`${K}.file.caption`, { count: stats.current_lines, rotated: stats.rotated_files })
-            : t(`${K}.file.caption_unread`)
+          !stats
+            ? t(`${K}.file.caption_unread`)
+            : scope === "this"
+              ? t(`${K}.file.caption`, { count: stats.current_lines, rotated: stats.rotated_files })
+              : th("logs.summary.file.caption_all", { count: stats.current_lines })
         }
       />
     </div>

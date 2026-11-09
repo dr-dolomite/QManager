@@ -631,6 +631,29 @@
           "eyebrow": "开机以来",
           "caption_other": "内核日志中有 {{count}} 行"
         }
+      },
+      "boot": {
+        "this": {
+          "caption_errors_other": "本次启动中有 {{count}} 条警告",
+          "caption_warnings": "本次启动中没有错误",
+          "caption_clean": "本次启动中没有警告",
+          "caption_none": "本次启动中没有错误或警告"
+        },
+        "prev": {
+          "caption_errors_other": "上次启动中有 {{count}} 条警告",
+          "caption_warnings": "上次启动中没有错误",
+          "caption_clean": "上次启动中没有警告",
+          "caption_none": "上次启动中没有错误或警告"
+        },
+        "older": {
+          "caption_errors_other": "那次启动中有 {{count}} 条警告",
+          "caption_warnings": "那次启动中没有错误",
+          "caption_clean": "那次启动中没有警告",
+          "caption_none": "那次启动中没有错误或警告"
+        }
+      },
+      "file": {
+        "caption_all_other": "所有启动共 {{count}} 行"
       }
     },
     "boot": {

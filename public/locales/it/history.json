@@ -644,6 +644,33 @@
           "caption_one": "{{count}} riga nel log del kernel",
           "caption_other": "{{count}} righe nel log del kernel"
         }
+      },
+      "boot": {
+        "this": {
+          "caption_errors_one": "{{count}} avviso in questo avvio",
+          "caption_errors_other": "{{count}} avvisi in questo avvio",
+          "caption_warnings": "Nessun errore in questo avvio",
+          "caption_clean": "Nessun avviso in questo avvio",
+          "caption_none": "Nessun errore o avviso in questo avvio"
+        },
+        "prev": {
+          "caption_errors_one": "{{count}} avviso nell'avvio precedente",
+          "caption_errors_other": "{{count}} avvisi nell'avvio precedente",
+          "caption_warnings": "Nessun errore nell'avvio precedente",
+          "caption_clean": "Nessun avviso nell'avvio precedente",
+          "caption_none": "Nessun errore o avviso nell'avvio precedente"
+        },
+        "older": {
+          "caption_errors_one": "{{count}} avviso in quell'avvio",
+          "caption_errors_other": "{{count}} avvisi in quell'avvio",
+          "caption_warnings": "Nessun errore in quell'avvio",
+          "caption_clean": "Nessun avviso in quell'avvio",
+          "caption_none": "Nessun errore o avviso in quell'avvio"
+        }
+      },
+      "file": {
+        "caption_all_one": "{{count}} riga in tutti gli avvii",
+        "caption_all_other": "{{count}} righe in tutti gli avvii"
       }
     },
     "boot": {

@@ -644,6 +644,33 @@
           "caption_one": "{{count}} line in the kernel log",
           "caption_other": "{{count}} lines in the kernel log"
         }
+      },
+      "boot": {
+        "this": {
+          "caption_errors_one": "{{count}} warning in this boot",
+          "caption_errors_other": "{{count}} warnings in this boot",
+          "caption_warnings": "No errors in this boot",
+          "caption_clean": "No warnings in this boot",
+          "caption_none": "No errors or warnings in this boot"
+        },
+        "prev": {
+          "caption_errors_one": "{{count}} warning in the previous boot",
+          "caption_errors_other": "{{count}} warnings in the previous boot",
+          "caption_warnings": "No errors in the previous boot",
+          "caption_clean": "No warnings in the previous boot",
+          "caption_none": "No errors or warnings in the previous boot"
+        },
+        "older": {
+          "caption_errors_one": "{{count}} warning in that boot",
+          "caption_errors_other": "{{count}} warnings in that boot",
+          "caption_warnings": "No errors in that boot",
+          "caption_clean": "No warnings in that boot",
+          "caption_none": "No errors or warnings in that boot"
+        }
+      },
+      "file": {
+        "caption_all_one": "{{count}} line across all boots",
+        "caption_all_other": "{{count}} lines across all boots"
       }
     },
     "boot": {

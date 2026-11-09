@@ -631,6 +631,29 @@
           "eyebrow": "Sejak boot",
           "caption_other": "{{count}} baris di log kernel"
         }
+      },
+      "boot": {
+        "this": {
+          "caption_errors_other": "{{count}} peringatan dalam boot ini",
+          "caption_warnings": "Tidak ada galat dalam boot ini",
+          "caption_clean": "Tidak ada peringatan dalam boot ini",
+          "caption_none": "Tidak ada galat atau peringatan dalam boot ini"
+        },
+        "prev": {
+          "caption_errors_other": "{{count}} peringatan dalam boot sebelumnya",
+          "caption_warnings": "Tidak ada galat dalam boot sebelumnya",
+          "caption_clean": "Tidak ada peringatan dalam boot sebelumnya",
+          "caption_none": "Tidak ada galat atau peringatan dalam boot sebelumnya"
+        },
+        "older": {
+          "caption_errors_other": "{{count}} peringatan dalam boot itu",
+          "caption_warnings": "Tidak ada galat dalam boot itu",
+          "caption_clean": "Tidak ada peringatan dalam boot itu",
+          "caption_none": "Tidak ada galat atau peringatan dalam boot itu"
+        }
+      },
+      "file": {
+        "caption_all_other": "{{count}} baris di semua boot"
       }
     },
     "boot": {

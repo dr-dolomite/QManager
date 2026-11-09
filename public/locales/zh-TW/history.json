@@ -631,6 +631,29 @@
           "eyebrow": "開機以來",
           "caption_other": "核心日誌中有 {{count}} 行"
         }
+      },
+      "boot": {
+        "this": {
+          "caption_errors_other": "本次開機中有 {{count}} 條警告",
+          "caption_warnings": "本次開機中沒有錯誤",
+          "caption_clean": "本次開機中沒有警告",
+          "caption_none": "本次開機中沒有錯誤或警告"
+        },
+        "prev": {
+          "caption_errors_other": "上次開機中有 {{count}} 條警告",
+          "caption_warnings": "上次開機中沒有錯誤",
+          "caption_clean": "上次開機中沒有警告",
+          "caption_none": "上次開機中沒有錯誤或警告"
+        },
+        "older": {
+          "caption_errors_other": "那次開機中有 {{count}} 條警告",
+          "caption_warnings": "那次開機中沒有錯誤",
+          "caption_clean": "那次開機中沒有警告",
+          "caption_none": "那次開機中沒有錯誤或警告"
+        }
+      },
+      "file": {
+        "caption_all_other": "所有開機共 {{count}} 行"
       }
     },
     "boot": {
