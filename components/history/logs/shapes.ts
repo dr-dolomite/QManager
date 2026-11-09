@@ -42,3 +42,8 @@ export const LOGS = {
   /** Keeps the empty and error states about as tall as a page of rows. */
   STATE_H: "min-h-52",
 } as const;
+
+/** The QManager tab's three summary tiles: stacked, then one row on a wide column. */
+export const LOGS_SUMMARY = {
+  GRID: "grid grid-cols-1 gap-3.5 @3xl/main:grid-cols-3",
+} as const;
