@@ -3,8 +3,9 @@
 # qlog.sh — QManager Centralized Logging Library
 # =============================================================================
 # A sourceable logging library for all QManager shell scripts.
-# Provides structured logging with levels, rotation, and dual output
-# (file + syslog).
+# Provides structured logging with levels, rotation and file output (stdout
+# optional). Syslog output was dropped: the device's syslog ring holds ~9 s, so
+# the copies were wasted forks.
 #
 # Usage:
 #   . /usr/lib/qmanager/qlog.sh          # Source the library
@@ -175,26 +176,6 @@ _qlog_write() {
         _qlog_rotate
     fi
     echo "$line" >> "$QLOG_FILE" 2>/dev/null
-
-    # Optionally write to syslog, only at or above QLOG_SYSLOG_LEVEL
-    local syslog_level_num
-    case "$QLOG_SYSLOG_LEVEL" in
-        DEBUG) syslog_level_num=$_QLOG_LVL_DEBUG ;;
-        INFO)  syslog_level_num=$_QLOG_LVL_INFO ;;
-        ERROR) syslog_level_num=$_QLOG_LVL_ERROR ;;
-        *)     syslog_level_num=$_QLOG_LVL_WARN ;;
-    esac
-    if [ "$QLOG_TO_SYSLOG" = "1" ] && [ "$msg_level_num" -ge "$syslog_level_num" ]; then
-        local syslog_priority
-        case "$level" in
-            DEBUG) syslog_priority="daemon.debug" ;;
-            INFO)  syslog_priority="daemon.info" ;;
-            WARN)  syslog_priority="daemon.warn" ;;
-            ERROR) syslog_priority="daemon.err" ;;
-            *)     syslog_priority="daemon.info" ;;
-        esac
-        logger -t "qm_${_QLOG_COMPONENT}" -p "$syslog_priority" "$message" 2>/dev/null
-    fi
 
     # Optionally write to stdout
     if [ "$QLOG_TO_STDOUT" = "1" ]; then
