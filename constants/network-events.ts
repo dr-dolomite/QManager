@@ -40,6 +40,10 @@ export const EVENT_TAB_CATEGORIES: Record<NetworkEventType, EventTabCategory> =
     apn_reapply_failed: "dataConnection",
     thermal_throttled: "dataConnection",
     thermal_recovered: "dataConnection",
+    // History-only (System Health); never in the events log.
+    device_reboot: "dataConnection",
+    modem_crash: "dataConnection",
+    modem_recovered: "dataConnection",
   };
 
 /** The filter rail on `/monitoring/events`, in render order. `all` is not a category. */
