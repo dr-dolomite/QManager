@@ -1,0 +1,71 @@
+{
+  "connection": {
+    "sites": {
+      "title": "Sites",
+      "description": "How fast each site answers over the cellular link.",
+      "manage": "Manage",
+      "not_checked": "Not checked yet",
+      "off_title": "Sites monitor is off",
+      "off_description": "Turn it on to time each site every {{interval}}.",
+      "turn_on": "Turn on",
+      "empty_title": "No sites yet",
+      "empty_description": "Add the sites you use to see how fast each one answers.",
+      "error_title": "Couldn't read the sites",
+      "error_description": "Try again in a moment.",
+      "retry": "Try again",
+      "notice_stale": "Not updating. Showing the last readings.",
+      "live": "Live",
+      "no_reply": "No reply",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "s",
+      "stat_average": "Average",
+      "stat_fastest": "Fastest",
+      "stat_slowest": "Slowest",
+      "stat_answered": "Answered",
+      "answered_count": "{{ok}} of {{n}}",
+      "tooltip_range": "Range",
+      "tooltip_no_reply": "No reply in this period",
+      "tooltip_no_data": "No data",
+      "limit": "Limit {{value}}",
+      "close": "Close",
+      "chart_aria": "Latency of {{site}} over the selected range",
+      "chart_empty": "No readings in this range yet."
+    },
+    "manage": {
+      "title": "Manage sites",
+      "description": "Up to {{max}} sites, timed over the cellular link.",
+      "monitor": "Monitor",
+      "on": "On",
+      "off": "Off",
+      "interval": "Check every",
+      "list_aria": "Sites",
+      "remove": "Remove {{host}}",
+      "add_placeholder": "Add a site, like netflix.com",
+      "add_label": "Site address",
+      "add": "Add",
+      "error_invalid": "Enter a site name like netflix.com.",
+      "error_duplicate": "That site is already on the list.",
+      "error_full": "The list holds up to {{max}} sites.",
+      "count": "{{n}} of {{max}}",
+      "cancel": "Cancel",
+      "save": "Save",
+      "empty": "No sites on the list.",
+      "every": {
+        "seconds": "{{n}} s",
+        "minutes": "{{n}} min",
+        "hours": "{{n}} h"
+      }
+    },
+    "toast": {
+      "check_failed": "Couldn't start a check.",
+      "save_ok": "Sites saved.",
+      "save_failed": "Couldn't save the sites.",
+      "turn_on_ok": "Sites monitor turned on.",
+      "turn_on_failed": "Couldn't turn the sites monitor on."
+    },
+    "redirect": {
+      "label": "Opening Connection History"
+    }
+  }
+}

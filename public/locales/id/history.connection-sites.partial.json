@@ -1,0 +1,71 @@
+{
+  "connection": {
+    "sites": {
+      "title": "Situs",
+      "description": "Seberapa cepat tiap situs menjawab lewat jaringan seluler.",
+      "manage": "Kelola",
+      "not_checked": "Belum diperiksa",
+      "off_title": "Monitor situs mati",
+      "off_description": "Nyalakan untuk mengukur tiap situs setiap {{interval}}.",
+      "turn_on": "Nyalakan",
+      "empty_title": "Belum ada situs",
+      "empty_description": "Tambahkan situs yang Anda pakai untuk melihat seberapa cepat tiap situs menjawab.",
+      "error_title": "Tidak dapat membaca situs",
+      "error_description": "Coba lagi sebentar lagi.",
+      "retry": "Coba lagi",
+      "notice_stale": "Tidak diperbarui. Menampilkan data terakhir.",
+      "live": "Langsung",
+      "no_reply": "Tidak ada balasan",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "dtk",
+      "stat_average": "Rata-rata",
+      "stat_fastest": "Tercepat",
+      "stat_slowest": "Terlambat",
+      "stat_answered": "Terjawab",
+      "answered_count": "{{ok}} dari {{n}}",
+      "tooltip_range": "Rentang",
+      "tooltip_no_reply": "Tidak ada balasan pada periode ini",
+      "tooltip_no_data": "Tidak ada data",
+      "limit": "Batas {{value}}",
+      "close": "Tutup",
+      "chart_aria": "Latensi {{site}} pada rentang yang dipilih",
+      "chart_empty": "Belum ada pembacaan pada rentang ini."
+    },
+    "manage": {
+      "title": "Kelola situs",
+      "description": "Hingga {{max}} situs, diukur lewat jaringan seluler.",
+      "monitor": "Monitor",
+      "on": "Nyala",
+      "off": "Mati",
+      "interval": "Periksa setiap",
+      "list_aria": "Situs",
+      "remove": "Hapus {{host}}",
+      "add_placeholder": "Tambah situs, misalnya netflix.com",
+      "add_label": "Alamat situs",
+      "add": "Tambah",
+      "error_invalid": "Masukkan nama situs seperti netflix.com.",
+      "error_duplicate": "Situs itu sudah ada di daftar.",
+      "error_full": "Daftar memuat paling banyak {{max}} situs.",
+      "count": "{{n}} dari {{max}}",
+      "cancel": "Batal",
+      "save": "Simpan",
+      "empty": "Tidak ada situs di daftar.",
+      "every": {
+        "seconds": "{{n}} dtk",
+        "minutes": "{{n}} mnt",
+        "hours": "{{n}} j"
+      }
+    },
+    "toast": {
+      "check_failed": "Tidak dapat memulai pemeriksaan.",
+      "save_ok": "Situs disimpan.",
+      "save_failed": "Tidak dapat menyimpan situs.",
+      "turn_on_ok": "Monitor situs dinyalakan.",
+      "turn_on_failed": "Tidak dapat menyalakan monitor situs."
+    },
+    "redirect": {
+      "label": "Membuka Riwayat Koneksi"
+    }
+  }
+}

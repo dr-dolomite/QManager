@@ -1,0 +1,71 @@
+{
+  "connection": {
+    "sites": {
+      "title": "Siti",
+      "description": "Quanto risponde in fretta ogni sito sul collegamento cellulare.",
+      "manage": "Gestisci",
+      "not_checked": "Non ancora controllato",
+      "off_title": "Il monitoraggio dei siti è spento",
+      "off_description": "Accendilo per misurare ogni sito ogni {{interval}}.",
+      "turn_on": "Accendi",
+      "empty_title": "Ancora nessun sito",
+      "empty_description": "Aggiungi i siti che usi per vedere quanto risponde in fretta ciascuno.",
+      "error_title": "Impossibile leggere i siti",
+      "error_description": "Riprova tra un momento.",
+      "retry": "Riprova",
+      "notice_stale": "Non si aggiorna. Mostra le ultime letture.",
+      "live": "In diretta",
+      "no_reply": "Nessuna risposta",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "s",
+      "stat_average": "Media",
+      "stat_fastest": "Più rapido",
+      "stat_slowest": "Più lento",
+      "stat_answered": "Risposte",
+      "answered_count": "{{ok}} di {{n}}",
+      "tooltip_range": "Intervallo",
+      "tooltip_no_reply": "Nessuna risposta in questo periodo",
+      "tooltip_no_data": "Nessun dato",
+      "limit": "Limite {{value}}",
+      "close": "Chiudi",
+      "chart_aria": "Latenza di {{site}} nell'intervallo selezionato",
+      "chart_empty": "Ancora nessuna lettura in questo intervallo."
+    },
+    "manage": {
+      "title": "Gestisci siti",
+      "description": "Fino a {{max}} siti, misurati sul collegamento cellulare.",
+      "monitor": "Monitoraggio",
+      "on": "Acceso",
+      "off": "Spento",
+      "interval": "Controlla ogni",
+      "list_aria": "Siti",
+      "remove": "Rimuovi {{host}}",
+      "add_placeholder": "Aggiungi un sito, ad esempio netflix.com",
+      "add_label": "Indirizzo del sito",
+      "add": "Aggiungi",
+      "error_invalid": "Inserisci il nome di un sito, ad esempio netflix.com.",
+      "error_duplicate": "Quel sito è già nell'elenco.",
+      "error_full": "L'elenco contiene al massimo {{max}} siti.",
+      "count": "{{n}} di {{max}}",
+      "cancel": "Annulla",
+      "save": "Salva",
+      "empty": "Nessun sito nell'elenco.",
+      "every": {
+        "seconds": "{{n}} s",
+        "minutes": "{{n}} min",
+        "hours": "{{n}} h"
+      }
+    },
+    "toast": {
+      "check_failed": "Impossibile avviare il controllo.",
+      "save_ok": "Siti salvati.",
+      "save_failed": "Impossibile salvare i siti.",
+      "turn_on_ok": "Monitoraggio dei siti acceso.",
+      "turn_on_failed": "Impossibile accendere il monitoraggio dei siti."
+    },
+    "redirect": {
+      "label": "Apertura di Cronologia connessione"
+    }
+  }
+}

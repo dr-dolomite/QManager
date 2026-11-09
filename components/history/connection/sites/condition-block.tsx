@@ -1,8 +1,10 @@
 "use client";
 
-import { Loader2Icon, type LucideIcon } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
+import {
+  MaterialSymbol,
+  type MaterialSymbolName,
+} from "@/components/ui/material-symbol";
 import { cn } from "@/lib/utils";
 
 import { CONDITION, CONDITION_TONE, type ConditionTone } from "./shapes";
@@ -11,12 +13,12 @@ import { CONDITION, CONDITION_TONE, type ConditionTone } from "./shapes";
 // the state, which is why it is one of the sanctioned container uses.
 export interface ConditionBlockProps {
   tone: ConditionTone;
-  icon: LucideIcon;
+  icon: MaterialSymbolName;
   title: string;
   description: string;
   actionLabel?: string;
   onAction?: () => void;
-  actionIcon?: LucideIcon;
+  actionIcon?: MaterialSymbolName;
   /** `tonal` for an action that changes a setting rather than retrying a read. */
   actionVariant?: "pill" | "tonal";
   /** Disables the action and swaps its glyph for a spinner while it runs. */
@@ -25,12 +27,12 @@ export interface ConditionBlockProps {
 
 export function ConditionBlock({
   tone,
-  icon: Icon,
+  icon,
   title,
   description,
   actionLabel,
   onAction,
-  actionIcon: ActionIcon,
+  actionIcon,
   actionVariant = "pill",
   actionBusy = false,
 }: ConditionBlockProps) {
@@ -38,7 +40,7 @@ export function ConditionBlock({
   return (
     <div className={cn(CONDITION.ROOT, skin.ROOT)} role="status">
       <span aria-hidden className={cn(CONDITION.DISC, skin.DISC)}>
-        <Icon className={CONDITION.GLYPH} />
+        <MaterialSymbol name={icon} size={28} />
       </span>
       <span className={CONDITION.TITLE}>{title}</span>
       <p className={CONDITION.DESC}>{description}</p>
@@ -54,9 +56,13 @@ export function ConditionBlock({
           )}
         >
           {actionBusy ? (
-            <Loader2Icon className="size-4 motion-safe:animate-spin" />
-          ) : ActionIcon ? (
-            <ActionIcon className="size-4" />
+            <MaterialSymbol
+              name="progress_activity"
+              size={18}
+              className="motion-safe:animate-spin"
+            />
+          ) : actionIcon ? (
+            <MaterialSymbol name={actionIcon} size={18} />
           ) : null}
           {actionLabel}
         </Button>
