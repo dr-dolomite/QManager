@@ -442,6 +442,7 @@ main() {
 
         # Normalize the send target once per cycle (strip one leading +, like
         # sms.sh:255). The full international number is the user's responsibility.
+        _sf_idle_logged=0
         SF_SEND_TARGET=$(printf '%s' "$SF_TARGET" | sed 's/^+//')
 
         # Seed-on-first-run: if the seen-set doesn't exist yet, record every
