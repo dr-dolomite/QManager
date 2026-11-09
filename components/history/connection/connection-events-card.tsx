@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useEventMessage } from "@/hooks/use-event-message";
 import { cn } from "@/lib/utils";
 import type { HistoryRange } from "@/types/history";
 
@@ -126,6 +127,7 @@ function EventRow({
 }) {
   const { i18n, t } = useTranslation("history");
   const when = formatWhen(event.timestamp, nowSec, t, i18n.language);
+  const message = useEventMessage()(event);
   const type = event.type as ConnectionEventType;
 
   return (
@@ -138,8 +140,8 @@ function EventRow({
         <div className="flex min-w-0 items-center gap-3">
           <Disc className={discClass(event)} glyph={eventGlyph(type)} />
           <div className="min-w-0">
-            <div className="text-on-surface truncate text-sm font-medium" title={event.message}>
-              {event.message}
+            <div className="text-on-surface truncate text-sm font-medium" title={message}>
+              {message}
             </div>
             <div className={cn("text-on-surface-variant text-xs tabular-nums", NARROW_ONLY)}>
               {when}

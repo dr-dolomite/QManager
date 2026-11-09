@@ -56,6 +56,10 @@ const RESOLVED_BY: Partial<Record<NetworkEventType, NetworkEventType>> = {
   high_latency: "latency_recovered",
   high_packet_loss: "packet_loss_recovered",
   thermal_throttled: "thermal_recovered",
+  data_call_dropped: "data_call_restored",
+  dns_failing: "dns_recovered",
+  site_down: "site_up",
+  eth_link_down: "eth_link_up",
 };
 
 /**
@@ -159,6 +163,11 @@ export type EventGlyph =
   | "radio"
   | "sim"
   | "profile"
+  | "network"
+  | "lock"
+  | "security"
+  | "system"
+  | "ethernet"
   | "neutral";
 
 /**
@@ -236,6 +245,10 @@ const RECOVERY_TYPES: ReadonlySet<NetworkEventType> = new Set([
   "watchcat_recovery",
   "profile_applied",
   "apn_reapplied",
+  "data_call_restored",
+  "dns_recovered",
+  "site_up",
+  "eth_link_up",
 ]);
 
 /** Family glyphs for routine info events, so a row is scannable by shape
@@ -255,6 +268,31 @@ const FAMILY_GLYPHS: Partial<Record<NetworkEventType, EventGlyph>> = {
   verizon_mpdn_applied: "profile",
   verizon_mpdn_reverted: "profile",
   apn_reapply_failed: "profile",
+  // Journal-era types: one family each, so a row is scannable by shape.
+  registration_changed: "radio",
+  rat_priority_changed: "radio",
+  fplmn_cleared: "radio",
+  band_lock_changed: "lock",
+  tower_lock_changed: "lock",
+  band_failover: "lock",
+  tower_failover: "lock",
+  sim_switched: "sim",
+  scenario_switched: "profile",
+  apn_changed: "network",
+  data_cid_changed: "network",
+  dns_changed: "network",
+  ttl_mtu_changed: "network",
+  wan_address_changed: "network",
+  login_failed: "security",
+  login_locked: "security",
+  password_changed: "security",
+  software_updated: "system",
+  broker_restarted: "system",
+  imei_changed: "system",
+  clock_stepped: "system",
+  storage_low: "system",
+  oom_kill: "system",
+  eth_link_down: "ethernet",
 };
 
 /**

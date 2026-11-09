@@ -994,6 +994,39 @@ export type NetworkEventType =
   | "apn_reapply_failed" // APN profile could not be restored after deactivation
   | "thermal_throttled" // Heat is limiting part of the radio or CPU
   | "thermal_recovered" // Heat throttling cleared
+  // Journal-era events (qmanager_logd); structured fields arrive in `f`:
+  | "apn_changed" // f: from, to, cid
+  | "band_lock_changed" // f: rat, to
+  | "tower_lock_changed" // f: rat, action, cells
+  | "band_failover" // f: to, fail_count
+  | "tower_failover" // f: quality, threshold, rsrp
+  | "sim_switched" // f: to
+  | "rat_priority_changed" // f: to
+  | "fplmn_cleared"
+  | "scenario_switched" // f: from, to
+  | "dns_changed" // f: from, to
+  | "ttl_mtu_changed" // f: which, from, to
+  | "login_failed" // f: remaining
+  | "login_locked" // f: retry_after
+  | "password_changed"
+  | "alert_send_failed" // f: channel, trigger
+  | "registration_changed" // f: from, to
+  | "data_call_dropped"
+  | "data_call_restored" // f: down_s
+  | "dns_failing" // f: resolver
+  | "dns_recovered" // f: resolver, ms
+  | "broker_restarted"
+  | "software_updated" // f: from, to
+  | "imei_changed" // f: from, to (last 4 digits)
+  | "site_down" // f: site
+  | "site_up" // f: site
+  | "wan_address_changed" // f: family, from, to
+  | "data_cid_changed" // f: from, to, source
+  | "clock_stepped" // f: step_s
+  | "storage_low" // f: free_kb, min_kb
+  | "oom_kill" // f: proc, pid
+  | "eth_link_up" // f: iface, speed, duplex
+  | "eth_link_down" // f: iface
   // History-only (the "system" series records these; never in the events log):
   | "device_reboot" // Device booted again; message "cause=<c> off=<s>"
   | "modem_crash" // Baseband (SSR) crashed
@@ -1020,6 +1053,15 @@ export interface NetworkEvent {
    * every other row and on pre-upgrade rows.
    */
   code?: string;
+  /**
+   * Structured fields (journal backend): string values the localised sentence
+   * interpolates. Absent on older rows; a missing field falls back to `message`.
+   */
+  f?: Record<string, string>;
+  /** Journal category, when the backend sends one. */
+  cat?: string;
+  /** Journal sequence number, when the backend sends one. */
+  seq?: number;
 }
 
 // --- Formatting Utilities ----------------------------------------------------

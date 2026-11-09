@@ -31,6 +31,15 @@ export const CONNECTION_EVENT_TYPES = [
   "packet_loss_recovered",
   "watchcat_recovery",
   "sim_failover",
+  // Journal-era types the series records.
+  "data_call_dropped",
+  "data_call_restored",
+  "dns_failing",
+  "dns_recovered",
+  "site_down",
+  "site_up",
+  "wan_address_changed",
+  "broker_restarted",
 ] as const satisfies readonly NetworkEventType[];
 
 export type ConnectionEventType = (typeof CONNECTION_EVENT_TYPES)[number];

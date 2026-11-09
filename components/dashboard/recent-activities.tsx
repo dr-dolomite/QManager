@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwapLabel } from "@/components/ui/swap-label";
+import { useEventMessage } from "@/hooks/use-event-message";
 import { useRecentActivities } from "@/hooks/use-recent-activities";
 import {
   computeUnresolved,
@@ -154,6 +155,11 @@ const GLYPHS: Record<EventGlyph, MaterialSymbolName> = {
   sim: "memory",
   radio: "cell_tower",
   profile: "badge",
+  network: "public",
+  lock: "lock",
+  security: "shield",
+  system: "settings",
+  ethernet: "settings_ethernet",
   neutral: "info",
 };
 
@@ -246,6 +252,7 @@ function EventRow({
   timeAgo,
   severityWord,
 }: EventRowProps) {
+  const sentence = useEventMessage();
   const glyphName = GLYPHS[presentation.glyph];
   // Fill tracks the DISC, not the row's age. `presentEvent` splits its disc on
   // exactly this predicate — a solid role colour for the three chromatic tones,
@@ -300,7 +307,7 @@ function EventRow({
             presentation.messageClass,
           )}
         >
-          {event.message}
+          {sentence(event)}
         </span>
         {/* The machine voice, per the reference. A modem-written relative time
             sits at the edge of the Machine-Voice Rule — it is device-clock

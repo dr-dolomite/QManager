@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useEventMessage } from "@/hooks/use-event-message";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import {
@@ -118,8 +119,9 @@ export function EventRow({
   timeAgo,
   clockTime,
 }: EventRowProps) {
+  const sentence = useEventMessage();
   const Glyph = TONE_GLYPH[presentation.tone];
-  const { text, identifiers } = splitEventMessage(event.message);
+  const { text, identifiers } = splitEventMessage(sentence(event));
   // A chromatic container supplies the ink for every line inside it.
   const { chromatic } = presentation;
 
@@ -300,8 +302,9 @@ export function MemberRow({
   severityWord,
   clockTime,
 }: MemberRowProps) {
+  const sentence = useEventMessage();
   const Glyph = TONE_GLYPH[presentation.tone];
-  const { text, identifiers } = splitEventMessage(event.message);
+  const { text, identifiers } = splitEventMessage(sentence(event));
   return (
     <div className={ROW.MEMBER_ROOT}>
       <span className={ROW.MEMBER_WHEN}>{clockTime}</span>

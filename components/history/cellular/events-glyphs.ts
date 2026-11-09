@@ -12,6 +12,13 @@ const GLYPH: Record<CellularEventType, MaterialSymbolName> = {
   scc_pci_change: "alt_route",
   band_change: "swap_horiz",
   ca_change: "layers",
+  registration_changed: "public",
+  sim_switched: "sim_card",
+  apn_changed: "hub",
+  band_lock_changed: "lock",
+  tower_lock_changed: "my_location",
+  band_failover: "restart_alt",
+  tower_failover: "settings_input_antenna",
 };
 
 export function eventGlyph(type: CellularEventType, tone: EventTone): MaterialSymbolName {

@@ -81,6 +81,8 @@ export interface HistoryEvent {
    * next matching recovery, or null while ongoing. Absent on other types.
    */
   end?: number | null;
+  /** Structured fields (journal backend), for the localised sentence. */
+  f?: Record<string, string>;
 }
 
 export interface HistoryEventsResponse {
@@ -120,6 +122,14 @@ export const CELLULAR_EVENT_TYPES = [
   "scc_pci_change",
   "band_change",
   "ca_change",
+  // Journal-era types the series records.
+  "registration_changed",
+  "sim_switched",
+  "apn_changed",
+  "band_lock_changed",
+  "tower_lock_changed",
+  "band_failover",
+  "tower_failover",
 ] as const satisfies readonly NetworkEventType[];
 
 export type CellularEventType = (typeof CELLULAR_EVENT_TYPES)[number];

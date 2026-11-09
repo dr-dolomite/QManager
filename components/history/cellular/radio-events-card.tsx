@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
+import { useEventMessage } from "@/hooks/use-event-message";
 import { useHistoryEvents } from "@/hooks/use-history";
 import { presentEvent } from "@/lib/event-presentation";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ interface EventRowProps {
 function EventRow({ event, nowSec, onHover }: EventRowProps) {
   const { t, i18n } = useTranslation("history");
   const when = formatWhen(event.timestamp, nowSec, t, i18n.language);
+  const message = useEventMessage()(event);
   const type = event.type as CellularEventType;
   const view = presentEvent(event, false, false, "card");
   // Paired outage onsets say how it ended: null = still ongoing.
@@ -130,8 +132,8 @@ function EventRow({ event, nowSec, onHover }: EventRowProps) {
         <div className="flex min-w-0 items-center gap-3">
           <Disc className={view.discClass} glyph={eventGlyph(type, view.tone)} />
           <div className="min-w-0">
-            <div className="text-on-surface truncate text-sm font-medium" title={event.message}>
-              {event.message}
+            <div className="text-on-surface truncate text-sm font-medium" title={message}>
+              {message}
             </div>
             <div className={cn("text-on-surface-variant text-xs tabular-nums", NARROW_ONLY)}>
               {fact ? `${when} (${fact})` : when}
