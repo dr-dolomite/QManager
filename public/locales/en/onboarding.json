@@ -52,7 +52,7 @@
     "error_mismatch": "Passwords do not match.",
     "error_setup_failed": "Setup failed. Please try again.",
     "hint_ssh": "This password also signs you in over SSH.",
-    "warn_ssh_not_synced": "Password set for the web interface, but the SSH password could not be set. Change it in Settings > Passwords."
+    "warn_ssh_not_synced": "Password set for the web interface, but the SSH password could not be set. Change it in Device Access."
   },
   "network_mode": {
     "heading": "Preferred network",

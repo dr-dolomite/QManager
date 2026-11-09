@@ -52,7 +52,7 @@
     "error_mismatch": "密碼不匹配。",
     "error_setup_failed": "設定失敗，請重試。",
     "hint_ssh": "此密碼同時用於 SSH 登入。",
-    "warn_ssh_not_synced": "網頁介面密碼已設定，但無法設定 SSH 密碼。請在「設定 > 密碼」中變更。"
+    "warn_ssh_not_synced": "網頁介面密碼已設定，但無法設定 SSH 密碼。請在「裝置存取」中變更。"
   },
   "network_mode": {
     "heading": "首選網路",

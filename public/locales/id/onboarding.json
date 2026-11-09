@@ -52,7 +52,7 @@
     "error_mismatch": "Kata sandi tidak cocok.",
     "error_setup_failed": "Pengaturan gagal. Silakan coba lagi.",
     "hint_ssh": "Kata sandi ini juga digunakan untuk masuk lewat SSH.",
-    "warn_ssh_not_synced": "Kata sandi antarmuka web sudah diatur, tetapi kata sandi SSH tidak dapat diatur. Ubah di Pengaturan > Kata Sandi."
+    "warn_ssh_not_synced": "Kata sandi antarmuka web sudah diatur, tetapi kata sandi SSH tidak dapat diatur. Ubah di Akses Perangkat."
   },
   "network_mode": {
     "heading": "Jaringan yang diinginkan",

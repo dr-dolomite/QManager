@@ -52,7 +52,7 @@
     "error_mismatch": "Le password non corrispondono.",
     "error_setup_failed": "L'installazione non è riuscita. Per favore riprova.",
     "hint_ssh": "Questa password serve anche per accedere via SSH.",
-    "warn_ssh_not_synced": "Password impostata per l'interfaccia web, ma non è stato possibile impostare quella SSH. Modificala in Impostazioni > Password."
+    "warn_ssh_not_synced": "Password impostata per l'interfaccia web, ma non è stato possibile impostare quella SSH. Modificala in Accesso al dispositivo."
   },
   "network_mode": {
     "heading": "Rete preferita",

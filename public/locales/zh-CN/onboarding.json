@@ -52,7 +52,7 @@
     "error_mismatch": "密码不匹配。",
     "error_setup_failed": "设置失败，请重试。",
     "hint_ssh": "此密码同时用于 SSH 登录。",
-    "warn_ssh_not_synced": "网页界面密码已设置，但无法设置 SSH 密码。请在“设置 > 密码”中更改。"
+    "warn_ssh_not_synced": "网页界面密码已设置，但无法设置 SSH 密码。请在“设备访问”中更改。"
   },
   "network_mode": {
     "heading": "首选网络",
