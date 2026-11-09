@@ -19,7 +19,6 @@ import {
   throttleParts,
   type LiveStatus,
 } from "./derive";
-import { LogsCard } from "./logs-card";
 import { MetricChartCard } from "./metric-chart-card";
 import { HISTORY_PAGE, METRICS_GRID } from "./shapes";
 import { StabilityCard } from "./stability-card";
@@ -37,8 +36,8 @@ import { SystemEventsCard } from "./system-events-card";
 // =============================================================================
 // Header with the range control, then the summary strip, the stability lanes,
 // the 2x2 grid of processor / memory / temperature charts and storage, and the
-// system events list. The range and the shared cursor are the only page-level
-// state. A new install or an untrusted clock answers with no history to show,
+// system events list; the logs live on their own page (History > Logs). The
+// range and the shared cursor are the only page-level state. A new install or an untrusted clock answers with no history to show,
 // which is "collecting", not an error. The hooks keep the previous range on
 // screen while the next one loads, so the skeleton only shows on the first fetch.
 // =============================================================================
@@ -107,9 +106,6 @@ function Loaded({
           covered={coversRange(history)}
           tempC={tempC}
         />
-      </motion.div>
-      <motion.div variants={staggerItem}>
-        <LogsCard />
       </motion.div>
     </>
   );

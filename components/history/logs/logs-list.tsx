@@ -13,7 +13,7 @@ import {
   type DayGroup,
   type LogLineView,
   type LogTone,
-} from "./logs-derive";
+} from "./derive";
 import { LOGS } from "./shapes";
 
 // =============================================================================
@@ -49,7 +49,7 @@ function LogRow({ row, plain, locale }: { row: LogLineView; plain: boolean; loca
           {level && row.tone ? (
             <Badge variant={level.variant} className="justify-self-start">
               <MaterialSymbol name={level.glyph} size={12} filled aria-hidden="true" />
-              {t(`system.logs.level.${row.tone}`)}
+              {t(`logs.level.${row.tone}`)}
             </Badge>
           ) : (
             <span aria-hidden="true" className="hidden @2xl/card:block" />

@@ -1,10 +1,14 @@
-import type { DeviceKernelLogEntry, DeviceLogLevel } from "@/types/device-syslog";
+import type {
+  DeviceKernelLogEntry,
+  DeviceLogLevel,
+  DeviceLogResponse,
+} from "@/types/device-syslog";
 import type { LogEntry, LogLevel } from "@/types/system-logs";
 
 import { parseLogTimestamp } from "@/components/system-settings/logs/derive";
 
 // =============================================================================
-// Logs card: pure helpers
+// Logs: pure helpers
 // =============================================================================
 // Both log sources (QManager's own transcript and the device's system log)
 // collapse onto four visible levels, so one chip vocabulary serves both and no
@@ -127,4 +131,78 @@ export function groupByDay(rows: LogLineView[]): DayGroup[] {
     }
   }
   return groups;
+}
+
+/** The modem's system log or kernel ring as rows, in the order the device sent them. */
+export function deviceLines(device: DeviceLogResponse): LogLineView[] {
+  const seen = new Map<string, number>();
+  const unique = (base: string) => {
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n}`;
+  };
+  if (device.source === "kernel") {
+    return device.entries.map((e) => ({
+      key: unique(`${e.up}|${e.msg}`),
+      sec: kernelWallSec(e, device.now, device.uptime),
+      rawTime: "",
+      tone: null,
+      tag: null,
+      message: e.msg,
+    }));
+  }
+  return device.entries.map((e) => ({
+    key: unique(`${e.t ?? e.ts}|${e.proc}|${e.pid}|${e.msg}`),
+    sec: e.t,
+    rawTime: e.ts,
+    tone: toneOfSyslog(e.level),
+    tag: e.proc,
+    message: e.msg,
+  }));
+}
+
+export interface LogPage {
+  /** Zero-based page actually shown, clamped into range. */
+  page: number;
+  /** At least 1, so an empty list still reads "Page 1 of 1". */
+  pageCount: number;
+  /** One-based position of the first and last row shown; 0 and 0 when empty. */
+  from: number;
+  to: number;
+  rows: LogLineView[];
+}
+
+/** One page of rows. A stale index (the list shrank) lands on the last page. */
+export function paginate(rows: LogLineView[], pageIndex: number, pageSize: number): LogPage {
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const page = Math.min(Math.max(0, Math.floor(pageIndex)), pageCount - 1);
+  const start = page * pageSize;
+  const slice = rows.slice(start, start + pageSize);
+  return {
+    page,
+    pageCount,
+    from: slice.length > 0 ? start + 1 : 0,
+    to: start + slice.length,
+    rows: slice,
+  };
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Plain text for the clipboard, one line per row, newest first like the list. */
+export function logLinesText(rows: LogLineView[]): string {
+  return rows
+    .map((r) => {
+      let time = r.rawTime;
+      if (r.sec !== null) {
+        const d = new Date(r.sec * 1000);
+        time = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(
+          d.getHours(),
+        )}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+      }
+      const level = r.tone ? ` [${r.tone.toUpperCase()}]` : "";
+      const tag = r.tag ? ` ${r.tag}:` : "";
+      return `${time}${level}${tag} ${r.message}`.trim();
+    })
+    .join("\n");
 }

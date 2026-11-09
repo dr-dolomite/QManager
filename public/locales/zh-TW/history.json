@@ -345,46 +345,6 @@
         "device_off": "裝置已關閉",
         "mem_value": "{{pct}}%（{{mb}} MB）"
       }
-    },
-    "logs": {
-      "title": "日誌",
-      "description": "數據機和 QManager 寫入日誌的內容，依時間由新到舊排列。",
-      "tabs": {
-        "qmanager": "QManager",
-        "system": "系統"
-      },
-      "level_label": "日誌等級",
-      "level": {
-        "all": "全部",
-        "error": "錯誤",
-        "warn": "警告",
-        "info": "資訊",
-        "debug": "除錯"
-      },
-      "source_label": "日誌來源",
-      "source": {
-        "system": "系統",
-        "kernel": "核心"
-      },
-      "lines_label": "顯示行數",
-      "lines_option": "{{value}} 行",
-      "showing": "顯示 {{shown}} / {{total}}",
-      "open_full": "開啟完整日誌",
-      "stale": "未在更新",
-      "loading_sr": "正在載入日誌",
-      "error": {
-        "title": "無法載入日誌",
-        "description": "請檢查連線後再試一次。"
-      },
-      "empty": {
-        "title": "尚無日誌",
-        "description": "新的日誌行會顯示在這裡。"
-      },
-      "empty_level": {
-        "title": "此等級沒有日誌行",
-        "description": "最新的日誌行中沒有符合所選等級的內容。"
-      },
-      "show_all": "顯示所有等級"
     }
   },
   "connection": {
@@ -582,6 +542,56 @@
     },
     "redirect": {
       "label": "正在開啟連線歷史"
+    }
+  },
+  "logs": {
+    "page": {
+      "title": "日誌",
+      "description": "數據機和 QManager 寫入日誌的內容，依時間由新到舊排列。"
+    },
+    "tabs": {
+      "qmanager": "QManager",
+      "system": "系統"
+    },
+    "level_label": "日誌等級",
+    "level": {
+      "all": "全部",
+      "error": "錯誤",
+      "warn": "警告",
+      "info": "資訊",
+      "debug": "除錯"
+    },
+    "source_label": "日誌來源",
+    "source": {
+      "system": "系統",
+      "kernel": "核心"
+    },
+    "lines_label": "顯示行數",
+    "lines_option": "{{value}} 行",
+    "showing": "第 {{from}}–{{to}} 筆，共 {{total}} 筆",
+    "stale": "未在更新",
+    "loading_sr": "正在載入日誌",
+    "error": {
+      "title": "無法載入日誌",
+      "description": "請檢查連線後再試一次。"
+    },
+    "empty": {
+      "title": "尚無日誌",
+      "description": "新的日誌行會顯示在這裡。"
+    },
+    "empty_level": {
+      "title": "此等級沒有日誌行",
+      "description": "最新的日誌行中沒有符合所選等級的內容。"
+    },
+    "show_all": "顯示所有等級",
+    "retry": "重試",
+    "pagination": {
+      "rows_per_page": "每頁列數",
+      "page_of": "第 {{page}} / {{pages}} 頁",
+      "first": "第一頁",
+      "previous": "上一頁",
+      "next": "下一頁",
+      "last": "最後一頁"
     }
   }
 }

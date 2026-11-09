@@ -124,7 +124,7 @@ const navLocalNetwork: NavItem[] = [
 //
 // An expander's own URL is its first sub-row (lib/nav-tree.ts): History opens
 // on Cellular History, Extensions on Tailscale. The three history pages come
-// first, then the two logs. Settings is Connection Quality's settings page.
+// first, then Network Events, then Logs last. Settings is Connection Quality's settings page.
 const navMonitoring: NavItem[] = [
   {
     t_key: "history",
@@ -133,8 +133,8 @@ const navMonitoring: NavItem[] = [
     items: [
       { t_key: "history_connection", url: "/monitoring/history/connection" },
       { t_key: "history_system", url: "/monitoring/history/system-health" },
-      { t_key: "logs", url: "/monitoring/history/logs" },
       { t_key: "network_events", url: "/monitoring/history/events" },
+      { t_key: "logs", url: "/monitoring/history/logs" },
     ],
   },
   { t_key: "alerts", url: "/monitoring/alerts", icon: "notifications" },

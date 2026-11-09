@@ -1,15 +1,16 @@
-// Run with: bun test components/history/system
+// Run with: bun test components/history/logs
 import { describe, expect, it } from "bun:test";
 
 import type { LogEntry } from "@/types/system-logs";
 
 import {
   groupByDay,
+  paginate,
   kernelWallSec,
   qmanagerLines,
   toneOfSyslog,
   type LogLineView,
-} from "./logs-derive";
+} from "./derive";
 
 const entry = (timestamp: string, message: string): LogEntry => ({
   timestamp,
@@ -76,5 +77,35 @@ describe("groupByDay", () => {
   it("gives leading unreadable rows a group with no heading", () => {
     const groups = groupByDay([row(null, "a")]);
     expect(groups[0].sec).toBeNull();
+  });
+});
+
+describe("paginate", () => {
+  const rows: LogLineView[] = Array.from({ length: 23 }, (_, i) => ({
+    key: String(i),
+    sec: null,
+    rawTime: "",
+    tone: null,
+    tag: null,
+    message: `m${i}`,
+  }));
+
+  it("slices one page and reports the range", () => {
+    const v = paginate(rows, 1, 10);
+    expect(v.page).toBe(1);
+    expect(v.pageCount).toBe(3);
+    expect([v.from, v.to]).toEqual([11, 20]);
+    expect(v.rows[0].message).toBe("m10");
+  });
+
+  it("clamps a stale index onto the last page", () => {
+    const v = paginate(rows, 9, 10);
+    expect(v.page).toBe(2);
+    expect([v.from, v.to]).toEqual([21, 23]);
+  });
+
+  it("reads an empty list as page 1 of 1", () => {
+    const v = paginate([], 4, 10);
+    expect([v.page, v.pageCount, v.from, v.to]).toEqual([0, 1, 0, 0]);
   });
 });

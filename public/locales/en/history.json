@@ -347,46 +347,6 @@
         "device_off": "Device off",
         "mem_value": "{{pct}}% ({{mb}} MB)"
       }
-    },
-    "logs": {
-      "title": "Logs",
-      "description": "What the modem and QManager wrote to their logs, newest first.",
-      "tabs": {
-        "qmanager": "QManager",
-        "system": "System"
-      },
-      "level_label": "Log level",
-      "level": {
-        "all": "All",
-        "error": "Error",
-        "warn": "Warning",
-        "info": "Info",
-        "debug": "Debug"
-      },
-      "source_label": "Log source",
-      "source": {
-        "system": "System",
-        "kernel": "Kernel"
-      },
-      "lines_label": "Lines to show",
-      "lines_option": "{{value}} lines",
-      "showing": "Showing {{shown}} of {{total}}",
-      "open_full": "Open full logs",
-      "stale": "Not refreshing",
-      "loading_sr": "Loading logs",
-      "error": {
-        "title": "Couldn't load the logs",
-        "description": "Check the connection and try again."
-      },
-      "empty": {
-        "title": "Nothing logged yet",
-        "description": "New log lines will appear here."
-      },
-      "empty_level": {
-        "title": "No lines at this level",
-        "description": "Nothing in the latest lines matches the chosen level."
-      },
-      "show_all": "Show all levels"
     }
   },
   "connection": {
@@ -587,6 +547,56 @@
     },
     "redirect": {
       "label": "Opening Connection History"
+    }
+  },
+  "logs": {
+    "page": {
+      "title": "Logs",
+      "description": "What the modem and QManager wrote to their logs, newest first."
+    },
+    "tabs": {
+      "qmanager": "QManager",
+      "system": "System"
+    },
+    "level_label": "Log level",
+    "level": {
+      "all": "All",
+      "error": "Error",
+      "warn": "Warning",
+      "info": "Info",
+      "debug": "Debug"
+    },
+    "source_label": "Log source",
+    "source": {
+      "system": "System",
+      "kernel": "Kernel"
+    },
+    "lines_label": "Lines to show",
+    "lines_option": "{{value}} lines",
+    "showing": "{{from}}–{{to}} of {{total}}",
+    "stale": "Not refreshing",
+    "loading_sr": "Loading logs",
+    "error": {
+      "title": "Couldn't load the logs",
+      "description": "Check the connection and try again."
+    },
+    "empty": {
+      "title": "Nothing logged yet",
+      "description": "New log lines will appear here."
+    },
+    "empty_level": {
+      "title": "No lines at this level",
+      "description": "Nothing in the latest lines matches the chosen level."
+    },
+    "show_all": "Show all levels",
+    "retry": "Try again",
+    "pagination": {
+      "rows_per_page": "Rows per page",
+      "page_of": "Page {{page}} of {{pages}}",
+      "first": "Go to first page",
+      "previous": "Go to previous page",
+      "next": "Go to next page",
+      "last": "Go to last page"
     }
   }
 }

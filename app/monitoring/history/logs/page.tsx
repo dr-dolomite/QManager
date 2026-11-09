@@ -1,7 +1,5 @@
-import SystemLogs from "@/components/system-settings/logs/system-logs";
+import LogsPage from "@/components/history/logs/logs-page";
 
-const SystemLogsPage = () => {
-  return <SystemLogs />;
-};
-
-export default SystemLogsPage;
+export default function HistoryLogsPage() {
+  return <LogsPage />;
+}
