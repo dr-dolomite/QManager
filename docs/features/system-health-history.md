@@ -107,7 +107,7 @@ Runs once per boot, on the first sample where the history clock is trusted (`his
 - **Cards:** four summary tiles (Up for, Modem restarts, Processor, Memory; Up for and Memory use the live status poll), Stability, three charts (Processor, Memory, Temperature with a dashed "Throttles at N C" guide from the status poll's `trip_c`), Storage (three meters with a tick for where each area stood at the start of the range; warning from 80 %, destructive from 90 %), System events (grouped by day, five rows then "Show more"), Logs.
 - **One event fetch** (`pageSize: 100`) feeds lanes, markers and the list. Reboot, crash and throttle episodes beyond 100 events in a range are not drawn.
 - Strings live in `history.json` `system.*` in all five catalogs. Glyphs are Material Symbols (`/history/**` is a Material route).
-- A development switch, `?mock=<scenario>` (`dev-mock.tsx`, `mock-fixture.ts`), still swaps the hooks for a fixture; it exists for UI work and is marked in code for removal.
+- `mock-fixture.ts` holds five scenarios (healthy, modem, hot, storage, fresh) in the exact CGI shapes; it is test-only (`derive.test.ts`), the page has no mock switch.
 
 ## 6. Known limits
 

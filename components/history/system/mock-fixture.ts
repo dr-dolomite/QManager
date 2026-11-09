@@ -24,8 +24,7 @@ import type {
 // wherever the device was off, hourly storage readings that most buckets lack,
 // and raw event rows in the exact formats `types/system-history.ts` documents.
 //
-// Delete with `dev-mock.tsx` once the collector ships; nothing outside the dev
-// switch imports this except Stability / chart cards during development.
+// Test-only: `derive.test.ts` runs the derivations over these scenarios.
 // =============================================================================
 
 export type SystemScenario = "healthy" | "modem" | "hot" | "storage" | "fresh";

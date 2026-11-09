@@ -7,7 +7,6 @@ import { useModemStatus } from "@/hooks/use-modem-status";
 import type { HistoryRange } from "@/types/history";
 import type { SystemMetric, SystemState } from "@/types/system-history";
 
-import { MockPage, useMockScenario } from "./dev-mock";
 import type { LiveStatus } from "./derive";
 import { SystemHealthView } from "./system-health-view";
 
@@ -16,8 +15,7 @@ import { SystemHealthView } from "./system-health-view";
 // =============================================================================
 // Reads the `system` series and its event rows through the shared history hooks
 // and folds in the live values from the status poll (uptime, memory in use, the
-// heat-throttling snapshot). `?mock=<scenario>` swaps in the development
-// fixture until the collector ships (see dev-mock.tsx).
+// heat-throttling snapshot).
 // =============================================================================
 
 function LivePage() {
@@ -55,16 +53,6 @@ function LivePage() {
   );
 }
 
-function Entry() {
-  const scenario = useMockScenario();
-  return scenario ? <MockPage scenario={scenario} /> : <LivePage />;
-}
-
 export default function SystemHealth() {
-  // `useSearchParams` needs a Suspense boundary in a static export.
-  return (
-    <React.Suspense fallback={null}>
-      <Entry />
-    </React.Suspense>
-  );
+  return <LivePage />;
 }
