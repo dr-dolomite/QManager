@@ -134,7 +134,6 @@ const navMonitoring: NavItem[] = [
     url: "/monitoring/connection-quality",
     icon: "speed",
     items: [
-      { t_key: "latency_monitor", url: "/monitoring/latency" },
       { t_key: "network_events", url: "/monitoring/events" },
       { t_key: "prometheus", url: "/monitoring/prometheus" },
     ],

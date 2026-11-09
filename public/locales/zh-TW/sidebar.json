@@ -45,7 +45,6 @@
     "traffic_masquerade": "流量偽裝",
     "traffic_engine": "流量引擎",
     "network_events": "網路事件",
-    "latency_monitor": "延遲監控",
     "alerts": "警報",
     "tailscale": "Tailscale",
     "netbird": "NetBird",
