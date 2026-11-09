@@ -11,6 +11,7 @@ HIST_cellular_FAULT="down"
 HIST_cellular_METRICS="lte_rsrp lte_rsrq lte_sinr lte_rssi nr_rsrp nr_rsrq nr_sinr"
 HIST_cellular_EVENTS="signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change"
 HIST_cellular_EVENTS_KEEP="signal_lost signal_restored"
+HIST_cellular_PAIRS="signal_lost:signal_restored"
 
 # _hcl_v VALUE LO HI -> _HI = integer within LO..HI, else empty (no reading).
 _hcl_v() {

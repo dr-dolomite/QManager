@@ -73,6 +73,11 @@ export interface HistoryEvent {
   severity: EventSeverity;
   radio: HistoryRadio;
   message: string;
+  /**
+   * Onset types paired in the series (HIST_<id>_PAIRS) only: the t of the
+   * next matching recovery, or null while ongoing. Absent on other types.
+   */
+  end?: number | null;
 }
 
 export interface HistoryEventsResponse {
