@@ -1,6 +1,6 @@
 import type { BadgeVariant } from "@/components/ui/badge";
 
-// Tailscale — the /monitoring/tailscale family's geometry and tone contract.
+// Tailscale — the /monitoring/extensions/tailscale family's geometry and tone contract.
 // Restated from the Alerts and Latency siblings, never imported across families.
 // Skeletons read the same constants the loaded views do (Skeleton-Mirror).
 

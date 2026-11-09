@@ -28,7 +28,7 @@ import { MaterialSymbol } from "@/components/ui/material-symbol";
 // white flash reads as a broken link.
 // =============================================================================
 
-const TARGET = "/history/connection";
+const TARGET = "/monitoring/history/connection";
 
 function LatencyRedirect() {
   const router = useRouter();

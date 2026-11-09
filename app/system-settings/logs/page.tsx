@@ -1,7 +1,6 @@
-import SystemLogs from "@/components/system-settings/logs/system-logs";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const SystemLogsPage = () => {
-  return <SystemLogs />;
-};
-
-export default SystemLogsPage;
+// Logs moved to /monitoring/history/logs; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/logs" />;
+}

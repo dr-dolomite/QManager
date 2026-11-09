@@ -46,7 +46,7 @@ export const EVENT_TAB_CATEGORIES: Record<NetworkEventType, EventTabCategory> =
     modem_recovered: "dataConnection",
   };
 
-/** The filter rail on `/monitoring/events`, in render order. `all` is not a category. */
+/** The filter rail on `/monitoring/history/events`, in render order. `all` is not a category. */
 export const EVENT_FILTERS = [
   "all",
   "bandChanges",

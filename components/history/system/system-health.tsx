@@ -11,7 +11,7 @@ import type { LiveStatus } from "./derive";
 import { SystemHealthView } from "./system-health-view";
 
 // =============================================================================
-// System Health: /history/system-health
+// System Health: /monitoring/history/system-health
 // =============================================================================
 // Reads the `system` series and its event rows through the shared history hooks
 // and folds in the live values from the status poll (uptime, memory in use, the

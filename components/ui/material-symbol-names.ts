@@ -87,6 +87,8 @@ export const MATERIAL_SYMBOL_NAMES = [
   "expand_less",
   "expand_more",
   "explore",
+  // Monitoring > Extensions, the sidebar row for the add-on integrations.
+  "extension",
   "favorite",
   "fingerprint",
   "first_page",

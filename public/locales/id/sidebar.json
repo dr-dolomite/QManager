@@ -4,7 +4,6 @@
     "cellular": "Seluler",
     "local_network": "Jaringan Lokal",
     "monitoring": "Monitoring",
-    "history": "Riwayat",
     "system": "Sistem"
   },
   "breadcrumb": "Jejak navigasi",
@@ -16,7 +15,6 @@
     "cell_scanner_full_scan": "Pindai Penuh",
     "cellular_settings_general": "Umum",
     "ip_passthrough": "Passthrough IP",
-    "connection_quality_overview": "Ringkasan",
     "system_settings_general": "Umum",
     "history": "Riwayat",
     "history_cellular": "Riwayat Seluler",
@@ -51,11 +49,11 @@
     "tailscale": "Tailscale",
     "netbird": "NetBird",
     "watchdog": "Watchdog",
+    "extensions": "Ekstensi",
     "system_settings": "Pengaturan Sistem",
     "configuration_backup": "Cadangan Konfigurasi",
     "device_access": "Akses Perangkat",
     "ssh_password": "Kata Sandi SSH",
-    "connection_quality": "Kualitas Koneksi",
     "adaptive_polling": "Polling Adaptif",
     "hardware": "Hardware",
     "logs": "Log",
@@ -67,7 +65,8 @@
     "support": "Dukungan",
     "donate": "Donasi untuk Proyek",
     "languages": "Bahasa",
-    "prometheus": "Prometheus"
+    "prometheus": "Prometheus",
+    "monitoring_settings": "Pengaturan"
   },
   "switcher": {
     "opens_new_tab": "Membuka di tab baru",

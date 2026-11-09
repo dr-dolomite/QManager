@@ -4,7 +4,6 @@
     "cellular": "蜂窝网络",
     "local_network": "本地网络",
     "monitoring": "监控",
-    "history": "历史记录",
     "system": "系统"
   },
   "breadcrumb": "面包屑导航",
@@ -16,7 +15,6 @@
     "cell_scanner_full_scan": "全面扫描",
     "cellular_settings_general": "常规",
     "ip_passthrough": "IP 直通",
-    "connection_quality_overview": "概览",
     "system_settings_general": "常规",
     "history": "历史记录",
     "history_cellular": "蜂窝历史",
@@ -51,11 +49,11 @@
     "tailscale": "Tailscale",
     "netbird": "NetBird",
     "watchdog": "看门狗",
+    "extensions": "扩展",
     "system_settings": "系统设置",
     "configuration_backup": "配置备份",
     "device_access": "设备访问",
     "ssh_password": "SSH 密码",
-    "connection_quality": "连接质量",
     "adaptive_polling": "自适应轮询",
     "hardware": "硬件",
     "logs": "日志",
@@ -67,7 +65,8 @@
     "support": "支持",
     "donate": "捐赠项目",
     "languages": "语言",
-    "prometheus": "Prometheus"
+    "prometheus": "Prometheus",
+    "monitoring_settings": "设置"
   },
   "switcher": {
     "opens_new_tab": "在新标签页中打开",

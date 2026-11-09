@@ -1,5 +1,5 @@
 // =============================================================================
-// System Logs — the /system-settings/logs family's geometry and tone contract
+// System Logs — the /monitoring/history/logs family's geometry and tone contract
 // =============================================================================
 // Two sources, and the split is deliberate.
 //

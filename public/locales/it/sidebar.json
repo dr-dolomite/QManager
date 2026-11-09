@@ -4,7 +4,6 @@
     "cellular": "Rete mobile",
     "local_network": "Rete locale",
     "monitoring": "Monitoraggio",
-    "history": "Cronologia",
     "system": "Sistema"
   },
   "breadcrumb": "Percorso di navigazione",
@@ -16,7 +15,6 @@
     "cell_scanner_full_scan": "Scansione completa",
     "cellular_settings_general": "Generali",
     "ip_passthrough": "Passthrough IP",
-    "connection_quality_overview": "Panoramica",
     "system_settings_general": "Generali",
     "history": "Cronologia",
     "history_cellular": "Cronologia rete mobile",
@@ -51,11 +49,11 @@
     "tailscale": "Tailscale",
     "netbird": "NetBird",
     "watchdog": "Watchdog",
+    "extensions": "Estensioni",
     "system_settings": "Impostazioni di sistema",
     "configuration_backup": "Backup della configurazione",
     "device_access": "Accesso al dispositivo",
     "ssh_password": "Password SSH",
-    "connection_quality": "Qualità della connessione",
     "adaptive_polling": "Polling Adattivo",
     "hardware": "Hardware",
     "logs": "Log",
@@ -67,7 +65,8 @@
     "support": "Supporto",
     "donate": "Dona al progetto",
     "languages": "Lingue",
-    "prometheus": "Prometheus"
+    "prometheus": "Prometheus",
+    "monitoring_settings": "Impostazioni"
   },
   "switcher": {
     "opens_new_tab": "Si apre in una nuova scheda",

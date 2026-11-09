@@ -1,10 +1,6 @@
-import NetworkEventsComponent from '@/components/monitoring/network-events'
-import React from 'react'
+import { RouteRedirect } from "@/components/route-redirect";
 
-const NetworkAnalysisPage = () => {
-  return (
-    <NetworkEventsComponent />
-  )
+// Network Events moved to /monitoring/history/events; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/events" />;
 }
-
-export default NetworkAnalysisPage

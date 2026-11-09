@@ -23,7 +23,7 @@ import { SummaryTiles } from "./summary-tiles";
 import { DEFAULT_LIMITS, type ConnectionLimits } from "./types";
 
 // =============================================================================
-// Connection History: /history/connection
+// Connection History: /monitoring/history/connection
 // =============================================================================
 // Header with the range control, then the summary strip, the reachability
 // strip, the four metric charts, the Sites card and the connection events table.

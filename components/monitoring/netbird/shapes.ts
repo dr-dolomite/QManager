@@ -1,6 +1,6 @@
 import type { BadgeVariant } from "@/components/ui/badge";
 
-// NetBird — the /monitoring/netbird family's geometry and tone contract.
+// NetBird — the /monitoring/extensions/netbird family's geometry and tone contract.
 // Restated from the Tailscale sibling, never imported across families.
 // Skeletons read the same constants the loaded views do (Skeleton-Mirror).
 

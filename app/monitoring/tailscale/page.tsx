@@ -1,7 +1,6 @@
-import TailscaleComponent from "@/components/monitoring/tailscale/tailscale";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const TailscalePage = () => {
-  return <TailscaleComponent />;
-};
-
-export default TailscalePage;
+// Tailscale moved to /monitoring/extensions/tailscale; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/extensions/tailscale" />;
+}

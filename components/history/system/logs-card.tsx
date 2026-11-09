@@ -188,7 +188,7 @@ export function LogsCard() {
                   className="@2xl/card:ml-1"
                 />
                 <Button variant="tonal-neutral" size="sm" asChild className="@2xl/card:ml-auto">
-                  <Link href="/system-settings/logs">
+                  <Link href="/monitoring/history/logs">
                     {t("system.logs.open_full")}
                     <MaterialSymbol name="open_in_new" size={18} aria-hidden="true" />
                   </Link>

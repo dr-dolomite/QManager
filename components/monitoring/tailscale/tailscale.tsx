@@ -198,7 +198,7 @@ const TailscaleComponent = () => {
               components={{
                 link: (
                   <Link
-                    href="/monitoring/netbird"
+                    href="/monitoring/extensions/netbird"
                     className="font-medium underline underline-offset-2"
                   />
                 ),

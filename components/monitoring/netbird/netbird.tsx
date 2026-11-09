@@ -190,7 +190,7 @@ const NetBirdComponent = () => {
               components={{
                 link: (
                   <Link
-                    href="/monitoring/tailscale"
+                    href="/monitoring/extensions/tailscale"
                     className="font-medium underline underline-offset-2"
                   />
                 ),

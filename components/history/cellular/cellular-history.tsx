@@ -20,7 +20,7 @@ import { CellularHistoryError, CellularHistorySkeleton } from "./states";
 import { SummaryTiles } from "./summary-tiles";
 
 // =============================================================================
-// Cellular History — /history/cellular
+// Cellular History — /monitoring/history/cellular
 // =============================================================================
 // Header with the range control, then the summary strip, the connection strip,
 // the four signal charts and the radio events table. The range and the shared

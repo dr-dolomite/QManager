@@ -1,7 +1,6 @@
-import CellularHistory from "@/components/history/cellular/cellular-history";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const CellularHistoryPage = () => {
-  return <CellularHistory />;
-};
-
-export default CellularHistoryPage;
+// Cellular History moved to /monitoring/history/cellular; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/cellular" />;
+}

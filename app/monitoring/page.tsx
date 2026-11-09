@@ -1,15 +1,6 @@
-"use client";
+import { RouteRedirect } from "@/components/route-redirect";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-// Network Events moved to /monitoring/events; this keeps old bookmarks working.
-export default function MonitoringRedirectPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/monitoring/events");
-  }, [router]);
-
-  return null;
+// /monitoring has no page of its own; old links to it still open Network Events.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/events" />;
 }

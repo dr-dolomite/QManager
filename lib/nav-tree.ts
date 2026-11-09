@@ -69,7 +69,7 @@ export const FIRST_SUB_T_KEY: Readonly<Record<string, string>> = {
   cell_scanner: "cell_scanner_full_scan",
   settings: "cellular_settings_general",
   local_network_settings: "ip_passthrough",
-  connection_quality: "connection_quality_overview",
+  extensions: "tailscale",
   system_settings: "system_settings_general",
   history: "history_cellular",
 };

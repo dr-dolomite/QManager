@@ -1,7 +1,6 @@
-import ConnectionHistory from "@/components/history/connection/connection-history";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const ConnectionHistoryPage = () => {
-  return <ConnectionHistory />;
-};
-
-export default ConnectionHistoryPage;
+// Connection History moved to /monitoring/history/connection; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/connection" />;
+}

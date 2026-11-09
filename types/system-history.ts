@@ -2,7 +2,7 @@
 // System Health history: the "system" series (history_series_system.sh)
 // =============================================================================
 // Narrows the generic history contract (types/history.ts) for
-// /history/system-health. See docs/features/history.md (System Health).
+// /monitoring/history/system-health. See docs/features/history.md (System Health).
 // =============================================================================
 
 import type {

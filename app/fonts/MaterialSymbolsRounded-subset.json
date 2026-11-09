@@ -42,6 +42,7 @@
     "expand_less",
     "expand_more",
     "explore",
+    "extension",
     "favorite",
     "fingerprint",
     "first_page",
@@ -137,6 +138,6 @@
     "wifi_tethering_off",
     "work"
   ],
-  "bytes": 49320,
-  "sha256": "384c5c7d6f5c088308c1f36ee6b164a951755e616ef070ca62972f11c0a3c5b7"
+  "bytes": 50204,
+  "sha256": "aa8879f7b7ca81b371aed1211e2cfc01c0b6431e4551c61335c5c2bdc850fc8e"
 }

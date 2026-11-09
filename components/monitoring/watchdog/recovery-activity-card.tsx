@@ -153,7 +153,7 @@ export function RecoveryActivityCard({
         </CardDescription>
         <CardAction>
           <Button asChild variant="ghost" className={LOG_LINK}>
-            <Link href="/monitoring/events">
+            <Link href="/monitoring/history/events">
               {t("watchdog.activity.allEvents")}
               <ChevronRightIcon className={PILL_GLYPH} aria-hidden />
             </Link>

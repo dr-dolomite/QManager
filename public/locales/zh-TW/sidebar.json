@@ -4,7 +4,6 @@
     "cellular": "蜂窩網路",
     "local_network": "本地網路",
     "monitoring": "監控",
-    "history": "歷史記錄",
     "system": "系統"
   },
   "breadcrumb": "麵包屑導航",
@@ -16,7 +15,6 @@
     "cell_scanner_full_scan": "全面掃描",
     "cellular_settings_general": "一般",
     "ip_passthrough": "IP 直通",
-    "connection_quality_overview": "概覽",
     "system_settings_general": "一般",
     "history": "歷史記錄",
     "history_cellular": "蜂窩歷史",
@@ -51,11 +49,11 @@
     "tailscale": "Tailscale",
     "netbird": "NetBird",
     "watchdog": "看門狗",
+    "extensions": "擴充功能",
     "system_settings": "系統設定",
     "configuration_backup": "設定備份",
     "device_access": "裝置存取",
     "ssh_password": "SSH 密碼",
-    "connection_quality": "連線質量",
     "adaptive_polling": "自適應輪詢",
     "hardware": "硬體",
     "logs": "日誌",
@@ -67,7 +65,8 @@
     "support": "支援",
     "donate": "捐贈專案",
     "languages": "語言",
-    "prometheus": "Prometheus"
+    "prometheus": "Prometheus",
+    "monitoring_settings": "設定"
   },
   "switcher": {
     "opens_new_tab": "在新標籤頁中開啟",

@@ -119,37 +119,36 @@ const navLocalNetwork: NavItem[] = [
   },
 ];
 
-// History is a section of its own. The parent row expands to its pages: its own
-// page (Cellular History) is the first sub-row, then each page listed in
-// `items`, so the next History page is one entry here.
-const navHistory: NavItem[] = [
-  {
-    t_key: "history",
-    url: "/history/cellular",
-    icon: "history",
-    items: [
-      { t_key: "history_connection", url: "/history/connection" },
-      { t_key: "history_system", url: "/history/system-health" },
-    ],
-  },
-];
-
 // The Watchdog row's live status is injected at render (AppSidebar), so the
 // array itself stays static and the breadcrumb can read it too.
+//
+// An expander's own URL is its first sub-row (lib/nav-tree.ts): History opens
+// on Cellular History, Extensions on Tailscale. The three history pages come
+// first, then the two logs. Settings is Connection Quality's settings page.
 const navMonitoring: NavItem[] = [
   {
-    t_key: "connection_quality",
-    url: "/monitoring/connection-quality",
-    icon: "speed",
+    t_key: "history",
+    url: "/monitoring/history/cellular",
+    icon: "history",
     items: [
-      { t_key: "network_events", url: "/monitoring/events" },
-      { t_key: "prometheus", url: "/monitoring/prometheus" },
+      { t_key: "history_connection", url: "/monitoring/history/connection" },
+      { t_key: "history_system", url: "/monitoring/history/system-health" },
+      { t_key: "logs", url: "/monitoring/history/logs" },
+      { t_key: "network_events", url: "/monitoring/history/events" },
     ],
   },
   { t_key: "alerts", url: "/monitoring/alerts", icon: "notifications" },
   { t_key: "watchdog", url: "/monitoring/watchdog", icon: "pets" },
-  { t_key: "tailscale", url: "/monitoring/tailscale", icon: "vpn_lock" },
-  { t_key: "netbird", url: "/monitoring/netbird", icon: "hub" },
+  {
+    t_key: "extensions",
+    url: "/monitoring/extensions/tailscale",
+    icon: "extension",
+    items: [
+      { t_key: "netbird", url: "/monitoring/extensions/netbird" },
+      { t_key: "prometheus", url: "/monitoring/extensions/prometheus" },
+    ],
+  },
+  { t_key: "monitoring_settings", url: "/monitoring/settings", icon: "tune" },
 ];
 
 // Donate opens a dialog; its onClick is injected at render.
@@ -177,7 +176,6 @@ const navSystem: NavItem[] = [
         t_key: "system_health_check",
         url: "/system-settings/system-health-check",
       },
-      { t_key: "logs", url: "/system-settings/logs" },
     ],
   },
   {
@@ -301,7 +299,6 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   { groupKey: "cellular", items: navCellular },
   { groupKey: "local_network", items: navLocalNetwork },
   { groupKey: "monitoring", items: navMonitoring },
-  { groupKey: "history", items: navHistory },
   { groupKey: "system", items: navSystem },
   { items: navFooter, size: "sm" },
 ];

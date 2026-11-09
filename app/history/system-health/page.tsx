@@ -1,7 +1,6 @@
-import SystemHealth from "@/components/history/system/system-health";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const SystemHealthPage = () => {
-  return <SystemHealth />;
-};
-
-export default SystemHealthPage;
+// System Health moved to /monitoring/history/system-health; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/history/system-health" />;
+}

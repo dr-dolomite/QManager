@@ -1,6 +1,6 @@
 import type { BadgeVariant } from "@/components/ui/badge";
 
-// Prometheus — the /monitoring/prometheus geometry and tone contract.
+// Prometheus — the /monitoring/extensions/prometheus geometry and tone contract.
 // Skeletons import the same constants the loaded views do (Skeleton-Mirror).
 // Geometry is RESTATED from the sibling families (system-settings rows,
 // watchdog conditions), never imported: what is shared is the system's numbers,

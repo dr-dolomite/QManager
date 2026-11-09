@@ -412,7 +412,7 @@ const ConnectionQualityComponent = ({
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="secondary">
-            <Link href="/monitoring/connection-quality/">
+            <Link href="/monitoring/settings/">
               {t("connection_quality.empty_action")}
             </Link>
           </Button>
@@ -522,7 +522,7 @@ const ConnectionQualityComponent = ({
           {t("connection_quality.reach_label")}
         </span>
         <Link
-          href="/monitoring/events/"
+          href="/monitoring/history/events/"
           className={cn(
             "shrink-0 rounded-inline text-[11px] leading-tight font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring",
             reach.className,

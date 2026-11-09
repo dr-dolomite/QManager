@@ -152,7 +152,7 @@ export function DetectionCard({
                 : t("watchdog.detection.down.unknown")}
             </span>
           </span>
-          <Link href="/monitoring/connection-quality/" className={DETECT.LINK}>
+          <Link href="/monitoring/settings/" className={DETECT.LINK}>
             {t("watchdog.detection.sensitivityLink")}
             <ArrowRightIcon className="size-3.5" aria-hidden />
           </Link>

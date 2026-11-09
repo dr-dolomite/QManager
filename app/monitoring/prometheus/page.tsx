@@ -1,5 +1,6 @@
-import PrometheusComponent from "@/components/monitoring/prometheus/prometheus";
+import { RouteRedirect } from "@/components/route-redirect";
 
-const PrometheusPage = () => <PrometheusComponent />;
-
-export default PrometheusPage;
+// Prometheus moved to /monitoring/extensions/prometheus; this keeps old bookmarks working.
+export default function RedirectPage() {
+  return <RouteRedirect to="/monitoring/extensions/prometheus" />;
+}
