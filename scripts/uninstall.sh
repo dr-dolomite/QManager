@@ -693,6 +693,11 @@ remove_config() {
         rm -f /usrdata/qmanager/data_used.json /usrdata/qmanager/data_used.json.*
         info "Removed Data Used counter"
     fi
+    # History store (written by the poller's history.sh lib).
+    if [ -d /usrdata/qmanager/history ]; then
+        rm -rf /usrdata/qmanager/history
+        info "Removed History data"
+    fi
 }
 
 # --- Summary -----------------------------------------------------------------
