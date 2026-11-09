@@ -46,6 +46,9 @@ QLOG_TO_STDOUT="${QLOG_TO_STDOUT:-0}"
 _QLOG_COMPONENT=""
 _QLOG_INITIALIZED=0
 _QLOG_WRITES=0
+_QLOG_SPOOL_DIR=""
+_QLOG_NL='
+'
 
 # --- Level Constants ---------------------------------------------------------
 _QLOG_LVL_DEBUG=0
@@ -72,6 +75,9 @@ qlog_init() {
     esac
     [ -n "$log_dir" ] || log_dir="/"
     [ -d "$log_dir" ] || mkdir -p "$log_dir" 2>/dev/null
+
+    # qmanager_logd spool dir; writers use it only while <dir>/alive exists.
+    _QLOG_SPOOL_DIR="${QLOGD_RUN_DIR:-/var/run/qmanager/journal}"
 }
 
 # --- Level Resolver ----------------------------------------------------------
@@ -146,8 +152,30 @@ _qlog_write() {
         *)     cfg_level_num=$_QLOG_LVL_INFO ;;
     esac
 
+    # Spool dir is cached by qlog_init; scripts that log without init resolve it here.
+    local _qd="$_QLOG_SPOOL_DIR"
+    [ -n "$_qd" ] || _qd="${QLOGD_RUN_DIR:-/var/run/qmanager/journal}"
+
     if [ "$msg_level_num" -lt "$cfg_level_num" ] 2>/dev/null; then
-        return
+        # Below the configured level: only DEBUG under a live debug lease passes.
+        [ "$level" = "DEBUG" ] && [ -e "$_qd/debug" ] || return
+    fi
+
+    # logd path: zero forks. A newline would split the record, so collapse it
+    # (one tr fork, only on that edge).
+    if [ -e "$_qd/alive" ]; then
+        local _qmono
+        local _qidle
+        { read -r _qmono _qidle < /proc/uptime; } 2>/dev/null
+        case "$message" in
+            *"$_QLOG_NL"*) message=$(printf '%s' "$message" | tr '\n' ' ') ;;
+        esac
+        if printf 'L\t%s\t%s\t%s\t%s\t%s\n' "$_qmono" "$level" "$_QLOG_COMPONENT" "$$" "$message" >> "$_qd/spool" 2>/dev/null; then
+            if [ "$QLOG_TO_STDOUT" = "1" ]; then
+                echo "${level} [${_QLOG_COMPONENT}:$$] ${message}"
+            fi
+            return
+        fi
     fi
 
     # Format timestamp — ISO-ish for readability, compact for space
