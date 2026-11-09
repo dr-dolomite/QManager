@@ -24,6 +24,15 @@ qlog_init "cgi_mtu"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Configuration -----------------------------------------------------------
 MTU_FIREWALL_FILE="/etc/firewall.user.mtu"
 NETWORK_INTERFACE="rmnet_data0"
@@ -79,10 +88,15 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     if [ "$mtu_value" = "disable" ]; then
         qlog_info "Disabling custom MTU"
 
+        ev_was_custom=""
+        [ -f "$MTU_FIREWALL_FILE" ] && ev_was_custom="1"
         rm -f "$MTU_FIREWALL_FILE"
 
         default_mtu=$(get_current_mtu)
         default_mtu=${default_mtu:-1500}
+        if [ -n "$ev_was_custom" ]; then
+            append_event "ttl_mtu_changed" "Custom MTU disabled" "info" "" "which=mtu;from=${default_mtu};to=default"
+        fi
 
         qlog_info "MTU disabled, current=$default_mtu"
 
@@ -109,6 +123,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     fi
 
     qlog_info "Setting MTU=$mtu_value"
+    ev_from_mtu=$(get_current_mtu)
+    ev_from_mtu=${ev_from_mtu:-1500}
 
     # --- Write firewall MTU configuration file (atomic: temp + mv) ---
     MTU_TMP="${MTU_FIREWALL_FILE}.tmp"
@@ -124,6 +140,9 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     done
 
     qlog_info "MTU set to $mtu_value"
+    if [ "$ev_from_mtu" != "$mtu_value" ]; then
+        append_event "ttl_mtu_changed" "MTU changed from ${ev_from_mtu} to ${mtu_value}" "info" "" "which=mtu;from=${ev_from_mtu};to=${mtu_value}"
+    fi
 
     jq -n \
         --argjson current_value "$mtu_value" \

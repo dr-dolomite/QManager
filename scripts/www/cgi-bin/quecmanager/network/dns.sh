@@ -29,6 +29,37 @@ qlog_init "cgi_dns"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
+# Comma-joined DNS servers currently in UCI (IPv4 option 6 then IPv6 list).
+ev_dns_snapshot() {
+    local _a
+    local _b
+    _a=$(uci -q get dhcp.lan.dhcp_option 2>/dev/null)
+    _a="${_a#6,}"
+    _b=$(uci -q get dhcp.lan.dns 2>/dev/null | tr ' ' ',')
+    if [ -n "$_a" ] && [ -n "$_b" ]; then
+        printf '%s,%s' "$_a" "$_b"
+    else
+        printf '%s%s' "$_a" "$_b"
+    fi
+}
+
+# ev_dns_emit <from>: compares against the post-apply state.
+ev_dns_emit() {
+    local _to
+    _to=$(ev_dns_snapshot | tr -d ';[:cntrl:]')
+    [ "$1" = "$_to" ] && return 0
+    append_event "dns_changed" "DNS servers changed" "info" "" "from=${1};to=${_to}"
+}
+
 # --- Helper: determine NIC from MPDN_RULE ------------------------------------
 # Parses AT+QMAP="MPDN_RULE" response.
 # Fields: "MPDN_rule", index, enabled, pdnIndex, interfaceType, ipType
@@ -172,6 +203,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # Build comma-separated list of non-empty IPv4 DNS values
         dns_list=$(printf '%s' "$dns1,$dns2,$dns3" | tr ',' '\n' | grep -v '^$' | tr '\n' ',' | sed 's/,$//')
 
+        ev_dns_from=$(ev_dns_snapshot | tr -d ';[:cntrl:]')
+
         # Ensure UCI section exists
         uci show dhcp.lan >/dev/null 2>&1 || uci set dhcp.lan=dhcp
 
@@ -216,6 +249,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         mkdir -p /etc/qmanager
         echo "enabled" | qm_durable_write /etc/qmanager/dns_mode \n            || qlog_warn "Could not save dns_mode=enabled"
 
+        ev_dns_emit "$ev_dns_from"
         qlog_info "Custom DNS enabled: IPv4=$dns_list on lan"
         qlog_info "IPv6 DNS list applied on lan: $v6_list"
 
@@ -236,6 +270,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         # Read carrier IPv4 DNS from resolv.conf.auto
         carrier=$(awk '/^nameserver [0-9.]+/ {print $2}' /tmp/resolv.conf.d/resolv.conf.auto 2>/dev/null | \
             tr '\n' ',' | sed 's/,$//')
+
+        ev_dns_from=$(ev_dns_snapshot | tr -d ';[:cntrl:]')
 
         # Ensure UCI section exists
         uci show dhcp.lan >/dev/null 2>&1 || uci set dhcp.lan=dhcp
@@ -261,6 +297,7 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         mkdir -p /etc/qmanager
         echo "disabled" | qm_durable_write /etc/qmanager/dns_mode \n            || qlog_warn "Could not save dns_mode=disabled"
 
+        ev_dns_emit "$ev_dns_from"
         qlog_info "Carrier DNS restored: $carrier on lan; IPv6 DNS list cleared"
 
         jq -n \

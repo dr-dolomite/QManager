@@ -27,6 +27,15 @@ qlog_init "cgi_ttl"
 cgi_headers
 cgi_handle_options
 
+# --- Events (for append_event) -----------------------------------------------
+EVENTS_FILE="/tmp/qmanager_events.json"
+MAX_EVENTS=50
+if [ -f /usr/lib/qmanager/events.sh ]; then
+    . /usr/lib/qmanager/events.sh
+else
+    append_event() { :; }
+fi
+
 # --- Configuration -----------------------------------------------------------
 TTL_FILE="/etc/firewall.user.ttl"
 TTL_INIT="/etc/init.d/qmanager_ttl"
@@ -159,6 +168,12 @@ EOF
     fi
 
     qlog_info "TTL/HL applied: TTL=$new_ttl HL=$new_hl enabled=$is_enabled"
+    if [ "${cur_ttl:-0}" != "$new_ttl" ]; then
+        append_event "ttl_mtu_changed" "TTL changed from ${cur_ttl:-0} to ${new_ttl}" "info" "" "which=ttl;from=${cur_ttl:-0};to=${new_ttl}"
+    fi
+    if [ "${cur_hl:-0}" != "$new_hl" ]; then
+        append_event "ttl_mtu_changed" "Hop limit changed from ${cur_hl:-0} to ${new_hl}" "info" "" "which=hl;from=${cur_hl:-0};to=${new_hl}"
+    fi
 
     jq -n \
         --argjson is_enabled "$is_enabled" \
