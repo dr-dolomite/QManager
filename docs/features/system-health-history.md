@@ -13,7 +13,7 @@ System Health is the second History page. It shows how the modem itself held up 
 | RAM | `/var/run/qmanager/history/system.{open,queue,pending,run}` (core), `system.ssr` and `system.df` (provider) |
 | States | `normal throttled`; `FAULT` is empty (no outage/availability maths on this series) |
 | Metrics | `cpu mem_pct mem_mb temp_c st_sys_used st_sys_size st_app_used st_app_size st_tmp_used st_tmp_size` |
-| Events | `device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered` |
+| Events | `device_reboot modem_crash modem_recovered thermal_throttled thermal_recovered`, plus the journal-era `software_updated clock_stepped storage_low broker_restarted oom_kill imei_changed` (facts, no pairs) |
 | Pairs | `modem_crash:modem_recovered thermal_throttled:thermal_recovered` (the events CGI adds `end` to the onset rows) |
 | Reboot ledger | `/etc/qmanager/crash.log`, rows `<epoch>\|reboot\|<reason>` |
 | Types | `types/system-history.ts` (`SystemState`, `SystemMetric`, `SystemIncident`, `RebootCause`, `parseRebootMessage`, `parseThermalParts`) |
@@ -31,7 +31,7 @@ Logs are not on this page. The two-tab Logs card that used to sit at the bottom 
 2. **No new data source, no AT.** CPU, memory and thermal come from the poller; SSR comes from the QMI lane; reboot cause comes from `crash.log`. `status.json` and its composers are untouched, so `tools/poller-parity/` is unaffected.
 3. **The modem-crash source is the QMI lane, not the watchdog.** The watchdog only greps `dmesg` at escalation time and records no recovery, so it cannot be used. The provider reads `_QMI_SSR` (the broker's SSR episode counter) and `_QMI_STATE` (`down` during the SSR window), both loaded each cycle by `qmi_load` (`qmi_merge.sh`). Without the lane (`_QMI_OK` not `1`) the provider records no crash events at all. See [`qmi-lane.md`](qmi-lane.md).
 4. **`device_reboot` is stamped at the boot instant, not at classification time.** The classification runs on the first *trusted* sample of a boot, but the event is recorded with mono `0` (the moment this boot began), so its `t` is the boot epoch (`_hist_off`). **Why:** the page needs "back online at" to draw the offline span `[t - off, t]`.
-5. **`device_reboot`, `modem_crash` and `modem_recovered` go to history only.** They are emitted by the provider through `hist_event` and never through `append_event`, so they do not appear in the Network Events log or in Alerts. `thermal_throttled` / `thermal_recovered` come from `events.sh` `detect_thermal_events` as before (they also reach the Network Events log and the thermal alert).
+5. **`device_reboot`, `modem_crash` and `modem_recovered` are emitted by the provider through `hist_event`, never through `append_event`.** With `qmanager_logd` not alive they go to history only (not the Network Events log, not Alerts). With logd alive (Phase 3, [`history.md`](history.md) §2) `hist_event` writes them to logd's spool with their own mono (`0` for `device_reboot`, the `dmesg` onset for a crash), so their `t` is unchanged; being journal events, they are then also in logd's event views (EVQ `fmt=json`, the events mirror) unless those readers filter them. `device_reboot` carries `cause` and `off` as fields too; the message stays `cause=X off=Y` (the events CGI reads `off=` from it). `thermal_throttled` / `thermal_recovered` come from `events.sh` `detect_thermal_events` as before (they also reach the Network Events log and the thermal alert).
 6. **One `device_reboot` per boot.** The provider's `boot` stamp holds the `boot_id` it last classified. A poller restart in the same boot finds a matching stamp and records nothing. The first boot after install has no stamp: it writes the stamp and records nothing.
 7. **Alerts and Recent Reboots are unchanged.** `alert_engine.sh` `_ae_classify_reboot` folds `user`, `scheduled` and `update` into its `user` bucket (and `tier4_escalation` into `watchdog`). Only System Health tells them apart.
 
@@ -63,7 +63,11 @@ Logs are not on this page. The two-tab Logs card that used to sit at the bottom 
 | `thermal_throttled` | `warning` | `Thermal throttling started (LTE, 5G)` (the parenthesis may be absent) | debounced onset | `events.sh` |
 | `thermal_recovered` | `info` | `Thermal throttling ended after <dur>` | debounced recovery | `events.sh` |
 
-All five are in `HIST_system_EVENTS_KEEP`, so they are still recorded after a day file reaches the 2000-row event cap.
+| `clock_stepped` | `info` | `Clock stepped by <s>s` (`step_s` signed) | the sample that saw the step | `history.sh` `_hist_clock`, via `append_event` |
+| `storage_low` | `warning` | `Storage low (<n> KB free)` (`free_kb`, `min_kb`) | first flush skipped for low space in an episode | `history.sh` `hist_flush_queues`, via `append_event` |
+| `software_updated`, `broker_restarted`, `oom_kill`, `imei_changed` | per writer | per writer | per writer | their emitters (`events.sh`, update path, kernel capture) |
+
+The first five are in `HIST_system_EVENTS_KEEP`, so they are still recorded after a day file reaches the 2000-row event cap (legacy rows; the journal applies logd's own cap, `history.md` §6 Event source).
 
 `off=-` means the offline time is unknown. The page draws the offline span as `[t - off, t]`, or a zero-length span at `t` when unknown. `parseRebootMessage` defaults a missing or foreign `cause` to `unexpected`.
 
@@ -135,11 +139,11 @@ Runs once per boot, on the first sample where the history clock is trusted (`his
 
 ## 8. Testing and validation
 
-`tools/history-test/system-test.sh <dir>`: `<dir>` holds `history.sh` and `history_series_system.sh` flat, plus optionally `parse_at.sh` for the `t1_temperature_max` case. `df` and `dmesg` are shell-function stubs, so it touches no live state. Cases: first sample (trusted, metrics, storage, first run records no reboot); steady state (no second `df` until the 361st sample, bad values dropped); SSR (count up = crash with the onset from `dmesg`, `up` = recovered, stale `dmesg` stamp ignored, count down re-baselines, crash open across a poller restart); reboot classification (planned `user`/`scheduled`/`update`/`watchdog`, unexpected with a valid, torn and foreign `alive` stamp, clock untrusted after boot defers classification); `parse_temperature` on a fake sysfs tree.
+`tools/history-test/system-test.sh <dir>`: `<dir>` holds `history.sh` and `history_series_system.sh` flat, plus optionally `parse_at.sh` for the `t1_temperature_max` case. `df` and `dmesg` are shell-function stubs, so it touches no live state. Cases: first sample (trusted, metrics, storage, first run records no reboot); steady state (no second `df` until the 361st sample, bad values dropped); SSR (count up = crash with the onset from `dmesg`, `up` = recovered, stale `dmesg` stamp ignored, count down re-baselines, crash open across a poller restart); reboot classification (planned `user`/`scheduled`/`update`/`watchdog`, unexpected with a valid, torn and foreign `alive` stamp, clock untrusted after boot defers classification); `parse_temperature` on a fake sysfs tree. `HIST_TEST_MODE=logd` runs the same cases with the events going to the journal stand-in (`logd-stub.sh`, [`history.md`](history.md) §10).
 
 | Check | Result |
 |---|---|
-| `system-test.sh` | 51 of 51, on the RM551E and locally |
+| `system-test.sh` | 51 of 51, on the RM551E and locally; 2026-11-10 (Phase 3): 51 of 51 in both modes, locally under BusyBox 1.36.1 |
 | Provider cost | about 0.29 ms per sample on the device |
 | Whole-poller CPU | within measurement noise |
 

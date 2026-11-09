@@ -16,7 +16,8 @@ QManager keeps a small, flash-friendly history of things the poller already know
 | Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only; plus two small durable marker files per series: `since` (when collecting began, written once) and `last_fault` (`<start> <end>` of the newest completed fault run); plus one store-wide `last_wall` (wall time of the newest sample, written by the TERM flush, §5) |
 | RAM state | `/var/run/qmanager/history/` (`clock.env`, `<series>.open`, `<series>.queue`, `<series>.pending`, `<series>.run`, `ext.spool`, `ext.spool.work`) |
 | Event pairing | optional `HIST_<id>_PAIRS="onset:recovery ..."` per series; cellular: `signal_lost:signal_restored` (§6) |
-| External events | `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2) |
+| Event store | `qmanager_logd`'s journal while logd is alive (Phase 3): every writer spools the event to logd and `history/events.sh` reads it back with `qlog evq fmt=hist`; while logd is not alive, the legacy `k:"e"` day-file rows and `ext.spool` (§2, §6 Event source) |
+| External events | logd not alive: `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2). logd alive: nothing (the event is in the journal) |
 | Sample period | 10 s (every 5th 2 s poller cycle, the `TIER1_5_EVERY` grain) in every tier |
 | Base bucket | 1800 s, aligned to UTC epoch multiples |
 | Ranges | `5m` = 30 × 10 s and `1h` = 60 × 1 min (from the RAM sample ring `<series>.fine`); `24h` = 48 × 30 min, `7d` = 56 × 3 h, `15d` = 60 × 6 h, `30d` = 60 × 12 h (merged from base buckets at read time). UI tabs: 5m (default), 1h, 1D, 1W, 15D, 1M |
@@ -126,12 +127,22 @@ The collector is a library sourced by `qmanager_poller`, following the Data Used
 | `main()`, after `du_init` | `hist_init` |
 | main loop path, **after `write_cache` and before `qmi_overlay_restore`** | `hist_tick` |
 | scan / SIM-switch early return, after its `write_cache` | `hist_tick` |
-| `append_event` (`events.sh`), after the row is written | `hist_event "$etype" "$message" "$severity"` when `hist_event` exists (the poller); otherwise `_ev_hist_spool` (below) |
+| `append_event` (`events.sh`), legacy path only (logd not alive) | `hist_event "$etype" "$message" "$severity"` when `hist_event` exists (the poller); otherwise `_ev_hist_spool` (below). With logd alive `append_event` writes its spool line and returns: no tap |
 | `trap` | `trap 'du_flush; hist_flush; exit 0' TERM INT` |
 
 Placing `hist_tick` inside the overlay window means history records **exactly what `status.json` says that cycle** (QMI LTE signal when the overlay applied, AT otherwise), while `events.sh` and every other AT consumer keep seeing AT samples (qmi-lane Invariant: never feed QMI values to `events.sh`).
 
-### External events (the spool)
+### Events while `qmanager_logd` is alive (Phase 3)
+
+One event store: the journal. Writers check `[ -d journal ] && [ -e journal/alive ]` (builtins, `QLOGD_RUN_DIR`, default `/var/run/qmanager/journal`, contract `docs/plans/2026-11-10-logd-contract.md`):
+
+- **`append_event`** writes its `E` spool line and returns; it no longer calls `hist_event` or `_ev_hist_spool`. For a Cellular History type (`HIST_cellular_EVENTS`; a CGI without the provider uses the same list by hand) it adds `radio=lte|nr` to the fields by the rule History used when it stored the row itself (`hist_cellular_radio`: message prefix `LTE` / `NR` / `5G`, `nr_anchor` = `nr`, `signal_restored` = the leg connected now). logd cannot see the live radio, so the writer says. A writer `radio=` is kept.
+- **`hist_event`** (provider calls: `modem_crash`, `modem_recovered`, `device_reboot`; and `_hist_spool` replays) writes one `E` spool line instead of a `k:"e"` row, when the type is in some series' `EVENTS`, with the event's **own mono** in the mono field: logd maps it to wall time (`t = m + offset`), so a crash onset back-dated from `dmesg` and a `device_reboot` at mono `0` (the boot moment) keep their time with no Rust change. `device_reboot` also carries `cause=` and `off=` as fields; its message stays `cause=X off=Y` because the events CGI reads `off=` from it.
+- **New events from the core:** `clock_stepped` (info, `step_s=<signed seconds>`, from `_hist_clock` on a step beyond 120 s) and `storage_low` (warning, `free_kb`, `min_kb`, once per low-free episode of `hist_flush_queues`). Both go through `append_event`, so they reach logd or, with logd down, the legacy rows.
+
+The day files then hold buckets and restart rows only. With logd not alive every path above is the legacy one, unchanged, so nothing is lost; the reader merges both stores (§6 Event source). `ext.spool` is written only while logd is not alive; the replay in `hist_tick` stays to drain it (a replayed line goes to logd when it is back). Keep the legacy paths for one release.
+
+### External events (the spool, logd not alive)
 
 `append_event` is also called from processes that never source `history.sh` (the watchcat daemon, CGIs), so `hist_event` is absent there. In that case `_ev_hist_spool` in `events.sh` appends one line `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool`, with `mono` read from `/proc/uptime`. It acts only if that directory already exists (the poller creates it via `qm_run_dir`; a writer never creates it) and drops new lines once 200 are queued, so a stuck poller cannot grow the file.
 
@@ -246,6 +257,13 @@ Newest first. `types` (optional) is a comma list checked against the series' `ev
 }
 ```
 
+**Event source.** When `/var/run/qmanager_logd.proto` has `evq=1` (`hr_logd_evq`, builtins), the CGI reads the journal with `qlog evq fmt=hist types=<series events[,device_reboot]> since=<scan start> until=<now + 60> limit=2000` (`hr_ev_merge` in `history_read.sh`, one awk that runs the qlog calls) and merges it with the day-file rows, which hold the events recorded while logd was not alive. The pairing awk is unchanged: it gets the same `k:"e"` / `k:"r"` / `X` lines it always parsed.
+
+- **Windows.** EVQ answers the newest `limit` rows of `[since, until]`. A full page splits the time range in halves until each answer fits, so a 31-day pairing scan with more than 2000 events still comes back whole. One `qlog` fork per window; a quiet range is one fork. Windows are by time, not seq, so a back-dated row (higher seq, older t) is never skipped. A single second holding more than 2000 rows is truncated (cannot happen under logd's day cap).
+- **De-duplication.** A day-file event that the journal also holds (same type and message, within 2 s) is dropped. Only builds that wrote both stores (Phase 2) produce such pairs.
+- **Fallback.** No `evq=1`, no `qlog`, or `qlog` exit 3 (logd unreachable): the day files alone, i.e. today's answer. Rows logd holds with an untrusted time (`t:null`) are not served until logd back-dates them.
+- **Caps.** The journal's cap is logd's (2000 events/day across all types, keep-list `signal_*`/`internet_*` plus every `error`), not `HIST_EV_DAY_MAX` and `HIST_<id>_EVENTS_KEEP`, which now apply to the legacy rows only.
+
 **Pairing (`end`).** A series that declares `HIST_<id>_PAIRS="onset:recovery ..."` gets `"end"` on its onset rows: the `t` of the next matching recovery, unless a **break** comes first, in which case `end` is the break's `t`; `"end": null` while neither exists (ongoing). Breaks:
 
 - **A restart row** (`k:"r"`, §1) at or after the onset. **Why:** the event detectors start fresh after a poller start and adopt the first reading silently, so an onset still open at a stop never gets its recovery; without the break, the next real recovery (hours later) closed it with a fake duration. Observed live 2026-11-09: `internet_lost` at 1794199488, cut by a planned reboot, read **Ongoing** while the page said Online. `end` = when observation stopped: a bounded, honest duration, never a guess at when the outage really ended.
@@ -314,12 +332,18 @@ sh history-test.sh <flat dir>
 | `HIST_LIB_DIR` | where `history.sh` looks for providers and the CGIs for `history_read.sh` |
 | `HIST_SYNC` | the `sync` command (`true` in the test) |
 | `_SKIP_AUTH=1` | lets a CGI run without a session |
+| `HIST_TEST_MODE=logd` | runs the same cases against the event journal: `logd-stub.sh` (next to the test) makes a journal run dir with `alive`, an `evq=1` capability file and a stub `qlog` that ingests the spool like logd (wall = mono + offset, pre-trust rows back-dated) and serves `evq fmt=hist` with logd's paging and radio rule; page size 2, so the CGI's window split runs on every query. Checks that read stored events read the journal instead |
+| `HIST_QLOG`, `HIST_LOGD_PROTO`, `HIST_EVQ_PAGE`, `QLOGD_RUN_DIR` | the reader's qlog client, capability file and EVQ page; the writers' journal run dir |
+
+`tools/history-test/journal-test.sh <flat dir>` covers Phase 3 itself: `hist_event` and `append_event` with logd alive and not (spool line, own mono, `device_reboot` at mono 0, `radio=` from the provider rule and the live state, no history tap), `clock_stepped` (signed) and `storage_low` (once per episode), and the reader: byte-identical answers with the events in the day files only, the journal only (windows), both stores (de-duplicated) and half in each; `qlog` exit 3 falls back to the day files; no `evq=1` never calls `qlog`; the new pairs, `site_*` unpaired.
+
+`tools/history-test/run-local.sh <repo root> [busybox]` builds the flat dir from `scripts/` (with a stub `cgi_base.sh`) and runs the three suites, the first two in both modes. Under BusyBox 1.29.3 / 1.31.1 and dash the base history-test already failed 14 / 12 cases before Phase 3 (environment, not a regression); use 1.36.1, the device's.
 
 ## 11. Validation (2026-11-09, RM551E)
 
 | Check | Result |
 |---|---|
-| On-device test (`history-test.sh`) | 50 passed, 0 failed; 63 of 63 after the 2026-11-09 fixes (QMI `down` cases, `last_wall` trust-floor cases); 71 of 71 with the pairing-break cases |
+| On-device test (`history-test.sh`) | 50 passed, 0 failed; 63 of 63 after the 2026-11-09 fixes (QMI `down` cases, `last_wall` trust-floor cases); 71 of 71 with the pairing-break cases; 86 of 86 at 8f2bc9fd (later cases), before Phase 3. Phase 3 (2026-11-10, locally, BusyBox 1.36.1): 86 of 86 legacy and logd, `system-test` 51 of 51 both, `journal-test` 30 of 30; not yet run on the device |
 | Live CGI shape | 24h = 48 buckets, 7d = 56, 30d = 60 |
 | 30 d query time | about 60 ms |
 | Poller restart mid-bucket | the run resumed (`run_mono` kept) |
@@ -427,7 +451,8 @@ The strip, charts and events share one cursor (`history-cursor.tsx`): hovering a
 
 - **Lasted.** `history/events.sh` reads `HIST_connection_PAIRS`. Each onset row (`internet_lost`, `high_latency`, `high_packet_loss`) gets `"end": <epoch>` of the next matching recovery, or of the first break before it (a restart, a device reboot, a newer onset of the same type, §6 Pairing), or `"end": null` when neither exists yet (ongoing). The page shows the duration, or "Ongoing" (destructive ink for an outage). Pairing scans every retained row (31 days), not only the range window, so an onset near the start of the window still finds its recovery. `HIST_cellular_PAIRS="signal_lost:signal_restored"` uses the same mechanism. A core without `PAIRS` returns no `end` and the column shows nothing.
 - **Why in the CGI:** pairing in the client fails across pages (the recovery can sit on page 2), so the one place that sees all rows does it.
-- **Watchdog and SIM failover rows** (`watchcat_recovery`, `sim_failover`) are written by `qmanager_watchcat`, a separate daemon with no `history.sh`. `events.sh` `append_event` calls `_ev_hist_spool` when `hist_event` is not defined, which appends `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool` (only once the poller has made that directory; capped at 200 lines, new lines are dropped when full). The poller's `hist_tick` ingests the spool (`_hist_spool`, rename then read) through the normal `hist_event` path, using the `mono` the writer recorded. There is still exactly one writer to flash. A watchdog recovery is `info` severity: the watchdog acting is a fact, not a verdict.
+- **Journal-era types** (Phase 3): `data_call_dropped:data_call_restored` and `dns_failing:dns_recovered` are paired; `data_call_*` are on the keep-list. `site_down` / `site_up` are listed but **not paired**: the CGI pairs by type only, so one site's `site_up` would close another site's `site_down`. `wan_address_changed` and `broker_restarted` are facts with no pair.
+- **Watchdog and SIM failover rows** (`watchcat_recovery`, `sim_failover`) are written by `qmanager_watchcat`, a separate daemon with no `history.sh`. With logd alive they are journal events like any other. Otherwise `events.sh` `append_event` calls `_ev_hist_spool` when `hist_event` is not defined, which appends `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool` (only once the poller has made that directory; capped at 200 lines, new lines are dropped when full). The poller's `hist_tick` ingests the spool (`_hist_spool`, rename then read) through the normal `hist_event` path, using the `mono` the writer recorded. There is still exactly one writer to flash. A watchdog recovery is `info` severity: the watchdog acting is a fact, not a verdict.
 
 ### Sites card and alignment
 
