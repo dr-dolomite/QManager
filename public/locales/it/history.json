@@ -318,6 +318,46 @@
         "device_off": "Dispositivo spento",
         "mem_value": "{{pct}}% ({{mb}} MB)"
       }
+    },
+    "logs": {
+      "title": "Log",
+      "description": "Ciò che il modem e QManager hanno scritto nei loro log, dal più recente.",
+      "tabs": {
+        "qmanager": "QManager",
+        "system": "Sistema"
+      },
+      "level_label": "Livello del log",
+      "level": {
+        "all": "Tutti",
+        "error": "Errore",
+        "warn": "Avviso",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "source_label": "Origine del log",
+      "source": {
+        "system": "Sistema",
+        "kernel": "Kernel"
+      },
+      "lines_label": "Righe da mostrare",
+      "lines_option": "{{value}} righe",
+      "showing": "Mostrate {{shown}} di {{total}}",
+      "open_full": "Apri i log completi",
+      "stale": "Non si aggiorna",
+      "loading_sr": "Caricamento dei log",
+      "error": {
+        "title": "Impossibile caricare i log",
+        "description": "Controlla la connessione e riprova."
+      },
+      "empty": {
+        "title": "Ancora nessun log",
+        "description": "Le nuove righe di log compariranno qui."
+      },
+      "empty_level": {
+        "title": "Nessuna riga a questo livello",
+        "description": "Nessuna delle ultime righe corrisponde al livello scelto."
+      },
+      "show_all": "Mostra tutti i livelli"
     }
   }
 }

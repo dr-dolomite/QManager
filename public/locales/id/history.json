@@ -316,6 +316,46 @@
         "device_off": "Perangkat mati",
         "mem_value": "{{pct}}% ({{mb}} MB)"
       }
+    },
+    "logs": {
+      "title": "Log",
+      "description": "Apa yang ditulis modem dan QManager ke log mereka, terbaru lebih dulu.",
+      "tabs": {
+        "qmanager": "QManager",
+        "system": "Sistem"
+      },
+      "level_label": "Tingkat log",
+      "level": {
+        "all": "Semua",
+        "error": "Error",
+        "warn": "Peringatan",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "source_label": "Sumber log",
+      "source": {
+        "system": "Sistem",
+        "kernel": "Kernel"
+      },
+      "lines_label": "Jumlah baris",
+      "lines_option": "{{value}} baris",
+      "showing": "Menampilkan {{shown}} dari {{total}}",
+      "open_full": "Buka log lengkap",
+      "stale": "Tidak menyegarkan",
+      "loading_sr": "Memuat log",
+      "error": {
+        "title": "Log tidak dapat dimuat",
+        "description": "Periksa koneksi lalu coba lagi."
+      },
+      "empty": {
+        "title": "Belum ada log",
+        "description": "Baris log baru akan muncul di sini."
+      },
+      "empty_level": {
+        "title": "Tidak ada baris pada tingkat ini",
+        "description": "Tidak ada baris terbaru yang cocok dengan tingkat yang dipilih."
+      },
+      "show_all": "Tampilkan semua tingkat"
     }
   }
 }
