@@ -301,6 +301,7 @@ conn_qdeb_vt_sec=10      # ... when the metric's preset is very-tolerant
 _conn_sens_applied=""    # sensitivity the four values above were resolved for
 _conn_sens_resolved=0    # 1 once resolved, so an absent name ("") resolves only once
 _last_ping_ts=0          # tracks last processed ping.json timestamp (stats gate)
+_ping_stale_since=""     # mono of the stale-warn edge; "" = not in a stale episode
 
 # Connection-quality event thresholds (consumed by events.sh
 # detect_data_connection_events). Resolved from UCI presets by
@@ -1862,9 +1863,20 @@ read_ping_data() {
             conn_fail_secs=""
             conn_recover_secs=""
         else
-            qlog_warn "Ping data stale ($(conn_state_why)), marking unknown"
+            # Edge-only: one line on entry, one on recovery (no per-cycle spam).
+            if [ -z "$_ping_stale_since" ]; then
+                mono_now_set
+                _ping_stale_since="$_MONO"
+                qlog_warn "Ping data stale ($(conn_state_why)), marking unknown"
+            fi
         fi
         return
+    fi
+
+    if [ -n "$_ping_stale_since" ]; then
+        mono_now_set
+        qlog_info "Ping data fresh again after $((_MONO - _ping_stale_since))s"
+        _ping_stale_since=""
     fi
 
     local ping_ts
