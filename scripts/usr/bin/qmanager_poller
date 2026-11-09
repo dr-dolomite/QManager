@@ -206,6 +206,7 @@ boot_ippt_dhcpv4dns="disabled"
 
 # Tier 1.5 data (sysfs thermal read, updated every 10s)
 t1_temperature=""
+t1_temperature_max=""
 
 # Tier 2 data (updated periodically)
 t2_carrier=""

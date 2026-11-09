@@ -492,11 +492,14 @@ _parse_temperature_legacy() {
     else
         t1_temperature=""
     fi
+    # Not derived on this odd-input path (never seen on real sysfs).
+    t1_temperature_max=""
 }
 
 # -----------------------------------------------------------------------------
 # SoC thermal — Average temperature from /sys/class/thermal (no AT channel)
-# Populates: t1_temperature
+# Populates: t1_temperature (mean, published in status.json)
+#            t1_temperature_max (hottest zone, history only)
 #
 # Reads sysfs instead of AT+QTEMP: AT+QTEMP can crash this firmware's AT
 # channel (/dev/smd11). Thermal sysfs is independent of AT and stable.
@@ -519,6 +522,7 @@ parse_temperature() {
     local r2
     local sum=0
     local count=0
+    local hot=0
 
     # --- TUNING KNOB: thermal-zone type-name allowlist (case glob) -----------
     # Modem-relevant SoC sensors plus the AP CPU cores (cpuss-*), averaged into
@@ -554,14 +558,26 @@ parse_temperature() {
                 [ -n "$t" ] || continue
                 sum=$((sum + t))
                 count=$((count + 1))
+                [ "$t" -gt "$hot" ] && hot="$t"
                 ;;
         esac
     done
 
     if [ "$count" -eq 0 ]; then
         t1_temperature=""
+        t1_temperature_max=""
         return
     fi
+
+    # Hottest zone, same half-to-even rounding as the mean below.
+    q=$((hot / 1000))
+    r2=$((hot % 1000 * 2))
+    if [ "$r2" -gt 1000 ]; then
+        q=$((q + 1))
+    elif [ "$r2" -eq 1000 ] && [ $((q % 2)) -eq 1 ]; then
+        q=$((q + 1))
+    fi
+    t1_temperature_max="$q"
 
     den=$((count * 1000))
     q=$((sum / den))
