@@ -10,18 +10,21 @@ QManager keeps a small, flash-friendly history of things the poller already know
 |---|---|
 | Page | `/history/cellular` (sidebar group **History**) |
 | Core lib (sourced by the poller) | `scripts/usr/lib/qmanager/history.sh` (`hist_init`, `hist_tick`, `hist_event`, `hist_flush`) |
-| Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat) |
+| Providers | `scripts/usr/lib/qmanager/history_series_<series>.sh` (first: `history_series_cellular.sh`; flat, because the installer copies the lib dir flat; `history.sh` dot-sources every one) |
 | Read lib (sourced by CGIs) | `scripts/usr/lib/qmanager/history_read.sh` (awk merge, range math) |
-| CGIs | `GET history/series.sh?series=&range=`, `GET history/events.sh?series=&range=&types=&limit=&offset=` |
-| Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only |
-| RAM state | `/var/run/qmanager/history/` (`clock.env`, `<series>.open`, `<series>.queue`, `<series>.pending`, `<series>.state`) |
+| CGIs | `scripts/www/cgi-bin/quecmanager/history/series.sh?series=&range=`, `.../history/events.sh?series=&range=&types=&limit=&offset=` (contract in §6, endpoints in [`../API-REFERENCE.md`](../API-REFERENCE.md#history)) |
+| Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only; plus two small durable marker files per series: `since` (when collecting began, written once) and `last_fault` (`<start> <end>` of the newest completed fault run) |
+| RAM state | `/var/run/qmanager/history/` (`clock.env`, `<series>.open`, `<series>.queue`, `<series>.pending`, `<series>.run`, `ext.spool`, `ext.spool.work`) |
+| Event pairing | optional `HIST_<id>_PAIRS="onset:recovery ..."` per series; cellular: `signal_lost:signal_restored` (§6) |
+| External events | `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2) |
 | Sample period | 10 s (every 5th 2 s poller cycle, the `TIER1_5_EVERY` grain) in every tier |
 | Base bucket | 1800 s, aligned to UTC epoch multiples |
 | Ranges | `24h` = 48 × 30 min, `7d` = 56 × 3 h, `30d` = 60 × 12 h (all merged from base buckets at read time) |
 | Retention | 31 days by day file; 2 MB per series; flush skipped under 8 MB free |
 | Flash flush | every closed bucket (≤ 1 per 30 min, all series in one pass, one global `sync` pair) and on TERM |
 | AT cost | **none**: no new AT command, no lock, no `qcmd` |
-| Frontend | `types/history.ts`, `hooks/use-history.ts` (`useHistorySeries`, `useHistoryEvents`), `components/history/**` |
+| Frontend | `types/history.ts`, `hooks/use-history.ts` (`useHistorySeries`, `useHistoryEvents`), `components/history/**`, `app/history/cellular/` |
+| Dev test | `tools/history-test/history-test.sh` (runs on the device, §10) |
 
 ---
 
@@ -37,6 +40,8 @@ A **series** is one history stream with a fixed id matching `[a-z][a-z0-9_]{0,23
 | `fault` | The subset of `states` that counts as an outage (availability, outage count, last outage). | `down` |
 | `metrics` | Integer metrics sampled each tick. Each keeps `n`, `sum`, `min`, `max` per bucket. | `lte_rsrp lte_rsrq lte_sinr lte_rssi nr_rsrp nr_rsrq nr_sinr` |
 | `events` | Event types (from `events.sh`) recorded into this series. | `signal_lost signal_restored nr_anchor pci_change scc_pci_change band_change ca_change` |
+| `events_keep` | Optional. Event types still recorded after a day file reaches the per-day event cap (§3). | `signal_lost signal_restored` |
+| `pairs` | Optional. `onset:recovery` event-type pairs; the events CGI adds `end` to onset rows (§6). | `signal_lost:signal_restored` |
 
 There is no `nr_rssi`: the modem reports no NR RSSI (`status.json` `.nr` has none, and QENG's NR row carries no RSSI), so the RSSI chart is LTE-only by data, not by a UI rule.
 
@@ -47,7 +52,7 @@ Resolved by the provider from the poller's globals as `status.json` reports them
 | State | Rule (first match wins) |
 |---|---|
 | `off` | `t1_cfun` is `0` or `4` (radio off by the user, airplane mode). Not an outage; drawn as "no data". |
-| `down` | `modem_reachable` is not `true`, or `service_status` is `no_service`/`limited`/empty, or neither leg is connected |
+| `down` | `modem_reachable` is not `true`, or `service_status` is empty/`unknown`/`sim_error`/`no_service`/`searching`, or neither leg is connected |
 | `nr` | `nr_state = connected` (5G NSA anchor up, or SA) |
 | `lte` | `lte_state = connected` |
 
@@ -87,13 +92,15 @@ HIST_thermal_STATES="normal throttled"
 HIST_thermal_FAULT="throttled"
 HIST_thermal_METRICS="soc_c modem_c"
 HIST_thermal_EVENTS="thermal_throttled thermal_recovered"
+HIST_thermal_EVENTS_KEEP="thermal_throttled thermal_recovered"   # optional: kept past the per-day cap
+HIST_thermal_PAIRS="thermal_throttled:thermal_recovered"        # optional: events CGI adds "end" to onsets
 hist_thermal_sample() {                      # builtins only, no forks
     _HS="normal"; [ "$thermal_throttled" = "1" ] && _HS="throttled"
     _HV_soc_c="$thermal_soc"; _HV_modem_c="$thermal_modem"
 }
 ```
 
-The core dot-sources every `history_series_*.sh` in the lib dir (each guarded with `[ -f ]`, BusyBox aborts on a missing dot-source), calls `hist_<id>_sample` each tick, and the CGIs accept any id whose provider file exists. The page, its i18n and the series' presentation (state colours, metric domains) are the feature's own.
+The core dot-sources every `history_series_*.sh` in the lib dir (each guarded with `[ -f ]`, BusyBox aborts on a missing dot-source), calls `hist_<id>_sample` each tick, and the CGIs accept any id whose provider file exists. A provider may also define `hist_<id>_radio TYPE MESSAGE` (sets `_HR` to `lte`, `nr` or empty) to tag event rows with the `radio` field. The page, its i18n and the series' presentation (state colours, metric domains) are the feature's own.
 
 ## 2. Collection: a poller hook, not a daemon
 
@@ -108,10 +115,20 @@ The collector is a library sourced by `qmanager_poller`, following the Data Used
 | `main()`, after `du_init` | `hist_init` |
 | main loop path, **after `write_cache` and before `qmi_overlay_restore`** | `hist_tick` |
 | scan / SIM-switch early return, after its `write_cache` | `hist_tick` |
-| `append_event` (`events.sh`), after the row is written | `hist_event "$etype" "$message" "$severity"` |
+| `append_event` (`events.sh`), after the row is written | `hist_event "$etype" "$message" "$severity"` when `hist_event` exists (the poller); otherwise `_ev_hist_spool` (below) |
 | `trap` | `trap 'du_flush; hist_flush; exit 0' TERM INT` |
 
 Placing `hist_tick` inside the overlay window means history records **exactly what `status.json` says that cycle** (QMI LTE signal when the overlay applied, AT otherwise), while `events.sh` and every other AT consumer keep seeing AT samples (qmi-lane Invariant: never feed QMI values to `events.sh`).
+
+### External events (the spool)
+
+`append_event` is also called from processes that never source `history.sh` (the watchcat daemon, CGIs), so `hist_event` is absent there. In that case `_ev_hist_spool` in `events.sh` appends one line `mono|type|severity|message` to `/var/run/qmanager/history/ext.spool`, with `mono` read from `/proc/uptime`. It acts only if that directory already exists (the poller creates it via `qm_run_dir`; a writer never creates it) and drops new lines once 200 are queued, so a stuck poller cannot grow the file.
+
+`hist_tick` handles the spool on every sample tick, in two steps: it first replays `ext.spool.work` (left by the previous tick) line by line through `hist_event TYPE MSG SEV MONO` and deletes it, then renames a non-empty `ext.spool` to `ext.spool.work`. Each series still filters by its own `HIST_<id>_EVENTS`, and the event keeps its own time (the `mono` the writer recorded, mapped through the clock anchor like any event), not the replay time. Lines with a non-numeric `mono` or an invalid type are skipped; an unknown severity becomes `info`.
+
+**Why rename now, read next tick:** a writer that opened `ext.spool` just before the rename may still be mid-`printf`. Reading the renamed file one tick (10 s) later lets that append land first. **Why drop-when-full, not truncate:** writers never rewrite the file, so there is no race with the poller's rename.
+
+> ℹ️ NOTE: the spool lives on tmpfs. Events queued but not yet replayed are lost on reboot, by design (the same bound as the open bucket).
 
 **Adaptive tiers.** The tick runs in every tier, but the inputs differ: in Active everything is ≤ 2 s old; in Idle the AT values are ≤ 15 s old; in Deep, LTE RSRP/RSRQ/RSSI still refresh every 2 s from QMI, while NR values and the AT-derived state refresh every 60 s (`AT+QENG` only). A 10 s sample of a 60 s-old value repeats it, which weights the bucket average correctly. **The history never asks the poller to stay Active and never adds an AT read.** Effect on outage resolution in Deep: a drop is seen when `modem_reachable` or `service_status` change, i.e. within one deep AT interval (≤ 60 s, plus `SC_FAIL_LIMIT`). That is accepted for 30-minute buckets; the doc of record for "how fast is a drop detected" stays `connection-quality.md` (data path) and this table (radio path).
 
@@ -134,9 +151,9 @@ All three UI ranges are exact multiples of 30 min, so **no coarse tier is stored
 
 | Data | Medium | Why |
 |---|---|---|
-| Open bucket, queue, pending, clock anchor | `/var/run/qmanager/history/` (tmpfs, dir `0700` root via `qm_run_dir`) | changes every 10 s; survives a poller restart, not a reboot |
+| Open bucket, queue, pending, run state, clock anchor, external-event spool | `/var/run/qmanager/history/` (tmpfs, dir `0700` root via `qm_run_dir`) | changes every 10 s; survives a poller restart, not a reboot |
 | Closed buckets and events | `/usrdata/qmanager/history/<series>/` (UBIFS, dir `0755`) | must survive reboots |
-| Last outage and the oldest row (`since`) | `<series>.state` in RAM, rebuilt at `hist_init` from the newest/oldest day file | cheap to recompute once per poller start |
+| `since` (when collecting began) and `last_fault` (newest completed fault run) | `<series>/since` and `<series>/last_fault` on flash, written once / once per outage through `qm_durable_write` | rare writes that must survive a reboot right after; the CGI reads them directly (`since` is moved up to the oldest kept row once retention has trimmed past it) |
 
 **Flush.** When any series closes a bucket, `hist_flush` appends every queued row of every series to its day file(s) with `printf >>`, then runs **one `sync`** (global on BusyBox) and truncates the queues. It also runs from the TERM trap (procd stop, planned reboot) with the open bucket written as a partial row, which §1's merge rule absorbs. Worst case on an unplanned reboot or AP hang: the open bucket (≤ 30 min) and its events are lost and read as no data.
 
@@ -190,30 +207,38 @@ Buckets are aligned to UTC multiples of `bucket_sec`; the last one contains now 
 }
 ```
 
-- `since` = start of the oldest stored row (`null` with none); `current.since` = when the current state run began (this boot's samples only; a reboot or a no-data gap ends a run). `last_fault` is the newest completed fault run (`null` if none in 31 days).
+- `since` = when collecting began, from the `since` marker file (the first trusted sample, or the oldest back-dated pending sample), moved up to the oldest kept row once retention has trimmed past it; `null` with none. `current.since` = when the current state run began (this boot's samples only; a reboot or a no-data gap ends a run; read from `<series>.run`, `null` while the collector is not alive). `last_fault` is read from the `last_fault` file: the newest completed fault run (`null` if none).
+- With `clock_trusted:false` the CGI answers `now:null`, `current:null`, `last_fault:null`, `buckets:[]` and still carries `since` and the descriptor lists.
 - `st` is clamped to `len`; `nodata = len - sum(st)`. `m` omits metrics with no reading; `avg` has one decimal.
 - Sources: day files covering the range, then the RAM queue, then the open mirror, all merged by the same `awk` program in `history_read.sh`.
 
 ### `GET history/events.sh?series=cellular&range=24h&types=band_change,ca_change&limit=5&offset=0`
 
-Newest first. `types` (optional) is a comma list checked against the series' `events`; `limit` 1..100 (default 25); `offset` ≥ 0.
+Newest first. `types` (optional) is a comma list checked against the series' `events`; `limit` 1..100 (default 25); `offset` ≥ 0. With an untrusted clock the answer is `total:0`, `counts:{}`, `events:[]`.
 
 ```json
 {
   "success": true, "series": "cellular", "range": "24h", "total": 132,
   "counts": { "band_change": 12, "ca_change": 101, "nr_anchor": 9, "pci_change": 8, "scc_pci_change": 0, "signal_lost": 1, "signal_restored": 1 },
-  "events": [ { "timestamp": 1794187659, "type": "ca_change", "severity": "info", "radio": "lte", "message": "LTE CA activated: B1 + B41, 35 MHz (2 carriers)" } ]
+  "events": [
+    { "timestamp": 1794187659, "type": "ca_change", "severity": "info", "radio": "lte", "message": "LTE CA activated: B1 + B41, 35 MHz (2 carriers)" },
+    { "timestamp": 1794100000, "type": "signal_lost", "severity": "warning", "radio": null, "message": "...", "end": 1794100140 }
+  ]
 }
 ```
 
+**Pairing (`end`).** A series that declares `HIST_<id>_PAIRS="onset:recovery ..."` gets `"end": <t of the next matching recovery>` on its onset rows, or `"end": null` while no recovery has been recorded (ongoing). Only onset rows carry `end`; every other row omits it (`HistoryEvent.end?: number | null`). Cellular sets `signal_lost:signal_restored`, so a signal-loss row shows its duration. The CGI pairs over the **whole retention window** (31 days, not just the range) *before* the window cut, the type filter and paging, so an outage that began before a 24 h window and ended inside it still resolves, and filtering to `signal_lost` alone still shows each end. `counts` and `total` are computed after pairing.
 `counts` is over the range ignoring `types`, so the filter menu can show counts and hide empty types. `radio` is `lte`, `nr` or `null`, set at record time (message prefix `LTE`/`NR`, `nr_anchor` = `nr`, `signal_*` = the leg at that moment, else `null`).
 
 ## 7. Frontend contract
 
-- `types/history.ts`: `HistoryRange`, `HistoryBucket<S, M>`, `HistorySeriesResponse<S, M>`, `HistoryEventsResponse`, and `CellularState` / `CellularMetric` aliases. Exported constants `HISTORY_RANGES` (bucket counts and sizes) mirror the table above.
-- `hooks/use-history.ts`: `useHistorySeries<S, M>(series, range)` and `useHistoryEvents(series, range, { types, page, pageSize })`. Both return `{ data, isLoading, error, refresh }`, refetch every 30 s through `startVisibleInterval` (`lib/visible-interval.ts`, so a hidden tab stops polling and refetches on show), refetch at once on a range or page change, and keep the previous data while a new range loads (no skeleton flash on a range switch).
+- `types/history.ts`: `HistoryRange`, `HistoryBucket<S, M>`, `HistorySeriesResponse<S, M>`, `HistoryEvent` (`end?: number | null`, set on paired onset rows only), `HistoryEventsResponse`, and `CellularState` / `CellularMetric` aliases. Exported constants `HISTORY_RANGES` (bucket counts and sizes) mirror the table above.
+- `hooks/use-history.ts`: `useHistorySeries<S, M>(series, range)` and `useHistoryEvents(series, range, { types, page, pageSize })`. Both return `{ data, isLoading, error, refresh }`, refetch every 30 s through `startVisibleInterval` (`lib/visible-interval.ts`, so a hidden tab stops polling and refetches on show), refetch at once on a range, page or type-filter change, and keep the previous data while a new query loads (`isLoading` is true, `data` is not cleared, so no skeleton flash on a range switch).
+- **Stale responses.** Each query has an `AbortController`; a response for a query that has since been replaced is dropped.
+- **`error`.** Set only when the *current* query has nothing on screen: a failed poll behind an on-screen response keeps that response and retries at the next tick. The message goes through `resolveErrorMessage` (the `errors` namespace); `invalid_series`, `invalid_range` and `invalid_param` have entries in all five catalogs.
 - A new History page = a `history_series_<id>.sh` provider + its page under `app/history/<id>/` + `components/history/<id>/**`. Shared, series-agnostic pieces live in `components/history/` (range control, state strip, bucket-axis ticks, metric chart, shared cursor context, events table shell).
 - The page shows `clock_trusted:false` and `since:null` as the empty "Collecting" state.
+- **Connection strip** (`components/history/cellular/derive.ts`, `bucketKind`): any `down` time or outage entry (`x > 0`) makes the bucket an outage; otherwise the majority radio (`nr` vs `lte`). A bucket reads **no data** when radio coverage (`nr + lte`) is below 50 % of its span, or has none. The span is counted from `since` for the bucket collection began in (the head before `since` is not part of it), so a fresh install's first bucket (up to 12 h on 30d) is not blanked for time that was never collected. `off` and uncollected time both read as no data.
 
 ## 8. Lifecycle lockstep
 
@@ -240,4 +265,44 @@ Not in config backup (history is data, not settings). An update keeps the store;
 
 **Validation plan.** Static: `.claude/check-crlf.sh`, `sh -n`, BusyBox/POSIX audit (no bashisms, one var per `local`, no jq regex, guarded dot-sources, numeric guards). Dev test `tools/history-test/history-test.sh` run on the device under its BusyBox: accumulate, close, merge, back-date, step ±, reboot, caps. On device: deploy + `sync`, poller CPU measure, a forced bucket close via test hooks, CGI shape for each range, a poller restart mid-bucket, a reboot (user OK required), and an observed outage if one occurs (or `AT+CFUN=4` → `off`, only with the user's OK).
 
+Results are in §11.
+
 **Rollback.** Remove the four call sites (or install the previous poller and `events.sh`): with the lib absent the stubs are no-ops. The store is inert data; delete `/usrdata/qmanager/history` to reclaim it. The frontend route can ship or roll back independently (the CGI errors become the page's error state).
+
+## 10. Testing
+
+`tools/history-test/history-test.sh` is the dev test for the collector and the reader. It runs **on the device** under its BusyBox, in a scratch dir under `/tmp`, and touches no live state.
+
+```sh
+sh history-test.sh <flat dir>
+```
+
+`<flat dir>` holds, flat: `history.sh`, `history_series_cellular.sh`, `history_read.sh`, the two CGIs as `series.sh` and `events.sh`, and optionally `events_lib.sh` (the library `events.sh` from `usr/lib/qmanager`, renamed so it does not collide with the CGI of the same name; it enables the spool-writer cases). The script prints `FAIL: ...` per failure and a pass/fail summary.
+
+| Override | Effect |
+|---|---|
+| `HIST_STORE` | flash store root (default `/usrdata/qmanager/history`) |
+| `HIST_RUN` | RAM state dir (default `/var/run/qmanager/history`) |
+| `HIST_UPTIME_FILE` | stands in for `/proc/uptime` (the monotonic clock) |
+| `HIST_BOOT_ID_FILE` | stands in for the boot id file |
+| `HIST_LIB_DIR` | where `history.sh` looks for providers and the CGIs for `history_read.sh` |
+| `HIST_SYNC` | the `sync` command (`true` in the test) |
+| `_SKIP_AUTH=1` | lets a CGI run without a session |
+
+## 11. Validation (2026-11-09, RM551E)
+
+| Check | Result |
+|---|---|
+| On-device test (`history-test.sh`) | 50 passed, 0 failed |
+| Live CGI shape | 24h = 48 buckets, 7d = 56, 30d = 60 |
+| 30 d query time | about 60 ms |
+| Poller restart mid-bucket | the run resumed (`run_mono` kept) |
+| Clock trust | trusted on the first sample |
+| `hist_tick` cost | micro-benchmark about 1.5 ms per poller cycle averaged (about 0.08 % of one core at the 2 s period), with the cellular and connection providers loaded |
+| Whole-poller CPU | 4.74 % (idle tier 12/12) against a 4.17 % baseline (idle 3 / deep 9). The delta is the tier mix, not history |
+| UI (dev server, captured live responses) | 24h/7d/30d switch refetches both endpoints at once; error state and retry verified |
+
+**Open (not yet done):**
+
+- Reboot survival: pending (needs the user's OK).
+- Outage observed live: pending.
