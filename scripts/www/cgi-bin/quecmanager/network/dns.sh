@@ -247,7 +247,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         /etc/init.d/odhcpd reload >/dev/null 2>&1
 
         mkdir -p /etc/qmanager
-        echo "enabled" | qm_durable_write /etc/qmanager/dns_mode \n            || qlog_warn "Could not save dns_mode=enabled"
+        echo "enabled" | qm_durable_write /etc/qmanager/dns_mode \
+            || qlog_warn "Could not save dns_mode=enabled"
 
         ev_dns_emit "$ev_dns_from"
         qlog_info "Custom DNS enabled: IPv4=$dns_list on lan"
@@ -295,7 +296,8 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
         /etc/init.d/odhcpd reload >/dev/null 2>&1
 
         mkdir -p /etc/qmanager
-        echo "disabled" | qm_durable_write /etc/qmanager/dns_mode \n            || qlog_warn "Could not save dns_mode=disabled"
+        echo "disabled" | qm_durable_write /etc/qmanager/dns_mode \
+            || qlog_warn "Could not save dns_mode=disabled"
 
         ev_dns_emit "$ev_dns_from"
         qlog_info "Carrier DNS restored: $carrier on lan; IPv6 DNS list cleared"
