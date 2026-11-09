@@ -26,6 +26,7 @@ the old `/system-settings/logs` route redirects here. The backend was not touche
 | ----- | ----- |
 | Route | `app/monitoring/history/logs/page.tsx` (renders `LogsPage`) |
 | Page | `components/history/logs/logs-page.tsx` (header actions, tabs, filters, states, clear dialog) |
+| Summary tiles | `components/history/logs/logs-summary.tsx` (QManager tab only; copy in `system-settings.json` `logs.band.*`) |
 | Footer | `components/history/logs/logs-pagination.tsx` (range, rows per page, page count, first/prev/next/last) |
 | Rows | `components/history/logs/logs-list.tsx` (`LogList`, `LogRowsSkeleton`) |
 | Derivations | `components/history/logs/derive.ts` (`qmanagerLines`, `deviceLines`, `groupByDay`, `paginate`, `logLinesText`; tests in `derive.test.ts`) |
@@ -204,6 +205,14 @@ poll adds a line at the top, which remounts the whole list.
   100, server side). System: a System / Kernel `SegmentedField` and a line budget
   (`DEVICE_LOG_LINES` 100/200/500, default 100). Only the tab in view polls; the other hook is
   paused.
+- **Summary tiles (QManager tab only).** Three System Health-style tiles above the card, in
+  `LOGS_SUMMARY.GRID` (stacked, three across from `@3xl/main`). **Severity**: errors, else
+  warnings, else Clean, counted over the fetched window (not the level filter). **Feed**: the
+  hook's `FeedState` (`live` / `paused` while the tab is hidden or the clear dialog is open /
+  `stopped` after a failed read) with a one-second age caption. **Log file**: `stats.current_size_kb`,
+  lines and archived files; the disc turns warning at `ROTATION_WARN_KB` (80 % of the 256 KB
+  rotation default, a client-side mirror of `QLOG_MAX_SIZE_KB` with no wire representation).
+  Every state of a tile has its own glyph; the disc is the only colour.
 - **Rows.** Time (24-hour, `tabular-nums`), a filled level `Badge` with one glyph per level,
   the component or process as a `Tag`, and the raw line in mono. Kernel rows are time and
   message only. Syslog priorities fold onto the same four levels (`toneOfSyslog`); a line with no
@@ -223,8 +232,8 @@ poll adds a line at the top, which remounts the whole list.
   to show (`Notice` + Try again), empty, empty at a level (with "Show all levels"), loaded. A
   failed background poll with rows on screen keeps the rows and shows the "Not refreshing"
   warning chip in the footer.
-- `FeedState`, `stats`, `availableComponents`, search and `includeRotated` are still on
-  `useSystemLogs()` but the page does not surface them.
+- `availableComponents`, search and `includeRotated` are still on `useSystemLogs()` but the
+  page does not surface them.
 
 ---
 
