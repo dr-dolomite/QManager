@@ -332,6 +332,55 @@ ondemand_radio_fetch() {
 }
 
 # ---------------------------------------------------------------------------
+# _ondemand_dataplane_events <old v4> <old v6> <cid> <cid source>
+# wan_address_changed / data_cid_changed. The old WAN addresses are the ones the
+# on-demand cache held before this read; an empty old or new value is no
+# observation (first sighting, or no bearer), never an event. The data CID has
+# no cache slot: its last value sits in a run-dir file (builtin read/redirect),
+# written only when it changes. Runs in the poller, CGIs and apply scripts, so
+# events.sh is loaded lazily when the caller did not.
+# ---------------------------------------------------------------------------
+_ondemand_dataplane_events() {
+    local _oe_cidf
+    local _oe_old
+    _oe_cidf="/var/run/qmanager/data_cid.last"
+    if ! command -v append_event >/dev/null 2>&1; then
+        [ -f /usr/lib/qmanager/events.sh ] || return 0
+        EVENTS_FILE="${EVENTS_FILE:-/tmp/qmanager_events.json}"
+        MAX_EVENTS="${MAX_EVENTS:-50}"
+        . /usr/lib/qmanager/events.sh
+    fi
+    if [ -n "$1" ] && [ -n "$t2_wan_ipv4" ] && [ "$1" != "$t2_wan_ipv4" ]; then
+        case "$1$t2_wan_ipv4" in
+            *[!0-9.]*) ;;
+            *) append_event "wan_address_changed" "WAN IPv4 address changed" "info" "" "family=ipv4;from=${1};to=${t2_wan_ipv4}" ;;
+        esac
+    fi
+    if [ -n "$2" ] && [ -n "$t2_wan_ipv6" ] && [ "$2" != "$t2_wan_ipv6" ]; then
+        case "$2$t2_wan_ipv6" in
+            *[!0-9A-Fa-f:.]*) ;;
+            *) append_event "wan_address_changed" "WAN IPv6 address changed" "info" "" "family=ipv6;from=${2};to=${t2_wan_ipv6}" ;;
+        esac
+    fi
+    case "$3" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    [ -d /var/run/qmanager ] || return 0
+    _oe_old=""
+    { read -r _oe_old < "$_oe_cidf"; } 2>/dev/null
+    if [ "$_oe_old" != "$3" ]; then
+        case "$_oe_old" in
+            ''|*[!0-9]*) ;;
+            *)
+                case "$4" in *[!A-Za-z0-9_-]*) set -- "$1" "$2" "$3" "" ;; esac
+                append_event "data_cid_changed" "Data connection moved from CID ${_oe_old} to CID ${3}" "info" "" "from=${_oe_old};to=${3};source=${4}"
+                ;;
+        esac
+        { printf '%s\n' "$3" > "$_oe_cidf"; } 2>/dev/null
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _ondemand_apply_dataplane <AT+CGPADDR;+CGCONTRDP reply>
 # Resolve the data CID (data_cid.sh: CGPADDR confirmed against the kernel
 # default route), take the WAN IPs from that CID's CGPADDR entry (t2_wan_ipv4 /
@@ -342,13 +391,18 @@ ondemand_radio_fetch() {
 _ondemand_apply_dataplane() {
     local blob
     local cid
+    local ev_old4
+    local ev_old6
     blob=$(printf '%s\n' "$1" | tr -d '\r')
     cid=""
+    ev_old4="$t2_wan_ipv4"
+    ev_old6="$t2_wan_ipv6"
     if command -v qm_detect_data_cid >/dev/null 2>&1; then
         qm_detect_data_cid "$blob"
         cid="$QM_DATA_CID"
         t2_wan_ipv4="$QM_DATA_IPV4"
         t2_wan_ipv6="$QM_DATA_IPV6"
+        _ondemand_dataplane_events "$ev_old4" "$ev_old6" "$cid" "$QM_DATA_CID_SOURCE"
     fi
     if printf '%s\n' "$blob" | grep -q '+CGCONTRDP:'; then
         parse_cgcontrdp "$blob" "$cid"
