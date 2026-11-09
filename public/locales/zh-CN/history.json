@@ -76,5 +76,199 @@
       },
       "retry": "重试"
     }
+  },
+  "connection": {
+    "page": {
+      "title": "连接历史",
+      "description": "互联网连接随时间的稳定表现。"
+    },
+    "range": {
+      "label": "时间范围",
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "tiles": {
+      "collecting": "正在收集数据",
+      "since": "自 {{when}}",
+      "online": {
+        "label": "已在线"
+      },
+      "offline": {
+        "label": "已离线"
+      },
+      "radio_off": {
+        "label": "无线电已关闭"
+      },
+      "last_outage": {
+        "label": "上次中断",
+        "none": "无",
+        "none_caption": "没有中断记录"
+      },
+      "availability": {
+        "label": "可用率",
+        "outages_other": "{{count}} 次中断",
+        "none": "无中断"
+      },
+      "median": {
+        "label": "延迟中位数",
+        "slow": "在 {{total}} 个时段中有 {{slow}} 个偏慢",
+        "within": "在你的限值内"
+      }
+    },
+    "reachability": {
+      "title": "可达性",
+      "description": "互联网是否应答，以及应答得如何。",
+      "aria": "可达性时间线",
+      "collecting": "自 {{time}} 开始收集",
+      "collecting_plain": "正在收集数据",
+      "legend": {
+        "up": "响应正常",
+        "slow": "偏慢或丢包",
+        "down": "中断",
+        "nodata": "无数据"
+      },
+      "tooltip": {
+        "latency": "延迟",
+        "loss": "丢包率",
+        "down": "中断",
+        "nodata": "无数据"
+      }
+    },
+    "charts": {
+      "latency": {
+        "title": "延迟",
+        "description": "到测试目标的往返时间。"
+      },
+      "loss": {
+        "title": "丢包",
+        "description": "未收到回复的测试所占比例。"
+      },
+      "jitter": {
+        "title": "抖动",
+        "description": "测试之间延迟的波动幅度。"
+      },
+      "dns": {
+        "title": "DNS 查询",
+        "description": "解析域名所需的时间。"
+      },
+      "limit": "限值 {{value}}",
+      "peak": "峰值",
+      "down": "中断",
+      "no_data": "无数据",
+      "chart_aria": "{{metric}} 历史图表",
+      "collecting_since": "自 {{time}} 起采集",
+      "collecting": "正在采集数据"
+    },
+    "events": {
+      "title": "连接事件",
+      "description": "中断、偏慢或丢包的时段，以及恢复情况。",
+      "col_event": "事件",
+      "col_lasted": "持续",
+      "col_time": "时间",
+      "ongoing": "进行中",
+      "filter_all": "全部事件",
+      "filter_some": "{{count}} / {{total}} 种类型",
+      "filter_aria": "按事件类型筛选",
+      "show_all": "显示全部",
+      "show_all_events": "显示全部事件",
+      "rows_per_page": "每页行数",
+      "page_of": "第 {{page}} 页，共 {{pages}} 页",
+      "first_page": "第一页",
+      "prev_page": "上一页",
+      "next_page": "下一页",
+      "last_page": "最后一页",
+      "count_other": "{{count}} 个事件",
+      "shown_other": "显示 {{count}} 个事件",
+      "empty_title": "暂无连接事件",
+      "empty_description": "中断以及偏慢或丢包的时段将显示在这里。",
+      "no_match_title": "没有匹配的事件",
+      "no_match_description": "此时间范围内没有所选类型的事件。",
+      "error_title": "历史记录不可用",
+      "error_description": "调制解调器未返回任何事件。",
+      "retry": "重试",
+      "categories": {
+        "outage": "中断",
+        "latency": "高延迟",
+        "loss": "丢包",
+        "watchdog": "看门狗",
+        "sim": "SIM 切换"
+      }
+    },
+    "states": {
+      "loading_sr": "正在加载连接历史",
+      "error": {
+        "title": "历史记录不可用",
+        "description": "调制解调器未返回任何历史记录。"
+      },
+      "retry": "重试"
+    },
+    "sites": {
+      "title": "网站",
+      "description": "各网站通过蜂窝链路响应有多快。",
+      "manage": "管理",
+      "not_checked": "尚未检测",
+      "off_title": "网站监控已关闭",
+      "off_description": "开启后每 {{interval}} 测量一次各网站。",
+      "turn_on": "开启",
+      "empty_title": "暂无网站",
+      "empty_description": "添加你常用的网站，查看每个网站的响应速度。",
+      "error_title": "无法读取网站",
+      "error_description": "请稍后再试。",
+      "retry": "重试",
+      "notice_stale": "未在更新，显示的是最后一次读数。",
+      "live": "实时",
+      "no_reply": "无响应",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "s",
+      "stat_average": "平均",
+      "stat_fastest": "最快",
+      "stat_slowest": "最慢",
+      "stat_answered": "已响应",
+      "answered_count": "{{ok}} / {{n}}",
+      "tooltip_range": "范围",
+      "tooltip_no_reply": "此时段无响应",
+      "tooltip_no_data": "无数据",
+      "limit": "上限 {{value}}",
+      "close": "关闭",
+      "chart_aria": "{{site}} 在所选时段内的延迟",
+      "chart_empty": "此时段内暂无读数。"
+    },
+    "manage": {
+      "title": "管理网站",
+      "description": "最多 {{max}} 个网站，通过蜂窝链路测量。",
+      "monitor": "监控",
+      "on": "开",
+      "off": "关",
+      "interval": "检测间隔",
+      "list_aria": "网站",
+      "remove": "移除 {{host}}",
+      "add_placeholder": "添加网站，例如 netflix.com",
+      "add_label": "网站地址",
+      "add": "添加",
+      "error_invalid": "请输入网站名称，例如 netflix.com。",
+      "error_duplicate": "该网站已在列表中。",
+      "error_full": "列表最多容纳 {{max}} 个网站。",
+      "count": "{{n}} / {{max}}",
+      "cancel": "取消",
+      "save": "保存",
+      "empty": "列表中没有网站。",
+      "every": {
+        "seconds": "{{n}} 秒",
+        "minutes": "{{n}} 分钟",
+        "hours": "{{n}} 小时"
+      }
+    },
+    "toast": {
+      "check_failed": "无法开始检测。",
+      "save_ok": "网站已保存。",
+      "save_failed": "无法保存网站。",
+      "turn_on_ok": "网站监控已开启。",
+      "turn_on_failed": "无法开启网站监控。"
+    },
+    "redirect": {
+      "label": "正在打开连接历史"
+    }
   }
 }

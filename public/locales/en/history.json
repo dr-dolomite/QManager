@@ -76,5 +76,202 @@
       },
       "retry": "Try again"
     }
+  },
+  "connection": {
+    "page": {
+      "title": "Connection History",
+      "description": "How the internet connection held up over time."
+    },
+    "range": {
+      "label": "Time range",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "tiles": {
+      "collecting": "Collecting data",
+      "since": "Since {{when}}",
+      "online": {
+        "label": "Online for"
+      },
+      "offline": {
+        "label": "Offline for"
+      },
+      "radio_off": {
+        "label": "Radio off for"
+      },
+      "last_outage": {
+        "label": "Last outage",
+        "none": "None",
+        "none_caption": "No outages recorded"
+      },
+      "availability": {
+        "label": "Availability",
+        "outages_one": "{{count}} outage",
+        "outages_other": "{{count}} outages",
+        "none": "No outages"
+      },
+      "median": {
+        "label": "Median latency",
+        "slow": "Slow in {{slow}} of {{total}} periods",
+        "within": "Within your limit"
+      }
+    },
+    "reachability": {
+      "title": "Reachability",
+      "description": "Whether the internet answered, and how well.",
+      "aria": "Reachability timeline",
+      "collecting": "Collecting since {{time}}",
+      "collecting_plain": "Collecting data",
+      "legend": {
+        "up": "Responsive",
+        "slow": "Slow or lossy",
+        "down": "Down",
+        "nodata": "No data"
+      },
+      "tooltip": {
+        "latency": "Latency",
+        "loss": "Packet loss",
+        "down": "Down",
+        "nodata": "No data"
+      }
+    },
+    "charts": {
+      "latency": {
+        "title": "Latency",
+        "description": "Round-trip time to the test target."
+      },
+      "loss": {
+        "title": "Packet loss",
+        "description": "Share of tests that got no reply."
+      },
+      "jitter": {
+        "title": "Jitter",
+        "description": "How much latency varies between tests."
+      },
+      "dns": {
+        "title": "DNS lookup",
+        "description": "Time to resolve a name."
+      },
+      "limit": "Limit {{value}}",
+      "peak": "Peak",
+      "down": "Down",
+      "no_data": "No data",
+      "chart_aria": "{{metric}} history chart",
+      "collecting_since": "Collecting since {{time}}",
+      "collecting": "Collecting data"
+    },
+    "events": {
+      "title": "Connection events",
+      "description": "Outages, slow or lossy periods, and what recovered them.",
+      "col_event": "Event",
+      "col_lasted": "Lasted",
+      "col_time": "Time",
+      "ongoing": "Ongoing",
+      "filter_all": "All events",
+      "filter_some": "{{count}} of {{total}} types",
+      "filter_aria": "Filter by event type",
+      "show_all": "Show all",
+      "show_all_events": "Show all events",
+      "rows_per_page": "Rows per page",
+      "page_of": "Page {{page}} of {{pages}}",
+      "first_page": "First page",
+      "prev_page": "Previous page",
+      "next_page": "Next page",
+      "last_page": "Last page",
+      "count_one": "{{count}} event",
+      "count_other": "{{count}} events",
+      "shown_one": "{{count}} event shown",
+      "shown_other": "{{count}} events shown",
+      "empty_title": "No connection events yet",
+      "empty_description": "Outages and slow or lossy periods will appear here.",
+      "no_match_title": "No events match",
+      "no_match_description": "Nothing of the selected types in this range.",
+      "error_title": "History unavailable",
+      "error_description": "The modem didn't return any events.",
+      "retry": "Try again",
+      "categories": {
+        "outage": "Outages",
+        "latency": "High latency",
+        "loss": "Packet loss",
+        "watchdog": "Watchdog",
+        "sim": "SIM failover"
+      }
+    },
+    "states": {
+      "loading_sr": "Loading connection history",
+      "error": {
+        "title": "History unavailable",
+        "description": "The modem didn't return any history."
+      },
+      "retry": "Try again"
+    },
+    "sites": {
+      "title": "Sites",
+      "description": "How fast each site answers over the cellular link.",
+      "manage": "Manage",
+      "not_checked": "Not checked yet",
+      "off_title": "Sites monitor is off",
+      "off_description": "Turn it on to time each site every {{interval}}.",
+      "turn_on": "Turn on",
+      "empty_title": "No sites yet",
+      "empty_description": "Add the sites you use to see how fast each one answers.",
+      "error_title": "Couldn't read the sites",
+      "error_description": "Try again in a moment.",
+      "retry": "Try again",
+      "notice_stale": "Not updating. Showing the last readings.",
+      "live": "Live",
+      "no_reply": "No reply",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "s",
+      "stat_average": "Average",
+      "stat_fastest": "Fastest",
+      "stat_slowest": "Slowest",
+      "stat_answered": "Answered",
+      "answered_count": "{{ok}} of {{n}}",
+      "tooltip_range": "Range",
+      "tooltip_no_reply": "No reply in this period",
+      "tooltip_no_data": "No data",
+      "limit": "Limit {{value}}",
+      "close": "Close",
+      "chart_aria": "Latency of {{site}} over the selected range",
+      "chart_empty": "No readings in this range yet."
+    },
+    "manage": {
+      "title": "Manage sites",
+      "description": "Up to {{max}} sites, timed over the cellular link.",
+      "monitor": "Monitor",
+      "on": "On",
+      "off": "Off",
+      "interval": "Check every",
+      "list_aria": "Sites",
+      "remove": "Remove {{host}}",
+      "add_placeholder": "Add a site, like netflix.com",
+      "add_label": "Site address",
+      "add": "Add",
+      "error_invalid": "Enter a site name like netflix.com.",
+      "error_duplicate": "That site is already on the list.",
+      "error_full": "The list holds up to {{max}} sites.",
+      "count": "{{n}} of {{max}}",
+      "cancel": "Cancel",
+      "save": "Save",
+      "empty": "No sites on the list.",
+      "every": {
+        "seconds": "{{n}} s",
+        "minutes": "{{n}} min",
+        "hours": "{{n}} h"
+      }
+    },
+    "toast": {
+      "check_failed": "Couldn't start a check.",
+      "save_ok": "Sites saved.",
+      "save_failed": "Couldn't save the sites.",
+      "turn_on_ok": "Sites monitor turned on.",
+      "turn_on_failed": "Couldn't turn the sites monitor on."
+    },
+    "redirect": {
+      "label": "Opening Connection History"
+    }
   }
 }

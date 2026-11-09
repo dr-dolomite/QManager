@@ -76,5 +76,199 @@
       },
       "retry": "重試"
     }
+  },
+  "connection": {
+    "page": {
+      "title": "連線歷史",
+      "description": "網際網路連線隨時間的穩定表現。"
+    },
+    "range": {
+      "label": "時間範圍",
+      "24h": "24 小時",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "tiles": {
+      "collecting": "正在收集資料",
+      "since": "自 {{when}}",
+      "online": {
+        "label": "已在線"
+      },
+      "offline": {
+        "label": "已離線"
+      },
+      "radio_off": {
+        "label": "無線電已關閉"
+      },
+      "last_outage": {
+        "label": "上次中斷",
+        "none": "無",
+        "none_caption": "沒有中斷記錄"
+      },
+      "availability": {
+        "label": "可用率",
+        "outages_other": "{{count}} 次中斷",
+        "none": "無中斷"
+      },
+      "median": {
+        "label": "延遲中位數",
+        "slow": "在 {{total}} 個時段中有 {{slow}} 個偏慢",
+        "within": "在你的限值內"
+      }
+    },
+    "reachability": {
+      "title": "可達性",
+      "description": "網際網路是否回應，以及回應得如何。",
+      "aria": "可達性時間軸",
+      "collecting": "自 {{time}} 開始收集",
+      "collecting_plain": "正在收集資料",
+      "legend": {
+        "up": "回應正常",
+        "slow": "偏慢或遺失封包",
+        "down": "中斷",
+        "nodata": "無資料"
+      },
+      "tooltip": {
+        "latency": "延遲",
+        "loss": "封包遺失率",
+        "down": "中斷",
+        "nodata": "無資料"
+      }
+    },
+    "charts": {
+      "latency": {
+        "title": "延遲",
+        "description": "到測試目標的往返時間。"
+      },
+      "loss": {
+        "title": "封包遺失",
+        "description": "未收到回覆的測試所占比例。"
+      },
+      "jitter": {
+        "title": "抖動",
+        "description": "測試之間延遲的波動幅度。"
+      },
+      "dns": {
+        "title": "DNS 查詢",
+        "description": "解析網域名稱所需的時間。"
+      },
+      "limit": "限值 {{value}}",
+      "peak": "峰值",
+      "down": "中斷",
+      "no_data": "無資料",
+      "chart_aria": "{{metric}} 歷史圖表",
+      "collecting_since": "自 {{time}} 起收集",
+      "collecting": "正在收集資料"
+    },
+    "events": {
+      "title": "連線事件",
+      "description": "中斷、偏慢或遺失封包的時段，以及恢復情況。",
+      "col_event": "事件",
+      "col_lasted": "持續",
+      "col_time": "時間",
+      "ongoing": "進行中",
+      "filter_all": "全部事件",
+      "filter_some": "{{count}} / {{total}} 種類型",
+      "filter_aria": "依事件類型篩選",
+      "show_all": "顯示全部",
+      "show_all_events": "顯示全部事件",
+      "rows_per_page": "每頁列數",
+      "page_of": "第 {{page}} 頁，共 {{pages}} 頁",
+      "first_page": "第一頁",
+      "prev_page": "上一頁",
+      "next_page": "下一頁",
+      "last_page": "最後一頁",
+      "count_other": "{{count}} 個事件",
+      "shown_other": "顯示 {{count}} 個事件",
+      "empty_title": "尚無連線事件",
+      "empty_description": "中斷以及偏慢或遺失封包的時段會顯示在這裡。",
+      "no_match_title": "沒有符合的事件",
+      "no_match_description": "此時間範圍內沒有所選類型的事件。",
+      "error_title": "歷史記錄無法使用",
+      "error_description": "數據機未傳回任何事件。",
+      "retry": "重試",
+      "categories": {
+        "outage": "中斷",
+        "latency": "高延遲",
+        "loss": "封包遺失",
+        "watchdog": "看門狗",
+        "sim": "SIM 切換"
+      }
+    },
+    "states": {
+      "loading_sr": "正在載入連線歷史",
+      "error": {
+        "title": "歷史記錄無法使用",
+        "description": "數據機沒有回傳任何歷史記錄。"
+      },
+      "retry": "重試"
+    },
+    "sites": {
+      "title": "網站",
+      "description": "各網站透過行動網路回應有多快。",
+      "manage": "管理",
+      "not_checked": "尚未檢測",
+      "off_title": "網站監控已關閉",
+      "off_description": "開啟後每 {{interval}} 量測一次各網站。",
+      "turn_on": "開啟",
+      "empty_title": "尚無網站",
+      "empty_description": "加入你常用的網站，查看每個網站的回應速度。",
+      "error_title": "無法讀取網站",
+      "error_description": "請稍後再試。",
+      "retry": "重試",
+      "notice_stale": "未在更新，顯示的是最後一次讀數。",
+      "live": "即時",
+      "no_reply": "無回應",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "s",
+      "stat_average": "平均",
+      "stat_fastest": "最快",
+      "stat_slowest": "最慢",
+      "stat_answered": "已回應",
+      "answered_count": "{{ok}} / {{n}}",
+      "tooltip_range": "範圍",
+      "tooltip_no_reply": "此時段無回應",
+      "tooltip_no_data": "無資料",
+      "limit": "上限 {{value}}",
+      "close": "關閉",
+      "chart_aria": "{{site}} 在所選時段內的延遲",
+      "chart_empty": "此時段內尚無讀數。"
+    },
+    "manage": {
+      "title": "管理網站",
+      "description": "最多 {{max}} 個網站，透過行動網路量測。",
+      "monitor": "監控",
+      "on": "開",
+      "off": "關",
+      "interval": "檢測間隔",
+      "list_aria": "網站",
+      "remove": "移除 {{host}}",
+      "add_placeholder": "加入網站，例如 netflix.com",
+      "add_label": "網站位址",
+      "add": "加入",
+      "error_invalid": "請輸入網站名稱，例如 netflix.com。",
+      "error_duplicate": "該網站已在清單中。",
+      "error_full": "清單最多容納 {{max}} 個網站。",
+      "count": "{{n}} / {{max}}",
+      "cancel": "取消",
+      "save": "儲存",
+      "empty": "清單中沒有網站。",
+      "every": {
+        "seconds": "{{n}} 秒",
+        "minutes": "{{n}} 分鐘",
+        "hours": "{{n}} 小時"
+      }
+    },
+    "toast": {
+      "check_failed": "無法開始檢測。",
+      "save_ok": "網站已儲存。",
+      "save_failed": "無法儲存網站。",
+      "turn_on_ok": "網站監控已開啟。",
+      "turn_on_failed": "無法開啟網站監控。"
+    },
+    "redirect": {
+      "label": "正在開啟連線歷史"
+    }
   }
 }

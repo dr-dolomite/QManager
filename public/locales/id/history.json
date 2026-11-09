@@ -76,5 +76,199 @@
       },
       "retry": "Coba lagi"
     }
+  },
+  "connection": {
+    "page": {
+      "title": "Riwayat Koneksi",
+      "description": "Seberapa stabil koneksi internet dari waktu ke waktu."
+    },
+    "range": {
+      "label": "Rentang waktu",
+      "24h": "24 jam",
+      "7d": "7 hari",
+      "30d": "30 hari"
+    },
+    "tiles": {
+      "collecting": "Mengumpulkan data",
+      "since": "Sejak {{when}}",
+      "online": {
+        "label": "Online selama"
+      },
+      "offline": {
+        "label": "Offline selama"
+      },
+      "radio_off": {
+        "label": "Radio mati selama"
+      },
+      "last_outage": {
+        "label": "Gangguan terakhir",
+        "none": "Tidak ada",
+        "none_caption": "Belum ada gangguan tercatat"
+      },
+      "availability": {
+        "label": "Ketersediaan",
+        "outages_other": "{{count}} gangguan",
+        "none": "Tanpa gangguan"
+      },
+      "median": {
+        "label": "Median latensi",
+        "slow": "Lambat pada {{slow}} dari {{total}} periode",
+        "within": "Dalam batas Anda"
+      }
+    },
+    "reachability": {
+      "title": "Keterjangkauan",
+      "description": "Apakah internet menjawab, dan seberapa baik.",
+      "aria": "Linimasa keterjangkauan",
+      "collecting": "Mengumpulkan sejak {{time}}",
+      "collecting_plain": "Mengumpulkan data",
+      "legend": {
+        "up": "Responsif",
+        "slow": "Lambat atau kehilangan paket",
+        "down": "Terputus",
+        "nodata": "Tanpa data"
+      },
+      "tooltip": {
+        "latency": "Latensi",
+        "loss": "Kehilangan paket",
+        "down": "Terputus",
+        "nodata": "Tanpa data"
+      }
+    },
+    "charts": {
+      "latency": {
+        "title": "Latensi",
+        "description": "Waktu pulang-pergi ke target uji."
+      },
+      "loss": {
+        "title": "Kehilangan paket",
+        "description": "Porsi uji yang tidak mendapat balasan."
+      },
+      "jitter": {
+        "title": "Jitter",
+        "description": "Seberapa besar latensi berubah antar uji."
+      },
+      "dns": {
+        "title": "Pencarian DNS",
+        "description": "Waktu untuk menyelesaikan sebuah nama."
+      },
+      "limit": "Batas {{value}}",
+      "peak": "Puncak",
+      "down": "Terputus",
+      "no_data": "Tanpa data",
+      "chart_aria": "Grafik riwayat {{metric}}",
+      "collecting_since": "Mengumpulkan data sejak {{time}}",
+      "collecting": "Mengumpulkan data"
+    },
+    "events": {
+      "title": "Peristiwa koneksi",
+      "description": "Gangguan, periode lambat atau kehilangan paket, dan apa yang memulihkannya.",
+      "col_event": "Peristiwa",
+      "col_lasted": "Durasi",
+      "col_time": "Waktu",
+      "ongoing": "Sedang berlangsung",
+      "filter_all": "Semua peristiwa",
+      "filter_some": "{{count}} dari {{total}} jenis",
+      "filter_aria": "Filter menurut jenis peristiwa",
+      "show_all": "Tampilkan semua",
+      "show_all_events": "Tampilkan semua peristiwa",
+      "rows_per_page": "Baris per halaman",
+      "page_of": "Halaman {{page}} dari {{pages}}",
+      "first_page": "Halaman pertama",
+      "prev_page": "Halaman sebelumnya",
+      "next_page": "Halaman berikutnya",
+      "last_page": "Halaman terakhir",
+      "count_other": "{{count}} peristiwa",
+      "shown_other": "{{count}} peristiwa ditampilkan",
+      "empty_title": "Belum ada peristiwa koneksi",
+      "empty_description": "Gangguan serta periode lambat atau kehilangan paket akan muncul di sini.",
+      "no_match_title": "Tidak ada peristiwa yang cocok",
+      "no_match_description": "Tidak ada peristiwa dari jenis yang dipilih dalam rentang ini.",
+      "error_title": "Riwayat tidak tersedia",
+      "error_description": "Modem tidak mengembalikan peristiwa apa pun.",
+      "retry": "Coba lagi",
+      "categories": {
+        "outage": "Gangguan",
+        "latency": "Latensi tinggi",
+        "loss": "Kehilangan paket",
+        "watchdog": "Watchdog",
+        "sim": "Failover SIM"
+      }
+    },
+    "states": {
+      "loading_sr": "Memuat riwayat koneksi",
+      "error": {
+        "title": "Riwayat tidak tersedia",
+        "description": "Modem tidak mengembalikan riwayat apa pun."
+      },
+      "retry": "Coba lagi"
+    },
+    "sites": {
+      "title": "Situs",
+      "description": "Seberapa cepat tiap situs menjawab lewat jaringan seluler.",
+      "manage": "Kelola",
+      "not_checked": "Belum diperiksa",
+      "off_title": "Monitor situs mati",
+      "off_description": "Nyalakan untuk mengukur tiap situs setiap {{interval}}.",
+      "turn_on": "Nyalakan",
+      "empty_title": "Belum ada situs",
+      "empty_description": "Tambahkan situs yang Anda pakai untuk melihat seberapa cepat tiap situs menjawab.",
+      "error_title": "Tidak dapat membaca situs",
+      "error_description": "Coba lagi sebentar lagi.",
+      "retry": "Coba lagi",
+      "notice_stale": "Tidak diperbarui. Menampilkan data terakhir.",
+      "live": "Langsung",
+      "no_reply": "Tidak ada balasan",
+      "unmeasured": "—",
+      "unit_ms": "ms",
+      "unit_s": "dtk",
+      "stat_average": "Rata-rata",
+      "stat_fastest": "Tercepat",
+      "stat_slowest": "Terlambat",
+      "stat_answered": "Terjawab",
+      "answered_count": "{{ok}} dari {{n}}",
+      "tooltip_range": "Rentang",
+      "tooltip_no_reply": "Tidak ada balasan pada periode ini",
+      "tooltip_no_data": "Tidak ada data",
+      "limit": "Batas {{value}}",
+      "close": "Tutup",
+      "chart_aria": "Latensi {{site}} pada rentang yang dipilih",
+      "chart_empty": "Belum ada pembacaan pada rentang ini."
+    },
+    "manage": {
+      "title": "Kelola situs",
+      "description": "Hingga {{max}} situs, diukur lewat jaringan seluler.",
+      "monitor": "Monitor",
+      "on": "Nyala",
+      "off": "Mati",
+      "interval": "Periksa setiap",
+      "list_aria": "Situs",
+      "remove": "Hapus {{host}}",
+      "add_placeholder": "Tambah situs, misalnya netflix.com",
+      "add_label": "Alamat situs",
+      "add": "Tambah",
+      "error_invalid": "Masukkan nama situs seperti netflix.com.",
+      "error_duplicate": "Situs itu sudah ada di daftar.",
+      "error_full": "Daftar memuat paling banyak {{max}} situs.",
+      "count": "{{n}} dari {{max}}",
+      "cancel": "Batal",
+      "save": "Simpan",
+      "empty": "Tidak ada situs di daftar.",
+      "every": {
+        "seconds": "{{n}} dtk",
+        "minutes": "{{n}} mnt",
+        "hours": "{{n}} j"
+      }
+    },
+    "toast": {
+      "check_failed": "Tidak dapat memulai pemeriksaan.",
+      "save_ok": "Situs disimpan.",
+      "save_failed": "Tidak dapat menyimpan situs.",
+      "turn_on_ok": "Monitor situs dinyalakan.",
+      "turn_on_failed": "Tidak dapat menyalakan monitor situs."
+    },
+    "redirect": {
+      "label": "Membuka Riwayat Koneksi"
+    }
   }
 }
