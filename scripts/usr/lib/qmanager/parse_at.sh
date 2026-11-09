@@ -263,6 +263,26 @@ _pat_qeng_csv() {
     return 0
 }
 
+# --- Edge-only logging state (poller sources this every cycle) ---------------
+# _pa_* globals: "" = condition not active, else the uptime second it began.
+# _pa_up sets _PA_NOW without a fork and without depending on qlog.sh.
+_pa_noqeng_since=""
+_pa_reconcile_since=""
+_PA_NOW=0
+_pa_up() {
+    local _pa_idle
+    _PA_NOW=""
+    { read -r _PA_NOW _pa_idle < /proc/uptime; } 2>/dev/null
+    _PA_NOW="${_PA_NOW%%.*}"
+    case "$_PA_NOW" in ''|*[!0-9]*) _PA_NOW=0 ;; esac
+}
+_pa_reconcile_end() {
+    [ -n "$_pa_reconcile_since" ] || return 0
+    _pa_up
+    qlog_info "parse_ca_info: network_type no longer needs QCAINFO reconcile (after $((_PA_NOW - _pa_reconcile_since))s)"
+    _pa_reconcile_since=""
+}
+
 # -----------------------------------------------------------------------------
 # Parse AT+QENG="servingcell"
 # Populates: lte_state, lte_band, lte_earfcn, lte_bandwidth, lte_pci,
@@ -344,9 +364,18 @@ parse_serving_cell() {
     done
 
     if [ "$have_qeng" = 0 ]; then
-        qlog_warn "parse_serving_cell: no +QENG: lines in response"
+        if [ -z "$_pa_noqeng_since" ]; then
+            _pa_up
+            _pa_noqeng_since="$_PA_NOW"
+            qlog_warn "parse_serving_cell: no +QENG: lines in response"
+        fi
         service_status="unknown"
         return
+    fi
+    if [ -n "$_pa_noqeng_since" ]; then
+        _pa_up
+        qlog_info "parse_serving_cell: +QENG: lines back after $((_PA_NOW - _pa_noqeng_since))s"
+        _pa_noqeng_since=""
     fi
 
     # --- Detect connection state ---
@@ -1362,6 +1391,8 @@ _PCA_EOF
                 esac
                 ;;
         esac
+    else
+        _pa_reconcile_end
     fi
 }
 
