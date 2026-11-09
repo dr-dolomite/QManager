@@ -20,10 +20,9 @@ import type {
 
 import { axisTicks } from "@/components/history/axis";
 import {
-  formatClock,
   formatDuration,
   formatSince,
-  formatWhen,
+  formatSpan,
 } from "@/components/history/format";
 import { useHistoryCursor } from "@/components/history/history-cursor";
 import {
@@ -116,7 +115,7 @@ function SignalTooltip({
   return (
     <div className={CHART.TOOLTIP}>
       <span className={CHART.TOOLTIP_TITLE}>
-        {formatWhen(point.start, nowSec, t, locale)} {"–"} {formatClock(point.end, locale)}
+        {formatSpan(point.start, point.end, nowSec, t, locale)}
       </span>
       {point.lteRaw !== null ? (
         <span className={CHART.TOOLTIP_ROW}>

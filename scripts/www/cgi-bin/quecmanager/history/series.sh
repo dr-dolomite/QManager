@@ -3,10 +3,12 @@
 # =============================================================================
 # history/series.sh — CGI Endpoint: one history series as merged buckets (GET)
 # =============================================================================
-# GET ?series=<id>&range=24h|7d|30d
+# GET ?series=<id>&range=5m|1h|24h|7d|15d|30d
 #   → {success, series, range, bucket_sec, now, clock_trusted, since, states,
 #      fault, metrics, current, last_fault, buckets:[{t,len,st,x,m}]}
-# Read-only; the poller's history.sh is the only writer. Contract:
+# 5m and 1h read the poller's RAM sample ring (<id>.fine, ~1 h, lost on
+# reboot); the others merge the 30-minute rows. Read-only; the poller's
+# history.sh is the only writer. Contract:
 # docs/features/history.md §6.
 #
 # Endpoint: GET /cgi-bin/quecmanager/history/series.sh
@@ -38,7 +40,7 @@ fi
 hr_param range
 range="${_HP:-24h}"
 if ! hr_range "$range"; then
-    cgi_error "invalid_range" "range must be 24h, 7d or 30d"
+    cgi_error "invalid_range" "range must be 5m, 1h, 24h, 7d, 15d or 30d"
     exit 0
 fi
 
@@ -95,14 +97,24 @@ if [ -f "$HIST_STORE/$series/last_fault" ]; then
     esac
 fi
 
-buckets=$(hr_rows "$series" b "$first" | awk -v first="$first" -v B="$HR_B" -v N="$HR_N" \
-    -v now="$now" -v states="$states" -v metrics="$metrics" '
+# Fine rows (k "f") are single samples covering [t - dt, t) in state s; each
+# is spread over the buckets it overlaps (state seconds by overlap, metrics
+# counted in every overlapped bucket), so a 10 s sample that straddles a
+# 10 s bucket edge never leaves an empty bar beside a doubled one.
+if [ "$HR_FINE" = "1" ]; then
+    rows_cmd="hr_fine_rows"
+else
+    rows_cmd="hr_rows"
+fi
+buckets=$($rows_cmd "$series" b "$first" | awk -v first="$first" -v B="$HR_B" -v N="$HR_N" \
+    -v now="$now" -v states="$states" -v metrics="$metrics" -v alive="$HR_ALIVE" '
 BEGIN {
     ns = split(states, S, " "); nm = split(metrics, M, " ")
     for (j = 1; j <= nm; j++) MI[M[j]] = j
 }
 {
     line = $0
+    if (substr(line, 1, 8) == "{\"k\":\"f\"") { fine(line); next }
     t = line; sub(/^\{"k":"b","t":/, "", t); sub(/,.*/, "", t); t += 0
     if (t < first || t > now) next
     i = int((t - first) / B)
@@ -125,7 +137,50 @@ BEGIN {
         if (!((i, j) in HI) || a[4] + 0 > HI[i, j]) HI[i, j] = a[4] + 0
     }
 }
+function fine(line,    t, dt, a, b, s, x, i, i0, i1, lo, hi, ov, m, e, name, j, v) {
+    t = line; sub(/^\{"k":"f","t":/, "", t); sub(/,.*/, "", t); t += 0
+    dt = line; sub(/.*"dt":/, "", dt); sub(/,.*/, "", dt); dt += 0
+    if (t > now + 30) return
+    a = t - dt; b = t
+    if (b <= first && dt > 0) return
+    if (dt <= 0 && t < first) return
+    s = line; sub(/.*"s":"/, "", s); sub(/".*/, "", s)
+    if (t > LT) { LT = t; LS = s }
+    x = line; sub(/.*"x":/, "", x); sub(/,.*/, "", x); x += 0
+    i0 = int((a - first) / B); if (a < first) i0 = 0
+    i1 = (dt > 0) ? int((b - 1 - first) / B) : int((b - first) / B)
+    if (i1 >= N) i1 = N - 1
+    if (i0 > i1) return
+    if (x > 0) X[i1] += x
+    for (i = i0; i <= i1; i++) {
+        lo = first + i * B; hi = lo + B
+        ov = (b < hi ? b : hi) - (a > lo ? a : lo)
+        if (ov > 0) ST[i, s] += ov
+        m = line; sub(/.*"m":\{/, "", m)
+        while (match(m, /"[a-z0-9_]+":-?[0-9]+/)) {
+            e = substr(m, RSTART, RLENGTH); m = substr(m, RSTART + RLENGTH)
+            name = e; sub(/^"/, "", name); sub(/".*/, "", name)
+            if (!(name in MI)) continue
+            j = MI[name]
+            v = e; sub(/.*:/, "", v); v += 0
+            N1[i, j] += 1; SU[i, j] += v
+            if (!((i, j) in LO) || v < LO[i, j]) LO[i, j] = v
+            if (!((i, j) in HI) || v > HI[i, j]) HI[i, j] = v
+        }
+    }
+}
 END {
+    # Fine ranges: the newest sample is up to 10 s old, which would leave the
+    # last bars as "no data". While the collector is alive, its state holds
+    # until now (at most 30 s); no metric is invented for that span.
+    if (alive == 1 && LT > 0 && now > LT && now - LT <= 30) {
+        for (i = int((LT - first) / B); i < N; i++) {
+            if (i < 0) continue
+            lo = first + i * B; hi = lo + B
+            ov = (now < hi ? now : hi) - (LT > lo ? LT : lo)
+            if (ov > 0) ST[i, LS] += ov
+        }
+    }
     for (i = 0; i < N; i++) {
         t = first + i * B
         len = (i == N - 1) ? now - t : B

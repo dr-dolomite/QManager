@@ -19,7 +19,7 @@ QManager keeps a small, flash-friendly history of things the poller already know
 | External events | `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2) |
 | Sample period | 10 s (every 5th 2 s poller cycle, the `TIER1_5_EVERY` grain) in every tier |
 | Base bucket | 1800 s, aligned to UTC epoch multiples |
-| Ranges | `24h` = 48 × 30 min, `7d` = 56 × 3 h, `30d` = 60 × 12 h (all merged from base buckets at read time) |
+| Ranges | `5m` = 30 × 10 s and `1h` = 60 × 1 min (from the RAM sample ring `<series>.fine`); `24h` = 48 × 30 min, `7d` = 56 × 3 h, `15d` = 60 × 6 h, `30d` = 60 × 12 h (merged from base buckets at read time). UI tabs: 5m (default), 1h, 1D, 1W, 15D, 1M |
 | Retention | 31 days by day file; 2 MB per series; flush skipped under 8 MB free |
 | Flash flush | every closed bucket (≤ 1 per 30 min, all series in one pass, one global `sync` pair) and on TERM |
 | AT cost | **none**: no new AT command, no lock, no `qcmd` |
@@ -150,11 +150,12 @@ Placing `hist_tick` inside the overlay window means history records **exactly wh
 | Tier | Holds | Where | Bound |
 |---|---|---|---|
 | Raw | the samples of the open bucket, as running `n/sum/min/max` + state seconds (not individual samples) | poller memory, mirrored to `<series>.open` every 30 s | one bucket |
+| Sample ring | every trusted 10 s sample as one row `{"k":"f","t":<wall>,"dt":<s>,"s":"<state>","x":0|1,"m":{"<metric>":<int>}}`, covering `[t - dt, t)`. Feeds the `5m` and `1h` ranges only | `<series>.fine` (RAM, tmpfs) | `HIST_FINE_MAX` 400 rows (~66 min); trimmed to it with one `tail` once 60 rows over. Never on flash, lost on reboot, not written before trust (pre-trust samples are back-dated into base rows only) |
 | Pre-trust raw | individual samples taken while the clock is untrusted (§5), with their `mono` | `<series>.pending` (RAM) | 360 lines (1 h at 10 s); oldest dropped beyond that |
 | Base | 30-minute bucket rows | RAM queue until flushed, then `d<DAY>.jsonl` on flash | 31 days |
-| Read tiers | 30 min, 3 h, 12 h | computed by the CGI by merging 1, 6 or 24 base rows | none stored |
+| Read tiers | 30 min, 3 h, 6 h, 12 h | computed by the CGI by merging 1, 6, 12 or 24 base rows | none stored |
 
-All three UI ranges are exact multiples of 30 min, so **no coarse tier is stored**: one base tier and a read-time merge give 24 h/7 d/30 d with no second rollup to keep consistent. 30 days × 48 rows × ~300 B ≈ 430 KB per series. A future range beyond 31 days (90 d, 1 y) adds a stored 12 h tier rolled up from closed base days by the same mergeable-row rule; it is not built now.
+The four long ranges are exact multiples of 30 min, so **no coarse tier is stored**: one base tier and a read-time merge give 24 h/7 d/15 d/30 d with no second rollup to keep consistent. The two short ranges cannot come from 30-minute rows, so they read the sample ring instead. **Why a RAM ring and not a finer flash tier:** a 10 s row on flash would mean a flash write every 10 s per series; an hour of RAM is ~70 KB per series and costs one `printf >>` per tick (no fork) plus one `tail` about every 10 minutes. After a reboot the short ranges read as no data until the ring refills, the same bound as the open bucket. 30 days × 48 rows × ~300 B ≈ 430 KB per series. A future range beyond 31 days (90 d, 1 y) adds a stored 12 h tier rolled up from closed base days by the same mergeable-row rule; it is not built now.
 
 **Hard caps.** Day files older than 31 days are deleted after each flush (by file name, no date maths). While a series directory exceeds 2 MB the oldest day file is deleted (never today's). A flush is skipped while `/usrdata` has under 8 MB free (the queue keeps up to 96 rows, then drops the oldest). Events are capped at 2000 rows per day file (after that only `fault`-related types, `signal_lost`/`signal_restored`, are kept that day), so a CA-churn storm cannot fill the store. The pending file is capped at 360 lines, the queue at 96 rows.
 
@@ -189,13 +190,18 @@ The RM551E has no usable RTC: the kernel boots at 1970, `sysfixtime` sets it to 
 
 Both endpoints are authenticated GETs (`cgi_base.sh`), read-only, and use the standard `{success:false, error, detail}` envelope. Error codes (added to `errors.json` in all five catalogs): `invalid_series`, `invalid_range`, `invalid_param`.
 
-### `GET history/series.sh?series=cellular&range=24h|7d|30d`
+### `GET history/series.sh?series=cellular&range=5m|1h|24h|7d|15d|30d`
 
 | Range | `bucket_sec` | Buckets |
 |---|---|---|
+| `5m` | 10 | 30 |
+| `1h` | 60 | 60 |
 | `24h` | 1800 | 48 |
 | `7d` | 10800 | 56 |
+| `15d` | 21600 | 60 |
 | `30d` | 43200 | 60 |
+
+`5m` and `1h` read `<series>.fine` (`hr_fine_rows`, flag `HR_FINE` from `hr_range`). Each sample row is **spread over the buckets its interval `[t - dt, t)` overlaps**: state seconds by overlap, each metric counted once in every overlapped bucket, `x` in the bucket that holds `t - 1`. **Why:** samples land every ~10 s but drift against the 10 s grid; keyed by `t` alone, two samples would fall in one bucket and leave its neighbour empty, a zig-zag of "no data" bars. While the collector is alive (`HR_ALIVE`), the newest sample's state is held from its `t` to now (at most 30 s, state seconds only, no metrics), because that sample is up to 10 s old and the last bars would otherwise always read as no data. Output shape is the same as for the other ranges. `events.sh` accepts the same six ranges.
 
 Buckets are aligned to UTC multiples of `bucket_sec`; the last one contains now and is partial (`len` < `bucket_sec`). Every bucket is present even with no data.
 
@@ -425,7 +431,7 @@ The strip, charts and events share one cursor (`history-cursor.tsx`): hovering a
 
 ### Sites card and alignment
 
-The Sites card follows the page range. `useSites(range: HistoryRange, live: boolean)` requests `monitoring/sites.sh?range=24h|7d|30d`, whose buckets are **1800 s / 10800 s / 43200 s**, the same UTC-aligned sizes as the History ranges. The two are aligned **on the server** on purpose: the old 20-minute, 2-hour and 8-hour buckets do not divide into the page's buckets, so client re-binning would smear samples across bars and break the shared cursor. The 24h range no longer returns raw rows. Daemon, store and CGI contract: [sites-monitor.md](sites-monitor.md).
+The Sites card follows the page range. `useSites(range: HistoryRange, live: boolean)` requests `monitoring/sites.sh?range=<the page range>`, whose buckets are **10 s / 60 s / 1800 s / 10800 s / 21600 s / 43200 s**, the same UTC-aligned sizes as the History ranges, and anchors its grid on the response's `now` (the modem clock), so a skewed browser clock cannot shift a probe into the wrong 10 s slot. Sites sweep every `interval_sec` (5 min by default), so the short ranges are mostly empty buckets: that is the data, not a fault. The two are aligned **on the server** on purpose: the old 20-minute, 2-hour and 8-hour buckets do not divide into the page's buckets, so client re-binning would smear samples across bars and break the shared cursor. The 24h range no longer returns raw rows. Daemon, store and CGI contract: [sites-monitor.md](sites-monitor.md).
 
 - **Value under each logo.** In Live, the latest live sample (`liveData`; a miss reads "No reply"). Otherwise `siteAverage(series)` over the range: the mean of **answered** samples, each bucket weighted by its `ok` count (not a mean of bucket means). No answered sample but some sampled reads "No reply"; never checked reads "Not checked yet"; anything else is a dash.
 - **Tone.** `latencyTone(ms, limit)`: amber above the latency limit, red above twice the limit, green otherwise. A Sites figure is a **TCP connect time** graded against the same single latency limit as the ICMP probe, not a site-specific number.

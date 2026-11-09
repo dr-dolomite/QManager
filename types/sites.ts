@@ -1,7 +1,9 @@
 // Sites monitor: the GET/POST contract of the sites CGI (docs/features/sites-monitor.md).
 
+import type { HistoryRange } from "@/types/history";
+
 /** The ranges the sites CGI serves the page; "now" is live latest-only with an empty series. */
-export type SitesRange = "now" | "24h" | "7d" | "30d";
+export type SitesRange = "now" | HistoryRange;
 
 export interface SiteLatest {
   ts: number;
@@ -42,6 +44,8 @@ export interface SitesResponse {
   next_check_at: number | null;
   /** A sweep is running or a check-now flag is pending. */
   checking: boolean;
+  /** The modem's clock when the response was built (epoch s); anchors the bucket grid. */
+  now?: number;
   wans: string[];
   summary: { answered: number; total: number };
   sites: SiteEntry[];

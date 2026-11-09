@@ -7,7 +7,7 @@ import { axisTicks } from "@/components/history/axis";
 import {
   formatClock,
   formatDuration,
-  formatWhen,
+  formatSpan,
 } from "@/components/history/format";
 import { useHistoryCursor } from "@/components/history/history-cursor";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -172,7 +172,7 @@ export function ConnectionCard({ history }: { history: CellularHistory }) {
 
   const windowLabel = (idx: number) => {
     const b = buckets[idx];
-    return `${formatWhen(b.t, now, t, locale)} – ${formatClock(b.t + b.len, locale)}`;
+    return formatSpan(b.t, b.t + b.len, now, t, locale);
   };
 
   const durationRows = (idx: number) => {

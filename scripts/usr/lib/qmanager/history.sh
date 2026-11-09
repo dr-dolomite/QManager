@@ -5,6 +5,8 @@
 # 30-minute bucket rows on flash, with no AT command and no lock:
 #   every cycle      one counter test (hist_tick)
 #   every 5 cycles   one sample of every registered series (builtins only)
+#                    and one printf >> of the raw sample to the RAM ring
+#                    <id>.fine (5-minute and 1-hour ranges, never flash)
 #   every 3 samples  the open-bucket mirror (one mv per series)
 #   bucket close     one printf >> to the RAM queue, then one flash pass for
 #                    every series (printf >> day files, one global sync)
@@ -38,6 +40,7 @@ _QM_HISTORY_LOADED=1
 : "${HIST_MIN_FREE_KB:=8192}"
 : "${HIST_QUEUE_MAX:=96}"
 : "${HIST_PENDING_MAX:=360}"
+: "${HIST_FINE_MAX:=400}"
 : "${HIST_EV_DAY_MAX:=2000}"
 : "${HIST_MIRROR_EVERY:=3}"
 : "${HIST_SYNC:=sync}"
@@ -351,6 +354,35 @@ _hist_add() {
         eval "_o=\$_ha_${_s}_hi_${_w}"
         { [ -z "$_o" ] || [ "$_v" -gt "$_o" ]; } && eval "_ha_${_s}_hi_${_w}=$_v"
     done
+    _hist_fine "$_s" $((_m + _hist_off)) "$_dt" "$_x"
+}
+
+# _hist_fine ID WALL DT X: append this sample to the RAM ring <id>.fine, read
+# by the 5-minute and 1-hour ranges. One row covers [WALL - DT, WALL) in state
+# _HS. Builtins + one printf >> per tick; one tail per ~60 extra rows.
+_hist_fine() {
+    local _l
+    local _w
+    local _v
+    local _r
+    local _sep
+    local _n
+    local _f
+    _r="{\"k\":\"f\",\"t\":$2,\"dt\":$3,\"s\":\"$_HS\",\"x\":$4,\"m\":{"
+    eval "_l=\$HIST_${1}_METRICS"
+    _sep=""
+    for _w in $_l; do
+        eval "_v=\${_HV_${_w}:-}"
+        [ -n "$_v" ] || continue
+        _r="${_r}${_sep}\"${_w}\":${_v}"
+        _sep=","
+    done
+    _f="$HIST_RUN/$1.fine"
+    printf '%s}}\n' "$_r" >> "$_f" 2>/dev/null
+    eval "_n=\$((\${_hfn_${1}:-0} + 1)); _hfn_${1}=\$_n"
+    [ "$_n" -gt $((HIST_FINE_MAX + 60)) ] || return 0
+    tail -n "$HIST_FINE_MAX" "$_f" > "$_f.tmp" 2>/dev/null && mv -f "$_f.tmp" "$_f" 2>/dev/null
+    eval "_hfn_${1}=$HIST_FINE_MAX"
 }
 
 # _hist_write_fault ID START END: the newest completed fault run, on flash.
@@ -524,7 +556,7 @@ hist_init() {
         # on reboot; this covers a poller started with a stale run dir).
         if [ "$hist_boot" != "$_hist_boot" ]; then
             for _s in $HIST_SERIES; do
-                rm -f "$HIST_RUN/$_s.open" "$HIST_RUN/$_s.pending" "$HIST_RUN/$_s.run"
+                rm -f "$HIST_RUN/$_s.open" "$HIST_RUN/$_s.pending" "$HIST_RUN/$_s.run" "$HIST_RUN/$_s.fine"
             done
         fi
         _hist_trusted=0

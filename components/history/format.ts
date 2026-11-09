@@ -16,11 +16,12 @@ export const DAY = 86400;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** "14:40", 24-hour in every locale. */
-export function formatClock(sec: number, locale?: string): string {
+/** "14:40", 24-hour in every locale; "14:40:10" with `withSeconds`. */
+export function formatClock(sec: number, locale?: string, withSeconds = false): string {
   return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
+    ...(withSeconds ? { second: "2-digit" as const } : {}),
     hourCycle: "h23",
   }).format(sec * 1000);
 }
@@ -45,14 +46,31 @@ export function formatDay(
   );
 }
 
-/** "Today, 14:40" / "Yesterday, 21:42" / "Nov 8, 21:42". */
+/** "Today, 14:40" / "Yesterday, 21:42" / "Nov 8, 21:42"; seconds with `withSeconds`. */
 export function formatWhen(
   sec: number,
   nowSec: number,
   t: TFunction,
   locale?: string,
+  withSeconds = false,
 ): string {
-  return `${formatDay(sec, nowSec, t, locale)}, ${formatClock(sec, locale)}`;
+  return `${formatDay(sec, nowSec, t, locale)}, ${formatClock(sec, locale, withSeconds)}`;
+}
+
+/**
+ * A bucket's window for a tooltip title: "Today, 14:40 – 14:50". A window
+ * shorter than a minute (the 5 minutes range's 10 s buckets) carries seconds
+ * ("Today, 14:40:10 – 14:40:20") so neighbouring buckets stay distinguishable.
+ */
+export function formatSpan(
+  start: number,
+  end: number,
+  nowSec: number,
+  t: TFunction,
+  locale?: string,
+): string {
+  const seconds = end - start < MINUTE;
+  return `${formatWhen(start, nowSec, t, locale, seconds)} – ${formatClock(end, locale, seconds)}`;
 }
 
 /** "14:40" for today, otherwise the full day-and-time. */

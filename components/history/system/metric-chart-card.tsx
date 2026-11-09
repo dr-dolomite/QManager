@@ -13,9 +13,8 @@ import {
 
 import { axisTicks } from "@/components/history/axis";
 import {
-  formatClock,
   formatSince,
-  formatWhen,
+  formatSpan,
 } from "@/components/history/format";
 import { useHistoryCursor } from "@/components/history/history-cursor";
 import { Chip, buildThrottleLabel } from "@/components/dashboard/status-rail";
@@ -453,8 +452,7 @@ export function MetricChartCard({
     return (
       <>
         <p className="mb-1.5 font-semibold tabular-nums">
-          {formatWhen(p.start, history.now, t, locale)} {"–"}{" "}
-          {formatClock(p.end, locale)}
+          {formatSpan(p.start, p.end, history.now, t, locale)}
         </p>
         <ul className="flex flex-col gap-0.5">
           {reading !== null ? (

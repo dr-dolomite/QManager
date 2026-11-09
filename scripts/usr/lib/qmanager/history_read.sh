@@ -48,14 +48,26 @@ _hist_in() {
     return 1
 }
 
-# hr_range RANGE -> HR_B (bucket seconds), HR_N (bucket count), or 1.
+# hr_range RANGE -> HR_B (bucket seconds), HR_N (bucket count), HR_FINE (1 =
+# read the RAM sample ring <id>.fine, not the 30-minute rows), or 1.
 hr_range() {
+    HR_FINE=0
     case "$1" in
+        5m) HR_B=10; HR_N=30; HR_FINE=1 ;;
+        1h) HR_B=60; HR_N=60; HR_FINE=1 ;;
         24h) HR_B=1800; HR_N=48 ;;
         7d) HR_B=10800; HR_N=56 ;;
+        15d) HR_B=21600; HR_N=60 ;;
         30d) HR_B=43200; HR_N=60 ;;
         *) return 1 ;;
     esac
+}
+
+# hr_fine_rows ID: every sample row of the RAM ring (k "f"), on stdout. The
+# anchored grep drops a line torn by a concurrent append or trim.
+hr_fine_rows() {
+    [ -f "$HIST_RUN/$1.fine" ] || return 0
+    grep '^{"k":"f","t":[0-9][0-9]*,"dt":[0-9][0-9]*,.*}$' "$HIST_RUN/$1.fine" 2>/dev/null
 }
 
 # hr_clock -> HR_TRUSTED (0/1), HR_NOW (collector now), HR_OFF, HR_ALIVE (0/1).

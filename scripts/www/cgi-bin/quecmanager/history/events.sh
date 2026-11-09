@@ -3,7 +3,7 @@
 # =============================================================================
 # history/events.sh — CGI Endpoint: a history series' events, paged (GET)
 # =============================================================================
-# GET ?series=<id>&range=24h|7d|30d[&types=a,b][&limit=1..100][&offset=N]
+# GET ?series=<id>&range=5m|1h|24h|7d|15d|30d[&types=a,b][&limit=1..100][&offset=N]
 #   → {success, series, range, total, counts:{type:N}, events:[{timestamp,
 #      type, severity, radio, message[, end]}]} newest first.
 # counts ignore the type filter; total honours it. An onset type named in
@@ -43,7 +43,7 @@ fi
 hr_param range
 range="${_HP:-24h}"
 if ! hr_range "$range"; then
-    cgi_error "invalid_range" "range must be 24h, 7d or 30d"
+    cgi_error "invalid_range" "range must be 5m, 1h, 24h, 7d, 15d or 30d"
     exit 0
 fi
 eval "evtypes=\$HIST_${series}_EVENTS; pairs=\${HIST_${series}_PAIRS:-}; resume=\${HIST_${series}_RESUME:-}"

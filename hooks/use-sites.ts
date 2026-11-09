@@ -17,6 +17,8 @@ import type {
 
 const ENDPOINT = "/cgi-bin/quecmanager/monitoring/sites.sh";
 const IDLE_POLL_MS = 30_000;
+/** The 5 minutes and 1 hour ranges poll faster, as the rest of History does. */
+const SHORT_IDLE_POLL_MS = 10_000;
 const BUSY_POLL_MS = 3_000;
 /** Each "now" read renews the daemon's live lease, so it polls only while the tab is visible. */
 const LIVE_POLL_MS = 2_000;
@@ -109,7 +111,8 @@ export function useSites(range: HistoryRange, live: boolean): UseSitesReturn {
 
       setData(json);
       setDataRange(r);
-      setDataNow(Math.floor(Date.now() / 1000));
+      // The modem's clock, so 10 s buckets don't shift with browser clock skew.
+      setDataNow(json.now ?? Math.floor(Date.now() / 1000));
       setError(null);
       checkedAtRef.current = json.checked_at;
 
@@ -162,7 +165,8 @@ export function useSites(range: HistoryRange, live: boolean): UseSitesReturn {
   }, [range, fetchRange]);
 
   const busy = (data?.checking ?? false) || checkPending;
-  const cadence = busy ? BUSY_POLL_MS : IDLE_POLL_MS;
+  const idleMs = range === "5m" || range === "1h" ? SHORT_IDLE_POLL_MS : IDLE_POLL_MS;
+  const cadence = busy ? BUSY_POLL_MS : idleMs;
   useEffect(() => {
     const id = window.setInterval(
       () => void fetchRange(rangeRef.current),

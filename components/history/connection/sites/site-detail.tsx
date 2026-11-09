@@ -19,7 +19,7 @@ import type {
 } from "recharts/types/component/DefaultTooltipContent";
 
 import { axisTicks } from "@/components/history/axis";
-import { formatClock, formatWhen } from "@/components/history/format";
+import { formatSpan } from "@/components/history/format";
 import { useHistoryCursor } from "@/components/history/history-cursor";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,7 +89,7 @@ function SiteTooltip({
   return (
     <div className={DETAIL.TOOLTIP}>
       <span className={DETAIL.TOOLTIP_TITLE}>
-        {formatWhen(point.start, nowSec, t, locale)} {"–"} {formatClock(point.end, locale)}
+        {formatSpan(point.start, point.end, nowSec, t, locale)}
       </span>
       {point.ms !== null ? (
         <>

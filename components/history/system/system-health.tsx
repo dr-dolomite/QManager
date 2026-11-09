@@ -19,7 +19,7 @@ import { SystemHealthView } from "./system-health-view";
 // =============================================================================
 
 function LivePage() {
-  const [range, setRange] = React.useState<HistoryRange>("24h");
+  const [range, setRange] = React.useState<HistoryRange>("5m");
   const series = useHistorySeries<SystemState, SystemMetric>("system", range);
   const events = useHistoryEvents("system", range, { page: 0, pageSize: 100 });
   const { data: modem } = useModemStatus();

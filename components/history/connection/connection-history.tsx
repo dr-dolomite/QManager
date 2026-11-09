@@ -50,7 +50,7 @@ function useLimits(): ConnectionLimits {
 
 export default function ConnectionHistory() {
   const { t } = useTranslation("history");
-  const [range, setRange] = React.useState<HistoryRange>("24h");
+  const [range, setRange] = React.useState<HistoryRange>("5m");
   const { data, isLoading, error, refresh } = useConnectionSeries(range);
   const limits = useLimits();
 

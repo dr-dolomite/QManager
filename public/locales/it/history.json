@@ -10,9 +10,28 @@
       "s": "{{value}}s"
     },
     "range_ago": {
+      "5m": "5 minuti fa",
+      "1h": "1 ora fa",
       "24h": "24 ore fa",
       "7d": "7 giorni fa",
+      "15d": "15 giorni fa",
       "30d": "30 giorni fa"
+    },
+    "range_short": {
+      "5m": "5m",
+      "1h": "1h",
+      "24h": "1g",
+      "7d": "1s",
+      "15d": "15g",
+      "30d": "1M"
+    },
+    "range_span": {
+      "5m": "5 minuti",
+      "1h": "1 ora",
+      "24h": "24 ore",
+      "7d": "7 giorni",
+      "15d": "15 giorni",
+      "30d": "30 giorni"
     }
   },
   "cellular": {
@@ -22,9 +41,12 @@
     },
     "range": {
       "label": "Intervallo di tempo",
-      "24h": "24 ore",
-      "7d": "7 giorni",
-      "30d": "30 giorni"
+      "5m": "5 minuti",
+      "1h": "1 ora",
+      "24h": "Giorno",
+      "7d": "Settimana",
+      "15d": "15 giorni",
+      "30d": "Mese"
     },
     "summary": {
       "collecting": "Raccolta dati in corso",
@@ -147,9 +169,12 @@
     },
     "range": {
       "label": "Intervallo di tempo",
-      "24h": "24 ore",
-      "7d": "7 giorni",
-      "30d": "30 giorni"
+      "5m": "5 minuti",
+      "1h": "1 ora",
+      "24h": "Giorno",
+      "7d": "Settimana",
+      "15d": "15 giorni",
+      "30d": "Mese"
     },
     "parts": {
       "lte": "LTE",
@@ -202,6 +227,10 @@
       "empty": {
         "title": "Nessuna lettura dell'archiviazione",
         "description": "L'archiviazione viene misurata una volta all'ora."
+      },
+      "empty_short": {
+        "title": "Nessuna lettura dell'archiviazione in questo intervallo",
+        "description": "L'archiviazione viene misurata una volta all'ora. Scegli Giorno o un intervallo più lungo per vederla."
       }
     },
     "events": {
@@ -367,9 +396,12 @@
     },
     "range": {
       "label": "Intervallo di tempo",
-      "24h": "24 ore",
-      "7d": "7 giorni",
-      "30d": "30 giorni"
+      "5m": "5 minuti",
+      "1h": "1 ora",
+      "24h": "Giorno",
+      "7d": "Settimana",
+      "15d": "15 giorni",
+      "30d": "Mese"
     },
     "tiles": {
       "collecting": "Raccolta dati in corso",

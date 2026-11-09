@@ -261,19 +261,35 @@ describe("summaries", () => {
 });
 
 describe("systemFixture", () => {
-  for (const range of ["24h", "7d", "30d"] as const) {
+  for (const range of ["5m", "1h", "24h", "7d", "15d", "30d"] as const) {
     it(`shapes the ${range} response like the collector`, () => {
       const { history, events } = systemFixture(range, "healthy", NOW);
-      const spec = { "24h": [48, 1800], "7d": [56, 10800], "30d": [60, 43200] }[range];
+      const spec = {
+        "5m": [30, 10],
+        "1h": [60, 60],
+        "24h": [48, 1800],
+        "7d": [56, 10800],
+        "15d": [60, 21600],
+        "30d": [60, 43200],
+      }[range];
+      expect(history.bucket_sec).toBe(spec[1]);
       expect(history.buckets).toHaveLength(spec[0]);
       expect(history.buckets.every((b) => b.t % spec[1] === 0)).toBe(true);
       const last = history.buckets[history.buckets.length - 1];
-      expect(last.t + last.len).toBe(NOW);
+      // The partial last bucket is at least 1 s long, so a "now" exactly on a
+      // 10 s boundary (the 5m range) ends 1 s past it.
+      expect(last.t + last.len - NOW).toBeGreaterThanOrEqual(0);
+      expect(last.t + last.len - NOW).toBeLessThanOrEqual(1);
       expect(last.len).toBeLessThanOrEqual(spec[1]);
       expect(events.events.every((e) => e.timestamp <= NOW)).toBe(true);
       expect(coversRange(history)).toBe(true);
     });
   }
+
+  it("derives no incidents from a quiet 5 minute window", () => {
+    const { history, events } = systemFixture("5m", "healthy", NOW);
+    expect(laneCounts(deriveIncidents(events.events, history.buckets)).reboots).toBe(0);
+  });
 
   it("leaves st short where the device was off", () => {
     const { history } = systemFixture("30d", "healthy", NOW);
