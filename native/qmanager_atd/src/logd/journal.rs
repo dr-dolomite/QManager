@@ -93,8 +93,8 @@ impl State {
 }
 
 /// `write_atomic` plus `fdatasync` of the file and `fsync` of its directory,
-/// so the rename itself survives a power cut.
-pub fn write_durable(dir: &str, path: &str, contents: &[u8]) -> std::io::Result<()> {
+/// so the rename itself survives a power cut. Returns the syncs issued.
+pub fn write_durable(dir: &str, path: &str, contents: &[u8]) -> std::io::Result<u64> {
     let tmp = format!("{path}.new");
     let _ = fs::remove_file(&tmp);
     let res = (|| {
@@ -108,14 +108,16 @@ pub fn write_durable(dir: &str, path: &str, contents: &[u8]) -> std::io::Result<
         unsafe { libc::fdatasync(f.as_raw_fd()) };
         fs::rename(&tmp, path)
     })();
-    if res.is_err() {
+    if let Err(e) = res {
         let _ = fs::remove_file(&tmp);
-        return res;
+        return Err(e);
     }
+    let mut n = 1;
     if let Ok(d) = File::open(dir) {
         unsafe { libc::fsync(d.as_raw_fd()) };
+        n += 1;
     }
-    Ok(())
+    Ok(n)
 }
 
 /// Per-boot facts for queries: which rows and day files hold it.
@@ -236,7 +238,8 @@ impl Journal {
         fs::read_to_string(self.state_path()).ok().map(|t| State::parse(&t))
     }
 
-    pub fn save_state(&self, st: &State) -> std::io::Result<()> {
+    /// Durable save; returns the syncs issued (file and directory).
+    pub fn save_state(&self, st: &State) -> std::io::Result<u64> {
         write_durable(&self.dir, &self.state_path(), st.render().as_bytes())
     }
 
@@ -541,7 +544,7 @@ mod tests {
         let j = Journal::new(d.clone());
         assert!(j.load_state().is_none());
         let st = State { seq: 42, boot: 7, boot_id: "abc-def".into(), last_wall: 1_794_199_490, clean: true, kmsg_seq: 1501, kmsg_ssr: 2 };
-        j.save_state(&st).unwrap();
+        assert_eq!(j.save_state(&st).unwrap(), 2, "file and directory");
         assert_eq!(j.load_state().unwrap(), st);
         assert!(!std::path::Path::new(&format!("{d}/state.new")).exists());
         assert_eq!(State::parse("seq=x\nboot=2\ngarbage\n"), State { boot: 2, ..Default::default() });

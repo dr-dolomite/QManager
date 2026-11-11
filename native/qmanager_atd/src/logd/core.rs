@@ -20,6 +20,9 @@ pub const URGENT_MS: u64 = 2_000;
 pub const URGENT_GAP_MS: u64 = 120_000;
 /// Otherwise, pending rows are flushed this long after the first arrived.
 pub const REGULAR_MS: u64 = 300_000;
+/// A periodic flush syncs the state file at most this often; otherwise it is
+/// synced only at start and on a clean stop.
+pub const STATE_SYNC_GAP_MS: u64 = 3_600_000;
 /// Default debug lease when the file's expiry cannot be read.
 pub const LEASE_DEFAULT_S: i64 = 1800;
 /// Retention runs at most this often (and at start).
@@ -128,6 +131,8 @@ pub struct Engine {
     first_pending_ms: Option<u64>,
     urgent_at: Option<u64>,
     last_urgent_ms: Option<u64>,
+    /// Last durable (synced) state save.
+    last_state_sync_ms: Option<u64>,
     /// Lowest `s` in the ring still without a wall time.
     null_from: Option<u64>,
     /// Debug lease expiry, mono seconds.
@@ -194,6 +199,7 @@ impl Engine {
             first_pending_ms: None,
             urgent_at: None,
             last_urgent_ms: None,
+            last_state_sync_ms: None,
             null_from: None,
             lease: None,
             last_retain_ms: None,
@@ -523,7 +529,8 @@ impl Engine {
             // A storm still dropping is reported with what reaches flash.
             let open = self.rate.drain(now.ms());
             self.store_rate(open, now);
-            self.flush_as(now, false, regular);
+            let sync = regular && self.last_state_sync_ms.map_or(true, |t| now.ms() >= t + STATE_SYNC_GAP_MS);
+            self.flush_as(now, false, sync);
         }
         if due(self.text.deadline()) {
             self.text.flush();
@@ -550,8 +557,9 @@ impl Engine {
         self.flush_as(now, clean, clean);
     }
 
-    /// `durable`: the state file is synced too. Urgent and eviction flushes
-    /// leave it in the page cache: only a power cut or kernel crash loses it,
+    /// `durable`: the state file is synced too (clean stop, and a periodic
+    /// flush at most once per `STATE_SYNC_GAP_MS`). Otherwise it is left in
+    /// the page cache: only a power cut or kernel crash loses it,
     /// and that is a new boot, where `open` rebuilds seq and boot from the
     /// flash rows (plus `UNCLEAN_SEQ_GAP`, state being `clean=0`).
     fn flush_as(&mut self, now: &Now, clean: bool, durable: bool) {
@@ -613,8 +621,9 @@ impl Engine {
         };
         if !durable {
             let _ = self.journal.save_state_volatile(&st);
-        } else if self.journal.save_state(&st).is_ok() {
-            self.stats.fsyncs += 1;
+        } else if let Ok(n) = self.journal.save_state(&st) {
+            self.stats.fsyncs += n;
+            self.last_state_sync_ms = Some(now.ms());
         }
     }
 
@@ -750,7 +759,7 @@ pub(crate) mod tests {
         now = Now::at(1500.0, W + 500);
         e.tick(&now);
         assert_eq!(ev_lines(&c).len(), 1);
-        assert_eq!(e.stats.fsyncs, fs1 + 2, "the periodic flush syncs the state too");
+        assert_eq!(e.stats.fsyncs, fs1 + 1, "the event file only: the state was synced at start");
         assert_eq!(e.next_deadline(&now), None, "idle: no timer at all");
         // State carries the seq head and the wall floor.
         let st = e.journal.load_state().unwrap();
@@ -973,5 +982,53 @@ pub(crate) mod tests {
         e.shutdown(&now);
         assert_eq!(reports(&e), 2);
         assert!(log_lines(&c).iter().any(|l| l.contains("(still dropping)")));
+    }
+
+    #[test]
+    fn periodic_flushes_sync_only_touched_files_and_the_state_once_an_hour() {
+        let c = cfg("syncbudget");
+        let mut now = Now::at(1000.0, W);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        assert_eq!(e.stats.fsyncs, 2, "open: state file and directory");
+        // Nothing new: a flush writes and syncs nothing, the tick sets no timer.
+        e.flush(&now, false);
+        assert_eq!((e.stats.fsyncs, e.stats.flushes), (2, 0));
+        // DEBUG rows under a lease are never persisted: still nothing to do.
+        fs::write(format!("{}/debug", c.run_dir), "99999").unwrap();
+        e.on_debug_file(&now);
+        e.flush(&now, false);
+        let base = e.stats.fsyncs;
+        feed(&mut e, &now, "L\t1000\tDEBUG\tcgi\t1\thidden\n");
+        e.flush(&now, false);
+        assert_eq!(e.stats.fsyncs, base);
+        // An INFO line: the periodic flush syncs the log file only.
+        let periodic = |e: &mut Engine, now: &mut Now, line: &str| {
+            feed(e, now, line);
+            now.mono_cs += REGULAR_MS / 10;
+            now.wall += (REGULAR_MS / 1000) as i64;
+            let before = e.stats.fsyncs;
+            e.tick(now);
+            e.stats.fsyncs - before
+        };
+        assert_eq!(periodic(&mut e, &mut now, "L\t1000\tINFO\ta\t1\tone\n"), 1);
+        // An info event alone: the event file only.
+        assert_eq!(periodic(&mut e, &mut now, "E\t1300\tband_change\tinfo\t\t\tB3\n"), 1);
+        // Both files.
+        assert_eq!(periodic(&mut e, &mut now, "L\t1600\tINFO\ta\t1\ttwo\nE\t1600\tpci_change\tinfo\t\t\tx\n"), 2);
+        // Within the hour after open, no state sync; past it, one (file + dir).
+        for _ in 0..8 {
+            assert_eq!(periodic(&mut e, &mut now, "L\t1900\tINFO\ta\t1\tmore\n"), 1);
+        }
+        assert_eq!(now.ms() + REGULAR_MS, 1_000_000 + STATE_SYNC_GAP_MS, "the next flush is an hour after open");
+        assert_eq!(periodic(&mut e, &mut now, "L\t1900\tINFO\ta\t1\tlate\n"), 1 + 2);
+        assert_eq!(periodic(&mut e, &mut now, "L\t1900\tINFO\ta\t1\tafter\n"), 1);
+        // The unsynced saves still kept the state current for a restart.
+        assert_eq!(e.journal.load_state().unwrap().seq, e.head());
+        // A clean stop syncs the day file and the state.
+        feed(&mut e, &now, "L\t1900\tINFO\ta\t1\tlast\n");
+        let before = e.stats.fsyncs;
+        e.shutdown(&now);
+        assert_eq!(e.stats.fsyncs - before, 1 + 2);
+        assert!(e.journal.load_state().unwrap().clean);
     }
 }

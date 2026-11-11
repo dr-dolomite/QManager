@@ -101,7 +101,7 @@ Journal row (JSONL, in RAM and on flash):
 - otherwise every 5 min;
 - on TERM, as a final flush.
 
-Each flush syncs only the day files it appended to; the state file is synced on the 5-min flush, at start and on TERM only (an urgent flush rewrites it without a sync). The target is at most 300 file syncs per day, about the same as Data Used's 5-min sync and below one 4 KiB page per flush at today's volume. An unplanned reboot or AP hang loses at most 5 min of INFO, and at most 120 s of ERROR lines and warning/error events. Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
+A flush with no new rows writes nothing; otherwise it syncs only the day files it appended to. The state file is rewritten on every flush but synced only at start, on TERM, and at most once per hour from the 5-min flush (2 syncs: file and directory). The target is at most 300 file syncs per day, about the same as Data Used's 5-min sync and below one 4 KiB page per flush at today's volume. An unplanned reboot or AP hang loses at most 5 min of INFO, and at most 120 s of ERROR lines and warning/error events. Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
 
 **Boots:** every row carries `b`, so the Logs page can show **"This boot / Previous boot"**: the lines that led up to an unplanned reboot finally survive it.
 
