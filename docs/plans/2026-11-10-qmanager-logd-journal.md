@@ -97,11 +97,11 @@ Journal row (JSONL, in RAM and on flash):
 | Event journal | all events | `/usrdata/qmanager/journal/ev-<epochday>.jsonl` | 31 days, 2 MB, 2000/day (keep-list types past the cap, as in History); past 2 MB a day file keeps only keep-list and `error` events, up to 256 KB more |
 
 **Flush policy:** batch in RAM, then append to the day file + `fdatasync` on that file only, never a global `sync`. Flush:
-- within 2 s of any ERROR or any event of severity `warning`/`error`, coalesced to at most one flush per 120 s under a storm (the row is in the RAM ring, and queryable, at once);
-- otherwise every 5 min;
+- within 2 s of any ERROR or any event of severity `warning`/`error`; under a storm the gap to the next flush (counted from the last flush of any kind) starts at 120 s and doubles up to 10 min, back to 2 s after an hour without such rows (every row is in the RAM ring, and queryable, at once);
+- otherwise 10 min after the first pending row;
 - on TERM, as a final flush.
 
-A flush with no new rows writes nothing; otherwise it syncs only the day files it appended to. The state file is rewritten on every flush but synced only at start, on TERM, and at most once per hour from the 5-min flush (2 syncs: file and directory). The target is at most 300 file syncs per day, about the same as Data Used's 5-min sync and below one 4 KiB page per flush at today's volume. An unplanned reboot or AP hang loses at most 5 min of INFO, and at most 120 s of ERROR lines and warning/error events. Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
+A flush with no new rows writes nothing; otherwise it syncs only the day files it appended to. The state file is rewritten on every flush but synced only at start, on TERM, and at most once per 4 h from the 10-min flush (2 syncs: file and directory). Worst case: about 148 flushes a day (one per 10 min plus the 2 s / 120 / 240 / 480 s ramp) × at most 2 day files, plus 12 state syncs: about 310 syncs a day with both files written every 10 min all day, about 160 to 230 on a normal day. An unplanned reboot or AP hang loses at most 10 min of INFO, and of ERROR lines and warning/error events under a sustained storm (2 s for the first). Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
 
 **Boots:** every row carries `b`, so the Logs page can show **"This boot / Previous boot"**: the lines that led up to an unplanned reboot finally survive it.
 

@@ -15,14 +15,19 @@ use std::io::Read;
 
 /// Flush within this of an urgent row (ERROR, or a warning/error event)...
 pub const URGENT_MS: u64 = 2_000;
-/// ...but at most one urgent flush per this, so an urgent row is on flash
-/// within 120 s at worst (it is in the RAM ring, and queryable, at once).
+/// ...but at most one urgent flush per gap. The gap starts here and doubles
+/// each time it held an urgent row back, up to `URGENT_GAP_MAX_MS`, so a
+/// sustained storm costs one flush per 10 min. Rows are in the RAM ring, and
+/// queryable, at once.
 pub const URGENT_GAP_MS: u64 = 120_000;
+pub const URGENT_GAP_MAX_MS: u64 = 600_000;
+/// The gap falls back to `URGENT_GAP_MS` after this long without urgent rows.
+pub const URGENT_RESET_MS: u64 = 3_600_000;
 /// Otherwise, pending rows are flushed this long after the first arrived.
-pub const REGULAR_MS: u64 = 300_000;
+pub const REGULAR_MS: u64 = 600_000;
 /// A periodic flush syncs the state file at most this often; otherwise it is
 /// synced only at start and on a clean stop.
-pub const STATE_SYNC_GAP_MS: u64 = 3_600_000;
+pub const STATE_SYNC_GAP_MS: u64 = 14_400_000;
 /// Default debug lease when the file's expiry cannot be read.
 pub const LEASE_DEFAULT_S: i64 = 1800;
 /// Retention runs at most this often (and at start).
@@ -131,6 +136,11 @@ pub struct Engine {
     first_pending_ms: Option<u64>,
     urgent_at: Option<u64>,
     last_urgent_ms: Option<u64>,
+    /// Current minimum gap between urgent flushes.
+    urgent_gap_ms: u64,
+    /// The pending urgent flush was pushed back by the gap.
+    urgent_held: bool,
+    last_urgent_row_ms: Option<u64>,
     /// Day the "daily log cap" row was written for.
     cap_noted_day: Option<i64>,
     /// Last durable (synced) state save.
@@ -201,6 +211,9 @@ impl Engine {
             first_pending_ms: None,
             urgent_at: None,
             last_urgent_ms: None,
+            urgent_gap_ms: URGENT_GAP_MS,
+            urgent_held: false,
+            last_urgent_row_ms: None,
             cap_noted_day: None,
             last_state_sync_ms: None,
             null_from: None,
@@ -369,9 +382,8 @@ impl Engine {
         self.index.entry(self.boot).note(row.s, row.t, None);
         if self.persistable(&row) {
             self.first_pending_ms.get_or_insert(now.ms());
-            if urgent && self.urgent_at.is_none() {
-                let at = now.ms() + URGENT_MS;
-                self.urgent_at = Some(self.last_urgent_ms.map_or(at, |l| at.max(l + URGENT_GAP_MS)));
+            if urgent {
+                self.note_urgent(now.ms());
             }
         }
         // Never evict a row flash has not seen: flush first.
@@ -384,6 +396,30 @@ impl Engine {
                 self.null_from = self.ring.iter().find(|r| r.t.is_none()).map(|r| r.s);
             }
         }
+    }
+
+    /// Schedules the flush for an urgent row: 2 s, unless urgency is ongoing
+    /// (an urgent row within `URGENT_RESET_MS`); then the gap counts from the
+    /// last flush of any kind, so periodic and urgent flushes together stay
+    /// one per gap.
+    fn note_urgent(&mut self, ms: u64) {
+        let ongoing = self.last_urgent_row_ms.map_or(false, |t| ms < t + URGENT_RESET_MS);
+        if !ongoing {
+            self.urgent_gap_ms = URGENT_GAP_MS;
+        }
+        self.last_urgent_row_ms = Some(ms);
+        if self.urgent_at.is_some() {
+            return;
+        }
+        let mut at = ms + URGENT_MS;
+        let last = self.last_urgent_ms.max(self.stats.last_flush_ms);
+        if let (true, Some(l)) = (ongoing, last) {
+            if at < l + self.urgent_gap_ms {
+                at = l + self.urgent_gap_ms;
+                self.urgent_held = true;
+            }
+        }
+        self.urgent_at = Some(at);
     }
 
     /// ERROR → syslog as `<27>qmanager[pid]: [component] message` (daemon.err)
@@ -599,7 +635,11 @@ impl Engine {
         }
         if self.urgent_at.is_some() {
             self.last_urgent_ms = Some(now.ms());
+            if self.urgent_held {
+                self.urgent_gap_ms = (self.urgent_gap_ms * 2).min(URGENT_GAP_MAX_MS);
+            }
         }
+        self.urgent_held = false;
         self.urgent_at = None;
         self.first_pending_ms = None;
         self.flushed_s = head;
@@ -730,7 +770,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn an_error_is_on_flash_within_2s_and_urgent_flushes_coalesce_to_120s() {
+    fn an_error_is_on_flash_within_2s_and_urgent_flushes_back_off_to_10_min() {
         let c = cfg("urgent");
         let mut now = Now::at(1000.0, W);
         let mut e = Engine::open(c.clone(), &now).unwrap();
@@ -760,24 +800,42 @@ pub(crate) mod tests {
         assert_eq!(e.stats.fsyncs, fs0 + 1, "an urgent flush syncs the day file, not the state");
         // The state file is still current (page cache) for a logd restart.
         assert_eq!(e.journal.load_state().unwrap().seq, e.head());
-        // A warning event is urgent too; an info event waits for 5 min.
-        now = Now::at(1200.0, W + 200);
-        feed(&mut e, &now, "E\t1200\tband_change\tinfo\t\t\tB3\n");
-        assert_eq!(e.first_pending_ms, Some(1_200_000));
+        // That flush was held back, so the gap doubled; it keeps doubling to 10 min.
+        assert_eq!(e.urgent_gap_ms, 240_000);
+        let mut t = 1122.0;
+        for gap in [240.0, 480.0, 600.0, 600.0] {
+            feed(&mut e, &Now::at(t + 1.0, W + (t + 1.0 - 1000.0) as i64), "L\t1\tERROR\tpoller\t1\tstorm\n");
+            assert_eq!(e.urgent_at, Some(((t + gap) * 1000.0) as u64));
+            t += gap;
+            e.tick(&Now::at(t, W + (t - 1000.0) as i64));
+        }
+        assert_eq!(e.urgent_gap_ms, URGENT_GAP_MAX_MS);
+        // An hour without urgent rows: back to 2 s and a 120 s gap.
+        t += 3700.0;
+        feed(&mut e, &Now::at(t, W + (t - 1000.0) as i64), "L\t1\tERROR\tpoller\t1\tlater\n");
+        assert_eq!(e.urgent_at, Some((t * 1000.0) as u64 + URGENT_MS));
+        assert_eq!(e.urgent_gap_ms, URGENT_GAP_MS);
+        t += 2.0;
+        e.tick(&Now::at(t, W + (t - 1000.0) as i64));
+        // A warning event is urgent too; an info event waits for 10 min.
+        t += 100.0;
+        now = Now::at(t, W + (t - 1000.0) as i64);
+        feed(&mut e, &now, "E\t1\tband_change\tinfo\t\t\tB3\n");
+        assert_eq!(e.first_pending_ms, Some((t * 1000.0) as u64));
         assert_eq!(e.urgent_at, None);
-        now = Now::at(1499.0, W + 499);
+        now = Now::at(t + 599.0, W + (t + 599.0 - 1000.0) as i64);
         e.tick(&now);
         assert!(ev_lines(&c).is_empty());
         let fs1 = e.stats.fsyncs;
-        now = Now::at(1500.0, W + 500);
+        now = Now::at(t + 600.0, W + (t + 600.0 - 1000.0) as i64);
         e.tick(&now);
         assert_eq!(ev_lines(&c).len(), 1);
-        assert_eq!(e.stats.fsyncs, fs1 + 1, "the event file only: the state was synced at start");
+        assert_eq!(e.stats.fsyncs, fs1 + 1, "the event file only: the state is not due");
         assert_eq!(e.next_deadline(&now), None, "idle: no timer at all");
         // State carries the seq head and the wall floor.
         let st = e.journal.load_state().unwrap();
         assert_eq!((st.seq, st.boot, st.boot_id.as_str(), st.clean), (e.head(), 1, "boot-A", false));
-        assert_eq!(st.last_wall, W + 500);
+        assert_eq!(st.last_wall, now.wall);
     }
 
     #[test]
@@ -1029,7 +1087,7 @@ pub(crate) mod tests {
         // Both files.
         assert_eq!(periodic(&mut e, &mut now, "L\t1600\tINFO\ta\t1\ttwo\nE\t1600\tpci_change\tinfo\t\t\tx\n"), 2);
         // Within the hour after open, no state sync; past it, one (file + dir).
-        for _ in 0..8 {
+        for _ in 0..(STATE_SYNC_GAP_MS / REGULAR_MS - 4) {
             assert_eq!(periodic(&mut e, &mut now, "L\t1900\tINFO\ta\t1\tmore\n"), 1);
         }
         assert_eq!(now.ms() + REGULAR_MS, 1_000_000 + STATE_SYNC_GAP_MS, "the next flush is an hour after open");
@@ -1065,5 +1123,24 @@ pub(crate) mod tests {
         assert!(text.contains("\"kept\"") && text.contains("daily log cap reached"));
         assert!(!text.contains("\"dropped"));
         assert_eq!(e.stats.cap_drops, 3, "the shutdown INFO line too");
+    }
+
+    #[test]
+    fn periodic_and_urgent_flushes_together_stay_one_per_gap() {
+        let c = cfg("interleave");
+        let at = |t: f64| Now::at(t, W + (t - 1000.0) as i64);
+        let mut e = Engine::open(c.clone(), &at(1000.0)).unwrap();
+        feed(&mut e, &at(1000.0), "L\t1\tERROR\tp\t1\tfirst\n");
+        e.tick(&at(1002.0));
+        // INFO right after: periodic at +600 s.
+        feed(&mut e, &at(1003.0), "L\t1\tINFO\tp\t1\tinfo\n");
+        e.tick(&at(1603.0));
+        assert_eq!(e.stats.last_flush_ms, Some(1_603_000));
+        // An ERROR just after the periodic flush waits a gap from it, not 2 s.
+        feed(&mut e, &at(1604.0), "L\t1\tERROR\tp\t1\tsecond\n");
+        assert_eq!(e.urgent_at, Some(1_603_000 + URGENT_GAP_MS));
+        let flushes = e.stats.flushes;
+        e.tick(&at(1606.0));
+        assert_eq!(e.stats.flushes, flushes);
     }
 }
