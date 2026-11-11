@@ -5,6 +5,11 @@
 //! first line of a key opens a 60 s window and is kept; repeats inside it are
 //! counted and dropped; when the window ends with N > 0 dropped, one summary
 //! row `<first message> … repeated N times in 60 s` is emitted.
+//!
+//! Rate limit: a token bucket per component. A run of drops is one storm,
+//! reported by one WARN row `rate limit: dropped N lines in D s` once no line
+//! was dropped for `RATE_QUIET_MS`; a storm still running at a timed flush or
+//! TERM is reported then with ` (still dropping)`.
 
 use crate::common::log::Level;
 
@@ -14,8 +19,13 @@ const MAX_KEYS: usize = 256;
 /// Characters of the first message kept for the summary.
 const FIRST_CHARS: usize = 200;
 
-pub const RATE_PER_SEC: f64 = 20.0;
-pub const RATE_BURST: f64 = 200.0;
+/// Per-component refill: a component writing 100 distinct lines/s for as long
+/// as it likes loses nothing.
+pub const RATE_PER_SEC: f64 = 100.0;
+pub const RATE_BURST: f64 = 500.0;
+/// A storm (a run of drops) ends after this long without a drop; its one
+/// summary row is stored then.
+pub const RATE_QUIET_MS: u64 = 10_000;
 const MAX_BUCKETS: usize = 256;
 
 struct Win {
@@ -128,7 +138,23 @@ impl Collapser {
 struct Bucket {
     tokens: f64,
     last_ms: u64,
+    p: u32,
+    /// Lines dropped since the last report of this storm.
     dropped: u64,
+    /// First drop since the last report, and the latest drop.
+    from_ms: u64,
+    last_drop_ms: u64,
+}
+
+/// A drop report to store: (component, pid, message).
+pub type RateReport = (String, u32, String);
+
+fn report_of(c: &str, b: &mut Bucket, to_ms: u64, ongoing: bool) -> RateReport {
+    let secs = (to_ms.saturating_sub(b.from_ms) + 999) / 1000;
+    let tail = if ongoing { " (still dropping)" } else { "" };
+    let m = format!("rate limit: dropped {} lines in {} s{tail}", b.dropped, secs.max(1));
+    b.dropped = 0;
+    (c.to_string(), b.p, m)
 }
 
 #[derive(Default)]
@@ -138,31 +164,72 @@ pub struct RateLimit {
 }
 
 impl RateLimit {
-    /// Takes a token for `c`. `Ok(Some(n))`: allowed, and n lines of this
-    /// component were dropped since its last allowed line.
-    pub fn take(&mut self, c: &str, now_ms: u64) -> Result<Option<u64>, ()> {
+    /// Takes a token for `c`. `Ok(Some(r))`: allowed, and the storm this
+    /// component was in has gone quiet; store `r` before the line (the
+    /// timer was missed).
+    pub fn take(&mut self, c: &str, p: u32, now_ms: u64) -> Result<Option<RateReport>, ()> {
         let i = match self.buckets.iter().position(|(x, _)| x == c) {
             Some(i) => i,
             None => {
                 if self.buckets.len() >= MAX_BUCKETS {
                     self.buckets.retain(|(_, b)| b.dropped > 0);
                 }
-                self.buckets.push((c.to_string(), Bucket { tokens: RATE_BURST, last_ms: now_ms, dropped: 0 }));
+                let b = Bucket { tokens: RATE_BURST, last_ms: now_ms, p, dropped: 0, from_ms: 0, last_drop_ms: 0 };
+                self.buckets.push((c.to_string(), b));
                 self.buckets.len() - 1
             }
         };
-        let b = &mut self.buckets[i].1;
+        let (name, b) = &mut self.buckets[i];
         let dt = now_ms.saturating_sub(b.last_ms) as f64 / 1000.0;
         b.tokens = (b.tokens + dt * RATE_PER_SEC).min(RATE_BURST);
         b.last_ms = now_ms;
+        b.p = p;
         if b.tokens < 1.0 {
+            if b.dropped == 0 {
+                b.from_ms = now_ms;
+            }
             b.dropped += 1;
+            b.last_drop_ms = now_ms;
             self.dropped += 1;
             return Err(());
         }
         b.tokens -= 1.0;
-        let d = std::mem::take(&mut b.dropped);
-        Ok((d > 0).then_some(d))
+        if b.dropped > 0 && now_ms >= b.last_drop_ms + RATE_QUIET_MS {
+            let to = b.last_drop_ms;
+            return Ok(Some(report_of(name, b, to, false)));
+        }
+        Ok(None)
+    }
+
+    /// Reports of every storm that has gone quiet.
+    pub fn expire(&mut self, now_ms: u64) -> Vec<RateReport> {
+        let mut out = Vec::new();
+        for (c, b) in self.buckets.iter_mut() {
+            if b.dropped > 0 && now_ms >= b.last_drop_ms + RATE_QUIET_MS {
+                let to = b.last_drop_ms;
+                out.push(report_of(c, b, to, false));
+            }
+        }
+        out
+    }
+
+    /// Reports of every storm with unreported drops, ended or not (before a
+    /// flush and at shutdown, so drops never go unrecorded on flash).
+    pub fn drain(&mut self, now_ms: u64) -> Vec<RateReport> {
+        let mut out = Vec::new();
+        for (c, b) in self.buckets.iter_mut() {
+            if b.dropped > 0 {
+                let ongoing = now_ms < b.last_drop_ms + RATE_QUIET_MS;
+                let to = if ongoing { now_ms } else { b.last_drop_ms };
+                out.push(report_of(c, b, to, ongoing));
+            }
+        }
+        out
+    }
+
+    /// When the next storm may end.
+    pub fn deadline(&self) -> Option<u64> {
+        self.buckets.iter().map(|e| &e.1).filter(|b| b.dropped > 0).map(|b| b.last_drop_ms + RATE_QUIET_MS).min()
     }
 }
 
@@ -206,19 +273,60 @@ mod tests {
     }
 
     #[test]
-    fn the_token_bucket_bursts_then_drops_and_reports() {
+    fn the_token_bucket_bursts_then_drops_and_reports_once_per_storm() {
         let mut r = RateLimit::default();
-        for _ in 0..200 {
-            assert_eq!(r.take("sites", 0), Ok(None));
+        for _ in 0..500 {
+            assert_eq!(r.take("sites", 1, 0), Ok(None));
         }
-        assert_eq!(r.take("sites", 0), Err(()));
-        assert_eq!(r.take("sites", 10), Err(()));
+        assert_eq!(r.take("sites", 1, 0), Err(()));
+        assert_eq!(r.take("sites", 1, 5), Err(()));
         // Another component has its own bucket.
-        assert_eq!(r.take("poller", 10), Ok(None));
-        // 100 ms refills 2 tokens; the first allowed line reports the drops.
-        assert_eq!(r.take("sites", 110), Ok(Some(2)));
-        assert_eq!(r.take("sites", 110), Ok(None));
-        assert_eq!(r.take("sites", 110), Err(()));
+        assert_eq!(r.take("poller", 1, 5), Ok(None));
+        // 20 ms refills 2 tokens: allowed lines inside the storm report nothing.
+        assert_eq!(r.take("sites", 1, 25), Ok(None));
+        assert_eq!(r.take("sites", 1, 25), Ok(None));
+        assert_eq!(r.take("sites", 2, 25), Err(()));
         assert_eq!(r.dropped, 3);
+        assert_eq!(r.deadline(), Some(25 + RATE_QUIET_MS));
+        assert!(r.expire(25 + RATE_QUIET_MS - 1).is_empty());
+        let v = r.expire(25 + RATE_QUIET_MS);
+        assert_eq!(v, vec![("sites".into(), 2, "rate limit: dropped 3 lines in 1 s".into())]);
+        assert_eq!(r.deadline(), None);
+        assert!(r.expire(u64::MAX / 2).is_empty(), "one report per storm");
+    }
+
+    #[test]
+    fn a_sustained_100_per_second_storm_loses_nothing() {
+        let mut r = RateLimit::default();
+        for i in 0..6000u64 {
+            assert_eq!(r.take("storm", 1, i * 10), Ok(None), "line {i}");
+        }
+        // Batched arrival (a spool read of 500 lines at once) still fits the burst.
+        let mut r = RateLimit::default();
+        for s in 0..60u64 {
+            for _ in 0..100 {
+                assert_eq!(r.take("storm", 1, s * 1000), Ok(None));
+            }
+        }
+        assert_eq!(r.dropped, 0);
+    }
+
+    #[test]
+    fn a_missed_timer_reports_on_the_next_line_and_drain_reports_ongoing_storms() {
+        let mut r = RateLimit::default();
+        for _ in 0..600 {
+            let _ = r.take("x", 1, 0);
+        }
+        assert_eq!(r.dropped, 100);
+        let (_, _, m) = r.take("x", 1, 20_000).unwrap().unwrap();
+        assert_eq!(m, "rate limit: dropped 100 lines in 1 s");
+        for _ in 0..600 {
+            let _ = r.take("y", 1, 100_000);
+        }
+        let _ = r.take("y", 1, 103_500);
+        let v = r.drain(104_000);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].2, "rate limit: dropped 100 lines in 4 s (still dropping)");
+        assert!(r.drain(200_000).is_empty());
     }
 }

@@ -265,12 +265,9 @@ impl Engine {
                 if !keep {
                     return;
                 }
-                match self.rate.take(&c, now.ms()) {
+                match self.rate.take(&c, p, now.ms()) {
                     Err(()) => return,
-                    Ok(Some(n)) => {
-                        let m = format!("rate limit: dropped {n} lines");
-                        self.store(Body::Log { lv: Level::Warn, c: c.clone(), p, msg: m }, now.mono_cs, now);
-                    }
+                    Ok(Some(r)) => self.store_rate(vec![r], now),
                     Ok(None) => {}
                 }
                 self.store(Body::Log { lv, c, p, msg }, Self::mono_of(mono, now), now);
@@ -307,6 +304,13 @@ impl Engine {
         if let Some((ty, sev, f, msg)) = ev {
             let cat = registry::category(ty);
             self.store(Body::Ev { ty: ty.into(), sev, cat, code: String::new(), f, msg }, m, now);
+        }
+    }
+
+    /// Drop reports of the rate limit, as WARN rows of the component.
+    fn store_rate(&mut self, v: Vec<super::collapse::RateReport>, now: &Now) {
+        for (c, p, msg) in v {
+            self.store(Body::Log { lv: Level::Warn, c, p, msg }, now.mono_cs, now);
         }
     }
 
@@ -487,6 +491,7 @@ impl Engine {
             }
         };
         put(self.collapse.deadline());
+        put(self.rate.deadline());
         put(self.text.deadline());
         put(self.events.deadline());
         put(self.urgent_at);
@@ -505,6 +510,8 @@ impl Engine {
         for (c, lv, p, msg) in self.collapse.expire(now.ms()) {
             self.store(Body::Log { lv, c, p, msg }, now.mono_cs, now);
         }
+        let ended = self.rate.expire(now.ms());
+        self.store_rate(ended, now);
         if let Some(x) = self.lease {
             if now.mono_s() >= x {
                 self.end_lease(now, true);
@@ -513,6 +520,9 @@ impl Engine {
         let due = |d: Option<u64>| d.map_or(false, |d| d <= now.ms());
         let regular = due(self.first_pending_ms.map(|t| t + REGULAR_MS));
         if regular || due(self.urgent_at) {
+            // A storm still dropping is reported with what reaches flash.
+            let open = self.rate.drain(now.ms());
+            self.store_rate(open, now);
             self.flush_as(now, false, regular);
         }
         if due(self.text.deadline()) {
@@ -630,6 +640,8 @@ impl Engine {
         for (c, lv, p, msg) in self.collapse.drain() {
             self.store(Body::Log { lv, c, p, msg }, now.mono_cs, now);
         }
+        let open = self.rate.drain(now.ms());
+        self.store_rate(open, now);
         self.self_log(Level::Info, "journal stopping", now);
         self.text.flush();
         if self.events.dirty {
@@ -910,4 +922,56 @@ pub(crate) mod tests {
         assert!(e.events.rows.iter().all(|r| r.t == Some(W)));
     }
 
+    #[test]
+    fn a_rate_storm_keeps_100_per_s_and_reports_drops_once_when_it_ends() {
+        let c = cfg("ratestorm");
+        let mut now = Now::at(500.0, W);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        e.ring.max_rows = 100_000;
+        let word = |i: u32| -> String { format!("{i:05}").bytes().map(|b| (b - b'0' + b'a') as char).collect() };
+        let batch = |n: &mut u32, k: u32| -> String {
+            let mut b = String::new();
+            for _ in 0..k {
+                b.push_str(&format!("L\t500\tINFO\tsites\t1\tline {}\n", word(*n)));
+                *n += 1;
+            }
+            b
+        };
+        let mut n = 0;
+        // 100 distinct lines/s for 60 s, one spool batch per second: nothing lost.
+        for _ in 0..60 {
+            let b = batch(&mut n, 100);
+            feed(&mut e, &now, &b);
+            now.mono_cs += 100;
+            e.tick(&now);
+        }
+        assert_eq!(e.rate.dropped, 0);
+        // 300/s for 10 s: drops, but no row while the storm runs.
+        for _ in 0..10 {
+            let b = batch(&mut n, 300);
+            feed(&mut e, &now, &b);
+            now.mono_cs += 100;
+            e.tick(&now);
+        }
+        let dropped = e.rate.dropped;
+        assert!(dropped > 1000, "{dropped}");
+        let reports = |e: &Engine| e.ring.iter().filter(|r| r.msg().starts_with("rate limit: dropped")).count();
+        assert_eq!(reports(&e), 0);
+        // Quiet: one row for the whole storm, with its count and length
+        // (the burst lasts 2 s, drops run from then to the last batch).
+        for _ in 0..12 {
+            now.mono_cs += 100;
+            e.tick(&now);
+        }
+        assert_eq!(reports(&e), 1);
+        let r = e.ring.iter().find(|r| r.msg().starts_with("rate limit: dropped")).unwrap();
+        assert_eq!(r.msg(), format!("rate limit: dropped {dropped} lines in 7 s"));
+        assert_eq!(r.log_level(), Some(Level::Warn));
+        // A storm still running at TERM is reported then, marked ongoing.
+        let b = batch(&mut n, 600);
+        feed(&mut e, &now, &b);
+        e.shutdown(&now);
+        assert_eq!(reports(&e), 2);
+        assert!(log_lines(&c).iter().any(|l| l.contains("(still dropping)")));
+    }
 }
