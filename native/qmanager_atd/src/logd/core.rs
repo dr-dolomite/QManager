@@ -13,10 +13,11 @@ use super::spool::{self, Rec};
 use crate::common::log::Level;
 use std::io::Read;
 
-/// Flush within this of an urgent row (ERROR, or a warning/error event).
+/// Flush within this of an urgent row (ERROR, or a warning/error event)...
 pub const URGENT_MS: u64 = 2_000;
-/// At most one urgent flush per this.
-pub const URGENT_GAP_MS: u64 = 30_000;
+/// ...but at most one urgent flush per this, so an urgent row is on flash
+/// within 120 s at worst (it is in the RAM ring, and queryable, at once).
+pub const URGENT_GAP_MS: u64 = 120_000;
 /// Otherwise, pending rows are flushed this long after the first arrived.
 pub const REGULAR_MS: u64 = 300_000;
 /// Default debug lease when the file's expiry cannot be read.
@@ -206,7 +207,7 @@ impl Engine {
         };
         e.index.entry(boot);
         e.clock_tick(now);
-        e.save_state(now, false);
+        e.save_state(now, false, true);
         e.retain(now);
         Ok(e)
     }
@@ -510,8 +511,9 @@ impl Engine {
             }
         }
         let due = |d: Option<u64>| d.map_or(false, |d| d <= now.ms());
-        if due(self.urgent_at) || due(self.first_pending_ms.map(|t| t + REGULAR_MS)) {
-            self.flush(now, false);
+        let regular = due(self.first_pending_ms.map(|t| t + REGULAR_MS));
+        if regular || due(self.urgent_at) {
+            self.flush_as(now, false, regular);
         }
         if due(self.text.deadline()) {
             self.text.flush();
@@ -532,8 +534,17 @@ impl Engine {
         }
     }
 
-    /// Appends every pending row to flash and writes the state file.
+    /// Appends every pending row to flash and writes the state file
+    /// (durably only when `clean`).
     pub fn flush(&mut self, now: &Now, clean: bool) {
+        self.flush_as(now, clean, clean);
+    }
+
+    /// `durable`: the state file is synced too. Urgent and eviction flushes
+    /// leave it in the page cache: only a power cut or kernel crash loses it,
+    /// and that is a new boot, where `open` rebuilds seq and boot from the
+    /// flash rows (plus `UNCLEAN_SEQ_GAP`, state being `clean=0`).
+    fn flush_as(&mut self, now: &Now, clean: bool, durable: bool) {
         self.clock_tick(now);
         // The newest row in the ring, not `seq`: a flush forced by eviction
         // runs while the row that caused it is not in the ring yet.
@@ -570,14 +581,14 @@ impl Engine {
         self.first_pending_ms = None;
         self.flushed_s = head;
         if any || clean {
-            self.save_state(now, clean);
+            self.save_state(now, clean, durable);
         }
         if self.last_retain_ms.map_or(true, |t| now.ms() >= t + RETAIN_GAP_MS) {
             self.retain(now);
         }
     }
 
-    fn save_state(&mut self, now: &Now, clean: bool) {
+    fn save_state(&mut self, now: &Now, clean: bool, durable: bool) {
         if self.clock.trusted {
             self.clock.note(now.wall);
         }
@@ -590,7 +601,9 @@ impl Engine {
             kmsg_seq: self.kmsg_hw,
             kmsg_ssr: self.kmsg_ssr,
         };
-        if self.journal.save_state(&st).is_ok() {
+        if !durable {
+            let _ = self.journal.save_state_volatile(&st);
+        } else if self.journal.save_state(&st).is_ok() {
             self.stats.fsyncs += 1;
         }
     }
@@ -683,7 +696,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn an_error_is_on_flash_within_2s_and_urgent_flushes_coalesce_to_30s() {
+    fn an_error_is_on_flash_within_2s_and_urgent_flushes_coalesce_to_120s() {
         let c = cfg("urgent");
         let mut now = Now::at(1000.0, W);
         let mut e = Engine::open(c.clone(), &now).unwrap();
@@ -699,32 +712,38 @@ pub(crate) mod tests {
         let l = log_lines(&c);
         assert_eq!(l.len(), 2, "{l:?}");
         assert!(l[1].contains("\"lv\":\"ERROR\"") && l[1].contains(&format!("\"t\":{}", W)), "{}", l[1]);
-        // A second error 5 s later waits for the 30 s gap.
+        let fs0 = e.stats.fsyncs;
+        // A second error 5 s later waits for the 120 s gap.
         now = Now::at(1007.0, W + 7);
         feed(&mut e, &now, "L\t1007.00\tERROR\tpoller\t1\tagain\n");
-        assert_eq!(e.urgent_at, Some(1_032_000));
-        now = Now::at(1031.0, W + 31);
+        assert_eq!(e.urgent_at, Some(1_122_000));
+        now = Now::at(1121.0, W + 121);
         e.tick(&now);
         assert_eq!(log_lines(&c).len(), 2);
-        now = Now::at(1032.0, W + 32);
+        now = Now::at(1122.0, W + 122);
         e.tick(&now);
         assert_eq!(log_lines(&c).len(), 3);
+        assert_eq!(e.stats.fsyncs, fs0 + 1, "an urgent flush syncs the day file, not the state");
+        // The state file is still current (page cache) for a logd restart.
+        assert_eq!(e.journal.load_state().unwrap().seq, e.head());
         // A warning event is urgent too; an info event waits for 5 min.
-        now = Now::at(1100.0, W + 100);
-        feed(&mut e, &now, "E\t1100\tband_change\tinfo\t\t\tB3\n");
-        assert_eq!(e.first_pending_ms, Some(1_100_000));
+        now = Now::at(1200.0, W + 200);
+        feed(&mut e, &now, "E\t1200\tband_change\tinfo\t\t\tB3\n");
+        assert_eq!(e.first_pending_ms, Some(1_200_000));
         assert_eq!(e.urgent_at, None);
-        now = Now::at(1399.0, W + 399);
+        now = Now::at(1499.0, W + 499);
         e.tick(&now);
         assert!(ev_lines(&c).is_empty());
-        now = Now::at(1400.0, W + 400);
+        let fs1 = e.stats.fsyncs;
+        now = Now::at(1500.0, W + 500);
         e.tick(&now);
         assert_eq!(ev_lines(&c).len(), 1);
+        assert_eq!(e.stats.fsyncs, fs1 + 2, "the periodic flush syncs the state too");
         assert_eq!(e.next_deadline(&now), None, "idle: no timer at all");
         // State carries the seq head and the wall floor.
         let st = e.journal.load_state().unwrap();
         assert_eq!((st.seq, st.boot, st.boot_id.as_str(), st.clean), (e.head(), 1, "boot-A", false));
-        assert_eq!(st.last_wall, W + 400);
+        assert_eq!(st.last_wall, W + 500);
     }
 
     #[test]
@@ -890,4 +909,5 @@ pub(crate) mod tests {
         assert_eq!(e.events.rows.len(), 3);
         assert!(e.events.rows.iter().all(|r| r.t == Some(W)));
     }
+
 }

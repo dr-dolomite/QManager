@@ -97,11 +97,11 @@ Journal row (JSONL, in RAM and on flash):
 | Event journal | all events | `/usrdata/qmanager/journal/ev-<epochday>.jsonl` | 31 days, 2 MB, 2000/day (keep-list types past the cap, as in History) |
 
 **Flush policy:** batch in RAM, then append to the day file + `fdatasync` on that file only, never a global `sync`. Flush:
-- within 2 s of any ERROR or any event of severity `warning`/`error`, coalesced to at most one flush per 30 s under a storm;
+- within 2 s of any ERROR or any event of severity `warning`/`error`, coalesced to at most one flush per 120 s under a storm (the row is in the RAM ring, and queryable, at once);
 - otherwise every 5 min;
 - on TERM, as a final flush.
 
-That is at most about 300 file syncs per day, about the same as Data Used's 5-min sync and below one 4 KiB page per flush at today's volume. An unplanned reboot or AP hang loses at most 5 min of INFO, and at most 2 s of anything WARN-level or above. Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
+Each flush syncs only the day files it appended to; the state file is synced on the 5-min flush, at start and on TERM only (an urgent flush rewrites it without a sync). The target is at most 300 file syncs per day, about the same as Data Used's 5-min sync and below one 4 KiB page per flush at today's volume. An unplanned reboot or AP hang loses at most 5 min of INFO, and at most 120 s of ERROR lines and warning/error events. Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
 
 **Boots:** every row carries `b`, so the Logs page can show **"This boot / Previous boot"**: the lines that led up to an unplanned reboot finally survive it.
 

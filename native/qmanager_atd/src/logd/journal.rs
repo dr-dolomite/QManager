@@ -240,6 +240,11 @@ impl Journal {
         write_durable(&self.dir, &self.state_path(), st.render().as_bytes())
     }
 
+    /// Atomic replace without a sync: survives a logd restart, not a power cut.
+    pub fn save_state_volatile(&self, st: &State) -> std::io::Result<()> {
+        safefs::write_atomic(&self.state_path(), st.render().as_bytes())
+    }
+
     /// Day files of a kind, oldest first: (day, size).
     pub fn days(&self, kind: Kind) -> Vec<(i64, u64)> {
         let mut out = Vec::new();
