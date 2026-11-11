@@ -103,6 +103,7 @@
     "check_passed": "通过",
     "check_not_detected": "未检测到",
     "check_failed": "失败",
+    "check_injection_confirmed_one": "已确认伪造 SNI 注入（已处理 {{count}} 个数据包）",
     "check_injection_confirmed_other": "已确认伪造 SNI 注入（已处理 {{count}} 个数据包）",
     "acts_on_domains_one": "{{count}} 个主机名",
     "acts_on_domains_other": "{{count}} 个主机名",

@@ -138,7 +138,9 @@
       "prev_page": "上一页",
       "next_page": "下一页",
       "last_page": "最后一页",
+      "count_one": "{{count}} 个事件",
       "count_other": "{{count}} 个事件",
+      "shown_one": "显示 {{count}} 个事件",
       "shown_other": "显示 {{count}} 个事件",
       "empty_title": "暂无无线事件",
       "empty_description": "小区切换、频段变化和中断将显示在这里。",
@@ -387,6 +389,7 @@
       },
       "availability": {
         "label": "可用率",
+        "outages_one": "{{count}} 次中断",
         "outages_other": "{{count}} 次中断",
         "none": "无中断"
       },
@@ -458,7 +461,9 @@
       "prev_page": "上一页",
       "next_page": "下一页",
       "last_page": "最后一页",
+      "count_one": "{{count}} 个事件",
       "count_other": "{{count}} 个事件",
+      "shown_one": "显示 {{count}} 个事件",
       "shown_other": "显示 {{count}} 个事件",
       "empty_title": "暂无连接事件",
       "empty_description": "中断以及偏慢或丢包的时段将显示在这里。",
@@ -610,42 +615,53 @@
       "latest": {
         "eyebrow": "最近的问题",
         "none": "无",
+        "caption_none_one": "已读取的 {{count}} 行中没有错误或警告",
         "caption_none_other": "已读取的 {{count}} 行中没有错误或警告"
       },
       "device": {
         "head": "设备日志状况",
         "kernel": {
+          "caption_errors_one": "已读取的 {{lines}} 行内核日志中有 {{count}} 条警告",
           "caption_errors_other": "已读取的 {{lines}} 行内核日志中有 {{count}} 条警告",
+          "caption_warnings_one": "已读取的 {{count}} 行内核日志中没有错误",
           "caption_warnings_other": "已读取的 {{count}} 行内核日志中没有错误",
+          "caption_clean_one": "已读取的 {{count}} 行内核日志中没有警告",
           "caption_clean_other": "已读取的 {{count}} 行内核日志中没有警告",
+          "caption_none_one": "已读取的 {{count}} 行内核日志中没有错误或警告",
           "caption_none_other": "已读取的 {{count}} 行内核日志中没有错误或警告"
         },
         "cover": {
           "eyebrow": "覆盖时长",
           "caption_untimed": "带时间的行不足",
+          "caption_lines_one": "已读取 {{count}} 行",
           "caption_lines_other": "已读取 {{count}} 行",
+          "caption_top_one": "{{count}} 行，主要来自 {{proc}}（{{share}}%）",
           "caption_top_other": "{{count}} 行，主要来自 {{proc}}（{{share}}%）",
           "caption_busy": "{{proc}} 正在占满日志（{{share}}%）"
         },
         "boot": {
           "eyebrow": "开机以来",
+          "caption_one": "内核日志中有 {{count}} 行",
           "caption_other": "内核日志中有 {{count}} 行"
         }
       },
       "boot": {
         "this": {
+          "caption_errors_one": "本次启动中有 {{count}} 条警告",
           "caption_errors_other": "本次启动中有 {{count}} 条警告",
           "caption_warnings": "本次启动中没有错误",
           "caption_clean": "本次启动中没有警告",
           "caption_none": "本次启动中没有错误或警告"
         },
         "prev": {
+          "caption_errors_one": "上次启动中有 {{count}} 条警告",
           "caption_errors_other": "上次启动中有 {{count}} 条警告",
           "caption_warnings": "上次启动中没有错误",
           "caption_clean": "上次启动中没有警告",
           "caption_none": "上次启动中没有错误或警告"
         },
         "older": {
+          "caption_errors_one": "那次启动中有 {{count}} 条警告",
           "caption_errors_other": "那次启动中有 {{count}} 条警告",
           "caption_warnings": "那次启动中没有错误",
           "caption_clean": "那次启动中没有警告",
@@ -653,6 +669,7 @@
         }
       },
       "file": {
+        "caption_all_one": "所有启动共 {{count}} 行",
         "caption_all_other": "所有启动共 {{count}} 行"
       }
     },

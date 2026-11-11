@@ -103,6 +103,7 @@
     "check_passed": "Lulus",
     "check_not_detected": "Tidak terdeteksi",
     "check_failed": "Gagal",
+    "check_injection_confirmed_one": "Injeksi SNI palsu terkonfirmasi ({{count}} paket diproses)",
     "check_injection_confirmed_other": "Injeksi SNI palsu terkonfirmasi ({{count}} paket diproses)",
     "acts_on_domains_one": "{{count}} nama host",
     "acts_on_domains_other": "{{count}} nama host",

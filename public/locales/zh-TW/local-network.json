@@ -103,6 +103,7 @@
     "check_passed": "通過",
     "check_not_detected": "未檢測到",
     "check_failed": "失敗",
+    "check_injection_confirmed_one": "已確認偽造 SNI 注入（已處理 {{count}} 個封包）",
     "check_injection_confirmed_other": "已確認偽造 SNI 注入（已處理 {{count}} 個封包）",
     "acts_on_domains_one": "{{count}} 個主機名",
     "acts_on_domains_other": "{{count}} 個主機名",

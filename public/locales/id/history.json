@@ -138,7 +138,9 @@
       "prev_page": "Halaman sebelumnya",
       "next_page": "Halaman berikutnya",
       "last_page": "Halaman terakhir",
+      "count_one": "{{count}} peristiwa",
       "count_other": "{{count}} peristiwa",
+      "shown_one": "{{count}} peristiwa ditampilkan",
       "shown_other": "{{count}} peristiwa ditampilkan",
       "empty_title": "Belum ada peristiwa radio",
       "empty_description": "Handover, perubahan pita, dan gangguan akan muncul di sini.",
@@ -387,6 +389,7 @@
       },
       "availability": {
         "label": "Ketersediaan",
+        "outages_one": "{{count}} gangguan",
         "outages_other": "{{count}} gangguan",
         "none": "Tanpa gangguan"
       },
@@ -458,7 +461,9 @@
       "prev_page": "Halaman sebelumnya",
       "next_page": "Halaman berikutnya",
       "last_page": "Halaman terakhir",
+      "count_one": "{{count}} peristiwa",
       "count_other": "{{count}} peristiwa",
+      "shown_one": "{{count}} peristiwa ditampilkan",
       "shown_other": "{{count}} peristiwa ditampilkan",
       "empty_title": "Belum ada peristiwa koneksi",
       "empty_description": "Gangguan serta periode lambat atau kehilangan paket akan muncul di sini.",
@@ -610,42 +615,53 @@
       "latest": {
         "eyebrow": "Masalah terbaru",
         "none": "Tidak ada",
+        "caption_none_one": "Tidak ada galat atau peringatan dalam {{count}} baris yang dibaca",
         "caption_none_other": "Tidak ada galat atau peringatan dalam {{count}} baris yang dibaca"
       },
       "device": {
         "head": "Kesehatan log perangkat",
         "kernel": {
+          "caption_errors_one": "{{count}} peringatan dalam {{lines}} baris kernel yang dibaca",
           "caption_errors_other": "{{count}} peringatan dalam {{lines}} baris kernel yang dibaca",
+          "caption_warnings_one": "Tidak ada galat dalam {{count}} baris kernel yang dibaca",
           "caption_warnings_other": "Tidak ada galat dalam {{count}} baris kernel yang dibaca",
+          "caption_clean_one": "Tidak ada peringatan dalam {{count}} baris kernel yang dibaca",
           "caption_clean_other": "Tidak ada peringatan dalam {{count}} baris kernel yang dibaca",
+          "caption_none_one": "Tidak ada galat atau peringatan dalam {{count}} baris kernel yang dibaca",
           "caption_none_other": "Tidak ada galat atau peringatan dalam {{count}} baris kernel yang dibaca"
         },
         "cover": {
           "eyebrow": "Mencakup",
           "caption_untimed": "Baris bertanda waktu belum cukup",
+          "caption_lines_one": "{{count}} baris dibaca",
           "caption_lines_other": "{{count}} baris dibaca",
+          "caption_top_one": "{{count}} baris, sebagian besar dari {{proc}} ({{share}}%)",
           "caption_top_other": "{{count}} baris, sebagian besar dari {{proc}} ({{share}}%)",
           "caption_busy": "{{proc}} memenuhi log ({{share}}%)"
         },
         "boot": {
           "eyebrow": "Sejak boot",
+          "caption_one": "{{count}} baris di log kernel",
           "caption_other": "{{count}} baris di log kernel"
         }
       },
       "boot": {
         "this": {
+          "caption_errors_one": "{{count}} peringatan dalam boot ini",
           "caption_errors_other": "{{count}} peringatan dalam boot ini",
           "caption_warnings": "Tidak ada galat dalam boot ini",
           "caption_clean": "Tidak ada peringatan dalam boot ini",
           "caption_none": "Tidak ada galat atau peringatan dalam boot ini"
         },
         "prev": {
+          "caption_errors_one": "{{count}} peringatan dalam boot sebelumnya",
           "caption_errors_other": "{{count}} peringatan dalam boot sebelumnya",
           "caption_warnings": "Tidak ada galat dalam boot sebelumnya",
           "caption_clean": "Tidak ada peringatan dalam boot sebelumnya",
           "caption_none": "Tidak ada galat atau peringatan dalam boot sebelumnya"
         },
         "older": {
+          "caption_errors_one": "{{count}} peringatan dalam boot itu",
           "caption_errors_other": "{{count}} peringatan dalam boot itu",
           "caption_warnings": "Tidak ada galat dalam boot itu",
           "caption_clean": "Tidak ada peringatan dalam boot itu",
@@ -653,6 +669,7 @@
         }
       },
       "file": {
+        "caption_all_one": "{{count}} baris di semua boot",
         "caption_all_other": "{{count}} baris di semua boot"
       }
     },
