@@ -9,12 +9,12 @@ Design record: [`../plans/2026-11-10-qmanager-logd-journal.md`](../plans/2026-11
 | Thing | Where |
 |---|---|
 | Daemon | `/usr/bin/qmanager_logd` (symlink to `qmanager_atd`; started with no arguments or `-d`) |
-| Client | `/usr/bin/qlog` (symlink to `qmanager_atd`): `qlog stat`, `qlog logq k=v ...`, `qlog evq k=v ...`, `qlog --version` |
+| Client | `/usr/bin/qlog` (symlink to `qmanager_atd`): `qlog stat`, `qlog logq k=v ...`, `qlog evq k=v ...`, `qlog clear`, `qlog --version` |
 | Source | `native/qmanager_atd/src/logd/*.rs` (engine in `core.rs`, queries in `query.rs`, kernel filter in `kmsg.rs`, event registry in `registry.rs`), client `src/client/qlog.rs` |
 | Init script | `/etc/init.d/qmanager_logd`, procd, `START=97` (before the broker at 98), `STOP=12` (after the poller and broker so late lines still land) |
 | Run dir (tmpfs) | `/var/run/qmanager/journal/`: `spool`, `spool.work`, `alive`, `debug` |
 | Socket | `/var/run/qmanager_logd.sock` (`0600`, `SO_PEERCRED` uid 0 only) |
-| Capability file | `/var/run/qmanager_logd.proto`: `proto=1`, `version=<crate>`, `logq=1`, `evq=1`, then `kmsg=1` when `/dev/kmsg` is open. Written after the socket is bound; removed by init stop and uninstall |
+| Capability file | `/var/run/qmanager_logd.proto`: `proto=1`, `version=<crate>`, `logq=1`, `evq=1`, `lclr=1`, then `kmsg=1` when `/dev/kmsg` is open. Written after the socket is bound; removed by init stop and uninstall |
 | Flash journal | `/usrdata/qmanager/journal/`: `log-<epochday>.jsonl`, `ev-<epochday>.jsonl`, `state` (epochday = floor(wall / 86400), UTC) |
 | Text mirror | `/tmp/qmanager.log` (+ `.1`, `.2`), 256 KB each, same line format as before; written in 1 s batches |
 | Events mirror | `/tmp/qmanager_events.json`, newest 50 rows, legacy row shape, at most one rewrite per second |
@@ -131,8 +131,8 @@ Rows are in the RAM ring, and queryable, the moment they are ingested. Flash is 
 
 | What | Rule |
 |---|---|
-| Log files | 7 days **and 1 MB total** (oldest day file goes first, never today's) |
-| Event files | 31 days **and 2 MB total**, 2000 events a day |
+| Log files | 7 days **and 4 MB total** (oldest day file goes first, never today's) |
+| Event files | 31 days **and 8 MB total**, 2000 events a day |
 | Log day cap | Past 1 MB in one day file, only WARN/ERROR and `K` rows are kept, up to 256 KB more. The first row dropped that way each day logs one WARN `daily log cap reached; keeping warnings, errors and kernel lines only` |
 | Event day cap | Past 2 MB, or 2000 events, only keep-list types and `error` events are kept (256 KB reserve for the byte cap). Keep-list (`registry.rs` `kept_past_cap`): `signal_lost`, `signal_restored`, `internet_lost`, `internet_restored`, `sim_failover`, `data_call_dropped`, `data_call_restored`, `device_reboot`, `modem_crash`, `modem_recovered`, `thermal_throttled`, `thermal_recovered` |
 | Cap drops | STAT `drops.cap` counts every one |
@@ -140,13 +140,13 @@ Rows are in the RAM ring, and queryable, the moment they are ingested. Flash is 
 | Rate limit | 100 lines/s with a burst of 500, per component. Past it lines are dropped and counted; once the storm has been quiet for 10 s one WARN row `rate limit: dropped N lines in D s` is written. A storm still dropping when a timed flush or TERM comes is reported then, with ` (still dropping)` |
 | Text mirror | 256 KB x 3 files, rotated by logd |
 
-> ⚠️ WARNING: The 1 MB and 2 MB limits are **totals across all day files**, not per day, and retention deletes whole oldest files to meet them. At about 130 KB a day, 7 days of logs is close to the 1 MB edge; a chatty day shortens how many boots "Previous boot" can reach. A single day that hits the cap keeps only warnings, errors and kernel lines for the rest of that day, so the lines before an unplanned reboot are INFO-poor on such a day. The validation reboot test lost its marker exactly this way (see Gates).
+> ⚠️ WARNING: The 4 MB and 8 MB limits are **totals across all day files**, not per day (the 1 MB log and 2 MB event day caps above are unchanged), and retention deletes whole oldest files to meet them. **Why:** a day at its cap plus reserve is about 1.25 MB of logs, so 4 MB holds several full days and one storm day never deletes the days before it; the first design's 1 MB total did exactly that. A chatty day still shortens how many boots "Previous boot" can reach. A single day that hits the cap keeps only warnings, errors and kernel lines for the rest of that day, so the lines before an unplanned reboot are INFO-poor on such a day. The validation reboot test lost its marker exactly this way (see Gates).
 
 ## Query verbs
 
 `qlog stat` prints counters (`STAT`): `version`, `proto`, `pid`, `boot`, `head_seq`, `counts` (per level and `events`), `ring` (`rows`, `bytes`, `oldest_seq`), `drops` (`rate`, `collapse`, `bad_lines`, `level`, `cap`), `flushes`, `fsyncs`, `flush_skips`, `flush_errors`, `rows_flushed`, `bytes_written_today`, `last_flush_mono`, `clock` (`trusted`, `offset`), `debug_lease`, `debug_lease_expiry`, `level`, `persist_level`, `forward_syslog`, `syslog_forwarded`, `boots`, `kmsg` (`open`, `read`, `kept`, `overruns`, `seq`, `ssr_this_boot`).
 
-Both query verbs return the newest `limit` matches, oldest first. The RAM ring holds every row above its lowest `s`; older rows come from flash.
+Both query verbs return the newest `limit` matches, oldest first. The RAM ring holds every row above its lowest `s`; older rows come from flash. EVQ reads event day files newest day first and skips a whole older day when its last `s` (read from the file's last 8 KB, `Journal::last_s`) is below the lowest row already picked, so a page of recent events does not scan 31 days of files. **Why:** the 30 d connection History cost was dominated by reading every event file.
 
 ### `qlog logq` (LOGQ)
 
@@ -209,7 +209,11 @@ Nothing blocks and nothing is lost to the shell writers: `alive` is absent, so `
 
 **Spool backstop.** The poller checks `journal/spool` once a minute (one `wc -c`) and truncates it above 1 MB with one WARN `logd spool over 1 MB and unread (N bytes); truncated`. **Why:** a killed logd leaves `alive` behind for up to 5 s and a hung one forever; without a bound the tmpfs file would grow.
 
-> ⚠️ WARNING: `POST system/logs.sh {"action":"clear"}` is still the legacy code. It truncates `/tmp/qmanager.log` and its rotations (the text mirror) only; the RAM ring and the flash journal are untouched, so the Logs page, which reads LOGQ, shows the same rows after a clear while logd is alive.
+### Clear (`LCLR`, `qlog clear`)
+
+`LCLR` (no body; capability `lclr=1`) drops every `L` row from the RAM ring and deletes the log day files, then stores one INFO row `logs cleared`. It answers `{"success":true,"rows_cleared":N,"files_removed":M}`. Events (ring and `ev-*` files), the current boot's `K` rows in RAM and `kmsg_seq` are kept, so kmsg is not imported again after a restart. Kernel rows of earlier boots lived in the log day files and go with them, so a previous boot's System/Kernel tab is empty after a clear.
+
+`POST system/logs.sh {"action":"clear"}` calls `qlog clear` when `lclr=1` is advertised, then still truncates the text mirror (`/tmp/qmanager.log` and rotations). `qlog` exit 3 (logd unreachable) falls back to the mirror-only legacy clear; any other non-zero exit answers `clear_failed` and logs an ERROR. With logd alive, the single "logs cleared" row comes from logd, so the CGI does not write its own "Clearing all log files" lines.
 
 ## Lifecycle
 
@@ -269,28 +273,31 @@ Detector invariants that are not obvious from the code:
 
 ## Gates and measurements
 
-Device: RM551E test modem. Plan targets in §4 of the plan. "Pending" means not measured on the build now in the tree (`9f497ec4`, binary 815,728 B, md5 `86c6c72c420be244ec00c4575dd15643`); update this table when Round 2 lands.
+Device: RM551E test modem. Plan targets in §4 of the plan. Final build `5f3e0b68` (binary 819,080 B, md5 `4a2e2ccdeea17f78ca31ae3ceddfc1a9`), measured in Rounds 2 to 4 (2026-11-11). Rows that cite the earlier build `e4239b84` were not repeated because their code path did not change.
 
 | Gate | Target | Measured | Build | Status |
 |---|---|---|---|---|
 | Idle CPU | <= 0.2 % of one core | 0 ticks in 120 s (0.000 %) at a full ring | `e4239b84` | met |
 | Storm CPU | <= 3 % at 100 lines/s for 60 s, no loss below the ring bound | 0.57 % core (35 ticks / 61 s), 0 rate drops, head_seq +6003; storm at 300/s for 20 s: 0.99 %, 3405 dropped, one WARN row about 9 s after the end. (First build `ab28bd79`: 1.87 % and per-second drop rows, fixed by the burst/quiet rule) | `e4239b84` | met |
-| RSS | <= 1.5 MB | 1676 kB (HWM 1684 kB) at 4096 rows / 520 KB: **failed**; ring then cut to 2560 rows / 480 KB | `e4239b84`, fix `a52f55e7` | pending (re-measure on the current build) |
+| RSS | <= 1.5 MB | 1676 kB (HWM 1684 kB) at 4096 rows / 520 KB: **failed**; ring cut to 2560 rows / 480 KB. Final build: idle 848 kB; full ring (2560 rows) after a 100/s x30 s storm 1308 kB, VmHWM 1340 kB, 0.51 % core | `e4239b84`, fix `a52f55e7`; re-measured on `5f3e0b68` | met |
 | Shell write cost | 0 forks per line or event | control loop 2, `qlog_info` x200 = 3, `append_event` x30 = 1 (noise level) | `e4239b84` | met |
 | `logs.sh` request | <= 30 ms at a full ring | 0.02 to 0.03 s wall for `lines=500&include_rotated=1` x5 (baseline 0.16 s); `qlog logq limit=500` 0.00 to 0.01 s | `e4239b84` | met |
-| Poller | no regression (active <= +0.1 pt), parity zero-diff | 3.73 / 3.70 % core vs baseline 4.17 to 4.27 % (poller pinned by pid) | `e4239b84` | CPU met; parity scripts not recorded: pending |
-| History tests | 71/71 and system 51/51, unchanged | on device (BusyBox, `run-local.sh`): legacy 86/0 and 51/0, journal-test 30/0, logd mode 86/0 and 55/0 | `e4239b84` | met |
-| History CGI cost | no regression | logd reader vs legacy, 30 d, limit 100: connection 0.48 to 0.50 s vs 0.08 s, cellular 0.12 to 0.13 vs 0.06, system 0.06 vs 0.04. The single-awk reader (`8e532796`) was written to close this | `e4239b84`, fix `8e532796` | pending (re-measure) |
-| Flash | <= 300 syncs a day, <= 1 MB a day | First build: 15 fsyncs in 6 flushes (2.5/flush), 520 a day extrapolated: **failed**. After the flush fixes, quiet link: 6 fsyncs in 3 flushes over 33.9 min. Design arithmetic: worst case about 310, normal 160 to 230 | `e4239b84`; `f7be5e84` / `8b06f35e` after | pending (24 h soak on the current build) |
-| Binary | <= 800 kB (target) | 815,728 B stripped static aarch64; ceiling raised to **850 kB** and accepted for 0.8.0 | `9f497ec4` | accepted over target |
+| Poller | no regression (active <= +0.1 pt), parity zero-diff | 3.73 / 3.70 % core vs baseline 4.17 to 4.27 % (poller pinned by pid); Round 2: 3.88 / 3.93 % on a link-down window (ping retries, about 10 forks/s, not logd) | `e4239b84`, Round 2 | CPU met; the poller-parity scripts were not run for this change |
+| History tests | 71/71 and system 51/51, unchanged | on device (BusyBox, `run-local.sh`, no `QLOGD_RUN_DIR` workaround): legacy 86/86 and 51/51, journal-test 30/30, logd mode 86/86 and 55/55; the live journal was untouched (head_seq +1 organic, per-type event counts identical) | Round 2 (`f27c857c`) | met |
+| History CGI cost | no regression | 30 d, limit 100. First build: connection 0.48 to 0.50 s vs legacy 0.08 s. Final build: connection **0.18 to 0.19 s** (378 events vs legacy 265), cellular 0.07 to 0.08 s (legacy 0.06), system 0.07 s (legacy 0.04). Fixes: single-awk reader (`8e532796`), EVQ newest-day-first (`1f013812`) | `5f3e0b68` | accepted deviation: connection stays above the ~0.1 s target because the journal carries about 40 % more connection events than legacy |
+| Flash | <= 300 syncs a day, <= 1 MB a day | First build: 15 fsyncs in 6 flushes (2.5/flush), 520 a day extrapolated: **failed**. After the flush fixes, measured only on quiet link-down windows: 6 fsyncs in 3 flushes over 33.9 min (Round 1); 5 to 6 fsyncs, 2 to 3 flushes over 31.2 min (Round 2, the one flush was a test WARN). Design arithmetic: worst case about 310 a day, normal 160 to 230 (estimated, not measured under a busy link or over 24 h) | `e4239b84`, Round 2 | accepted: met on a quiet window, busy-link figure is arithmetic |
+| Binary | <= 800 kB (target) | 819,080 B stripped static aarch64 (815,728 B before the retention and `lclr` changes); ceiling raised to **850 kB** and accepted for 0.8.0 | `5f3e0b68` | accepted over target |
 | Fallback | logd stopped: legacy paths, nothing hangs | `alive`, socket, proto removed; `qlog_info` goes to `/tmp/qmanager.log` in shell format; logs/syslog/history/fetch_events answer in 0.02 to 0.24 s; `log_debug` `available:false`; start restores | `e4239b84` | met |
 | Crash recovery | respawn and drain | `kill -9`: respawn in 5.06 s, `alive` kept, gap lines logged, seq resumes (+~10 000), ring lost and flash kept | `ab28bd79` | met |
 | Spool backstop | bounded | 1.2 MB spool made while stopped: truncated within 25 s with the WARN | `ab28bd79` | met |
 | Debug lease | on/off/expiry | GET/POST OK, file = uptime + 1800, DEBUG rows kept while leased, expiry removes the file (level back to INFO), `invalid_body` OK | `e4239b84` | met |
 | Kernel capture | K rows, no duplicates | injected `<4>qm-validator-test: remoteproc-test stopped` -> K row (tag `remoteproc`, WARN); logd restart added no duplicate; `boot=prev` kernel returned the earlier K row; `boots[]` listed 2 boots | `e4239b84` | met |
-| Previous boot survives a reboot | marker line visible after reboot | **Not shown**: the validation storm had exhausted the 1 MB log day cap (day file 1,091,794 B, cap drops rising) so the marker never reached flash. An isolated instance showed SIGTERM flushes and sets `clean=1`. The reserve for WARN/ERROR/kernel rows (`a24b057c`) came after | `e4239b84`, fix `a24b057c` | pending (repeat the reboot test with a WARN marker, user OK needed) |
-| `device_reboot` for the new boot | recorded | not yet: clock untrusted after the reboot (no NTP, ISP outage) | `e4239b84` | pending |
-| AT path | `qcmd` OK before/after | `ATI` OK around every restart and the reboot | `e4239b84` | met |
+| Previous boot survives a reboot | marker line visible after reboot | First attempt failed: the validation storm had exhausted the 1 MB log day cap (day file 1,091,794 B) so the marker never reached flash; an isolated instance showed SIGTERM flushes and sets `clean=1`. Fixed by the WARN/ERROR/kernel reserve (`a24b057c`) and the 4 MB total (`1f013812`). Round 4: a WARN marker was persisted, `clean=1` written, and after the reboot `qlog logq boot=prev` and `logs.sh boot=prev` returned the marker and "journal stopping"; `boots` listed 1 to 3; logd up at about 45 s uptime | `a24b057c`, `1f013812`; Round 4 on `5f3e0b68` | met |
+| `device_reboot` for the new boot | recorded | Round 2: boot 2 recorded at its boot epoch, `cause=unexpected off=286` (a plain `reboot` is classed unexpected). Round 4: boot 3 recorded with `t` = the clock offset once the clock was trusted at about 300 s uptime | Rounds 2 and 4 | met |
+| AT path | `qcmd` OK before/after | `ATI` OK around every restart and both reboots | `e4239b84`, Rounds 2 to 4 | met |
+| Day cap persistence | WARN, ERROR and `K` rows survive a capped day | With the day capped: the cap WARN, a ping WARN, a test WARN and a `remoteproc` K row reached flash at the 10 min flush; INFO rows were dropped from flash (3038 cap drops) but stayed in the ring | Round 2 (`f27c857c`) | met |
+| Retention | several full days kept | Restart left the journal dir's file set identical (three `ev-*`, one `log-*`, `state`); no day file deleted | `5f3e0b68` | met |
+| Clear | logs and earlier-boot kernel rows go; events and kmsg state stay | `POST logs.sh {"action":"clear"}`: log day file removed, `ev-*` files byte-identical, one "logs cleared" row, kmsg seq unchanged and no re-import after a logd restart; `syslog.sh source=kernel&boot=prev` empty afterwards (expected) | Round 4 on `5f3e0b68` | met |
 | `broker_restarted` | one event per restart, silent on first sighting | exactly one event within 75 s of the second broker restart; none on first sighting | `ab28bd79` | met |
 
 ## Gotchas

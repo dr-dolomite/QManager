@@ -125,7 +125,7 @@ is ordered **oldest first**; the UI reverses it.
 
 | Body | Effect |
 | ---- | ------ |
-| `{"action":"clear"}` | Truncates `/tmp/qmanager.log` in place and `rm -f`s both rotated files. Returns `cgi_success`. |
+| `{"action":"clear"}` | With logd advertising `lclr=1`: `qlog clear` (drops the journal's log rows and log day files, keeps events and kmsg state, stores one "logs cleared" row), then truncates the text mirror. Without logd: truncates `/tmp/qmanager.log` in place and `rm -f`s both rotated files. A `qlog` exit other than 0 or 3 answers `clear_failed`. Returns `cgi_success`. |
 | `{"action":"status"}` | Returns `stats` only. **Unused by this UI.** |
 
 The clear path truncates through the existing inode (`: > "$LOG_FILE"`) rather than recreating
@@ -308,8 +308,8 @@ reads it unchanged. Design: `docs/plans/2026-11-10-qmanager-logd-journal.md` (se
 **Use condition.** `/var/run/qmanager_logd.proto` contains the line `logq=1` (read with the
 `read` builtin). Any other state falls back to the legacy file path, unchanged:
 no capability file, a parameter that fails validation, `qlog` exit 3 (logd unreachable), any
-other non-zero `qlog` exit, or an empty reply. POST (`clear`, `status`) is always the legacy
-code.
+other non-zero `qlog` exit, or an empty reply. POST `status` is always the legacy code; POST
+`clear` uses `qlog clear` when `lclr=1` is advertised (see the POST table).
 
 **Parameter mapping** (every value is validated with `case` and passed as one argv element,
 never through `eval`):
@@ -344,7 +344,7 @@ With `logq=1` the QManager tab is a view on the journal, not on a file. These be
 - **Debug lease, owned by the page** (`use-log-debug.ts`, `debug-lease-action.tsx`). The header carries "Debug logging (30 min)" on the QManager tab; while it runs the action becomes "Stop debug logging" and the toolbar shows a **Fact-Is-Info chip** (`Badge variant="info"`) with the time left. The page, not the action, holds the hook so the state survives a tab switch; the countdown runs on the browser clock from `expires_in` and the lease is re-read at zero because the device decides whether it lapsed. The control is hidden when `available` is false.
 - **Empty Debug view.** Picking the Debug level with no lease running shows "Detailed lines are only kept while debug logging is on." with a button that starts the lease, instead of a bare "nothing at this level". It shows only when the lease is available and not active.
 - **Kernel tab boot history.** With `kmsg=1` the System tab's Kernel source gets the same selector, fed by `boot`, `this_boot` and `boots[]` from `syslog.sh`; a past boot is the kept set only (SSR, OOM, thermal, panic, watchdog, BUG, eth link), not the whole ring.
-- **Clear.** The Clear action still runs the legacy code and only empties the text mirror (see [`journal.md`](../features/journal.md), fallback section); the journal rows stay.
+- **Clear.** With logd alive, Clear drops the journal's log rows and log day files (`LCLR`), so the page is empty bar one "logs cleared" row and earlier boots' kernel rows go too; events and kmsg state stay. See [`journal.md`](../features/journal.md#clear-lclr-qlog-clear).
 
 ## Debug lease (`system/log_debug.sh`)
 
