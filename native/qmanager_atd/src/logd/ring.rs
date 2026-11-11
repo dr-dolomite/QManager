@@ -5,9 +5,11 @@
 use super::record::Row;
 use std::collections::VecDeque;
 
-pub const MAX_ROWS: usize = 4096;
-/// Rendered bytes (the RSS gate is 1.5 MB for the whole daemon).
-pub const MAX_BYTES: usize = 768 * 1024;
+/// A full ring at 4096 rows / 768 KB measured 1.67 MB RSS on the RM551E
+/// against the 1.5 MB gate for the whole daemon.
+pub const MAX_ROWS: usize = 2560;
+/// Rendered bytes (`Row::cost`).
+pub const MAX_BYTES: usize = 480 * 1024;
 
 pub struct Ring {
     rows: VecDeque<Row>,
@@ -22,7 +24,9 @@ impl Ring {
     }
 
     pub fn with_bounds(max_rows: usize, max_bytes: usize) -> Ring {
-        Ring { rows: VecDeque::new(), bytes: 0, max_rows, max_bytes }
+        // Sized once: the deque never grows past the row bound (it would
+        // double its slot array, all of it touched as the ring wraps).
+        Ring { rows: VecDeque::with_capacity(max_rows.min(MAX_ROWS)), bytes: 0, max_rows, max_bytes }
     }
 
     pub fn len(&self) -> usize {
@@ -42,15 +46,17 @@ impl Ring {
         self.rows.front()
     }
 
-    /// Adds a row, evicting the oldest until the bounds hold.
+    /// Adds a row, evicting the oldest first so the bounds hold (and the
+    /// deque never holds `max_rows + 1`, which would reallocate it).
     pub fn push(&mut self, row: Row) {
-        self.bytes += row.cost();
-        self.rows.push_back(row);
-        while self.rows.len() > 1 && (self.rows.len() > self.max_rows || self.bytes > self.max_bytes) {
+        let cost = row.cost();
+        while self.would_evict(cost) {
             if let Some(old) = self.rows.pop_front() {
                 self.bytes -= old.cost();
             }
         }
+        self.bytes += cost;
+        self.rows.push_back(row);
     }
 
     /// Lowest sequence number held (None when empty).
@@ -98,6 +104,7 @@ mod tests {
         assert_eq!(r.index_after(20), 10);
         assert_eq!(r.index_after(0), 0);
         assert_eq!(r.index_after(u64::MAX), MAX_ROWS);
+        assert!(r.rows.capacity() < MAX_ROWS * 2, "the deque never doubled: {}", r.rows.capacity());
     }
 
     #[test]
@@ -108,7 +115,7 @@ mod tests {
             r.push(row(s, 4000));
         }
         assert!(r.bytes() <= MAX_BYTES, "{}", r.bytes());
-        assert!(r.len() < 200 && r.len() > 180, "{}", r.len());
+        assert!(r.len() < 125 && r.len() > 110, "{}", r.len());
         assert_eq!(r.iter().last().unwrap().s, 2000);
         assert!(r.would_evict(5000));
         // One huge row is still kept alone.

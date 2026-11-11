@@ -91,7 +91,7 @@ Journal row (JSONL, in RAM and on flash):
 
 | Tier | Holds | Where | Bound |
 |---|---|---|---|
-| RAM ring | every record, DEBUG included | logd memory | 8192 records or 2 MB, whichever comes first |
+| RAM ring | every record, DEBUG included | logd memory | 2560 records or 480 KB, whichever comes first (a full 4096-record ring measured 1.67 MB RSS against the 1.5 MB gate). Not reloaded on restart: older rows of the boot are read from the day files |
 | Text mirror | the current boot's lines in today's format | `/tmp/qmanager.log` (+ `.1`, `.2`) | 256 KB × 3, written in 1 s batches. Kept so `qmanager_logread`, `qmanager_debug_report` and SSH greps work unchanged |
 | Log journal | INFO+ lines | `/usrdata/qmanager/journal/log-<epochday>.jsonl` | 7 days, 1 MB |
 | Event journal | all events | `/usrdata/qmanager/journal/ev-<epochday>.jsonl` | 31 days, 2 MB, 2000/day (keep-list types past the cap, as in History) |
