@@ -420,14 +420,31 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
 
     case "$action" in
         clear)
-            qlog_info "Clearing all log files"
+            # With logd alive the page reads the journal, so the journal is
+            # what must be cleared (logd then logs "logs cleared" itself).
+            # Exit 3 = logd unreachable: the legacy files are all there is.
+            via_logd=0
+            if _qd_cap "lclr=1"; then
+                /usr/bin/qlog clear >/dev/null 2>&1
+                rc=$?
+                case "$rc" in
+                    0) via_logd=1 ;;
+                    3) ;;
+                    *)
+                        qlog_error "Journal clear failed (qlog exit $rc)"
+                        cgi_error "clear_failed" "The journal could not be cleared"
+                        exit 0
+                        ;;
+                esac
+            fi
+            [ "$via_logd" -eq 1 ] || qlog_info "Clearing all log files"
             [ -f "$LOG_FILE" ] && : > "$LOG_FILE"
             i=1
             while [ "$i" -le "$MAX_ROTATED" ]; do
                 rm -f "${LOG_FILE}.${i}"
                 i=$((i + 1))
             done
-            qlog_info "Log files cleared"
+            [ "$via_logd" -eq 1 ] || qlog_info "Log files cleared"
             cgi_success
             ;;
         status)
