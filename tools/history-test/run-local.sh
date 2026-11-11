@@ -47,6 +47,15 @@ else
     SH="sh"
 fi
 
+# Never the live journal: logd unavailable unless a suite's jsetup points
+# the same env at its stub (logd-stub.sh jnone/jsetup do it per suite too).
+QLOGD_RUN_DIR="$D/nologd/run"
+HIST_QLOG="$D/nologd/qlog"
+HIST_LOGD_PROTO="$D/nologd/proto"
+QLOGD_PROTO="$D/nologd/proto"
+export QLOGD_RUN_DIR HIST_QLOG HIST_LOGD_PROTO QLOGD_PROTO
+unset QLOG_STUB_DIR
+
 RC=0
 for MODE in legacy logd; do
     for S in history-test system-test journal-test; do

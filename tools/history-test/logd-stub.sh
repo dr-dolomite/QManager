@@ -4,7 +4,11 @@
 #
 #   jsetup DIR      journal run dir (alive marker, spool), capability file
 #                   (evq=1) and a stub qlog on HIST_QLOG; exports the env the
-#                   writers (QLOGD_RUN_DIR) and the reader (HIST_*) use
+#                   writers (QLOGD_RUN_DIR) and the readers (HIST_*,
+#                   QLOGD_PROTO) use, so nothing reaches a live logd
+#   jnone DIR       legacy mode: points the same env at paths under DIR that
+#                   never exist, so on a device with logd alive the writers
+#                   and readers still see logd as down (no live spool writes)
 #   jingest WOFF    ingest the spool like logd does at write time: wall =
 #                   mono + WOFF once WOFF is a real clock; before that the row
 #                   waits and is back-dated with the first real offset
@@ -111,9 +115,19 @@ EOF
     QLOG_STUB_DIR="$J"
     HIST_QLOG="$J/bin/qlog"
     HIST_LOGD_PROTO="$J/proto"
+    QLOGD_PROTO="$J/proto"
     HIST_EVQ_PAGE="${HIST_EVQ_PAGE:-2}"
-    export QLOGD_RUN_DIR QLOG_STUB_DIR HIST_QLOG HIST_LOGD_PROTO HIST_EVQ_PAGE
+    export QLOGD_RUN_DIR QLOG_STUB_DIR HIST_QLOG HIST_LOGD_PROTO QLOGD_PROTO HIST_EVQ_PAGE
     chmod +x "$J/bin/qlog" "$J/bin/qlog-ingest"
+}
+
+jnone() {
+    QLOGD_RUN_DIR="$1/nologd/run"
+    HIST_QLOG="$1/nologd/qlog"
+    HIST_LOGD_PROTO="$1/nologd/proto"
+    QLOGD_PROTO="$1/nologd/proto"
+    export QLOGD_RUN_DIR HIST_QLOG HIST_LOGD_PROTO QLOGD_PROTO
+    unset QLOG_STUB_DIR
 }
 
 jingest() {

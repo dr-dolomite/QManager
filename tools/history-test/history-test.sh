@@ -19,9 +19,11 @@ export HIST_LIB_DIR="$SRC" HIST_STORE="$T/store" HIST_RUN="$T/run" \
     HIST_BOOT_ID_FILE="$T/boot" HIST_SYNC=true HIST_UPTIME_FILE="$T/uptime"
 
 MODE="${HIST_TEST_MODE:-legacy}"
+. "$(dirname "$0")/logd-stub.sh"
 if [ "$MODE" = logd ]; then
-    . "$(dirname "$0")/logd-stub.sh"
     jsetup "$T/j"
+else
+    jnone "$T"
 fi
 
 PASS=0

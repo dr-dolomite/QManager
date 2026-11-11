@@ -21,9 +21,11 @@ export HIST_LIB_DIR="$T/lib" HIST_STORE="$T/store" HIST_RUN="$T/run" \
     HIST_SYS_CRASH_LOG="$T/crash.log"
 
 MODE="${HIST_TEST_MODE:-legacy}"
+. "$(dirname "$0")/logd-stub.sh"
 if [ "$MODE" = logd ]; then
-    . "$(dirname "$0")/logd-stub.sh"
     jsetup "$T/j"
+else
+    jnone "$T"
 fi
 
 PASS=0
