@@ -1502,11 +1502,11 @@ Device hardware and firmware information.
 
 ### GET `/system/logs.sh`
 
-QManager log viewer. Query: `lines` (default 100, max 500 on the logd path), `level` (minimum severity), `component`, `search`, `include_rotated`, plus `boot` (`this|prev|<n>`), `after` / `before` (journal `seq`). With `qmanager_logd` running (`logq=1` in `/var/run/qmanager_logd.proto`) it is served by `qlog logq` and adds `seq`, `t`, `boot` per entry and `this_boot`, `head_seq`, `has_more`, `boots[]`, `counts`, `latest_problem`; otherwise the legacy `/tmp/qmanager.log` parser answers with the original shape. POST `{"action":"clear"|"status"}` is unchanged. See [`docs/reference/logs.md`](./reference/logs.md#the-logd-path-logq).
+QManager log viewer. Query: `lines` or `limit` (default 100, max 500 on the logd path), `level` (minimum severity), `component`, `search`, `include_rotated`, plus `boot` (`this|prev|<n>`), `after` / `before` (journal `seq`). With `qmanager_logd` running (`logq=1` in `/var/run/qmanager_logd.proto`) it is served by `qlog logq` and adds `seq`, `t`, `boot` per entry and `this_boot`, `head_seq`, `has_more`, `boots[]`, `counts`, `latest_problem`; otherwise the legacy `/tmp/qmanager.log` parser answers with the original shape. POST `{"action":"clear"|"status"}` is unchanged legacy code: with logd alive `clear` empties only the `/tmp/qmanager.log` mirror, not the journal. See [`docs/reference/logs.md`](./reference/logs.md#the-logd-path-logq).
 
 ### GET/POST `/system/log_debug.sh`
 
-Journal debug lease (30 minutes of DEBUG logging). Auth required.
+Journal debug lease (30 minutes of DEBUG logging; logd and every shell `qlog_debug` write DEBUG while it runs). Auth required.
 
 `GET` and `POST {"enable":true|false}` both return `{"success":true,"active":bool,"expires_in":<seconds>,"available":bool}`; `available` is true while logd's capability file exists. Errors: `invalid_body`, `unavailable` (no journal directory), `write_failed`. See [`docs/reference/logs.md`](./reference/logs.md#debug-lease-systemlog_debugsh).
 
@@ -1515,7 +1515,7 @@ Journal debug lease (30 minutes of DEBUG logging). Auth required.
 
 The modem's own logs (system log ring via `logread`, kernel ring via `dmesg`). Read-only. See [`docs/reference/logs.md`](./reference/logs.md#device-logs-systemsyslogsh).
 
-**Query:** `source=system|kernel` (default `system`), `lines=50..500` (default 200, clamped).
+**Query:** `source=system|kernel` (default `system`), `lines=50..500` (default 200, clamped), `boot=this|prev|<n>` (default `this`; `source=kernel` only, honoured when logd advertises `kmsg=1`, otherwise ignored; anything else is `invalid_param`). With `kmsg=1` the kernel response also carries `boot`, `this_boot` and `boots[]`; a past boot is answered from logd's kept kernel records (SSR, OOM, thermal, panic, watchdog, BUG, eth link) with `t` and `tag` per entry, and returns `unavailable` if logd cannot be read.
 
 **Response (`source=system`), entries newest first:**
 ```json

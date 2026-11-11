@@ -196,10 +196,10 @@ qlog_error "Something failed"
 ```
 
 **Features:**
-- Log levels: DEBUG, INFO, WARN, ERROR (configurable via `QLOG_LEVEL`)
-- File logging to `/tmp/qmanager.log` (configurable via `QLOG_FILE`)
+- Log levels: DEBUG, INFO, WARN, ERROR. The floor is UCI `quecmanager.logging.level` (read by each init script into `QLOG_LEVEL`); `/etc/qmanager/log_level` is retired. A debug lease (`/var/run/qmanager/journal/debug`) lets `qlog_debug` write for 30 min
+- While `qmanager_logd` is alive (`/var/run/qmanager/journal/alive`) each line is one `printf >>` to the journal spool with zero forks; otherwise the legacy append to `/tmp/qmanager.log` (configurable via `QLOG_FILE`) runs. See [`features/journal.md`](features/journal.md)
 - Auto-rotation at 256KB (configurable), keeps 2 rotated files
-- Optional syslog output (`QLOG_TO_SYSLOG=1`, default)
+- No syslog output from the shell (the 64 KB ring holds about 9 s); logd forwards ERROR itself when `quecmanager.logging.forward_syslog=1`
 - Optional stdout output (`QLOG_TO_STDOUT=0`, default)
 - Format: `[TIMESTAMP] LEVEL [COMPONENT:PID] Message`
 
@@ -208,6 +208,8 @@ qlog_error "Something failed"
 - `qlog_lock <event> [detail]` — Log flock events
 - `qlog_state_change <field> <old> <new>` — Log state transitions
 - `record_planned_reboot <reason>` — Appends `<epoch>|reboot|<reason>` to the shared, persistent reboot ledger `/etc/qmanager/crash.log` (flock on `/tmp/qmanager_crashlog.lock`, trims to 20 lines). `reason` is sanitized to `[a-z_]` only. Called synchronously, before the actual reboot, by every intentional-reboot path (`cgi_reboot_response`, `qmanager_scheduled_reboot`, IPPT apply, IMEI-check restore, install/uninstall) so `alert_engine.sh`'s reboot-alert detector can classify the next boot as planned rather than unplanned. Also reused post-boot to record an inferred `unplanned` breadcrumb. See [`docs/features/alerts.md`](features/alerts.md#reboot-alerts).
+- `append_event <type> <message> [severity] [code] [fields]` (`events.sh`) — records a Network Event. `fields` (5th argument) is `k=v;k=v` (keys `[a-z0-9_]{1,32}`, values without `;`, tab or newline) and reaches logd only. One `printf >>` to the spool while logd is alive; legacy locked `jq` append otherwise. Never pass an IP, a recipient or a full IMEI in a field. See [`features/journal.md`](features/journal.md).
+
 
 ### parse_at.sh
 
@@ -741,7 +743,7 @@ The tree also ships these CGI scripts under `scripts/www/cgi-bin/quecmanager/`. 
 | `qmanager_status.json` | poller | Main cached modem status |
 | `qmanager_signal_history.json` | poller | Signal history NDJSON |
 | `qmanager_ping_history.json` | poller | Ping history NDJSON |
-| `qmanager_events.json` | poller | Network events NDJSON |
+| `qmanager_events.json` | logd (mirror; legacy `append_event` when logd is down) | Newest 50 Network events NDJSON |
 | `qmanager_ping.json` | ping daemon | Current ping result |
 | `qmanager_ping_history` / `qmanager_ping_slots.json` | ping daemon | Raw probe ring (`<rtt|null> <slot>` per line, read by the poller statistics and the Watchdog's quality window) / live state of the four target slots |
 | `qmanager_dns.json` | ping daemon (detached job) | Last DNS lookup time `{ms, ok, resolver, name, mono, ts}` |
@@ -763,7 +765,7 @@ The tree also ships these CGI scripts under `scripts/www/cgi-bin/quecmanager/`. 
 | `qmanager_reboot_storm_hour` | poller (`alert_engine.sh`) | Mono-stamped marker suppressing further reboot alerts after a coalesced storm message |
 | `qmanager_crashlog.lock` | qlog.sh (`record_planned_reboot`) | flock guarding appends to the shared `/etc/qmanager/crash.log` reboot ledger |
 | `qmanager_sessions/` | CGI (auth) | Session files |
-| `qmanager.log` | all (qlog) | Centralized log file |
+| `qmanager.log` | logd mirror (legacy `qlog` writers when logd is down) | Text mirror of the journal |
 | `/var/run/nfqws.pid` | qmanager_dpi (procd pidfile) | nfqws instance PID (uptime tracking) |
 | `/tmp/qmanager_auth_attempts.json` | cgi_auth | Login rate-limit ladder state |
 | `/tmp/qmanager_ondemand.json` | `cellular/radio_details.sh` / poller | Last-known on-demand radio fields |

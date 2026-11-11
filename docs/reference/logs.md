@@ -7,9 +7,7 @@ The Logs page is the one place to read what QManager and the modem wrote to thei
 the last page under **History** in the sidebar (Cellular, Connection, System Health, Network
 Events, Logs). One card holds two tabs: **QManager** is the app's own diagnostic transcript, the
 file every QManager shell script writes through `qlog.sh`; **System** is the modem's system log
-(`logread`) or its kernel ring (`dmesg`). The QManager tab matters because the device has **no
-journal to fall back on**: `journald` is masked to `/dev/null` on both modems, so
-`/tmp/qmanager.log` is the only durable record of what a CGI script, a daemon or the poller did.
+(`logread`) or its kernel ring (`dmesg`). The QManager tab reads **the journal**: since 2026-11 `qmanager_logd` keeps those lines on flash across reboots (`journald` is masked to `/dev/null` on both modems, so before the journal `/tmp/qmanager.log` was the only record and it vanished at every reboot). `/tmp/qmanager.log` is now a mirror that keeps `qmanager_logread`, the debug report and SSH greps working. Design and contract: [`../features/journal.md`](../features/journal.md).
 
 History (2026-11): the page used to be a System Settings surface (`components/system-settings/logs/**`:
 status band, transcript card, 52px rows, search / component / archived filters), and System
@@ -36,10 +34,10 @@ pruned, and the old `/system-settings/logs` route redirects here. The backend wa
 | Types | `types/system-logs.ts`, `types/device-syslog.ts` |
 | CGI endpoint | `GET`/`POST` `/cgi-bin/quecmanager/system/logs.sh` |
 | Producer library | `scripts/usr/lib/qmanager/qlog.sh` (sourced by every QManager shell script) |
-| Log file | `/tmp/qmanager.log` — **RAM disk**, seeded `root:root 0666` by `qmanager_setup` |
+| Log file | Journal (flash, 7 days, previous boots): `/usrdata/qmanager/journal/log-<epochday>.jsonl`, read through `qlog logq` ([`journal.md`](../features/journal.md)). Text mirror `/tmp/qmanager.log` — **RAM disk**, seeded `root:root 0666` by `qmanager_setup`, also the legacy fallback when logd is down |
 | Rotated files | `/tmp/qmanager.log.1`, `/tmp/qmanager.log.2` (`MAX_ROTATED=2`) |
 | Rotation trigger | `QLOG_MAX_SIZE_KB`, default **256 KB** |
-| Default write threshold | `QLOG_LEVEL`, default **INFO** — so `DEBUG` lines are usually never written |
+| Level floor | UCI `quecmanager.logging.level` (default **INFO**; `QLOG_LEVEL` in each daemon, `QLOGD_LEVEL` in logd), plus the debug lease. `/etc/qmanager/log_level` is retired |
 | Poll cadence | `POLL_INTERVAL_MS = 10_000` (`hooks/use-system-logs.ts`) |
 | Line budgets | `LINE_BUDGETS = ["50", "100", "200", "500"]` |
 | Page sizes | `PAGE_SIZES = [10, 20, 50, 100]`, default **10** (`shapes.ts`) |
@@ -48,6 +46,8 @@ pruned, and the old `/system-settings/logs` route redirects here. The backend wa
 ---
 
 ## Data path
+
+This is the **legacy path** (logd down or old backend). With `qmanager_logd` alive, `logs.sh` is one `qlog logq` call and the awk pass below never runs; see [The logd path](#the-logd-path-logq).
 
 ```
 qlog_info "..."          -> [TS] LEVEL [component:PID] Message   (qlog.sh, appends)
@@ -74,13 +74,7 @@ A line that does not start with `[` is skipped outright, and a line whose level 
 one of the four is dropped by the awk pass. That is why `LogLevel` is a **closed union** in
 `types/system-logs.ts`: widening it on the client would be a lie until the backend widens too.
 
-> ℹ️ NOTE: `qlog.sh` also copies lines to syslog via `logger` when `QLOG_TO_SYSLOG=1`
-> (the default), but only at or above `QLOG_SYSLOG_LEVEL` (default `WARN`; set `INFO` or
-> `DEBUG` in a script's environment to widen it). INFO and DEBUG lines live only in the file:
-> no `logger` fork for routine lines, and they cannot push kernel lines out of the
-> `logread | tail -300` that the debug report and health check capture (on the RM551E the
-> 64 KB syslog ring holds well under a minute, flooded by the firmware's `qms` debug output).
-> Daemons pick up the new default on their next restart. This page never reads syslog, only the file.
+> ℹ️ NOTE: `qlog.sh` no longer calls `logger`: the syslog ring holds about 9 s on the RM551E (flooded by the firmware's `qms` output), so QManager's copies were wasted forks. `quecmanager.logging.forward_syslog=1` makes logd copy ERROR lines to syslog itself, without a fork (off by default). This page never reads syslog for the QManager tab.
 
 ---
 
@@ -140,12 +134,7 @@ for why that mode is load-bearing for a file both root daemons and `www-data` CG
 
 ### Rotation and volatility
 
-`/tmp` is a RAM disk. **The log is empty after every reboot** — there is no persistence, by
-design, because the flash is UBIFS and a chatty log would wear it. `_qlog_rotate()` moves the
-current file to `.1` (shifting `.1` to `.2`) once `wc -c` divided by 1024 reaches
-`QLOG_MAX_SIZE_KB`, then re-asserts mode `666` on the fresh file. Nothing is compressed.
-
-That volatility is the single most useful fact a first-time reader is missing, so the page
+The text file is a mirror and still lives on a RAM disk: it is empty after every reboot, and `_qlog_rotate()` (legacy writers) or logd (journal alive) moves it to `.1` then `.2` at `QLOG_MAX_SIZE_KB` (256 KB). **The page no longer depends on it:** with `qmanager_logd` running the page reads the journal, which keeps logs for 7 days on flash and shows the previous boots ([`../features/journal.md`](../features/journal.md)). Only the legacy fallback (logd down) has the old "empty after every reboot" behaviour, and the page description says so in plain English.
 description and the empty state both say it in plain English rather than leaving it to this doc.
 
 ---
@@ -289,11 +278,10 @@ lines than `stats.current_lines`, so the card description can read "Showing 400 
 log holds 180." That is honest — the two numbers measure different things — but it surprises
 people, and `current_lines` must not be repurposed as a total.
 
-### `DEBUG` is usually absent entirely
+### `DEBUG` is absent unless the lease runs
 
-`QLOG_LEVEL` defaults to `INFO`, and `_qlog_write` returns early below that threshold. On a
-stock device **no `DEBUG` line is ever written**, so the Debug rail chip reads `0` and is not
-broken. It only populates on a device that exports `QLOG_LEVEL=DEBUG` for a component.
+The level floor is `quecmanager.logging.level` (default **INFO**), so on a stock device no `DEBUG` line is written and the Debug chip reads `0`. That is not broken: the page owns a 30 minute **debug lease** (below) that makes logd and every shell writer keep DEBUG rows. An empty Debug view with no lease running says so and offers to turn it on (see "The journal-era page").
+
 
 ### `search` matches the whole raw line
 
@@ -344,6 +332,19 @@ top level `this_boot`, `head_seq`, `has_more`, `boots[]`, `counts`, `latest_prob
 `before` page by `seq`; `boot=prev` reads the previous boot's rows (the journal lives on flash,
 so they survive a reboot). Events appear as INFO rows of component `events` (`EVENT [type]
 message`), as the legacy writers logged them.
+
+## The journal-era page
+
+With `logq=1` the QManager tab is a view on the journal, not on a file. These behaviours exist only on that path; with logd down the page falls back to the legacy file and none of them apply (`boots[]` is absent, so no boot selector, and the lease control hides).
+
+- **Boot selector** (`boot-select.tsx`). Shown only when the journal holds two or more boots (`boots[]` from `logq`). Two boots are a **This boot / Previous boot** switch; more become a `Select` whose older entries are named by when they started. `hooks/use-system-logs.ts` sends `boot=this` (omitted), `boot=prev` or a boot number. A previous boot is a fixed record: it is read once and not polled. The hint beside it says logs are kept for 7 days and the oldest restarts are dropped first. If the chosen boot disappears (retention, or the journal was cleared) the page returns to this boot.
+- **Boot span on the modem's clock.** The rows' timestamps are the modem's local time text, while `t` and `boots[].first/last` are true epochs. `rowClockOffset` (`derive.ts`) takes the difference from the newest entry that carries both, and `modemNowSec` supplies "now" from the newest line the journal holds, never the browser clock. The running boot reads "Since 14:40"; a past boot reads its first-to-last span (both days when it crosses midnight). **Why:** a browser in another zone, or a skewed browser clock, would otherwise put "Today" and the span on the wrong side of midnight.
+- **Cursor polling.** While this boot is in view, each poll after the first sends `after=<head_seq>` and appends only what is new (deduplicated by `seq`, trimmed to the line budget); the cursor resets when the boot changes or `head_seq` goes backwards. Without `head_seq` (an older backend) every poll is a full read.
+- **Counts and tiles cover the whole boot.** `counts` and `latest_problem` come from every matching row of the boot, not just the fetched window, and an incremental read carries only the new rows' counts, which the hook adds. The Severity and Latest problem tiles therefore describe the boot, not the visible 100 lines.
+- **Debug lease, owned by the page** (`use-log-debug.ts`, `debug-lease-action.tsx`). The header carries "Debug logging (30 min)" on the QManager tab; while it runs the action becomes "Stop debug logging" and the toolbar shows a **Fact-Is-Info chip** (`Badge variant="info"`) with the time left. The page, not the action, holds the hook so the state survives a tab switch; the countdown runs on the browser clock from `expires_in` and the lease is re-read at zero because the device decides whether it lapsed. The control is hidden when `available` is false.
+- **Empty Debug view.** Picking the Debug level with no lease running shows "Detailed lines are only kept while debug logging is on." with a button that starts the lease, instead of a bare "nothing at this level". It shows only when the lease is available and not active.
+- **Kernel tab boot history.** With `kmsg=1` the System tab's Kernel source gets the same selector, fed by `boot`, `this_boot` and `boots[]` from `syslog.sh`; a past boot is the kept set only (SSR, OOM, thermal, panic, watchdog, BUG, eth link), not the whole ring.
+- **Clear.** The Clear action still runs the legacy code and only empties the text mirror (see [`journal.md`](../features/journal.md), fallback section); the journal rows stay.
 
 ## Debug lease (`system/log_debug.sh`)
 
