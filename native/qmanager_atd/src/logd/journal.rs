@@ -6,7 +6,8 @@
 //! global sync. Each file is opened O_APPEND|O_CREAT|O_NOFOLLOW and must be
 //! our own regular file with one link.
 
-use super::record::{quick_sbt, Names, Row, Sev};
+use super::record::{quick_sbt, Names, RKind, Row, Sev};
+use crate::common::log::Level;
 use super::registry;
 use crate::common::safefs;
 use std::fs::{self, File, OpenOptions};
@@ -16,6 +17,9 @@ use std::os::unix::io::AsRawFd;
 
 pub const LOG_DAYS: i64 = 7;
 pub const LOG_BYTES: u64 = 1024 * 1024;
+/// Past a day file's byte cap, this much more is kept for what matters:
+/// WARN/ERROR and kernel lines (logs), keep-list and `error` (events).
+pub const CAP_RESERVE: u64 = 256 * 1024;
 pub const EV_DAYS: i64 = 31;
 pub const EV_BYTES: u64 = 2 * 1024 * 1024;
 pub const EV_DAY_CAP: u64 = 2000;
@@ -197,6 +201,8 @@ pub struct FlushStats {
     pub fsyncs: u64,
     pub cap_drops: u64,
     pub errors: u64,
+    /// Day of the first log row dropped by the byte cap in this flush.
+    pub log_cap_day: Option<i64>,
 }
 
 pub struct Journal {
@@ -310,8 +316,9 @@ impl Journal {
 
     /// Appends rows (ascending `s`) to their day files. A row with a wall time
     /// goes to `epochday(t)`; one still untrusted goes to `null_day`. Events
-    /// past the day cap are kept only for the keep-list and `error`; a kind's
-    /// file is no longer grown once it alone exceeds the kind's byte cap.
+    /// past the day cap are kept only for the keep-list and `error`. Past a
+    /// kind's byte cap a day file keeps only WARN/ERROR and kernel lines
+    /// (logs) or keep-list and `error` events, up to `CAP_RESERVE` more.
     pub fn append(&mut self, rows: &[&Row], null_day: i64, stats: &mut FlushStats, index: &mut BootIndex, names: &Names) {
         // One open file per (kind, day) touched, written in 32 KB chunks so a
         // full ring never needs a second copy of itself in RAM.
@@ -321,6 +328,8 @@ impl Journal {
             file: Option<File>,
             buf: String,
             wrote: bool,
+            /// File size plus what this flush appended.
+            size: u64,
         }
         const CHUNK: usize = 32 * 1024;
         let mut groups: Vec<G> = Vec::new();
@@ -361,7 +370,7 @@ impl Journal {
                     let path = self.path(kind, day);
                     let cap = if kind == Kind::Log { LOG_BYTES } else { EV_BYTES };
                     let size = fs::symlink_metadata(&path).map(|m| m.len()).unwrap_or(0);
-                    let file = if size >= cap {
+                    let file = if size >= cap + CAP_RESERVE {
                         None
                     } else {
                         match Self::open_append(&path) {
@@ -372,17 +381,27 @@ impl Journal {
                             }
                         }
                     };
-                    groups.push(G { kind, day, file, buf: String::new(), wrote: false });
+                    groups.push(G { kind, day, file, buf: String::new(), wrote: false, size });
                     groups.len() - 1
                 }
             };
             let g = &mut groups[gi];
-            if g.file.is_none() {
+            let cap = if kind == Kind::Log { LOG_BYTES } else { EV_BYTES };
+            let reserved = match kind {
+                Kind::Log => r.kind == RKind::K || r.lv >= Level::Warn,
+                Kind::Ev => registry::kept_past_cap(names.name(r.ty)) || r.sev == Sev::Error,
+            };
+            if g.file.is_none() || (g.size >= cap && !reserved) || g.size >= cap + CAP_RESERVE {
                 stats.cap_drops += 1;
+                if kind == Kind::Log && g.size >= cap {
+                    stats.log_cap_day.get_or_insert(day);
+                }
                 continue;
             }
+            let before = g.buf.len();
             r.render(&mut g.buf);
             g.buf.push('\n');
+            g.size += (g.buf.len() - before) as u64;
             stats.rows += 1;
             index.entry(r.b).note(r.s, r.t, Some(day));
             if g.buf.len() >= CHUNK {
@@ -629,10 +648,10 @@ mod tests {
         let d = tmpdir("full");
         let mut j = Journal::new(d.clone());
         let row = lg(1, 1, Some(86400 * 9), "a");
-        fs::write(j.path(Kind::Log, 9), vec![b'x'; LOG_BYTES as usize]).unwrap();
+        fs::write(j.path(Kind::Log, 9), vec![b'x'; (LOG_BYTES + CAP_RESERVE) as usize]).unwrap();
         let mut st = FlushStats::default();
         app(&mut j, &[&row], 0, &mut st, &mut BootIndex::default());
-        assert_eq!((st.rows, st.cap_drops), (0, 1));
+        assert_eq!((st.rows, st.cap_drops, st.log_cap_day), (0, 1, Some(9)));
         let victim = format!("{d}/victim");
         fs::write(&victim, b"SECRET").unwrap();
         std::os::unix::fs::symlink(&victim, j.path(Kind::Log, 10)).unwrap();
@@ -641,5 +660,33 @@ mod tests {
         app(&mut j, &[&row], 0, &mut st, &mut BootIndex::default());
         assert_eq!((st.rows, st.errors), (0, 1));
         assert_eq!(fs::read(&victim).unwrap(), b"SECRET");
+    }
+
+    #[test]
+    fn past_the_byte_cap_only_warnings_errors_and_kernel_lines_use_the_reserve() {
+        let d = tmpdir("reserve");
+        let mut j = Journal::new(d.clone());
+        let t = Some(86400 * 9);
+        fs::write(j.path(Kind::Log, 9), vec![b'x'; LOG_BYTES as usize]).unwrap();
+        let names = &mut Names::default();
+        let mk = |s: u64, body: Body, names: &mut Names| Row::build(s, 1, 0, t, &body, names);
+        let info = mk(1, Body::Log { lv: Level::Info, c: "a".into(), p: 1, msg: "info".into() }, names);
+        let warn = mk(2, Body::Log { lv: Level::Warn, c: "a".into(), p: 1, msg: "warn".into() }, names);
+        let err = mk(3, Body::Log { lv: Level::Error, c: "a".into(), p: 1, msg: "err".into() }, names);
+        let kern = mk(4, Body::Kern { pri: 6, fac: 0, kseq: 9, tag: "ssr".into(), msg: "k".into() }, names);
+        let mut st = FlushStats::default();
+        j.append(&[&info, &warn, &err, &kern], 0, &mut st, &mut BootIndex::default(), names);
+        assert_eq!((st.rows, st.cap_drops, st.log_cap_day), (3, 1, Some(9)));
+        let text = fs::read_to_string(j.path(Kind::Log, 9)).unwrap();
+        assert!(!text.contains("\"info\"") && text.contains("\"warn\"") && text.contains("\"k\""));
+        // The reserve is bounded too.
+        let big = "w".repeat(3000);
+        let rows: Vec<Row> = (10..200).map(|s| mk(s, Body::Log { lv: Level::Warn, c: "a".into(), p: 1, msg: big.clone() }, names)).collect();
+        let refs: Vec<&Row> = rows.iter().collect();
+        let mut st = FlushStats::default();
+        j.append(&refs, 0, &mut st, &mut BootIndex::default(), names);
+        let size = fs::metadata(j.path(Kind::Log, 9)).unwrap().len();
+        assert!(size <= LOG_BYTES + CAP_RESERVE + 4096, "{size}");
+        assert!(st.cap_drops > 0 && st.rows > 0);
     }
 }

@@ -131,6 +131,8 @@ pub struct Engine {
     first_pending_ms: Option<u64>,
     urgent_at: Option<u64>,
     last_urgent_ms: Option<u64>,
+    /// Day the "daily log cap" row was written for.
+    cap_noted_day: Option<i64>,
     /// Last durable (synced) state save.
     last_state_sync_ms: Option<u64>,
     /// Lowest `s` in the ring still without a wall time.
@@ -199,6 +201,7 @@ impl Engine {
             first_pending_ms: None,
             urgent_at: None,
             last_urgent_ms: None,
+            cap_noted_day: None,
             last_state_sync_ms: None,
             null_from: None,
             lease: None,
@@ -570,6 +573,7 @@ impl Engine {
         let i = self.ring.index_after(self.flushed_s);
         let persist = self.cfg.persist_level;
         let any = self.ring.range_from(i).any(|r| r.log_level().map_or(true, |l| l >= persist));
+        let mut cap_day = None;
         if any {
             let low = self.journal.free_bytes().map_or(false, |f| f < self.min_free);
             if low {
@@ -581,6 +585,7 @@ impl Engine {
                 self.journal.append(&rows, null_day, &mut fs, &mut self.index, &self.names);
                 self.stats.fsyncs += fs.fsyncs;
                 self.stats.cap_drops += fs.cap_drops;
+                cap_day = fs.log_cap_day;
                 self.stats.flush_errors += fs.errors;
                 self.stats.rows_flushed += fs.rows;
                 let today = if self.clock.trusted { epochday(now.wall) } else { -1 };
@@ -598,6 +603,14 @@ impl Engine {
         self.urgent_at = None;
         self.first_pending_ms = None;
         self.flushed_s = head;
+        // Stored after the flush mark, so it is pending for the next flush
+        // (as a WARN it goes into the day file's reserve).
+        if let Some(day) = cap_day {
+            if self.cap_noted_day != Some(day) {
+                self.cap_noted_day = Some(day);
+                self.self_log(Level::Warn, "daily log cap reached; keeping warnings, errors and kernel lines only", now);
+            }
+        }
         if any || clean {
             self.save_state(now, clean, durable);
         }
@@ -1030,5 +1043,27 @@ pub(crate) mod tests {
         e.shutdown(&now);
         assert_eq!(e.stats.fsyncs - before, 1 + 2);
         assert!(e.journal.load_state().unwrap().clean);
+    }
+
+    #[test]
+    fn a_full_day_file_keeps_warnings_and_says_so_once() {
+        let c = cfg("daycap");
+        let now = Now::at(500.0, W);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        let day = epochday(W);
+        fs::write(format!("{}/log-{day}.jsonl", c.journal_dir), vec![b'x'; super::super::journal::LOG_BYTES as usize]).unwrap();
+        feed(&mut e, &now, "L\t500\tINFO\ta\t1\tdropped\nL\t500\tWARN\ta\t1\tkept\n");
+        e.flush(&now, false);
+        let notes = |e: &Engine| e.ring.iter().filter(|r| r.msg().starts_with("daily log cap reached")).count();
+        assert_eq!(notes(&e), 1);
+        assert_eq!(e.stats.cap_drops, 1);
+        feed(&mut e, &now, "L\t500\tINFO\ta\t1\tdropped too\n");
+        e.flush(&now, false);
+        assert_eq!(notes(&e), 1, "one row per day");
+        e.shutdown(&now);
+        let text = fs::read_to_string(format!("{}/log-{day}.jsonl", c.journal_dir)).unwrap();
+        assert!(text.contains("\"kept\"") && text.contains("daily log cap reached"));
+        assert!(!text.contains("\"dropped"));
+        assert_eq!(e.stats.cap_drops, 3, "the shutdown INFO line too");
     }
 }
