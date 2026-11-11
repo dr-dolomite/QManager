@@ -49,6 +49,15 @@ curl -s -I -o /dev/null --connect-timeout 5 --max-time 6 \
 - **Wall-clock gate:** the device boots at 1970. Below epoch `1700000000` a sweep still publishes `/tmp/qmanager_sites.json`, with `checked_at` / `next_check_at` `null`, and **nothing** goes to raw or the rollups. The CGI reads no history below it either.
 - **SIGTERM** (procd stop) kills in-flight probe jobs and flushes the pending hour into the rollups when the clock is sane; `term_timeout 10` covers it.
 
+## Events (`site_down` / `site_up`)
+
+After every sweep `_sites_events` feeds the journal ([`journal.md`](journal.md)) through `append_event`, with the site host as field `site`:
+
+- A site goes **down** (`site_down`, warning) after **2 failed sweeps in a row** and **up** (`site_up`, info) on the first success after that. The per-site state lives in shell variables named from the host, so it resets when the daemon restarts; the first sweep only sets the baseline.
+- A sweep in which **no** site answered is **no observation**: nothing is counted and no event fires, because that says the link is down, not the sites (`internet_lost` covers it). **Why:** otherwise one outage would raise an event per configured site.
+- Live-mode ticks (`?range=now`) do not feed the detector, only the 5-minute sweeps do.
+- With logd down `append_event` takes the legacy path, so these events still reach the Network Events file.
+
 ## Live mode ("Now")
 
 While someone has **Live values** on (a row in the Sites card's Manage dialog) in a visible tab, the page reads `?range=now` every 2 s. Each read renews the lease, and the daemon probes every site about every 2 s between sweeps:

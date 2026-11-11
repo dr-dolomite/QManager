@@ -174,7 +174,7 @@ Auth endpoints use `_SKIP_AUTH=1` to bypass the automatic auth check in `cgi_bas
 | `/tmp/qmanager_signal_history.json` | poller | NDJSON | Rolling signal history (one row per 2s Tier 1 cycle, ~60 rows) |
 | `/tmp/qmanager_ping_history.json` | poller | NDJSON | Ping history (max 8640 lines) |
 | `/tmp/qmanager_qmi.json`, `/var/run/qmanager/qmi.env` | `qmanager_atd` (QMI sampler) | JSON / env | QMI lane snapshot for CGIs; `qmi.env` read by the poller gap-fill |
-| `/tmp/qmanager_events.json` | poller | NDJSON | Network events (max 50 entries) |
+| `/tmp/qmanager_events.json` | `qmanager_logd` (legacy `append_event` when logd is down) | NDJSON | Mirror of the newest 50 Network events; the store is the journal (`/usrdata/qmanager/journal/ev-*.jsonl`) |
 | `/tmp/qmanager_ping.json` | ping daemon | JSON | Current ping result |
 | `/tmp/qmanager_watchcat.json` | watchcat | JSON | Watchdog state machine |
 | `/tmp/qmanager_profile_state.json` | profile_apply | JSON | Profile apply progress |
@@ -247,7 +247,8 @@ Daemons communicate through shared files in `/tmp/`:
 
 ## Event System
 
-The poller's `events.sh` library detects state changes and emits events to an NDJSON file:
+Detectors (the poller's `events.sh` library, plus CGIs and daemons that call `append_event`) emit events to `qmanager_logd`, which keeps them 31 days on flash and mirrors the newest 50 to `/tmp/qmanager_events.json` (NDJSON) for the legacy path. Full list, fields and invariants: [`features/journal.md`](features/journal.md).
+
 
 | Event Type | Trigger | Severity |
 |-----------|---------|----------|
@@ -264,6 +265,20 @@ The poller's `events.sh` library detects state changes and emits events to an ND
 | `watchcat_recovery` | Watchdog executed recovery action | warning |
 | `sim_failover` | SIM slot switched by watchdog | warning |
 | `sim_swap_detected` | Physical SIM card changed at boot | info |
+| `apn_changed` / `band_lock_changed` / `tower_lock_changed` | APN saved or reverted, band lock, tower lock applied or cleared (CGI, after the AT call succeeds) | info |
+| `band_failover` / `tower_failover` | Failover daemon fired (reset to defaults / lock cleared; `tower_failover` is `error` if a lock could not be cleared) | warning/error |
+| `sim_switched` / `rat_priority_changed` / `fplmn_cleared` / `scenario_switched` | User changes from the CGIs (SIM slot after verified switch, RAT order, FPLMN clear, scenario) | info |
+| `registration_changed` / `imei_changed` | Carrier name changed (empty name = no observation); IMEI differs from `/etc/qmanager/last_imei` (last 4 digits only) | info/warning |
+| `data_call_dropped` / `data_call_restored` | QMI WDS mux empty for 3 fresh samples while registered / back (silent during SSR) | warning/info |
+| `wan_address_changed` / `data_cid_changed` | WAN IPv4/IPv6 or data CID changed (empty value = no observation) | info |
+| `dns_changed` / `ttl_mtu_changed` | DNS servers, TTL/hop limit or MTU changed from the CGIs (never from boot apply) | info |
+| `dns_failing` / `dns_recovered` | 3 failed lookups after a good one / next good lookup | warning/info |
+| `site_down` / `site_up` | Site failed 2 sweeps in a row / answered again (a sweep where no site answered is no observation) | warning/info |
+| `broker_restarted` / `software_updated` | AT broker capability file newer than `broker.seen`; `/etc/qmanager/last_version` differs | warning/info |
+| `clock_stepped` / `storage_low` | History clock step beyond 120 s; low-free latch (first transition) | info/warning |
+| `oom_kill` / `eth_link_up` / `eth_link_down` | Kernel records captured by `qmanager_logd` from `/dev/kmsg` | warning/info/warning |
+| `login_failed` / `login_locked` / `password_changed` | Login failure (no IP), lockout in effect, admin password changed | warning/warning/info |
+| `alert_send_failed` | SMS or email alert could not be sent (channel and trigger, never the recipient) | warning |
 
 Events are suppressed during active watchcat recovery to prevent noise.
 

@@ -23,7 +23,7 @@ Adaptive Polling makes the QManager AT poller ease off modem interrogation when 
 | AT read cap | `QC_WAIT_MS=2500`, passed per call as `QCMD_WAIT_MS` (Invariant 8); per-cycle busy latch `_AT_LATCH` / `_AT_BUSY`, rc 3 = not run |
 | status.json composer | `_wc_compose_pf` (printf, compact one line); `write_cache_jq` is the safety net (Invariant 9) |
 | Sidecars | `/var/run/qmanager/{ping,dns,ondemand}.env` (Invariant 10); `/var/run/qmanager/ca.env` written by the poller for the watchdog (Invariant 7) |
-| Parity gate (dev-only) | `tools/poller-parity/` (`parity.sh`, `status_parity.sh`, `sidecar_parity.sh`, `ca_env_parity.sh`, `measure.sh`) |
+| Parity gate (dev-only) | `tools/poller-parity/` (`parity.sh`, `status_parity.sh`, `sidecar_parity.sh`, `ca_env_parity.sh`, `measure.sh`, pin it to the poller with `PPID` 1, see invariant 16) |
 | Reboot required | No |
 
 ---
@@ -284,6 +284,23 @@ Parity: `tools/poller-parity/qmi_ca_parity.sh` (63 checks) covers the gates and 
 - **Gate.** An edit of `parse_thermal` or of the `.thermal` part of either composer must pass `thermal_expect.sh` and `status_parity.sh` on the device.
 
 ---
+
+### 16. The poller hosts the journal-era event detectors, and every one is builtins-only
+
+Besides `detect_events` / `detect_data_connection_events` / `detect_thermal_events`, the poller loop now calls these `events.sh` detectors, each of which costs a test or a variable compare per cycle and forks only when it fires ([`journal.md`](journal.md) lists the types and their field names):
+
+| Detector | Where it runs | Fires |
+|---|---|---|
+| `detect_registration_event` | tier 2, right after `parse_carrier` | `registration_changed` when the carrier name changes (empty name = no observation, baseline kept) |
+| `detect_datacall_events` | every cycle after `qmi_load` | `data_call_dropped` after 3 fresh QMI samples with no WDS mux while registered; `data_call_restored` on the reverse edge. Silent unless `_QMI_STATE` is `up` and registered |
+| `detect_dns_events` | from `read_dns_data` per fresh DNS sample | `dns_failing` after 3 failures following a good lookup; `dns_recovered` |
+| `detect_broker_restart` | every cycle, acts once a minute | `broker_restarted` when `/var/run/qmanager_atd.proto` is newer than `/var/run/qmanager/broker.seen` (first sighting silent) |
+| `ev_identity_check` | every cycle until both checks have had a value, then one test | `software_updated` / `imei_changed` against `/etc/qmanager/last_version` / `last_imei` (durable, rewritten only on change) |
+| `_ondemand_dataplane_events` | wherever the WAN address is learned (poller, CGIs, apply scripts) | `wan_address_changed`, `data_cid_changed` (`/var/run/qmanager/data_cid.last`) |
+
+The poller also owns the spool backstop: once a minute `_spool_backstop` (one `wc -c`) truncates an unread `journal/spool` over 1 MB. Keep new detectors on this pattern: baseline on first sighting, no event on an empty observation, debounce on fresh samples (a sidecar `mono`), never a fork per cycle.
+
+> ℹ️ NOTE: When measuring the poller with `tools/poller-parity/measure.sh`, pin the run to the poller itself, the process with `PPID` 1. The script takes the first pid `pidof qmanager_poller` returns, which can be a short-lived poller subshell and yields a window of 0 ticks (an invalid run); the journal baseline and final runs pinned the pid by hand (`PID=$(awk ...)` over `/proc/*/stat`, or edit the copy on the device).
 
 ## CGI Envelopes
 

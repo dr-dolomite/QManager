@@ -798,7 +798,7 @@ Common to every phase:
   `/usrdata/qmanager_bak_b529/<phase>/` with md5s; deploy with `deploy.sh`
   (Section 13). Restart only the touched service (`/etc/init.d/qmanager
   restart`, `/etc/init.d/qmanager_atd restart`); never a reboot.
-- Measure with `tools/poller-parity/measure.sh` per tier (active: dashboard
+- Measure with `tools/poller-parity/measure.sh` (pin the pid to the poller, `PPID` 1: it can otherwise pick a short-lived subshell) per tier (active: dashboard
   open; idle: closed 21 s–5 min; deep: all tabs closed > 5 min, which first
   needs the once-a-minute heartbeat toucher found: `hb_age_max=58–59` in
   every baseline window), then `overnight_monitor.sh` for 12 h with

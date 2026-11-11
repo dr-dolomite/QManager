@@ -16,7 +16,7 @@ QManager keeps a small, flash-friendly history of things the poller already know
 | Flash store | `/usrdata/qmanager/history/<series>/d<DAY>.jsonl` (`DAY` = UTC epoch day, `t / 86400`), append-only; plus two small durable marker files per series: `since` (when collecting began, written once) and `last_fault` (`<start> <end>` of the newest completed fault run); plus one store-wide `last_wall` (wall time of the newest sample, written by the TERM flush, §5) |
 | RAM state | `/var/run/qmanager/history/` (`clock.env`, `<series>.open`, `<series>.queue`, `<series>.pending`, `<series>.run`, `ext.spool`, `ext.spool.work`) |
 | Event pairing | optional `HIST_<id>_PAIRS="onset:recovery ..."` per series; cellular: `signal_lost:signal_restored` (§6) |
-| Event store | `qmanager_logd`'s journal while logd is alive (Phase 3): every writer spools the event to logd and `history/events.sh` reads it back with `qlog evq fmt=hist`; while logd is not alive, the legacy `k:"e"` day-file rows and `ext.spool` (§2, §6 Event source) |
+| Event store | `qmanager_logd`'s journal while logd is alive (Phase 3): every writer spools the event to logd and `history/events.sh` reads it back with `qlog evq fmt=hist`; while logd is not alive, the legacy `k:"e"` day-file rows and `ext.spool` (§2, §6 Event source) | Store details: [`journal.md`](journal.md).
 | External events | logd not alive: `append_event` in a process without `history.sh` appends to `ext.spool`; the poller replays it (§2). logd alive: nothing (the event is in the journal) |
 | Sample period | 10 s (every 5th 2 s poller cycle, the `TIER1_5_EVERY` grain) in every tier |
 | Base bucket | 1800 s, aligned to UTC epoch multiples |
@@ -262,7 +262,7 @@ Newest first. `types` (optional) is a comma list checked against the series' `ev
 - **Windows.** EVQ answers the newest `limit` rows of `[since, until]`. A full page splits the time range in halves until each answer fits, so a 31-day pairing scan with more than 2000 events still comes back whole. One `qlog` fork per window; a quiet range is one fork. Windows are by time, not seq, so a back-dated row (higher seq, older t) is never skipped. A single second holding more than 2000 rows is truncated (cannot happen under logd's day cap).
 - **De-duplication.** A day-file event that the journal also holds (same type and message, within 2 s) is dropped. Only builds that wrote both stores (Phase 2) produce such pairs.
 - **Fallback.** No `evq=1`, no `qlog`, or `qlog` exit 3 (logd unreachable): the day files alone, i.e. today's answer. Rows logd holds with an untrusted time (`t:null`) are not served until logd back-dates them.
-- **Caps.** The journal's cap is logd's (2000 events/day across all types, keep-list `signal_*`/`internet_*` plus every `error`), not `HIST_EV_DAY_MAX` and `HIST_<id>_EVENTS_KEEP`, which now apply to the legacy rows only.
+- **Caps.** The journal's cap is logd's (2000 events/day across all types; past it only `error` events and the keep-list are kept: `signal_lost`/`signal_restored`, `internet_lost`/`internet_restored`, `sim_failover`, `data_call_dropped`/`data_call_restored`, `device_reboot`, `modem_crash`/`modem_recovered`, `thermal_throttled`/`thermal_recovered`; `registry.rs` `kept_past_cap`), not `HIST_EV_DAY_MAX` and `HIST_<id>_EVENTS_KEEP`, which now apply to the legacy rows only. Event retention in the journal is 31 days and 2 MB total ([`journal.md`](journal.md)). The `system` series reads the SSR onset from logd's kept kernel records (`qlog logq kind=K tag=ssr ... fmt=mono`) when the capability file has `kmsg=1`, and from `dmesg` otherwise.
 
 **Pairing (`end`).** A series that declares `HIST_<id>_PAIRS="onset:recovery ..."` gets `"end"` on its onset rows: the `t` of the next matching recovery, unless a **break** comes first, in which case `end` is the break's `t`; `"end": null` while neither exists (ongoing). Breaks:
 
@@ -300,7 +300,7 @@ Not in config backup (history is data, not settings). An update keeps the store;
 
 | Risk | Mitigation |
 |---|---|
-| Poller hot-path regression | builtins-only tick; measure with `tools/poller-parity/measure.sh` before/after (gate: Active CPU +≤ 0.3 pt, period 2.0 ± 0.2 s) |
+| Poller hot-path regression | builtins-only tick; measure with `tools/poller-parity/measure.sh` before/after, pid pinned to the poller with `PPID` 1 ([`adaptive-polling.md`](adaptive-polling.md) invariant 16) (gate: Active CPU +≤ 0.3 pt, period 2.0 ± 0.2 s) |
 | Clock step corrupts history | anchor + ±120 s tolerance + mergeable rows; replay test with `QM_TEST_*`-style hooks (`HIST_TEST_WALL`, `HIST_TEST_MONO`) in a scratch dir |
 | Flash wear / fill | one append pass per 30 min, 31 d / 2 MB / 8 MB-free caps, event storm cap |
 | Torn rows after power cut | anchored `grep -E` row filter before `awk` |
@@ -343,7 +343,7 @@ sh history-test.sh <flat dir>
 
 | Check | Result |
 |---|---|
-| On-device test (`history-test.sh`) | 50 passed, 0 failed; 63 of 63 after the 2026-11-09 fixes (QMI `down` cases, `last_wall` trust-floor cases); 71 of 71 with the pairing-break cases; 86 of 86 at 8f2bc9fd (later cases), before Phase 3. Phase 3 (2026-11-10, locally, BusyBox 1.36.1): 86 of 86 legacy and logd, `system-test` 51 of 51 both, `journal-test` 30 of 30; not yet run on the device |
+| On-device test (`history-test.sh`) | 50 passed, 0 failed; 63 of 63 after the 2026-11-09 fixes (QMI `down` cases, `last_wall` trust-floor cases); 71 of 71 with the pairing-break cases; 86 of 86 at 8f2bc9fd (later cases), before Phase 3. Phase 3 (2026-11-10, locally, BusyBox 1.36.1): 86 of 86 legacy and logd, `system-test` 51 of 51 both, `journal-test` 30 of 30; on the device (BusyBox, `run-local.sh`, build `e4239b84`, 2026-11-11): legacy 86/0 and `system-test` 51/0, `journal-test` 30/0, logd mode 86/0 and `system-test` 55/0 |
 | Live CGI shape | 24h = 48 buckets, 7d = 56, 30d = 60 |
 | 30 d query time | about 60 ms |
 | Poller restart mid-bucket | the run resumed (`run_mono` kept) |

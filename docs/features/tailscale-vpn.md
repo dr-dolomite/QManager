@@ -339,7 +339,7 @@ Constants: `TS_NET_ZONE=tailscale`, `TS_NET_DEV=tailscale0`, `TS_NET_PREF=1990`,
 
 | Caller | When |
 |---|---|
-| `qmanager_tailscale_net` (boot init) | At boot, when a Tailscale binary exists, `ts_net_owned` (else logs "skipping") and `ts_net_enabled`: `ts_net_apply`, then logs `ts_net_status_json` via `logger` |
+| `qmanager_tailscale_net` (boot init) | At boot, when a Tailscale binary exists, `ts_net_owned` (else logs "skipping") and `ts_net_enabled`: `ts_net_apply`, then logs `ts_net_status_json` via `qlog_info` |
 | CGI `connect`, `start_service` | `ts_net_prep`: `ts_net_ensure_rules` immediately; a missing zone is written to UCI now and fw4 is reloaded by the CGI's EXIT trap in an orphaned job one second after the response |
 | CGI `set_net_fixes` | Apply or teardown in the background after the response |
 | CGI `uninstall` | `ts_net_teardown` in the background after the response |
