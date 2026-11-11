@@ -12,7 +12,7 @@ QMI side (allow-list, field coverage, sidecars, SSR behaviour) is in
 [`qmi-lane.md`](qmi-lane.md); this doc covers the process model both lanes
 share. Broker 0.4.0 adds the live signal sampler (1 Hz since 0.4.1) (`live=1`, a static file for
 the UI, see [`live-signal.md`](live-signal.md)); it is not an AT path and adds
-no wire verb. Broker 0.5.0 holds the NAS signal config (`0x006C`) so the live file carries SINR and NR; still no wire change, no new verb and no new capability line. Broker 0.6.0 runs two broker-internal WDS clients and publishes the modem's packet counter as `qmi_wds_*` in the QMI sidecars for Data Used ([`qmi-lane.md`](qmi-lane.md#wds-packet-statistics-broker-060), [`data-used.md`](data-used.md)); again no wire change, no verb and no capability line. Broker 0.6.2 hardens every state file the broker writes or locks in a world-writable directory against planted FIFOs, hardlinks and foreign files (see the state-files invariant under Invariants); no wire change either. Broker 0.7.0 publishes per-carrier LTE signal, NR identity and the LTE band list in the QMI sidecars and adds the `sysinfo` and `bands` reads (DMS `0x0045` on the allow-list); still no wire change, no verb and no new capability line ([`qmi-lane.md`](qmi-lane.md#carrier-list-from-qmi-broker-070)).
+no wire verb. Broker 0.5.0 holds the NAS signal config (`0x006C`) so the live file carries SINR and NR; still no wire change, no new verb and no new capability line. Broker 0.6.0 runs two broker-internal WDS clients and publishes the modem's packet counter as `qmi_wds_*` in the QMI sidecars for Data Used ([`qmi-lane.md`](qmi-lane.md#wds-packet-statistics-broker-060), [`data-used.md`](data-used.md)); again no wire change, no verb and no capability line. Broker 0.6.2 hardens every state file the broker writes or locks in a world-writable directory against planted FIFOs, hardlinks and foreign files (see the state-files invariant under Invariants); no wire change either. Broker 0.7.0 publishes per-carrier LTE signal, NR identity and the LTE band list in the QMI sidecars and adds the `sysinfo` and `bands` reads (DMS `0x0045` on the allow-list); still no wire change, no verb and no new capability line ([`qmi-lane.md`](qmi-lane.md#carrier-list-from-qmi-broker-070)). Broker 0.8.0 adds two more argv0 roles to the binary, the journal daemon `qmanager_logd` and its client `qlog`, which run as their own process and socket and change nothing on the broker wire (proto 3 and the broker capability file are unchanged apart from the version); see [`journal.md`](journal.md). The binary grew to 815,728 B, over the 800 kB target; the ceiling is now 850 kB.
 
 **UI:** System Settings: Host AT Ports card (On / Off) on **Hardware** (`/system-settings/hardware`).
 **Source:** `native/qmanager_atd/` (Rust crate). The prebuilt binary is
@@ -41,11 +41,13 @@ no wire verb. Broker 0.5.0 holds the NAS signal config (`0x006C`) so the live fi
 | `qcmd` | `/usr/bin/qcmd` | A **symlink** to `qmanager_atd`, always. `install.sh` creates it and `/etc/init.d/qmanager_atd` re-asserts it at every broker start (`at_qcmd_link`). |
 | `qsms`, `qmi` | `/usr/bin/qsms`, `/usr/bin/qmi` | Symlinks to `qmanager_atd` (argv0 picks the client; both are always clients, whatever their arguments). `at_qsms_link` / `at_qmi_link`, same atomic repoint as `qcmd`. |
 | Broker socket | `/var/run/qmanager_atd.sock` | `0600` root. One request per connection. |
-| Capability file | `/var/run/qmanager_atd.proto` | `0644`, `proto=3`, `version=0.7.0`, `qmi=1` and `live=1` lines (that order). Written by the running daemon after it binds; removed by `init.d/qmanager_atd` stop and by `uninstall.sh`. See [below](#version-the-daemon-mode-rule-and-the-capability-file-proto-2). |
+| Capability file | `/var/run/qmanager_atd.proto` | `0644`, `proto=3`, `version=0.8.0`, `qmi=1` and `live=1` lines (that order). Written by the running daemon after it binds; removed by `init.d/qmanager_atd` stop and by `uninstall.sh`. See [below](#version-the-daemon-mode-rule-and-the-capability-file-proto-2). |
 | Link and port library | `/usr/lib/qmanager/at_engine.sh` | `at_qcmd_link` (idempotent atomic repoint of `qcmd`), `at_broker_available`, `at_broker_running`, and the `host_at_*` port-bridge functions. The filename is historical. |
 | QMI sidecars | `/var/run/qmanager/qmi.env`, `/tmp/qmanager_qmi.json` | Published by the daemon's QMI sampler (the poller sources `qmi.env`). See [`qmi-lane.md`](qmi-lane.md#snapshot-sidecars-and-the-live-lease). |
 | Live signal | `/var/run/qmanager/live/`, `/www/qmlive`, `qmi_live_{aim,watch}`, `qmi_live.token`, `qmi_live.lock` | Published while a lease is fresh; `at_live_link` re-asserts the link at every start. See [`live-signal.md`](live-signal.md). |
 | Boot service | `/etc/init.d/qmanager_atd` | procd, `START=98` (before the poller at 99), `STOP=11`. |
+| Journal roles | `/usr/bin/qmanager_logd`, `/usr/bin/qlog` | Symlinks to the same binary (`at_logd_link` / `at_qlog_link`). `qmanager_logd` is a **separate process** with its own init script (`START=97`, `STOP=12`) and socket; the broker only appends its own log lines to the logd spool while logd is alive (`common/log.rs`). Nothing in logd can stall the AT lane. See [`journal.md`](journal.md). |
+| Binary size | `dependencies/qmanager_atd` | **815,728 B** stripped static aarch64 at 0.8.0 (md5 `86c6c72c420be244ec00c4575dd15643`). The ceiling is **850 kB** (was 800 kB, 640 kB before that); 800 kB was the 0.8.0 target and was missed by the journal roles. Re-check the size on every rebuild ([`../../dependencies/README.md`](../../dependencies/README.md)). |
 | CGI | `system/host_at_ports.sh` | GET and POST. See `docs/API-REFERENCE.md`. |
 | Hook and types | `use-host-at-ports.ts`, `types/at-engine.ts` (host-AT-port types only) | Pessimistic: state is taken from the POST read-back, never flipped locally. |
 
@@ -253,10 +255,10 @@ Since broker 0.2.0 (B5.29 Phase B) a read-only caller can limit how long `qcmd` 
 
 ## `--version`, the daemon-mode rule and the capability file (proto 2)
 
-- **`--version`.** `qmanager_atd --version` and `qcmd --version` (any invoked name) print `qmanager_atd 0.7.0 proto=3` and exit 0. (`qmi --version` prints the same line.) This only exists in 0.2.0 or later: an older `qcmd` would send `--version` to the modem as a command, and an older `qmanager_atd` would start a second daemon (below). Scripts must not probe with it; they read the capability file.
+- **`--version`.** `qmanager_atd --version` and `qcmd --version` (any invoked name) print `qmanager_atd 0.8.0 proto=3` and exit 0. (`qmi --version` prints the same line.) This only exists in 0.2.0 or later: an older `qcmd` would send `--version` to the modem as a command, and an older `qmanager_atd` would start a second daemon (below). Scripts must not probe with it; they read the capability file.
 - **Daemon-mode rule.** Under a name containing `atd` (`qmanager_atd`), the daemon starts only with **no argument** or `-d` / `--daemon`. Any other argument prints a usage line on stderr and exits 2. **Why:** older binaries treated any invocation under an "atd" name as a request to start a daemon. A second daemon unlinked the live broker's socket and left it serving nobody while every client fell back to in-process. This happened for real on 2026-10-19 when `qmanager_atd --version` was run on a v0.1.32 binary. Under the `qcmd` name only an explicit `--daemon` starts the daemon, and `qsms` is always a client.
 - **Refuse to start if a broker is listening.** `run_daemon` connects to the socket first; if something answers, it logs `another broker is listening` and exits 1 without touching the socket. A stale socket file (nothing listening) is still replaced.
-- **Capability file `/var/run/qmanager_atd.proto`.** After the socket is bound, the daemon writes `proto=3`, `version=0.7.0`, `qmi=1` and `live=1`, one per line in that order (mode 0644), to a `.new` temp file (`O_EXCL` plus `O_NOFOLLOW`, a leftover or planted temp is unlinked first) and renames it into place. It describes the **running daemon**, not the binary on disk. `/etc/init.d/qmanager_atd` `stop_service` and `uninstall.sh` remove it (and the `.new` temp), so a rolled-back binary that never writes it is not credited with a protocol it does not speak. Scripts read it with a builtin `read`; they never run the binary to ask.
+- **Capability file `/var/run/qmanager_atd.proto`.** After the socket is bound, the daemon writes `proto=3`, `version=0.8.0`, `qmi=1` and `live=1`, one per line in that order (mode 0644), to a `.new` temp file (`O_EXCL` plus `O_NOFOLLOW`, a leftover or planted temp is unlinked first) and renames it into place. It describes the **running daemon**, not the binary on disk. `/etc/init.d/qmanager_atd` `stop_service` and `uninstall.sh` remove it (and the `.new` temp), so a rolled-back binary that never writes it is not credited with a protocol it does not speak. Scripts read it with a builtin `read`; they never run the binary to ask.
 - **Protocol numbers.** 1 = `REQ` / `SMS` framing (v0.1.32, no capability file). 2 = the client wait cap and `--version` (client-side only, no wire change). 3 = the `QMI` verb and the `qmi=1` capability line (0.3.0). Number 3 was once reserved for a `POLL` verb; it was never wired (Phase D was not built, decided 2026-10-19) and its parsers were removed on 2026-10-25, so number **4** is unassigned and a future verb would take it. A new capability is a new `name=value` line after the first two, never a reorder (`live=1`, 0.4.0, is one: the wire is unchanged, still proto 3; the lease CGI gates on it so a rolled-back 0.3.0 answers `available:false`). 0.5.0 adds no line: its signal config state is in the QMI JSON sidecar (`qmi_sig_config`), not in this file. Because the poller passes its cap through the environment variable, no current script depends on the capability file. The `qmi` client does: it uses the broker only when the file says `proto>=3` **and** `qmi=1` (`broker_serves_qmi`), else it runs in-process.
 
 ## SMS in the broker (`qsms`)
@@ -453,16 +455,17 @@ covered by fake-modem tests only (86 crate tests).
 
 | Dir | Contents |
 |---|---|
-| `main.rs` | Role dispatch only (argv0: `qmanager_atd` daemon, `qcmd`, `qsms`, `qmi`). |
+| `main.rs` | Role dispatch only (argv0: `qmanager_atd` daemon, `qcmd`, `qsms`, `qmi`, `qmanager_logd` journal daemon, `qlog` journal client). |
 | `common/` | `proto.rs` (wire format, capability file), `log.rs`, `lock.rs`, `safefs.rs` (`open_own`, `is_own_file`, `write_nofollow`, `write_atomic`, `ensure_own_dir`), `json.rs`. |
 | `at/` | `channel.rs`, `exec.rs`, `classify.rs`, `output.rs`: the AT path. |
 | `sms/` | `mod.rs`, `pdu.rs`. |
 | `daemon/` | `mod.rs` (bind, acceptor, readers, router), `at_lane.rs`, `data_call.rs`, `live.rs`, `qmi_lane.rs`, `qmi_snapshot.rs`. |
-| `client/` | `transport.rs` (socket-first, reply wait, frozen-broker restart), `qcmd.rs`, `qsms.rs`, `qmi.rs`. |
+| `client/` | `transport.rs` (socket-first, reply wait, frozen-broker restart), `qcmd.rs`, `qsms.rs`, `qmi.rs`, `qlog.rs` (journal client; talks to logd's own socket, not the broker's). |
+| `logd/` | The journal daemon role (`qmanager_logd`): spool ingest, clock anchor, ring, flash day files, query verbs, `/dev/kmsg` reader. Not part of the broker process. See [`journal.md`](journal.md). |
 | `qmi/` | `transport.rs`, `registry.rs`, `allow.rs`, `model.rs`, `query.rs`, `msg.rs`, `error.rs`, `codec/{nas,dms,uim,wds,dsd}.rs`. |
 
 The crate is `libc`-only (no async runtime, no other crates). `cargo test --release`
-runs **305** tests at 0.7.0 (WSL; 288 at 0.6.2). There is no `poll` cargo feature any more (see below).
+runs **366** tests at 0.8.0 (WSL; 305 at 0.7.0, 288 at 0.6.2). There is no `poll` cargo feature any more (see below).
 
 ## Host AT ports (`quecmanager.ports.host_at`)
 
@@ -502,7 +505,7 @@ Every path goes through `install.sh`; the OTA updater runs it too.
    deletes the retired `quecmanager.at` section, so a device that had chosen
    Legacy moves to the broker. It then runs `at_qcmd_link`, `at_qsms_link`
    and `at_qmi_link`.
-3. `start_services` starts `qmanager_atd` before the main service.
+3. `start_services` starts `qmanager_logd` first (`START=97`, so the broker's own lines reach the journal), then `qmanager_atd`, before the main service.
 4. `stop_services` already stops and kills `qmanager_*`.
 5. Firmware detection and the install smoke test run the client through
    `run_atd_qcmd`, a temporary symlink named `qcmd` pointing at
@@ -522,7 +525,7 @@ check. It has no procd reload trigger on purpose: many CGIs commit
 `quecmanager`.
 
 **`uninstall.sh`** restores host AT ports if needed, then removes:
-- the `qcmd`, `qsms` and `qmi` links (dangling-safe, via `-L`) and any
+- the `qcmd`, `qsms`, `qmi`, `qlog` and `qmanager_logd` links (dangling-safe, via `-L`) and any
   `.qcmd.*` / `.qsms.*` / `.qmi.*` temp links;
 - `qmanager_atd`, plus leftover `qcmd.sh` and `atcli_smd11` from old installs;
 - the socket, the capability file (`/var/run/qmanager_atd.proto` and its `.new` temp), the forgotten `/var/run/qmanager_atd.restart` marker and the init script;
