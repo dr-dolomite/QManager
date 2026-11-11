@@ -463,7 +463,7 @@ MSMTPEOF
                 if _sa_send_test_sms; then
                     cgi_success
                 else
-                    cgi_error "send_failed" "SMS send failed — check logread for details"
+                    cgi_error "send_failed" "SMS send failed — see the Logs page for details"
                 fi
                 exit 0
                 ;;

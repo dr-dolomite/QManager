@@ -1204,7 +1204,7 @@ Validation notes:
 ```json
 { "action": "send_test", "channel": "sms" }
 ```
-`channel` is `"sms"` or `"email"`. Requires that channel be `enabled` (not just filled in). SMS failures return `"error":"send_failed"` with detail `"SMS send failed — check logread for details"`; full context is logged via `qlog_error`.
+`channel` is `"sms"` or `"email"`. Requires that channel be `enabled` (not just filled in). SMS failures return `"error":"send_failed"` with detail `"SMS send failed — see the Logs page for details"`; full context is logged via `qlog_error`.
 
 **POST (mailer lifecycle):**
 ```json
