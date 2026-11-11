@@ -162,7 +162,7 @@ The state drives one **focal health block** at the top of the card, the single s
 | Code | Meaning |
 |---|---|
 | `invalid_phone` | Phone number failed E.164-ish validation (optional `+`, first digit 1–9, 7–15 total digits). |
-| `send_failed` | SMS test send via `qsms send` failed. The message is `<code>: <detail>` from `qsms`. Check `logread` for full context. |
+| `send_failed` | SMS test send via `qsms send` failed. The message is `<code>: <detail>` from `qsms`. Full context is in the QManager tab of the Logs page. |
 | `missing_action` | POST body did not include an `action` field. |
 | `invalid_action` | POST `action` value is not one of the three recognized strings. |
 
