@@ -93,8 +93,8 @@ Journal row (JSONL, in RAM and on flash):
 |---|---|---|---|
 | RAM ring | every record, DEBUG included | logd memory | 2560 records or 480 KB, whichever comes first (a full 4096-record ring measured 1.67 MB RSS against the 1.5 MB gate). Not reloaded on restart: older rows of the boot are read from the day files |
 | Text mirror | the current boot's lines in today's format | `/tmp/qmanager.log` (+ `.1`, `.2`) | 256 KB × 3, written in 1 s batches. Kept so `qmanager_logread`, `qmanager_debug_report` and SSH greps work unchanged |
-| Log journal | INFO+ lines | `/usrdata/qmanager/journal/log-<epochday>.jsonl` | 7 days, 1 MB; past 1 MB a day file keeps only WARN/ERROR and kernel lines, up to 256 KB more, and logs one WARN `daily log cap reached; keeping warnings, errors and kernel lines only` |
-| Event journal | all events | `/usrdata/qmanager/journal/ev-<epochday>.jsonl` | 31 days, 2 MB, 2000/day (keep-list types past the cap, as in History); past 2 MB a day file keeps only keep-list and `error` events, up to 256 KB more |
+| Log journal | INFO+ lines | `/usrdata/qmanager/journal/log-<epochday>.jsonl` | 7 days, 1 MB per day file, 4 MB total; past 1 MB a day file keeps only WARN/ERROR and kernel lines, up to 256 KB more, and logs one WARN `daily log cap reached; keeping warnings, errors and kernel lines only` |
+| Event journal | all events | `/usrdata/qmanager/journal/ev-<epochday>.jsonl` | 31 days, 2 MB per day file, 8 MB total, 2000/day (keep-list types past the cap, as in History); past 2 MB a day file keeps only keep-list and `error` events, up to 256 KB more |
 
 **Flush policy:** batch in RAM, then append to the day file + `fdatasync` on that file only, never a global `sync`. Flush:
 - within 2 s of any ERROR or any event of severity `warning`/`error`; under a storm the gap to the next flush (counted from the last flush of any kind) starts at 120 s and doubles up to 10 min, back to 2 s after an hour without such rows (every row is in the RAM ring, and queryable, at once);
@@ -102,6 +102,8 @@ Journal row (JSONL, in RAM and on flash):
 - on TERM, as a final flush.
 
 A flush with no new rows writes nothing; otherwise it syncs only the day files it appended to. The state file is rewritten on every flush but synced only at start, on TERM, and at most once per 4 h from the 10-min flush (2 syncs: file and directory). Worst case: about 148 flushes a day (one per 10 min plus the 2 s / 120 / 240 / 480 s ramp) × at most 2 day files, plus 12 state syncs: about 310 syncs a day with both files written every 10 min all day, about 160 to 230 on a normal day. An unplanned reboot or AP hang loses at most 10 min of INFO, and of ERROR lines and warning/error events under a sustained storm (2 s for the first). Flushing is skipped while `/usrdata` has under 8 MB free (the History rule), and torn last lines are filtered by the reader.
+
+**Query cost over the larger totals:** a this-boot LOGQ reads flash only when the ring cannot fill the page, and then only that boot's day files (up to 7, at most 4 MB in all); an earlier boot reads its own days only. EVQ reads event day files newest first and skips a day whose last row (read from its last 8 KB) is older than every row already picked, so a page of recent events reads one or two files, not 31.
 
 **Boots:** every row carries `b`, so the Logs page can show **"This boot / Previous boot"**: the lines that led up to an unplanned reboot finally survive it.
 

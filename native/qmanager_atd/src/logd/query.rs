@@ -124,16 +124,28 @@ impl Engine {
                     continue;
                 }
             }
-            self.journal.for_each_line(kind, day, |l| {
-                if let Some((s, b, t)) = quick_sbt(l) {
-                    if s < below_s && want(s, b, t) {
-                        if let Some(r) = Row::from_line(l, &mut names) {
-                            f(r, &names);
-                        }
+            self.flash_day(kind, day, below_s, &mut names, &mut want, &mut f);
+        }
+    }
+
+    fn flash_day(
+        &self,
+        kind: Kind,
+        day: i64,
+        below_s: u64,
+        names: &mut Names,
+        want: &mut impl FnMut(u64, u32, Option<i64>) -> bool,
+        f: &mut impl FnMut(Row, &Names),
+    ) {
+        self.journal.for_each_line(kind, day, |l| {
+            if let Some((s, b, t)) = quick_sbt(l) {
+                if s < below_s && want(s, b, t) {
+                    if let Some(r) = Row::from_line(l, names) {
+                        f(r, names);
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
     pub fn logq(&mut self, p: &[(String, String)], now: &Now) -> Result<String, String> {
@@ -471,14 +483,33 @@ impl Engine {
             };
             let need = limit - picked.len();
             let mut older: Vec<Row> = Vec::new();
-            self.flash_rows(Kind::Ev, days, ring_min, |s, _, t| ok_sbt(s, t), |r, names| {
-                if ok(&r, names) {
-                    older.push(r);
-                    if older.len() > 2 * need + 64 {
-                        trim_newest(&mut older, need);
+            // Newest day first; a day whose last (highest) `s` is below every
+            // row already picked cannot change the answer and is not read, so
+            // a page of recent events does not scan 31 days of files.
+            let mut names = Names::default();
+            let mut want = |s: u64, _: u32, t: Option<i64>| ok_sbt(s, t);
+            for (day, _) in self.journal.days(Kind::Ev).into_iter().rev() {
+                if let Some((lo, hi)) = days {
+                    if day < lo || day > hi {
+                        continue;
                     }
                 }
-            });
+                if older.len() >= need {
+                    trim_newest(&mut older, need);
+                    let floor = older.iter().map(|r| r.s).min().unwrap_or(0);
+                    if self.journal.last_s(Kind::Ev, day).map_or(false, |ls| ls < floor) {
+                        continue;
+                    }
+                }
+                self.flash_day(Kind::Ev, day, ring_min, &mut names, &mut want, &mut |r, names| {
+                    if ok(&r, names) {
+                        older.push(r);
+                        if older.len() > 2 * need + 64 {
+                            trim_newest(&mut older, need);
+                        }
+                    }
+                });
+            }
             trim_newest(&mut older, need);
             picked.extend(older);
         }
@@ -891,5 +922,30 @@ mod tests {
         assert!(contains_ci("x", b""));
         assert!(!contains_ci("ab", b"abc"));
         assert!(contains_ci("Ünïcode Ok", b"ok"));
+    }
+
+    #[test]
+    fn evq_reads_the_newest_days_first_and_skips_older_ones() {
+        let c = cfg("evq-days");
+        let mut e = Engine::open(c.clone(), &Now::at(500.0, W)).unwrap();
+        for d in 0..3i64 {
+            let now = Now::at(500.0 + (d * 86400) as f64, W + d * 86400);
+            e.clock_tick(&now);
+            for i in 0..5 {
+                feed(&mut e, &now, &format!("E\t{}\tpci_change\tinfo\t\t\tday {d} n {i}\n", 500 + d * 86400));
+            }
+            e.flush(&now, false);
+        }
+        let now = Now::at(500.0 + 2.0 * 86400.0, W + 2 * 86400);
+        e.shutdown(&now);
+        drop(e);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        assert_eq!(e.journal.days(Kind::Ev).len(), 3);
+        let seqs = |j: &str| -> Vec<u64> { j.split("\"seq\":").skip(1).map(|x| x.split(|c: char| !c.is_ascii_digit()).next().unwrap().parse().unwrap()).collect() };
+        let newest = e.evq(&kv(&[("limit", "3")]), &now).unwrap();
+        assert_eq!(seqs(&newest), vec![13, 14, 15], "{newest}");
+        // Reaching into the older days still answers in order.
+        let all = e.evq(&kv(&[("limit", "12")]), &now).unwrap();
+        assert_eq!(seqs(&all), (4..=15).collect::<Vec<u64>>(), "{all}");
     }
 }

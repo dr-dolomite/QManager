@@ -16,7 +16,12 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 
 pub const LOG_DAYS: i64 = 7;
+/// Per day file (logs). The total across days is `LOG_TOTAL`.
 pub const LOG_BYTES: u64 = 1024 * 1024;
+/// Totals across all day files of a kind: several full days, so one storm
+/// day (cap plus reserve) never deletes the days before it.
+pub const LOG_TOTAL: u64 = 4 * 1024 * 1024;
+pub const EV_TOTAL: u64 = 8 * 1024 * 1024;
 /// Past a day file's byte cap, this much more is kept for what matters:
 /// WARN/ERROR and kernel lines (logs), keep-list and `error` (events).
 pub const CAP_RESERVE: u64 = 256 * 1024;
@@ -422,8 +427,8 @@ impl Journal {
     /// epochday, else None (age is then not applied).
     pub fn retain(&self, kind: Kind, today: Option<i64>) -> u32 {
         let (max_days, max_bytes) = match kind {
-            Kind::Log => (LOG_DAYS, LOG_BYTES),
-            Kind::Ev => (EV_DAYS, EV_BYTES),
+            Kind::Log => (LOG_DAYS, LOG_TOTAL),
+            Kind::Ev => (EV_DAYS, EV_TOTAL),
         };
         let mut days = self.days(kind);
         let mut removed = 0;
@@ -453,6 +458,29 @@ impl Journal {
             }
         }
         removed
+    }
+
+    /// `s` of a day file's last whole line, read from its last 8 KB (rows are
+    /// appended in ascending `s`, so this is the file's highest). None when
+    /// it cannot be told cheaply: the caller must read the file.
+    pub fn last_s(&self, kind: Kind, day: i64) -> Option<u64> {
+        use std::io::{Read, Seek, SeekFrom};
+        let path = self.path(kind, day);
+        let m = fs::symlink_metadata(&path).ok()?;
+        if !m.file_type().is_file() {
+            return None;
+        }
+        let mut f = File::open(&path).ok()?;
+        let from = m.len().saturating_sub(8192);
+        f.seek(SeekFrom::Start(from)).ok()?;
+        let mut buf = Vec::with_capacity(8192);
+        f.take(8192).read_to_end(&mut buf).ok()?;
+        let text = String::from_utf8_lossy(&buf);
+        let mut lines = text.split('\n').collect::<Vec<_>>();
+        if from > 0 && !lines.is_empty() {
+            lines.remove(0);
+        }
+        lines.iter().rev().map(|l| l.trim_end_matches('\r')).filter(|l| super::record::looks_whole(l)).find_map(|l| quick_sbt(l).map(|x| x.0))
     }
 
     /// Calls `f` for every whole line of a day file.
@@ -626,13 +654,13 @@ mod tests {
         let d = tmpdir("ret");
         let j = Journal::new(d);
         for day in [100, 101, 105, 106, 107, 108] {
-            fs::write(j.path(Kind::Log, day), vec![b'x'; 300 * 1024]).unwrap();
+            fs::write(j.path(Kind::Log, day), vec![b'x'; 1200 * 1024]).unwrap();
         }
-        // Age: today 108 keeps 102..108; size: 1 MB keeps the newest 3.
+        // Age: today 108 keeps 102..108; size: 4 MB keeps the newest 3.
         assert_eq!(j.retain(Kind::Log, Some(108)), 3);
         assert_eq!(j.days(Kind::Log).iter().map(|d| d.0).collect::<Vec<_>>(), vec![106, 107, 108]);
         // Untrusted: no age rule; today's (newest) file survives even alone over the cap.
-        fs::write(j.path(Kind::Log, 108), vec![b'x'; 2 * 1024 * 1024]).unwrap();
+        fs::write(j.path(Kind::Log, 108), vec![b'x'; 5 * 1024 * 1024]).unwrap();
         j.retain(Kind::Log, None);
         assert_eq!(j.days(Kind::Log).iter().map(|d| d.0).collect::<Vec<_>>(), vec![108]);
         // Events: 31 days.
@@ -688,5 +716,27 @@ mod tests {
         let size = fs::metadata(j.path(Kind::Log, 9)).unwrap().len();
         assert!(size <= LOG_BYTES + CAP_RESERVE + 4096, "{size}");
         assert!(st.cap_drops > 0 && st.rows > 0);
+    }
+
+    #[test]
+    fn totals_keep_several_full_days_and_last_s_reads_the_tail() {
+        let d = tmpdir("totals");
+        let j = Journal::new(d.clone());
+        // Three storm days of cap + reserve each fit the 4 MB total.
+        for day in [97, 98, 99] {
+            fs::write(j.path(Kind::Log, day), vec![b'x'; (LOG_BYTES + CAP_RESERVE) as usize]).unwrap();
+        }
+        assert_eq!(j.retain(Kind::Log, Some(99)), 0);
+        fs::write(j.path(Kind::Log, 100), vec![b'x'; (LOG_BYTES + CAP_RESERVE) as usize]).unwrap();
+        assert_eq!(j.retain(Kind::Log, Some(100)), 1, "the oldest goes only past 4 MB");
+        assert_eq!(j.days(Kind::Log).iter().map(|d| d.0).collect::<Vec<_>>(), vec![98, 99, 100]);
+        let mut text = String::new();
+        for s in 1..=500u64 {
+            text.push_str(&format!("{{\"s\":{s},\"b\":1,\"m\":1.00,\"t\":5,\"k\":\"e\",\"ty\":\"x\",\"msg\":\"{}\"}}\n", "y".repeat(40)));
+        }
+        text.push_str("{\"s\":999,\"b\":1,\"m\":1.0");
+        fs::write(j.path(Kind::Ev, 7), &text).unwrap();
+        assert_eq!(j.last_s(Kind::Ev, 7), Some(500), "the torn last line is skipped");
+        assert_eq!(j.last_s(Kind::Ev, 8), None);
     }
 }
