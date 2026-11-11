@@ -27,7 +27,7 @@ pub mod ring;
 pub mod server;
 pub mod spool;
 
-/// logd's socket protocol (`STAT`, `LOGQ`, `EVQ`; framing in server.rs).
+/// logd's socket protocol (`STAT`, `LOGQ`, `EVQ`, `LCLR`; framing in server.rs).
 pub const PROTO: u32 = 1;
 
 pub fn version_line() -> String {
@@ -37,7 +37,7 @@ pub fn version_line() -> String {
 /// The capability file, written after the socket is bound.
 pub fn capability_body(kmsg: bool) -> String {
     let k = if kmsg { "kmsg=1\n" } else { "" };
-    format!("proto={}\nversion={}\nlogq=1\nevq=1\n{k}", PROTO, env!("CARGO_PKG_VERSION"))
+    format!("proto={}\nversion={}\nlogq=1\nevq=1\nlclr=1\n{k}", PROTO, env!("CARGO_PKG_VERSION"))
 }
 
 #[derive(Debug, PartialEq)]
@@ -93,8 +93,8 @@ mod tests {
             assert_eq!(logd_mode(&sv(bad)), LogdMode::Usage, "{bad:?}");
         }
         assert!(version_line().starts_with("qmanager_logd ") && version_line().ends_with(" proto=1"));
-        assert_eq!(capability_body(false), format!("proto=1\nversion={}\nlogq=1\nevq=1\n", env!("CARGO_PKG_VERSION")));
-        assert!(capability_body(true).ends_with("evq=1\nkmsg=1\n"));
+        assert_eq!(capability_body(false), format!("proto=1\nversion={}\nlogq=1\nevq=1\nlclr=1\n", env!("CARGO_PKG_VERSION")));
+        assert!(capability_body(true).ends_with("lclr=1\nkmsg=1\n"));
     }
 
     fn wait_for(what: &str, mut f: impl FnMut() -> bool) {

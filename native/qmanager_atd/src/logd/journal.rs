@@ -259,6 +259,17 @@ impl Journal {
         safefs::write_atomic(&self.state_path(), st.render().as_bytes())
     }
 
+    /// Deletes every day file of a kind; returns how many went.
+    pub fn remove_all(&self, kind: Kind) -> u32 {
+        let mut n = 0;
+        for (d, _) in self.days(kind) {
+            if fs::remove_file(self.path(kind, d)).is_ok() {
+                n += 1;
+            }
+        }
+        n
+    }
+
     /// Day files of a kind, oldest first: (day, size).
     pub fn days(&self, kind: Kind) -> Vec<(i64, u64)> {
         let mut out = Vec::new();

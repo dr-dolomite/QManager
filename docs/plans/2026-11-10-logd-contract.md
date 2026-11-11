@@ -12,7 +12,7 @@ Companion to `2026-11-10-qmanager-logd-journal.md` (the plan). The plan says *wh
 | alive marker | `journal/alive` | logd writes its pid after it is ready; removes on clean stop | writers test `[ -e ]` |
 | debug lease | `journal/debug` | CGI writes, logd removes on expiry | content: expiry as whole seconds of `/proc/uptime` (mono). Unparsable/empty → expiry = first-seen mono + 1800 |
 | query socket | `/var/run/qmanager_logd.sock` | logd | `SO_PEERCRED` uid 0 only |
-| capability file | `/var/run/qmanager_logd.proto` | logd writes after bind (atomic), init.d stop removes | `proto=1`, `version=<crate>`, then `logq=1`, `evq=1` (Phase 2), `kmsg=1` (Phase 4) |
+| capability file | `/var/run/qmanager_logd.proto` | logd writes after bind (atomic), init.d stop removes | `proto=1`, `version=<crate>`, then `logq=1`, `evq=1` (Phase 2), `lclr=1` (LCLR), `kmsg=1` (Phase 4) |
 | text mirror | `/tmp/qmanager.log` (+ `.1`, `.2`) | logd while alive; legacy writers when not | format unchanged |
 | events mirror | `/tmp/qmanager_events.json` | logd while alive; legacy `append_event` when not | NDJSON, newest 50, legacy row shape |
 | journal dir | `/usrdata/qmanager/journal/` | install.sh mkdir (0755); logd also creates | UBIFS |
@@ -63,6 +63,8 @@ Batch in RAM, append to the day file, `fdatasync` that file only (never a global
 
 init.d reads UCI `quecmanager.logging` and passes env to the daemon: `QLOGD_LEVEL` (min level kept, default INFO), `QLOGD_PERSIST_LEVEL` (default INFO), `QLOGD_FORWARD_SYSLOG` (0/1, ERROR to syslog via `libc::syslog`, no fork). Shell writers get `QLOG_LEVEL` as today. A live debug lease makes logd keep DEBUG and makes `qlog_debug` write (shell checks `[ -e journal/debug ]`).
 
-## Socket (Phase 1: STAT; Phase 2: LOGQ, EVQ)
+## Socket (Phase 1: STAT; Phase 2: LOGQ, EVQ; LCLR)
 
-One request per connection, broker framing style: request `<VERB> <nbytes>\n` then nbytes of `k=v` pairs joined by NUL (0 bytes for STAT). Reply `RES <0|1> <nbytes>\n<json>` or `ERR <code>\n`. Body cap 4 KB; reply cap 1 MB. Client role `qlog` (argv0): `qlog stat`, `qlog logq k=v …`, `qlog evq k=v …` prints the JSON on stdout, exit 0; exit 3 with no stdout when logd is unreachable (callers fall back to the legacy path).
+One request per connection, broker framing style: request `<VERB> <nbytes>\n` then nbytes of `k=v` pairs joined by NUL (0 bytes for STAT). Reply `RES <0|1> <nbytes>\n<json>` or `ERR <code>\n`. Body cap 4 KB; reply cap 1 MB. Client role `qlog` (argv0): `qlog stat`, `qlog logq k=v …`, `qlog evq k=v …`, `qlog clear` prints the JSON on stdout, exit 0; exit 3 with no stdout when logd is unreachable (callers fall back to the legacy path).
+
+`LCLR` (no body; `qlog clear`) drops every `L` row from the ring and deletes the log day files, then stores one INFO row `logs cleared`; it answers `{"success":true,"rows_cleared":N,"files_removed":M}`. Events (ring and `ev-*` files), the current boot's `K` rows in RAM and `kmsg_seq` are kept, so kmsg is not imported again; kernel rows of earlier boots lived in the log day files and go with them. `system/logs.sh` `{"action":"clear"}` calls it when `lclr=1` is advertised, and still truncates the text mirror.

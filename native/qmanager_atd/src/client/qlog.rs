@@ -1,4 +1,4 @@
-//! `qlog stat | logq k=v … | evq k=v …`: the journal client. Prints logd's
+//! `qlog stat | logq k=v … | evq k=v … | clear`: the journal client. Prints logd's
 //! JSON on stdout (exit 0, or 1 when logd answered a failure). Exit 3 with
 //! nothing on stdout when logd is unreachable, so callers fall back to the
 //! legacy path. Never runs anything in-process.
@@ -24,7 +24,7 @@ pub fn call(sock: &str, verb: &str, args: &[String]) -> Result<Answer, ()> {
 
 pub fn run_qlog(args: &[String]) -> i32 {
     let usage = || {
-        let _ = writeln!(std::io::stderr(), "usage: qlog stat | qlog logq [k=v ...] | qlog evq [k=v ...] | qlog --version");
+        let _ = writeln!(std::io::stderr(), "usage: qlog stat | qlog logq [k=v ...] | qlog evq [k=v ...] | qlog clear | qlog --version");
         2
     };
     let (verb, rest) = match args.split_first() {
@@ -33,6 +33,7 @@ pub fn run_qlog(args: &[String]) -> i32 {
             return 0;
         }
         Some((v, r)) if v == "stat" && r.is_empty() => ("STAT", r),
+        Some((v, r)) if v == "clear" && r.is_empty() => ("LCLR", r),
         Some((v, r)) if v == "logq" => ("LOGQ", r),
         Some((v, r)) if v == "evq" => ("EVQ", r),
         _ => return usage(),

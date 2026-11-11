@@ -59,6 +59,21 @@ impl Ring {
         self.rows.push_back(row);
     }
 
+    /// Keeps only the rows `keep` accepts; returns how many went.
+    pub fn retain(&mut self, mut keep: impl FnMut(&Row) -> bool) -> usize {
+        let before = self.rows.len();
+        let mut bytes = 0;
+        self.rows.retain(|r| {
+            let k = keep(r);
+            if k {
+                bytes += r.cost();
+            }
+            k
+        });
+        self.bytes = bytes;
+        before - self.rows.len()
+    }
+
     /// Lowest sequence number held (None when empty).
     pub fn min_s(&self) -> Option<u64> {
         self.rows.front().map(|r| r.s)

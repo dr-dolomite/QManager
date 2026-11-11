@@ -103,6 +103,7 @@ pub fn decode_answer(buf: &[u8]) -> Option<Answer> {
 pub fn answer(e: &mut Engine, verb: &str, params: &[(String, String)], now: &Now) -> Answer {
     let a = match verb {
         "STAT" => Answer::Res(true, e.stat(now)),
+        "LCLR" => Answer::Res(true, e.clear_logs(now)),
         _ => match e.query(verb, params, now) {
             Some(r) => r,
             None => Answer::Err("unknown_verb"),

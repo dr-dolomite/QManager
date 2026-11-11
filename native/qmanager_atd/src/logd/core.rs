@@ -684,17 +684,37 @@ impl Engine {
         let today = self.clock.trusted.then(|| epochday(now.wall));
         let n = self.journal.retain(Kind::Log, today) + self.journal.retain(Kind::Ev, today);
         if n > 0 {
-            // Day files went: rebuild the flash half of the boot index.
-            let (_, idx) = self.journal.scan();
-            let cur = self.index.remove(self.boot);
-            self.index = idx;
-            if let Some(c) = cur {
-                let f = self.index.entry(self.boot);
-                let (days, fmin) = (f.days, f.flash_min_s);
-                *f = BootInfo { days, flash_min_s: fmin, ..c };
-            }
+            self.reindex();
         }
         self.last_retain_ms = Some(now.ms());
+    }
+
+    /// Day files went: rebuild the flash half of the boot index.
+    fn reindex(&mut self) {
+        let (_, idx) = self.journal.scan();
+        let cur = self.index.remove(self.boot);
+        self.index = idx;
+        if let Some(c) = cur {
+            let f = self.index.entry(self.boot);
+            let (days, fmin) = (f.days, f.flash_min_s);
+            *f = BootInfo { days, flash_min_s: fmin, ..c };
+        }
+    }
+
+    /// LCLR: drops every log line (`L` rows) from the ring and deletes the
+    /// log day files. Events, the current boot's kernel rows in RAM and the
+    /// kmsg high-water mark stay, so kmsg is not imported again. Then one
+    /// INFO row says so.
+    pub fn clear_logs(&mut self, now: &Now) -> String {
+        self.clock_tick(now);
+        let rows = self.ring.retain(|r| r.kind != super::record::RKind::L);
+        let files = self.journal.remove_all(Kind::Log);
+        self.reindex();
+        self.null_from = self.ring.iter().find(|r| r.t.is_none()).map(|r| r.s);
+        self.self_log(Level::Info, "logs cleared", now);
+        let mut j = crate::common::json::J::obj();
+        j.boolean("success", true).num("rows_cleared", rows).num("files_removed", files);
+        j.done()
     }
 
     /// TERM: close collapse runs, write both mirrors, final flush (clean).
@@ -1142,5 +1162,32 @@ pub(crate) mod tests {
         let flushes = e.stats.flushes;
         e.tick(&at(1606.0));
         assert_eq!(e.stats.flushes, flushes);
+    }
+
+    #[test]
+    fn clearing_logs_keeps_events_kernel_rows_and_the_kmsg_mark() {
+        let c = cfg("lclr");
+        let now = Now::at(500.0, W);
+        let mut e = Engine::open(c.clone(), &now).unwrap();
+        feed(&mut e, &now, "L\t500\tINFO\ta\t1\told line\nE\t500\tband_change\tinfo\t\t\tB3\n");
+        e.ingest_kmsg(b"3,1502,4000000,-;remoteproc remoteproc0: crash detected in 4080000.remoteproc-mss: type fatal error", &now);
+        assert!(e.ring.iter().any(|r| r.kind == super::super::record::RKind::K));
+        let kmsg = e.kmsg_hw;
+        e.flush(&now, false);
+        assert!(!log_lines(&c).is_empty());
+        let j = e.clear_logs(&now);
+        assert!(j.starts_with("{\"success\":true,\"rows_cleared\":1,\"files_removed\":1"), "{j}");
+        assert!(log_lines(&c).is_empty());
+        assert_eq!(ev_lines(&c).len(), 1, "events stay on flash");
+        assert!(!e.ring.iter().any(|r| r.msg() == "old line"));
+        assert!(e.ring.iter().any(|r| r.is_event()));
+        assert_eq!(e.kmsg_hw, kmsg);
+        let last = e.ring.iter().last().unwrap();
+        assert_eq!((last.msg().as_str(), last.log_level()), ("logs cleared", Some(Level::Info)));
+        assert!(e.ring.iter().any(|r| r.kind == super::super::record::RKind::K), "kernel rows stay in RAM");
+        // The marker is persisted with the next flush, into a fresh file.
+        e.flush(&now, false);
+        assert!(log_lines(&c).iter().any(|l| l.contains("logs cleared")));
+        assert!(!log_lines(&c).iter().any(|l| l.contains("old line")));
     }
 }
