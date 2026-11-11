@@ -79,7 +79,7 @@ Every write site uses exactly this pipeline (or `sim_db_normalize`, which reprod
 
 > ⚠️ WARNING: If you add a new QCCID read site, use the identical pipeline. Do not use the profile's stored `sim_iccid` field as a substitute — that field may be hand-typed or carry a different format than the modem's `AT+QCCID` response.
 
-> ℹ️ NOTE: `sim_db.sh` also defines `iccid_canonicalize()`, a **compare-time-only** helper (strips space/CR/LF like `sim_db_normalize`, plus one trailing BCD pad `F`/`f`) used by Custom SIM Profiles' `auto_apply_profile` matching and the manual/auto apply worker's stale-SIM guard. It exists to reconcile read paths that disagree on whether they keep an ICCID's trailing pad nibble. It must never be used to rewrite what gets *stored* — `sim_db_add` and this file's byte-parity requirement above are unaffected; only comparisons run through it. See [`docs/features/custom-sim-profiles.md`](custom-sim-profiles.md) — "ICCID Canonicalization" for the full contract.
+> ℹ️ NOTE: `sim_db.sh` also defines `iccid_canonicalize()`, a **compare-time-only** helper (strips space/CR/LF like `sim_db_normalize`, plus every trailing BCD pad `F`/`f`, so one `F` or `FF`) used by Custom SIM Profiles' `auto_apply_profile` matching and the manual/auto apply worker's stale-SIM guard. It exists to reconcile read paths that disagree on whether they keep an ICCID's trailing pad nibble. It must never be used to rewrite what gets *stored* — `sim_db_add` and this file's byte-parity requirement above are unaffected; only comparisons run through it. See [`docs/features/custom-sim-profiles.md`](custom-sim-profiles.md) — "ICCID Canonicalization" for the full contract.
 
 ## Lock-Free Duplicate Tolerance
 

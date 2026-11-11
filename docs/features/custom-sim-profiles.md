@@ -184,7 +184,7 @@ Config readout: neutral `Tag`s for `APN <name>` (the name in mono), `CID <n>`, `
 
 Status for each row is derived at render time via `deriveStatus(isActive, profileIccid, currentIccid)`. `currentIccid` comes from `useCurrentSettings(true).settings?.iccid` — the coordinator passes it down as a prop. A profile reaches `"mismatch"` only when: it is the active profile AND its `sim_iccid` is non-empty AND `iccidMismatch(sim_iccid, currentIccid)` holds. An empty `sim_iccid` means SIM-agnostic; such profiles never mismatch.
 
-`iccidMismatch` (shared by the hero, rows and mismatch confirm, `profile-iccid.ts`) compares canonical forms (`canonicalIccid`: drop whitespace, uppercase, strip one trailing BCD pad `F`), mirroring `iccid_canonicalize` in `sim_db.sh`. `current_settings.sh` already returns the canonical form, so a raw compare would flag an F-padded stored ICCID as a false mismatch. An unknown live ICCID (`null` / empty) is never a mismatch, the same "don't know" rule as the backend.
+`iccidMismatch` (shared by the hero, rows and mismatch confirm, `profile-iccid.ts`) compares canonical forms (`canonicalIccid`: drop whitespace, uppercase, strip every trailing BCD pad `F`), mirroring `iccid_canonicalize` in `sim_db.sh`. `current_settings.sh` already returns the canonical form, so a raw compare would flag an F-padded stored ICCID as a false mismatch. An unknown live ICCID (`null` / empty) is never a mismatch, the same "don't know" rule as the backend.
 
 ### Mismatch Activation — Confirm, Then Apply (B5.37)
 
