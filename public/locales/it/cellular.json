@@ -2243,7 +2243,7 @@
         },
         "configuration": {
           "label": "Configurazione dell'operatore",
-          "placeholder": "Scegli Configurazione operatore",
+          "placeholder": "Scegli la configurazione dell'operatore",
           "option_active_suffix": " (Attivo)",
           "running": "In uso ora",
           "auto_hint": "Disattiva la selezione automatica per scegliere un profilo.",
