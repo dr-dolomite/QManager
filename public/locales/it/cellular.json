@@ -2242,7 +2242,7 @@
           "consequence": "Il modem sceglie il profilo adatto alla tua SIM."
         },
         "configuration": {
-          "label": "Configurazione del corriere",
+          "label": "Configurazione dell'operatore",
           "placeholder": "Scegli Configurazione operatore",
           "option_active_suffix": " (Attivo)",
           "running": "In uso ora",

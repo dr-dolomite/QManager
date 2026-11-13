@@ -691,7 +691,7 @@
     },
     "power_ups": {
       "rapid_fire": "⚡ FUOCO RAPIDO",
-      "spread": "◈ DIFFONDERE",
+      "spread": "◈ TIRO A VENTAGLIO",
       "shield": "◉ SCUDO"
     },
     "pause": {
@@ -706,7 +706,7 @@
       "controls_hint": "Invio per riprovare • Esc per uscire"
     },
     "boss_defeated": "BOSS SCONFITTO",
-    "muted": "MOTO",
+    "muted": "AUDIO DISATTIVATO",
     "boss_names": {
       "tier_1": "DISTURBO DEL SEGNALE",
       "tier_2": "JAMMER DI FREQUENZA",

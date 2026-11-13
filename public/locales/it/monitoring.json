@@ -37,7 +37,7 @@
     "table_header_event_type": "Tipo di evento",
     "table_header_message": "Messaggio",
     "table_header_time": "Data e ora",
-    "showing_count_one": "Visualizzazione di {{shown}} dell'evento {{total}}",
+    "showing_count_one": "Visualizzati {{shown}} di {{total}} eventi",
     "showing_count_other": "Visualizzazione di {{shown}} di {{total}} eventi",
     "last_updated": "Ultimo aggiornamento: {{time}}",
     "aria_refresh": "Aggiorna gli eventi di rete"

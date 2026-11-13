@@ -248,7 +248,7 @@
     "error_at_least_one": "Inserisci almeno un indirizzo server DNS",
     "error_invalid_ipv6": "Inserisci un indirizzo IPv6 valido (ad es. 2606:4700:4700::1111).",
     "toast_success_enabled": "La personalizzazione DNS è stata applicata correttamente",
-    "toast_success_disabled": "Ripristinato all'operatore DNS",
+    "toast_success_disabled": "Ripristinati i DNS dell'operatore",
     "toast_error_apply": "Impossibile applicare le impostazioni DNS",
     "error_load_title": "Impossibile leggere le impostazioni DNS",
     "error_load_desc": "Il modem non ha risposto. Controlla la connessione e riprova.",
