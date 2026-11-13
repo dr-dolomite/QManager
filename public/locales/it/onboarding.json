@@ -7,10 +7,10 @@
     "button_skip": "Salta",
     "button_saving": "Salvataggio…",
     "step_label_welcome": "Benvenuto",
-    "step_label_password": "Parola d'ordine",
+    "step_label_password": "Password",
     "step_label_network_mode": "Modalità di rete",
     "step_label_connection": "Connessione",
-    "step_label_band_preferences": "Preferenze della banda",
+    "step_label_band_preferences": "Preferenze delle bande",
     "step_label_web_port": "Porta web",
     "step_label_complete": "Completo",
     "aria_live_step_indicator": "Passaggio {{step}} di {{total}}: {{label}}",
@@ -20,12 +20,12 @@
     "error_unreachable": "Impossibile raggiungere il modem."
   },
   "welcome": {
-    "main_title": "Il tuo modem,\ngestiti in modo intelligente.",
+    "main_title": "Il tuo modem,\ngestito in modo intelligente.",
     "subtitle": "Ti aiuteremo a configurarlo in pochi rapidi passaggi. È richiesta solo la tua password: tutto il resto è facoltativo e modificabile in qualsiasi momento.",
-    "step_preview_password": "Parola d'ordine",
+    "step_preview_password": "Password",
     "step_preview_network_mode": "Modalità di rete",
     "step_preview_apn_sim": "Profilo APN o SIM",
-    "step_preview_band_preferences": "Preferenze della fascia",
+    "step_preview_band_preferences": "Preferenze delle bande",
     "step_preview_web_port": "Porta web"
   },
   "password": {
@@ -35,7 +35,7 @@
     "label_name_optional_suffix": "(facoltativo)",
     "placeholder_name": "ad es. Alex",
     "hint_name": "Mostrato nella barra laterale. Puoi modificarlo in qualsiasi momento.",
-    "label_password": "Parola d'ordine",
+    "label_password": "Password",
     "placeholder_password": "Crea una password",
     "aria_hide_password": "Nascondi la password",
     "aria_show_password": "Mostra password",
@@ -76,7 +76,7 @@
     "toast_failed": "Impossibile applicare la modalità di rete."
   },
   "band_locking": {
-    "heading": "Preferenze della fascia",
+    "heading": "Preferenze delle bande",
     "description": "Blocca bande di frequenza specifiche per un segnale migliore sulla tua rete.",
     "error_bands_unavailable": "Impossibile caricare le bande supportate dal modem. Puoi saltare questo passaggio e configurare le bande in un secondo momento.",
     "section_lte_title": "LTE Bande",
